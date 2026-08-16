@@ -1,0 +1,11 @@
+[package]
+name = "motor-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Núcleo matemático do motor universal de otimização combinatória"
+
+[dependencies]
+serde = { workspace = true }

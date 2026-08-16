@@ -1,0 +1,68 @@
+//! # motor-core — o núcleo matemático
+//!
+//! Este crate não sabe o que é uma loteria. Ele conhece:
+//!
+//! - um **universo** de `N` elementos;
+//! - um **pool** de `p` elementos escolhidos dentro dele;
+//! - **cartelas**, que são subconjuntos de `k` elementos do pool;
+//! - uma **regra de cobertura**, que diz quais subconjuntos precisam ser atendidos;
+//! - um **objetivo**, que diz o que significa "melhor".
+//!
+//! Qualquer modalidade — existente hoje ou criada amanhã — é apenas uma escolha
+//! diferente desses números. Não há, e não deve haver, nenhum `if` de
+//! modalidade em lugar nenhum deste código.
+//!
+//! ## O que sustenta a performance
+//!
+//! Três decisões de representação carregam o motor inteiro:
+//!
+//! 1. **Cartelas são bitmasks de 128 bits.** Interseção e contagem viram
+//!    instruções únicas de CPU. ([`cartela`])
+//! 2. **Alvos têm índice denso.** O ranqueamento colex dá a cada subconjunto um
+//!    inteiro em `0..C(p,j)`, então a cobertura vira um vetor plano em vez de um
+//!    mapa. ([`combinatoria`])
+//! 3. **A cobertura é incremental.** Adicionar ou remover uma cartela mexe só
+//!    nos alvos daquela cartela, nunca recalcula tudo. ([`solucao`])
+//!
+//! ## O que sustenta a confiança
+//!
+//! Otimizador rápido que devolve resposta errada é pior que otimizador lento.
+//! Duas defesas, ambas exercidas nos testes:
+//!
+//! - [`cobertura::MotorCobertura::contagens_por_forca_bruta`] recalcula a
+//!   cobertura por enumeração exaustiva, sem compartilhar caminho de código com
+//!   a versão incremental. [`solucao::Solucao::conferir_invariantes`] confronta
+//!   as duas.
+//! - [`limites`] reproduz números de covering design já provados na literatura,
+//!   o que valida a matemática contra uma fonte externa ao projeto.
+
+pub mod avaliacao;
+pub mod cartela;
+pub mod cobertura;
+pub mod combinatoria;
+pub mod conjunto;
+pub mod limites;
+pub mod problema;
+pub mod solucao;
+
+/// Quantas cartelas atendem um determinado alvo.
+///
+/// `u32` em vez de `u16` para que soluções muito redundantes — comuns durante a
+/// fase exploratória, quando o motor deliberadamente piora a solução — nunca
+/// possam estourar o contador e corromper o invariante de cobertura.
+pub type Contagem = u32;
+
+/// Custo de memória por alvo, somando o vetor de contagens e o conjunto
+/// esparso de descobertos. Usado para estimar a viabilidade de uma
+/// configuração antes de alocar qualquer coisa.
+pub const BYTES_POR_ALVO: u64 = 12;
+
+pub use avaliacao::{Avaliacao, ChaveCusto};
+pub use cartela::{Cartela, Mascara};
+pub use cobertura::{MotorCobertura, Rascunho};
+pub use conjunto::ConjuntoEsparso;
+pub use limites::{gap, limite_inferior, optimalidade_provada, LimiteInferior, MetodoLimite};
+pub use problema::{
+    ErroProblema, ErroViabilidade, Objetivo, Problema, RegraCobertura, Viabilidade,
+};
+pub use solucao::Solucao;

@@ -1,0 +1,11 @@
+/target
+**/*.rs.bk
+
+# Bancos de soluções gerados pelo motor
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+/execucoes
+
+.DS_Store

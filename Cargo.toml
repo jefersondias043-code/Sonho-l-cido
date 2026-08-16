@@ -1,0 +1,31 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/motor-core",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.80"
+license = "MIT"
+repository = "https://github.com/jefersondias043-code/sonho-l-cido"
+
+[workspace.dependencies]
+motor-core = { path = "crates/motor-core" }
+motor-busca = { path = "crates/motor-busca" }
+motor-persistencia = { path = "crates/motor-persistencia" }
+
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+rand = "0.8"
+rand_pcg = "0.3"
+rusqlite = { version = "0.32", features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
