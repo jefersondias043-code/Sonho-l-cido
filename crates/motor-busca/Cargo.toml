@@ -1,0 +1,13 @@
+[package]
+name = "motor-busca"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Motor de busca persistente e auto-reconstrutiva"
+
+[dependencies]
+motor-core = { workspace = true }
+rand = { workspace = true }
+rand_pcg = { workspace = true }

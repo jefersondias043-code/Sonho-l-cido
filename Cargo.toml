@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "crates/motor-core",
+    "crates/motor-busca",
 ]
 
 [workspace.package]

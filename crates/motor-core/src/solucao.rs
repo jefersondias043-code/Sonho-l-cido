@@ -28,6 +28,22 @@ pub struct Solucao {
     redundancia: u64,
 }
 
+/// Buffers de [`Solucao::restaurar_de`], reaproveitados entre chamadas para que
+/// desfazer uma transformação não aloque nada.
+#[derive(Debug, Default, Clone)]
+pub struct Restaurador {
+    atuais: Vec<Cartela>,
+    desejadas: Vec<Cartela>,
+    remover: Vec<Cartela>,
+    adicionar: Vec<Cartela>,
+}
+
+impl Restaurador {
+    pub fn novo() -> Self {
+        Self::default()
+    }
+}
+
 impl Solucao {
     /// Solução sem nenhuma cartela: todos os alvos descobertos.
     pub fn vazia(motor: &MotorCobertura) -> Self {
@@ -192,6 +208,70 @@ impl Solucao {
             .iter()
             .filter(|&&alvo| self.contagem[alvo as usize] == 0)
             .count()
+    }
+
+    /// Reverte a solução para exatamente o conjunto de cartelas de `alvo`.
+    ///
+    /// É o que torna a exploração barata. O motor testa uma transformação, mede
+    /// o resultado e, se não gostou, desfaz. Refazer a solução do zero custaria
+    /// O(total_alvos) só para zerar o vetor de contagens; aqui o custo é
+    /// proporcional ao que de fato mudou — normalmente duas ou três cartelas.
+    ///
+    /// Trata as cartelas como multiconjunto: se `alvo` contém a mesma cartela
+    /// duas vezes, o resultado também conterá.
+    pub fn restaurar_de(
+        &mut self,
+        motor: &MotorCobertura,
+        alvo: &[Cartela],
+        restaurador: &mut Restaurador,
+        rascunho: &mut Rascunho,
+    ) {
+        let Restaurador { atuais, desejadas, remover, adicionar } = restaurador;
+
+        atuais.clear();
+        atuais.extend_from_slice(&self.cartelas);
+        atuais.sort_unstable();
+
+        desejadas.clear();
+        desejadas.extend_from_slice(alvo);
+        desejadas.sort_unstable();
+
+        remover.clear();
+        adicionar.clear();
+
+        // Varredura simultânea das duas listas ordenadas: o que sobra de cada
+        // lado é exatamente o que precisa sair ou entrar.
+        let (mut i, mut j) = (0usize, 0usize);
+        while i < atuais.len() && j < desejadas.len() {
+            match atuais[i].cmp(&desejadas[j]) {
+                std::cmp::Ordering::Less => {
+                    remover.push(atuais[i]);
+                    i += 1;
+                }
+                std::cmp::Ordering::Greater => {
+                    adicionar.push(desejadas[j]);
+                    j += 1;
+                }
+                std::cmp::Ordering::Equal => {
+                    i += 1;
+                    j += 1;
+                }
+            }
+        }
+        remover.extend_from_slice(&atuais[i..]);
+        adicionar.extend_from_slice(&desejadas[j..]);
+
+        for &cartela in remover.iter() {
+            let indice = self
+                .cartelas
+                .iter()
+                .position(|&c| c == cartela)
+                .expect("cartela a remover veio da própria solução");
+            self.remover(motor, indice, rascunho);
+        }
+        for &cartela in adicionar.iter() {
+            self.adicionar(motor, cartela, rascunho);
+        }
     }
 
     /// Identidade estrutural da solução, independente da ordem das cartelas.
@@ -443,6 +523,76 @@ mod testes {
         segunda.adicionar(&motor, Cartela::dos_indices(&[0, 1, 3]), &mut rascunho);
 
         assert_ne!(primeira.assinatura(), segunda.assinatura());
+    }
+
+    #[test]
+    fn restaurar_desfaz_qualquer_transformacao() {
+        // Sem isso o motor não conseguiria explorar: cada tentativa rejeitada
+        // precisa voltar exatamente ao estado anterior, ou o estado incremental
+        // se corrompe silenciosamente ao longo de milhões de iterações.
+        let (motor, mut rascunho) = ambiente(10, 4, 3, 2);
+        let mut restaurador = Restaurador::novo();
+        let mut solucao = Solucao::vazia(&motor);
+        let mut sorteio = Sorteio(0xabc);
+
+        for _ in 0..8 {
+            solucao.adicionar(&motor, cartela_aleatoria(10, 4, &mut sorteio), &mut rascunho);
+        }
+
+        for rodada in 0..40 {
+            let instantaneo: Vec<Cartela> = solucao.cartelas().to_vec();
+            let referencia = solucao.clone();
+
+            // Mexe bastante: remove várias e adiciona outras tantas.
+            let remocoes = sorteio.proximo(4);
+            for _ in 0..remocoes {
+                if solucao.quantidade() > 1 {
+                    let alvo = sorteio.proximo(solucao.quantidade());
+                    solucao.remover(&motor, alvo, &mut rascunho);
+                }
+            }
+            for _ in 0..sorteio.proximo(4) {
+                solucao.adicionar(&motor, cartela_aleatoria(10, 4, &mut sorteio), &mut rascunho);
+            }
+
+            solucao.restaurar_de(&motor, &instantaneo, &mut restaurador, &mut rascunho);
+
+            assert_eq!(
+                solucao.quantidade(),
+                referencia.quantidade(),
+                "rodada {rodada}: quantidade divergiu"
+            );
+            assert_eq!(solucao.assinatura(), referencia.assinatura(), "rodada {rodada}");
+            assert_eq!(
+                solucao.total_descobertos(),
+                referencia.total_descobertos(),
+                "rodada {rodada}"
+            );
+            assert_eq!(solucao.redundancia(), referencia.redundancia(), "rodada {rodada}");
+            assert_eq!(solucao.conferir_invariantes(&motor), Ok(()), "rodada {rodada}");
+        }
+    }
+
+    #[test]
+    fn restaurar_preserva_cartelas_repetidas() {
+        let (motor, mut rascunho) = ambiente(9, 3, 2, 2);
+        let mut restaurador = Restaurador::novo();
+        let mut solucao = Solucao::vazia(&motor);
+        let repetida = Cartela::dos_indices(&[0, 1, 2]);
+
+        solucao.adicionar(&motor, repetida, &mut rascunho);
+        solucao.adicionar(&motor, repetida, &mut rascunho);
+        solucao.adicionar(&motor, Cartela::dos_indices(&[3, 4, 5]), &mut rascunho);
+        let instantaneo: Vec<Cartela> = solucao.cartelas().to_vec();
+        let redundancia_original = solucao.redundancia();
+
+        solucao.reiniciar();
+        solucao.adicionar(&motor, Cartela::dos_indices(&[6, 7, 8]), &mut rascunho);
+        solucao.restaurar_de(&motor, &instantaneo, &mut restaurador, &mut rascunho);
+
+        assert_eq!(solucao.quantidade(), 3, "a cartela repetida precisa voltar duas vezes");
+        assert_eq!(solucao.redundancia(), redundancia_original);
+        assert_eq!(solucao.conferir_invariantes(&motor), Ok(()));
     }
 
     #[test]

@@ -65,4 +65,4 @@ pub use limites::{gap, limite_inferior, optimalidade_provada, LimiteInferior, Me
 pub use problema::{
     ErroProblema, ErroViabilidade, Objetivo, Problema, RegraCobertura, Viabilidade,
 };
-pub use solucao::Solucao;
+pub use solucao::{Restaurador, Solucao};
