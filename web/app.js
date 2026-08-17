@@ -545,10 +545,19 @@ function textoDaReferenciaDaBusca(estado) {
   const { jogos, exato, piso } = referenciaDaBusca;
   const nossas = estado.melhor_cartelas || 0;
 
-  if (exato) {
-    const plural = jogos === 1 ? 'jogo' : 'jogos';
+  // Jogo do tamanho do pool: aposta única, e não há fechamento a fazer. Creditar
+  // Turán por isso seria invocar um teorema para dizer que um é um.
+  if (jogos === 1) {
     return (
-      `Mínimo comprovado: <b>${milhares(jogos)}</b> ${plural} <em>— sai do ` +
+      `<b>Aposta única.</b> <em>Jogar todas as dezenas escolhidas de uma vez é ` +
+      `um jogo só: não há fechamento, e nada que o motor possa reduzir. Para ` +
+      `fechar, o jogo precisa ser menor que o pool.</em>`
+    );
+  }
+
+  if (exato) {
+    return (
+      `Mínimo comprovado: <b>${milhares(jogos)}</b> jogos <em>— sai do ` +
       `teorema de Turán, e não existe fechamento menor. O motor continua ` +
       `procurando enquanto você deixar: ele não vai achar menos, e não vai ` +
       `parar sozinho.</em>`
