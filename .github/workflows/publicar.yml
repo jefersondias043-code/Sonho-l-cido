@@ -72,6 +72,12 @@ jobs:
       - name: Construir o site
         run: ./construir-web.sh
 
+      - name: Testar a construção
+        # Propriedades que só se manifestam entre uma construção e outra:
+        # o carimbo da versão reagir a qualquer mudança, e a lista de uso sem
+        # internet cobrir todo o site. Nenhum teste de navegador as alcança.
+        run: ./testar-construcao.sh
+
       - name: Testar a interface num navegador
         run: |
           # Sob a mesma subpasta em que o GitHub Pages serve. Um caminho

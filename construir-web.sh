@@ -76,12 +76,21 @@ sed -i "s|__ARQUIVOS_DA_CONSTRUCAO__|[$arquivos]|" "$destino/sw.js"
 echo "    $(echo "$arquivos" | tr ',' '\n' | wc -l) arquivos guardados para uso offline"
 
 echo "==> carimbando o service worker"
+# O `sw.js` já construído fica fora do resumo por necessidade — ele contém o
+# próprio carimbo, e incluí-lo criaria uma dependência circular. Mas o modelo
+# em `web/sw.js` entra: ele tem apenas os marcadores, não o valor final.
+#
+# Sem essa segunda parcela, uma correção que mexesse só no service worker
+# produziria um carimbo idêntico ao anterior. A correção chegaria ao aparelho
+# — o navegador compara os bytes do arquivo, não o carimbo — mas o número
+# mostrado na tela continuaria o antigo, e quem o usasse para conferir se a
+# correção chegou seria enganado. Foi o que aconteceu.
 carimbo=$(
-    find "$destino" -type f ! -name sw.js -exec sha256sum {} + \
-        | awk '{print $1}' | sort | sha256sum | cut -c1-12
+    {
+        find "$destino" -type f ! -name sw.js -exec sha256sum {} +
+        sha256sum web/sw.js
+    } | awk '{print $1}' | sort | sha256sum | cut -c1-12
 )
-# `sw.js` está fora do resumo por necessidade: ele contém o próprio carimbo, e
-# incluí-lo criaria uma dependência circular.
 sed -i "s/__CARIMBO_DA_CONSTRUCAO__/$carimbo/" "$destino/sw.js"
 echo "    versão desta construção: $carimbo"
 

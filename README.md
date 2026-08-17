@@ -303,6 +303,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo run --release --example aferir            # aferição contra a literatura
 
 ./construir-web.sh                              # monta o site em site/
+./testar-construcao.sh                          # testa a construção em si
 node web/testar.mjs                             # testa a interface na raiz
 node web/testar.mjs /Sonho-l-cido/              # testa sob a subpasta do Pages
 node web/testar-atualizacao.mjs                 # testa a atualização automática
