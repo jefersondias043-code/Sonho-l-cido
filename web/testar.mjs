@@ -282,6 +282,67 @@ try {
   await pagina.click('#iniciar');
   await pagina.waitForSelector('#buscar.ativo', { timeout: 15000 });
 
+  // ─── o resultado durante a busca ───
+  //
+  // O defeito que isto cobre: as cartelas apareciam na aba Resultado só depois
+  // que a busca terminava. Durante a busca — que é quando o usuário vai olhar,
+  // porque o motor já anunciou ter encontrado algo — a aba ficava vazia.
+  //
+  // A causa era o caminho que as cartelas percorriam: worker → armazenamento
+  // local → temporizador → tela. A gravação esperava na fila atrás da leva de
+  // iterações em curso, enquanto o temporizador já lia. O teste antigo não
+  // pegava porque só conferia a aba depois do fim, quando tudo já assentou.
+  await pagina.waitForFunction(
+    () => {
+      const t = document.getElementById('melhor-cartelas').textContent.trim();
+      return t !== '' && t !== '—';
+    },
+    undefined,
+    { timeout: 30000 }
+  );
+
+  await pagina.click('.aba[data-painel="resultado"]');
+  await pagina.waitForSelector('#resultado.ativo');
+
+  /*
+   * Os dois números são lidos no mesmo instante, dentro de uma única avaliação.
+   * Lê-los em momentos diferentes daria falso negativo numa busca veloz: entre
+   * uma leitura e outra o motor encontra uma solução melhor, e os valores
+   * divergem sem que nada esteja errado.
+   *
+   * Com o defeito presente a lista ficaria vazia e a espera estouraria — que é
+   * exatamente o que se quer detectar.
+   */
+  let durante = { anunciadas: 0, exibidas: 0 };
+  let coerente = true;
+  try {
+    durante = await pagina.waitForFunction(
+      () => {
+        const anunciadas = Number(
+          document.getElementById('melhor-cartelas').textContent.trim()
+        );
+        const exibidas = document.querySelectorAll('#lista-cartelas .cartela').length;
+        return exibidas > 0 && exibidas === anunciadas ? { anunciadas, exibidas } : null;
+      },
+      undefined,
+      { timeout: 15000 }
+    ).then((alca) => alca.jsonValue());
+  } catch {
+    coerente = false;
+    durante = await pagina.evaluate(() => ({
+      anunciadas: Number(document.getElementById('melhor-cartelas').textContent.trim()),
+      exibidas: document.querySelectorAll('#lista-cartelas .cartela').length,
+    }));
+  }
+
+  marcar(
+    coerente,
+    'as cartelas aparecem no Resultado enquanto a busca ainda corre',
+    `painel anuncia ${durante.anunciadas}, aba mostra ${durante.exibidas}`
+  );
+
+  await pagina.click('.aba[data-painel="buscar"]');
+
   // O relógio precisa andar. É a prova de vida que não exige entender nada do
   // que está escrito na tela.
   const relogioAntes = await pagina.locator('#relogio').textContent();
@@ -310,6 +371,21 @@ try {
     (await pagina.locator('#pausar').textContent()).includes('Continuar'),
     'o botão passa a oferecer continuar'
   );
+
+  // Pausado, o resultado tem de estar completo e coerente com o painel.
+  // Pausado nada mais muda, então uma leitura única já é confiável.
+  await pagina.click('.aba[data-painel="resultado"]');
+  await pagina.waitForSelector('#resultado.ativo');
+  const aoPausar = await pagina.evaluate(() => ({
+    anunciadas: Number(document.getElementById('melhor-cartelas').textContent.trim()),
+    exibidas: document.querySelectorAll('#lista-cartelas .cartela').length,
+  }));
+  marcar(
+    aoPausar.exibidas > 0 && aoPausar.exibidas === aoPausar.anunciadas,
+    'com a busca pausada, o resultado continua completo',
+    `${aoPausar.exibidas} cartelas`
+  );
+  await pagina.click('.aba[data-painel="buscar"]');
 
   // Continuar retoma de onde parou.
   await pagina.click('#pausar');

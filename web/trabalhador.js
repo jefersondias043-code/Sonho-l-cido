@@ -92,7 +92,7 @@ function tratar(mensagem) {
 
       case 'pausar':
         rodando = false;
-        postMessage({ tipo: 'pausado', estado: lerEstado() });
+        postMessage({ tipo: 'pausado', estado: lerEstado(), cartelas: JSON.parse(motor.melhor()) });
         break;
 
       case 'encerrar':
@@ -101,6 +101,7 @@ function tratar(mensagem) {
         postMessage({
           tipo: 'encerrado',
           estado: motor ? lerEstado() : null,
+          cartelas: motor ? JSON.parse(motor.melhor()) : null,
           salvo: motor ? motor.exportar() : null,
         });
         descartarMotor();
@@ -139,7 +140,8 @@ function criar({ configuracao, fechamento, salvo }) {
   setTimeout(() => {
     if (!motor) return;
     try {
-      postMessage({ tipo: 'preparado', estado: JSON.parse(motor.preparar()) });
+      const estado = JSON.parse(motor.preparar());
+      postMessage({ tipo: 'preparado', estado, cartelas: JSON.parse(motor.melhor()) });
     } catch (erro) {
       postMessage({ tipo: 'erro', mensagem: String(erro?.message ?? erro) });
     }
@@ -167,6 +169,29 @@ function lerEstado() {
   return JSON.parse(motor.estado());
 }
 
+/**
+ * As cartelas do recorde, quando este lote produziu um.
+ *
+ * Elas viajam **junto** com o estado que as anunciou, e não por um caminho
+ * paralelo. A primeira versão pedia a solução ao `localStorage`, gravado por
+ * uma mensagem separada de exportação — e essa mensagem esperava na fila
+ * atrás da leva de iterações em curso, enquanto a tela já tentava ler. O
+ * resultado era a aba Resultado vazia durante toda a busca: o motor achava as
+ * cartelas, a tela lia antes de elas serem gravadas, e ninguém voltava a
+ * olhar.
+ *
+ * Mandando as duas coisas na mesma mensagem, não existe intervalo em que uma
+ * chegou e a outra não.
+ *
+ * Só são incluídas quando há recorde novo: fora disso as cartelas são as
+ * mesmas do lote anterior, e serializá-las a cada 220 ms seria puro
+ * desperdício.
+ */
+function cartelasSeMudaram(estado) {
+  if (!estado.novos_recordes?.length) return null;
+  return JSON.parse(motor.melhor());
+}
+
 function laco() {
   if (!rodando || !motor) return;
 
@@ -192,14 +217,14 @@ function laco() {
   estado.velocidade =
     segundos > 0 ? (estado.iteracoes - iteracoesNoInicio) / segundos : 0;
 
-  postMessage({ tipo: 'estado', estado });
+  postMessage({ tipo: 'estado', estado, cartelas: cartelasSeMudaram(estado) });
 
   if (estado.encerrado) {
     // "Ótimo" e "encerrado" são coisas diferentes: aqui a busca terminou
     // porque não existe mais nada a procurar; `encerrar` é o usuário mandando
     // parar. Nomes distintos evitam que a interface confunda os dois.
     rodando = false;
-    postMessage({ tipo: 'otimo', estado });
+    postMessage({ tipo: 'otimo', estado, cartelas: JSON.parse(motor.melhor()) });
     return;
   }
 

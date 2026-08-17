@@ -279,7 +279,7 @@ function garantirTrabalhador() {
       // Existe uma primeira solução. É o momento em que a tela deixa de estar
       // vazia — e a partir daqui o número só pode cair.
       case 'preparado':
-        aplicarEstado(data.estado);
+        aplicarMensagem(data);
         if (data.estado.encerrado) {
           definirFase('concluida');
           avisar('Ótimo provado já na primeira tentativa.', true);
@@ -290,27 +290,28 @@ function garantirTrabalhador() {
         break;
 
       case 'estado':
-        aplicarEstado(data.estado);
+        aplicarMensagem(data);
         if (fase === 'buscando') {
           $('texto-situacao').textContent = `procurando algo menor que ${data.estado.melhor_cartelas}`;
         }
         break;
 
       case 'otimo':
-        aplicarEstado(data.estado);
+        aplicarMensagem(data);
         definirFase('concluida');
         soltarTelaLigada();
         avisar('Ótimo provado — não existe solução melhor.', true);
         break;
 
       case 'pausado':
-        aplicarEstado(data.estado);
+        aplicarMensagem(data);
         definirFase('pausado');
         break;
 
       // O usuário mandou encerrar. O worker já devolveu tudo e liberou a
       // memória; aqui só resta desmontá-lo e voltar à configuração.
       case 'encerrado':
+        aplicarMensagem(data);
         if (data.salvo) localStorage.setItem(CHAVE_SALVO, data.salvo);
         desmontarTrabalhador();
         definirFase('ocioso');
@@ -352,6 +353,21 @@ function desmontarTrabalhador() {
 
 /* ─────────── pintar a tela ─────────── */
 
+/**
+ * Atualiza a tela a partir de uma mensagem do worker.
+ *
+ * `cartelas` vem preenchido sempre que a solução mudou. Pintar a partir daqui
+ * — e não de uma leitura posterior do armazenamento — é o que garante que a
+ * aba Resultado mostre o que o painel de busca acabou de anunciar.
+ */
+function aplicarMensagem({ estado, cartelas }) {
+  if (Array.isArray(cartelas)) {
+    melhorCartelas = cartelas;
+    pintarCartelas();
+  }
+  if (estado) aplicarEstado(estado);
+}
+
 function aplicarEstado(estado) {
   $('melhor-cartelas').textContent = estado.melhor_cartelas || '—';
   $('limite-inferior').textContent = estado.limite_inferior || '—';
@@ -371,9 +387,9 @@ function aplicarEstado(estado) {
   if (estado.novos_recordes?.length) {
     recordes = [...estado.novos_recordes.reverse(), ...recordes].slice(0, 40);
     pintarRecordes();
-    pedirMelhorSolucao();
-    // Cada recorde é gravado na hora. Se a aba morrer — e no celular ela morre
-    // com frequência — o que já foi encontrado continua aqui.
+    // A gravação serve só para sobreviver ao fechamento da aba. As cartelas
+    // exibidas não dependem dela: vieram na mesma mensagem que trouxe o
+    // recorde.
     trabalhador?.postMessage({ tipo: 'exportar' });
   }
 
@@ -397,27 +413,6 @@ function pintarRecordes() {
       </li>`
     )
     .join('');
-}
-
-/*
- * As cartelas em si só são pedidas quando há um recorde novo. Trazê-las a cada
- * lote seria atravessar a fronteira dezenas de vezes por segundo para redesenhar
- * exatamente a mesma lista.
- */
-let pedidoDeSolucao = null;
-
-function pedirMelhorSolucao() {
-  clearTimeout(pedidoDeSolucao);
-  pedidoDeSolucao = setTimeout(() => {
-    const salvo = localStorage.getItem(CHAVE_SALVO);
-    if (!salvo) return;
-    try {
-      melhorCartelas = JSON.parse(salvo).melhor || [];
-      pintarCartelas();
-    } catch {
-      /* estado salvo corrompido: a próxima gravação corrige */
-    }
-  }, 120);
 }
 
 function pintarCartelas() {
