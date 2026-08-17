@@ -110,6 +110,28 @@ mesmo interpretador de formato do terminal, compilado para o navegador — o que
 celular aceita é exatamente o que a linha de comando aceita, e um erro de
 digitação é apontado com o número da linha.
 
+### A biblioteca de coberturas do mundo, guardada no aparelho
+
+O catálogo embutido traz os **números** do mundo. As **cartelas** ficam noutro
+arquivo, o `covers.json` da La Jolla — 2,7 GB, 61,7 milhões de blocos. Baixar
+tudo isso num celular não faz sentido, e a medição diz por quê:
+
+| faixa | designs | tamanho |
+|---|---|---|
+| tudo | 8.759 | 2.216 MB |
+| o que cabe na memória de um celular | 7.191 | 560 MB |
+| **faixa de uso real** (`v ≤ 40, k ≤ 12, t ≤ 5`) | **1.082** | **29 MB** |
+
+98% do arquivo são configurações que o aparelho não carrega: `C(99,25,8)` tem
+bilhões de combinações a cobrir, e o motor precisa de 12 bytes por combinação só
+para começar.
+
+`ferramentas/preparar-biblioteca.py` faz o recorte, lendo **em fluxo** — um
+design por vez, porque `json.load` sobre 2,7 GB pediria dezenas de gigabytes de
+RAM. O aplicativo importa o resultado em **Configurar → Biblioteca de coberturas
+do mundo**, guarda em IndexedDB (o `localStorage` do histórico tem 5 MB e não
+serviria) e consulta a cada busca.
+
 ### O ponto de partida é escolhido, não obedecido
 
 Quatro candidatos concorrem a cada partida, e todos custam milissegundos: a
@@ -137,6 +159,32 @@ A tela mostra o que aconteceu — "partiu do seu fechamento", "das 26 que você
 trouxe, 5 eram dispensáveis e saíram de graça", ou "partiu de PG(2,4), melhor
 que as 40 que você trouxe". Aproveitar o trabalho já feito é o objetivo; jogar
 fora um trabalho melhor que já estava disponível seria o contrário dele.
+
+### A ferramenta "18 de 25"
+
+Uma página fechada em torno de um cenário só: 25 números no universo, 18
+escolhidos por você, e os **816 grupos de 15** que existem dentro deles.
+
+Existe porque a tela Configurar é geral demais para quem sempre resolve o mesmo
+problema: são sete campos a acertar, e errar um produz um problema diferente do
+pretendido sem nenhum aviso — todos os valores são configurações legítimas.
+
+A matemática tem uma particularidade que a tela precisa explicar. Jogo e grupo
+saem dos mesmos 18 números, então **qualquer jogo de `k` números já acerta pelo
+menos `k + 15 − 18`** de qualquer grupo, sem esforço nenhum:
+
+| jogos de | acerta sempre | garantir 13 | garantir 14 |
+|----------|---------------|-------------|-------------|
+| 15 números | 12, com 1 jogo | **6 jogos** | **24 jogos** |
+| 18 números | os 15, com 1 jogo | — | — |
+
+Garantir 12 com jogos de 15 é gratuito; garantir 15 exige os 816 grupos
+inteiros, porque só o próprio grupo contém o grupo. O trabalho fica no meio, e a
+tela diz isso em vez de deixar alguém escolher o gratuito achando que otimizou.
+
+A garantia não é afirmada, é conferida: `web/testar-fechamento18.mjs` percorre os
+816 grupos um a um, em JavaScript, sem tocar no código que produziu o
+fechamento.
 
 ### Histórico de trabalhos
 
@@ -443,6 +491,10 @@ node web/testar.mjs                             # testa a interface na raiz
 node web/testar.mjs /Sonho-l-cido/              # testa sob a subpasta do Pages
 node web/testar-atualizacao.mjs                 # testa a atualização automática
 node web/testar-historico.mjs                   # testa o histórico de trabalhos
+node web/testar-biblioteca.mjs                  # testa a biblioteca do mundo
+node web/testar-fechamento18.mjs                # testa a ferramenta 18 de 25
+
+./ferramentas/preparar-biblioteca.py            # recorta o covers.json da La Jolla
 python3 -m http.server -d site 8000             # experimenta localmente
 ```
 
