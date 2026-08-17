@@ -28,7 +28,7 @@
 use motor_busca::{
     CondicoesDeParada, Configuracao, Controle, Evento, MotivoEncerramento, MotorBusca, Observador,
 };
-use motor_core::{Cartela, Objetivo, Problema, RegraCobertura};
+use motor_core::{interpretar_fechamento, Cartela, Objetivo, Problema, RegraCobertura};
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
 
@@ -105,6 +105,20 @@ pub struct Estado {
     pub metodo_limite: String,
     pub gap: Option<f64>,
     pub optimalidade_provada: bool,
+
+    /// Melhor resultado já obtido no mundo para esta configuração, quando ela é
+    /// um covering design catalogado. `None` em garantias parciais e fora da
+    /// faixa da tabela.
+    ///
+    /// É um limite **superior**, e a tela precisa tratá-lo como tal: serve para
+    /// dizer "faltam 6 para o recorde mundial", nunca para declarar optimalidade
+    /// — isso é papel de `limite_inferior`.
+    pub melhor_conhecido: Option<u64>,
+    /// Verdadeiro quando o melhor conhecido já encostou no limite provado: o
+    /// mundo considera essa configuração encerrada.
+    pub referencia_resolvida: bool,
+    /// Como o ponto de partida foi construído.
+    pub origem_do_inicio: String,
 
     /// Recordes encontrados neste lote, em ordem cronológica.
     pub novos_recordes: Vec<Recorde>,
@@ -188,6 +202,20 @@ impl MotorWeb {
         Ok(())
     }
 
+    /// Parte de um fechamento colado como texto pelo usuário.
+    ///
+    /// Usa o mesmo interpretador da linha de comando
+    /// ([`motor_core::texto::interpretar_fechamento`]), então o que o celular
+    /// aceita é exatamente o que o terminal aceita: uma cartela por linha,
+    /// números separados por espaço, vírgula, ponto e vírgula, tabulação ou
+    /// hífen, com `#` para comentários.
+    pub fn semear_com_texto(&mut self, texto: &str) -> Result<(), String> {
+        let rotulos = interpretar_fechamento(texto).map_err(|e| e.to_string())?;
+        let cartelas = self.converter(&rotulos)?;
+        self.interno.semear(&cartelas);
+        Ok(())
+    }
+
     /// Retoma uma busca salva anteriormente (§16).
     pub fn retomar_com(&mut self, estado_json: &str) -> Result<(), String> {
         let salvo: EstadoSalvo = serde_json::from_str(estado_json)
@@ -212,6 +240,10 @@ impl MotorWeb {
 
     pub fn semear(&mut self, cartelas_json: &str) -> Result<(), JsValue> {
         self.semear_com(cartelas_json).map_err(|e| JsValue::from_str(&e))
+    }
+
+    pub fn semear_texto(&mut self, texto: &str) -> Result<(), JsValue> {
+        self.semear_com_texto(texto).map_err(|e| JsValue::from_str(&e))
     }
 
     pub fn retomar(&mut self, estado_json: &str) -> Result<(), JsValue> {
@@ -374,6 +406,10 @@ impl MotorWeb {
             gap: self.interno.gap(),
             optimalidade_provada: self.interno.optimalidade_provada(),
 
+            melhor_conhecido: self.interno.referencia().map(|r| r.melhor_conhecido),
+            referencia_resolvida: self.interno.referencia().is_some_and(|r| r.resolvido()),
+            origem_do_inicio: self.interno.origem_do_inicio().to_string(),
+
             novos_recordes,
             encerrado: self.encerrado,
         };
@@ -397,6 +433,19 @@ mod testes {
             semente: 42,
         })
         .unwrap()
+    }
+
+    /// Uma configuração em que a busca tem trabalho de verdade.
+    ///
+    /// C(13,4,2) e C(16,4,2) passaram a sair prontas da construção algébrica,
+    /// com optimalidade provada antes da primeira iteração — e um teste de
+    /// lotes sobre elas mede zero iterações e zero recordes. Os testes da
+    /// mecânica da ponte precisam de um caso sem fórmula fechada, e `t = 3` não
+    /// tem nenhuma. E o melhor conhecido no mundo para `C(12,5,3)` (29) ainda
+    /// está acima do limite provado (27), então a busca também nunca para
+    /// sozinha por optimalidade.
+    fn configuracao_para_buscar() -> String {
+        configuracao(12, 5, 3)
     }
 
     fn estado_de(json: &str) -> serde_json::Value {
@@ -454,7 +503,7 @@ mod testes {
 
     #[test]
     fn preparar_e_avancar_se_encaixam() {
-        let mut motor = MotorWeb::construir(&configuracao(16, 4, 2)).unwrap();
+        let mut motor = MotorWeb::construir(&configuracao_para_buscar()).unwrap();
         let inicial = estado_de(&motor.preparar())["melhor_cartelas"].as_u64().unwrap();
 
         let depois = estado_de(&motor.avancar(20_000));
@@ -467,13 +516,12 @@ mod testes {
 
     #[test]
     fn avancar_progride_e_devolve_estado_completo() {
-        let mut motor = MotorWeb::construir(&configuracao(13, 4, 2)).unwrap();
+        let mut motor = MotorWeb::construir(&configuracao_para_buscar()).unwrap();
 
         let primeiro = estado_de(&motor.avancar(500));
         assert!(primeiro["iteracoes"].as_u64().unwrap() > 0);
         assert!(primeiro["melhor_cartelas"].as_u64().unwrap() > 0);
-        assert_eq!(primeiro["limite_inferior"].as_u64().unwrap(), 13);
-        assert!(primeiro["metodo_limite"].as_str().unwrap().contains("Schönheim"));
+        assert_eq!(primeiro["limite_inferior"].as_u64().unwrap(), 27);
 
         let segundo = estado_de(&motor.avancar(500));
         assert!(
@@ -484,7 +532,7 @@ mod testes {
 
     #[test]
     fn o_recorde_nunca_piora_entre_lotes() {
-        let mut motor = MotorWeb::construir(&configuracao(16, 4, 2)).unwrap();
+        let mut motor = MotorWeb::construir(&configuracao_para_buscar()).unwrap();
         let mut anterior = usize::MAX;
 
         for _ in 0..20 {
@@ -497,7 +545,7 @@ mod testes {
 
     #[test]
     fn os_recordes_do_lote_sao_reportados() {
-        let mut motor = MotorWeb::construir(&configuracao(13, 4, 2)).unwrap();
+        let mut motor = MotorWeb::construir(&configuracao_para_buscar()).unwrap();
         let estado = estado_de(&motor.avancar(5_000));
 
         let recordes = estado["novos_recordes"].as_array().unwrap();
@@ -551,15 +599,104 @@ mod testes {
     }
 
     #[test]
+    fn o_estado_traz_o_melhor_conhecido_no_mundo() {
+        // C(13,5,2): a cota de Schönheim dá 8, mas já está provado que 10 é o
+        // mínimo, e 10 é também o melhor que alguém já construiu.
+        //
+        // Sem o limite publicado, o motor acharia as 10 cartelas ótimas em
+        // segundos, não reconheceria que terminou, e seguiria procurando para
+        // sempre uma solução de 9 que não existe — gastando bateria à toa. É o
+        // defeito que este campo corrige, e vale em metade das configurações.
+        let motor = MotorWeb::construir(&configuracao(13, 5, 2)).unwrap();
+        let estado = estado_de(&motor.estado());
+
+        assert_eq!(estado["limite_inferior"].as_u64().unwrap(), 10);
+        assert!(estado["metodo_limite"].as_str().unwrap().contains("provado"));
+        assert_eq!(estado["melhor_conhecido"].as_u64().unwrap(), 10);
+        assert!(estado["referencia_resolvida"].as_bool().unwrap());
+    }
+
+    #[test]
+    fn garantia_parcial_nao_finge_ter_referencia() {
+        // A tabela mundial cataloga covering designs. Com garantia parcial não
+        // há número publicado, e mostrar um seria mentira.
+        let texto = serde_json::to_string(&ConfiguracaoEntrada {
+            universo: 20,
+            pool: (1..=20).collect(),
+            cartela: 6,
+            alvo: 6,
+            intersecao: 4,
+            orcamento: None,
+            semente: 42,
+        })
+        .unwrap();
+
+        let motor = MotorWeb::construir(&texto).unwrap();
+        let estado = estado_de(&motor.estado());
+        assert!(estado["melhor_conhecido"].is_null());
+        assert!(!estado["referencia_resolvida"].as_bool().unwrap());
+    }
+
+    #[test]
+    fn a_construcao_algebrica_resolve_antes_da_primeira_iteracao() {
+        // C(21,5,2) é o plano projetivo PG(2,4). A busca sozinha parava em 27
+        // cartelas depois de 3 segundos; a construção entrega as 21 ótimas antes
+        // de qualquer iteração.
+        let mut motor = MotorWeb::construir(&configuracao(21, 5, 2)).unwrap();
+        let estado = estado_de(&motor.preparar());
+
+        assert_eq!(estado["melhor_cartelas"].as_u64().unwrap(), 21);
+        assert_eq!(estado["iteracoes"].as_u64().unwrap(), 0);
+        assert!(estado["optimalidade_provada"].as_bool().unwrap());
+        assert!(
+            estado["origem_do_inicio"].as_str().unwrap().contains("PG(2,4)"),
+            "origem foi: {}",
+            estado["origem_do_inicio"]
+        );
+    }
+
+    #[test]
+    fn semear_por_texto_aceita_o_que_o_usuario_cola() {
+        // O caminho da tela de importar: texto cru, com comentário, separadores
+        // variados e espaçamento irregular.
+        let mut motor = MotorWeb::construir(&configuracao(13, 4, 2)).unwrap();
+        let colado = "# meu fechamento\n01 02 03 04\n5,6,7,8\n  9 - 10 - 11 - 12  \n";
+
+        motor.semear_com_texto(colado).expect("o texto precisa ser aceito");
+
+        let cartelas: Vec<Vec<u32>> =
+            serde_json::from_str(&motor.melhor()).unwrap_or_default();
+        let estado = estado_de(&motor.estado());
+        assert_eq!(estado["atual_cartelas"].as_u64().unwrap(), 3);
+        assert_eq!(
+            estado["origem_do_inicio"].as_str().unwrap(),
+            "fechamento importado"
+        );
+        // Três cartelas não cobrem C(13,4,2), então ainda não há recorde válido
+        // — mas a busca parte delas.
+        assert!(cartelas.is_empty() || cartelas.len() == 3);
+    }
+
+    #[test]
+    fn semear_por_texto_recusa_texto_invalido_com_a_linha() {
+        let mut motor = MotorWeb::construir(&configuracao(13, 4, 2)).unwrap();
+        let erro = motor.semear_com_texto("1 2 3 4\n5 6 sete 8").unwrap_err();
+        assert!(erro.contains("linha 2"), "mensagem foi: {erro}");
+
+        let fora = motor.semear_com_texto("1 2 3 99").unwrap_err();
+        assert!(fora.contains("99"), "mensagem foi: {fora}");
+    }
+
+    #[test]
     fn exportar_e_retomar_preservam_o_recorde() {
         // É o ciclo que faz a busca sobreviver a fechar a aba do navegador.
-        let mut original = MotorWeb::construir(&configuracao(16, 4, 2)).unwrap();
+        let mut original = MotorWeb::construir(&configuracao_para_buscar()).unwrap();
         original.avancar(3_000);
 
         let recorde = estado_de(&original.estado())["melhor_cartelas"].as_u64().unwrap();
         let salvo = original.exportar();
 
-        let mut retomado = MotorWeb::construir(&configuracao(16, 4, 2)).unwrap();
+        let mut retomado = MotorWeb::construir(&configuracao_para_buscar()).unwrap();
         retomado.retomar_com(&salvo).expect("estado salvo precisa ser aceito");
 
         let estado = estado_de(&retomado.estado());

@@ -10,6 +10,7 @@
 //! — e aí sim é legítimo dizer "ótimo provado".
 
 use crate::cobertura::MotorCobertura;
+use crate::referencia;
 
 /// Como o limite foi obtido.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -18,6 +19,11 @@ pub enum MetodoLimite {
     Schonheim,
     /// Contagem simples: total de alvos dividido pelo que cabe em uma cartela.
     Contagem,
+    /// Limite inferior já provado na literatura, catalogado em
+    /// [`crate::referencia`]. Costuma ser bem mais forte que os dois anteriores
+    /// — supera Schönheim em metade das configurações conhecidas — porque vem de
+    /// argumentos específicos daquele caso, e não de uma fórmula geral.
+    Publicado,
 }
 
 impl std::fmt::Display for MetodoLimite {
@@ -25,6 +31,7 @@ impl std::fmt::Display for MetodoLimite {
         match self {
             MetodoLimite::Schonheim => write!(f, "cota de Schönheim"),
             MetodoLimite::Contagem => write!(f, "cota de contagem"),
+            MetodoLimite::Publicado => write!(f, "limite provado na literatura"),
         }
     }
 }
@@ -84,9 +91,17 @@ pub fn schonheim(v: usize, k: usize, t: usize) -> u64 {
 
 /// Melhor limite inferior disponível para a configuração do motor.
 ///
-/// Para covering designs usa o mais forte entre Schönheim e contagem; para
+/// Para covering designs usa o mais forte entre três fontes: o limite já provado
+/// na literatura ([`crate::referencia`]), a cota de Schönheim e a contagem. Para
 /// garantias parciais, apenas contagem — Schönheim não se aplica quando a
-/// cartela pode atender um alvo sem contê-lo.
+/// cartela pode atender um alvo sem contê-lo, e a tabela publicada tampouco
+/// cobre esse caso.
+///
+/// Tomar o máximo é seguro porque os três são limites inferiores válidos: cada
+/// um afirma "não existe solução menor que isto", e a afirmação mais forte
+/// continua verdadeira. O que **não** pode entrar aqui é o melhor resultado
+/// conhecido no mundo — esse é um limite superior, e usá-lo faria o motor
+/// declarar optimalidade em cima de um recorde que ainda pode cair.
 pub fn limite_inferior(motor: &MotorCobertura) -> LimiteInferior {
     let viabilidade = motor.viabilidade();
     let por_contagem =
@@ -99,12 +114,26 @@ pub fn limite_inferior(motor: &MotorCobertura) -> LimiteInferior {
 
     let por_schonheim =
         schonheim(motor.tamanho_pool(), motor.tamanho_cartela(), motor.intersecao());
+    let publicado = referencia::consultar(
+        motor.tamanho_pool(),
+        motor.tamanho_cartela(),
+        motor.intersecao(),
+    )
+    .map(|r| r.limite_publicado)
+    .unwrap_or(0);
 
-    if por_schonheim >= por_contagem {
-        LimiteInferior { valor: por_schonheim, metodo: MetodoLimite::Schonheim }
+    // Empates ficam com o método mais simples de explicar: uma cota fechada é
+    // mais informativa na tela do que "está num catálogo".
+    let melhor = por_contagem.max(por_schonheim).max(publicado);
+    let metodo = if melhor == por_schonheim {
+        MetodoLimite::Schonheim
+    } else if melhor == por_contagem {
+        MetodoLimite::Contagem
     } else {
-        LimiteInferior { valor: por_contagem, metodo: MetodoLimite::Contagem }
-    }
+        MetodoLimite::Publicado
+    };
+
+    LimiteInferior { valor: melhor, metodo }
 }
 
 /// Distância relativa entre a melhor solução conhecida e o limite inferior.

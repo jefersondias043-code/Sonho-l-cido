@@ -122,7 +122,12 @@ function criar({ configuracao, fechamento, salvo }) {
 
   if (salvo) {
     motor.retomar(salvo);
-  } else if (fechamento && fechamento.length > 0) {
+  } else if (typeof fechamento === 'string' && fechamento.trim().length > 0) {
+    // Texto cru, interpretado do lado do Rust. É o mesmo interpretador da linha
+    // de comando, então o formato aceito é um só. O erro que ele devolve cita a
+    // linha, e sobe daqui até a caixa de texto onde o usuário colou.
+    motor.semear_texto(fechamento);
+  } else if (Array.isArray(fechamento) && fechamento.length > 0) {
     motor.semear(JSON.stringify(fechamento));
   }
 

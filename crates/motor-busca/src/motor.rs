@@ -40,8 +40,8 @@ use web_time::Instant;
 use std::time::Instant;
 
 use motor_core::{
-    limite_inferior, Avaliacao, Cartela, ChaveCusto, LimiteInferior, MotorCobertura, Objetivo,
-    Problema, Solucao,
+    limite_inferior, referencia, semente_algebrica, Avaliacao, Cartela, ChaveCusto, LimiteInferior,
+    MotorCobertura, Objetivo, Problema, Referencia, Solucao,
 };
 use rand::{Rng, SeedableRng};
 use rand_pcg::Pcg64Mcg;
@@ -153,6 +153,14 @@ pub struct MotorBusca {
     /// Cartelas da elite escolhida para recombinação nesta iteração.
     elite_atual: Vec<Cartela>,
 
+    /// O que o mundo já sabe sobre esta configuração, quando ela é um covering
+    /// design catalogado. `None` em garantias parciais e fora da faixa.
+    referencia: Option<Referencia>,
+
+    /// Como o ponto de partida foi obtido — "guloso", "plano projetivo PG(2,4)",
+    /// "fechamento importado". Aparece na tela e nos registros.
+    origem_do_inicio: String,
+
     estatisticas: Estatisticas,
     duracao_acumulada: Duration,
     iteracoes_sem_recorde: u64,
@@ -184,6 +192,10 @@ impl MotorBusca {
         let max_candidatos =
             crate::construcao::candidatos_por_posicao(&cobertura, config.orcamento_por_cartela);
 
+        let problema_regra_e_covering_design = problema.regra().e_covering_design();
+        let (tamanho_pool, tamanho_cartela, intersecao) =
+            (problema.tamanho_pool(), problema.tamanho_cartela(), problema.regra().intersecao);
+
         Ok(Self {
             problema,
             cobertura,
@@ -203,6 +215,12 @@ impl MotorBusca {
             rng,
             oficina: Oficina::nova(),
             elite_atual: Vec::new(),
+            referencia: if problema_regra_e_covering_design {
+                referencia::consultar(tamanho_pool, tamanho_cartela, intersecao)
+            } else {
+                None
+            },
+            origem_do_inicio: String::new(),
             estatisticas: Estatisticas::default(),
             duracao_acumulada: Duration::ZERO,
             iteracoes_sem_recorde: 0,
@@ -220,6 +238,7 @@ impl MotorBusca {
             self.atual.adicionar(&self.cobertura, cartela, &mut self.oficina.rascunho);
         }
         self.comecou = true;
+        self.origem_do_inicio = "fechamento importado".to_string();
         self.consolidar_inicio();
     }
 
@@ -232,10 +251,25 @@ impl MotorBusca {
         self.estatisticas.iteracoes = iteracoes_anteriores;
     }
 
+    /// Escolhe o ponto de partida da busca — a "primeira etapa" do processo em
+    /// duas fases.
+    ///
+    /// Duas construções competem, e ambas custam milissegundos:
+    ///
+    /// - **Guloso com ruído** ([`construir_do_zero`]), que funciona em qualquer
+    ///   configuração e é o que o motor sempre usou.
+    /// - **Construção algébrica** ([`semente_algebrica`]), que só existe para
+    ///   alguns formatos, mas quando existe entrega a solução ótima pronta.
+    ///
+    /// Quem vence é decidido pelo número de cartelas, não por preferência. Isso
+    /// importa: em pools bem menores que o plano de onde a construção veio, a
+    /// truncagem sobra e o guloso ganha. Comparar custa quase nada e garante que
+    /// acrescentar as construções nunca piore nenhum caso.
     fn garantir_inicio(&mut self, observador: &mut dyn Observador) {
         if self.comecou {
             return;
         }
+
         construir_do_zero(
             &self.cobertura,
             &mut self.atual,
@@ -245,6 +279,34 @@ impl MotorBusca {
             &mut self.oficina,
         );
         podar(&self.cobertura, &mut self.atual, &mut self.oficina);
+        self.origem_do_inicio = "construção gulosa".to_string();
+
+        if let Some(semente) = semente_algebrica(&self.problema) {
+            let guloso: Vec<Cartela> = self.atual.cartelas().to_vec();
+
+            self.atual.reiniciar();
+            for &cartela in &semente.cartelas {
+                self.atual.adicionar(&self.cobertura, cartela, &mut self.oficina.rascunho);
+            }
+            podar(&self.cobertura, &mut self.atual, &mut self.oficina);
+
+            // A construção só entra se cobrir tudo *e* usar menos cartelas. A
+            // conferência de cobertura não é formalidade: uma construção que
+            // deixasse um alvo descoberto entregaria um fechamento furado com
+            // cara de ótimo.
+            let venceu =
+                self.atual.cobertura_total() && self.atual.quantidade() < guloso.len();
+
+            if venceu {
+                self.origem_do_inicio = semente.origem;
+            } else {
+                self.atual.reiniciar();
+                for &cartela in &guloso {
+                    self.atual.adicionar(&self.cobertura, cartela, &mut self.oficina.rascunho);
+                }
+            }
+        }
+
         self.comecou = true;
         self.consolidar_inicio();
 
@@ -467,6 +529,22 @@ impl MotorBusca {
                 if melhor == 0 {
                     usize::MAX
                 } else {
+                    // Um passo por vez, e não um salto direto para o recorde
+                    // mundial.
+                    //
+                    // O salto foi tentado e medido: mirar a meta direto no
+                    // melhor conhecido levou os empates com o mundo de 41,7%
+                    // para 48,4% — e os casos com mais de 20% de distância de
+                    // 31,4% para 49,3%, com os piores piorando muito
+                    // (C(26,6,3) saiu de 246 para 288 cartelas).
+                    //
+                    // A razão é estrutural: `encolher_ate` corta a solução atual
+                    // até a meta, e cortar 116 cartelas de uma vez deixa um
+                    // destroço que a busca não consegue reparar. O passo único
+                    // mantém a solução sempre perto de viável, que é justamente
+                    // o que faz a busca por cardinalidade fixa funcionar. Quem
+                    // ganha com o salto é o caso fácil, que já ia bem; quem
+                    // perde é o difícil, que é o que o usuário sente.
                     (melhor - 1).max(1)
                 }
             }
@@ -639,6 +717,21 @@ impl MotorBusca {
         self.alvo_cartelas
     }
 
+    /// O melhor resultado já conhecido no mundo para esta configuração, quando
+    /// ela é um covering design catalogado.
+    ///
+    /// É um **limite superior**: alguém já construiu uma solução desse tamanho.
+    /// Nunca deve ser usado como limite inferior — para isso existe
+    /// [`Self::limite_inferior`], que já incorpora o limite publicado.
+    pub fn referencia(&self) -> Option<Referencia> {
+        self.referencia
+    }
+
+    /// Como o ponto de partida desta busca foi obtido.
+    pub fn origem_do_inicio(&self) -> &str {
+        &self.origem_do_inicio
+    }
+
     pub fn pesos_dos_operadores(&self) -> Vec<(&'static str, f64)> {
         Operador::TODOS
             .iter()
@@ -679,6 +772,24 @@ mod testes {
         .unwrap()
     }
 
+    /// Uma configuração em que a busca tem trabalho de verdade.
+    ///
+    /// As antigas favoritas destes testes — C(13,4,2), C(16,4,2), C(21,5,2) —
+    /// passaram a sair prontas da construção algébrica, com optimalidade provada
+    /// antes da primeira iteração. Testar o laço de busca sobre elas deixou de
+    /// observar laço nenhum: nenhum recorde, nenhuma diversificação, nenhuma
+    /// elite. Não é regressão, é a construção funcionando — mas os testes do
+    /// laço precisam de um caso sem fórmula fechada.
+    ///
+    /// `C(12,5,3)` serve duas vezes: `t = 3` não tem construção fechada neste
+    /// projeto, e o melhor conhecido no mundo (29) ainda está acima do limite
+    /// provado (27) — ninguém sabe se 27 existe. Logo a busca nunca prova
+    /// optimalidade e nunca para sozinha, que é o que estes testes precisam
+    /// observar.
+    fn problema_para_buscar() -> Problema {
+        problema(12, 5, 3)
+    }
+
     fn config_rapida(semente: u64) -> Configuracao {
         Configuracao {
             semente,
@@ -715,7 +826,7 @@ mod testes {
     #[test]
     fn o_recorde_nunca_piora_ao_longo_da_busca() {
         // §8: explorar pode piorar a solução atual, jamais o recorde.
-        let mut motor = MotorBusca::novo(problema(13, 4, 2), config_rapida(7)).unwrap();
+        let mut motor = MotorBusca::novo(problema_para_buscar(), config_rapida(7)).unwrap();
         let mut coletor = Coletor::default();
         motor.executar(
             &Controle::novo(),
@@ -743,7 +854,7 @@ mod testes {
     fn a_solucao_atual_pode_piorar_livremente() {
         // O outro lado do §8: se a atual nunca piorasse, seria só uma subida
         // gulosa e o motor ficaria preso no primeiro ótimo local.
-        let mut motor = MotorBusca::novo(problema(16, 4, 2), config_rapida(3)).unwrap();
+        let mut motor = MotorBusca::novo(problema_para_buscar(), config_rapida(3)).unwrap();
         let mut coletor = Coletor::default();
         let mut config_com_progresso = config_rapida(3);
         config_com_progresso.intervalo_progresso = 100;
@@ -821,7 +932,7 @@ mod testes {
         // Num caso fácil ele provaria o ótimo e encerraria por conta própria, e
         // a segunda chamada não teria mais o que fazer — o teste passaria a
         // medir outra coisa.
-        let mut motor = MotorBusca::novo(problema(21, 5, 2), config_rapida(9)).unwrap();
+        let mut motor = MotorBusca::novo(problema_para_buscar(), config_rapida(9)).unwrap();
         let condicoes = CondicoesDeParada::por_iteracoes(1_500);
         motor.executar(&Controle::novo(), &condicoes, &mut Silencioso);
 
@@ -917,7 +1028,7 @@ mod testes {
     #[test]
     fn sementes_diferentes_exploram_caminhos_diferentes() {
         let assinatura = |semente: u64| {
-            let mut motor = MotorBusca::novo(problema(16, 4, 2), config_rapida(semente)).unwrap();
+            let mut motor = MotorBusca::novo(problema_para_buscar(), config_rapida(semente)).unwrap();
             motor.executar(
                 &Controle::novo(),
                 &CondicoesDeParada::por_iteracoes(1_000),
@@ -932,7 +1043,7 @@ mod testes {
 
     #[test]
     fn o_arquivo_acumula_solucoes_diversas() {
-        let mut motor = MotorBusca::novo(problema(16, 4, 2), config_rapida(8)).unwrap();
+        let mut motor = MotorBusca::novo(problema_para_buscar(), config_rapida(8)).unwrap();
         motor.executar(
             &Controle::novo(),
             &CondicoesDeParada::por_iteracoes(20_000),
@@ -948,7 +1059,7 @@ mod testes {
     #[test]
     fn os_pesos_dos_operadores_se_diferenciam_com_o_tempo() {
         // §36: se todos continuassem iguais, não haveria aprendizado nenhum.
-        let mut motor = MotorBusca::novo(problema(16, 4, 2), config_rapida(10)).unwrap();
+        let mut motor = MotorBusca::novo(problema_para_buscar(), config_rapida(10)).unwrap();
         motor.executar(
             &Controle::novo(),
             &CondicoesDeParada::por_iteracoes(20_000),
@@ -968,7 +1079,7 @@ mod testes {
     fn diversificacao_dispara_quando_a_busca_estaciona() {
         let mut config = config_rapida(11);
         config.iteracoes_ate_diversificar = 200;
-        let mut motor = MotorBusca::novo(problema(16, 4, 2), config).unwrap();
+        let mut motor = MotorBusca::novo(problema_para_buscar(), config).unwrap();
         let mut coletor = Coletor::default();
 
         motor.executar(

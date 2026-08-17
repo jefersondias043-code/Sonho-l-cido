@@ -161,12 +161,17 @@ try {
   //
   // Usa um problema que não se resolve em segundos, para que continuar tenha
   // mesmo o que melhorar.
-  await buscar({ universo: 25, pool: 25, cartela: 5, cobrir: 2 });
+  //
+  // Aqui já esteve C(25,5,2). Não serve mais: é o plano afim AG(2,5) e agora
+  // sai pronto por construção algébrica, em zero iterações — e um teste de
+  // "continuar avançou" sobre ele mede 0 → 0. C(22,6,3) não tem construção
+  // fechada e continua rodando.
+  await buscar({ universo: 22, pool: 22, cartela: 6, cobrir: 3 });
   await pagina.waitForTimeout(2500);
   await encerrar();
 
   sessoes = await sessoesGravadas();
-  const antes = sessoes.find((s) => s.configuracao.pool.length === 25);
+  const antes = sessoes.find((s) => s.configuracao.pool.length === 22);
   marcar(!!antes, 'o trabalho longo também foi salvo', `${antes?.melhor.length} cartelas`);
 
   await pagina.click('.aba[data-painel="historico"]');
@@ -177,7 +182,7 @@ try {
   );
   await pagina.screenshot({ path: 'capturas/captura-historico.png' });
 
-  // Continua justamente o trabalho de pool 25.
+  // Continua justamente o trabalho de pool 22.
   const posicao = await pagina.evaluate((id) => {
     const botoes = [...document.querySelectorAll('[data-acao="continuar"]')];
     return botoes.findIndex((b) => b.dataset.id === id);

@@ -103,6 +103,30 @@
     </label>
   </div>
 
+  <!-- Importar um fechamento pronto: a segunda metade do processo em duas
+       etapas. Qualquer resultado, de qualquer ferramenta, entra aqui e o motor
+       continua a partir dele em vez de recomeçar do zero. -->
+  <details class="cartao" id="importar">
+    <summary>Já tenho um fechamento</summary>
+    <p class="ajuda">
+      Cole as cartelas que você já tem — de outro programa, de uma planilha ou de
+      uma busca anterior. O motor parte delas e tenta melhorar, em vez de
+      começar do zero.
+    </p>
+    <textarea id="texto-fechamento" rows="6" spellcheck="false"
+      placeholder="01 04 07 12&#10;02 05 08 14&#10;03 06 09 16"></textarea>
+    <p class="ajuda">
+      Uma cartela por linha. Separe por espaço, vírgula, ponto e vírgula ou
+      hífen. Linhas com <code>#</code> são comentários.
+    </p>
+    <div class="acoes-linha">
+      <button class="secundario" id="escolher-arquivo">Abrir um arquivo</button>
+      <button class="secundario" id="limpar-fechamento">Limpar</button>
+    </div>
+    <input type="file" id="arquivo-fechamento" accept=".txt,.csv,text/plain" hidden>
+    <p class="ajuda erro" id="erro-fechamento" hidden></p>
+  </details>
+
   <div class="cartao" id="previsao">
     <h2>Antes de começar</h2>
     <div id="texto-previsao" class="ajuda">calculando…</div>
@@ -116,6 +140,11 @@
   <p class="rodape-nota">
     Tudo roda dentro do seu aparelho. Nenhum dado sai daqui, e depois da
     primeira visita funciona sem internet.
+    <br>
+    Os números de "melhor conhecido no mundo" vêm da
+    <a href="https://github.com/dmgordo/LJCR" target="_blank" rel="noopener">La
+    Jolla Covering Repository</a>, de D. M. Gordon, sob licença CC BY 4.0, e
+    estão embutidos no aplicativo.
     <br>
     <!-- Torna verificável, sem adivinhação, se uma correção publicada chegou
          mesmo a este aparelho. -->
@@ -138,6 +167,8 @@
     <div class="rotulo">Melhor solução conhecida</div>
     <div class="numerao"><span id="melhor-cartelas">—</span><small>cartelas</small></div>
     <div class="selo" id="selo-otimo" hidden>★ ótimo provado</div>
+    <div class="selo recorde" id="selo-recorde" hidden>★ acima do melhor conhecido no mundo</div>
+    <div class="referencia" id="referencia-busca" hidden></div>
     <div class="barra-limite">
       <div class="marca">
         <span class="valor" id="limite-inferior">—</span>
@@ -203,6 +234,9 @@
   <div class="cartao destaque">
     <div class="rotulo">Fechamento encontrado</div>
     <div class="numerao"><span id="res-cartelas">—</span><small>cartelas</small></div>
+    <div class="selo" id="res-selo-otimo" hidden>★ ótimo provado</div>
+    <div class="selo recorde" id="res-selo-recorde" hidden>★ acima do melhor conhecido no mundo</div>
+    <div class="referencia" id="referencia-resultado" hidden></div>
     <div class="barra-limite">
       <div class="marca">
         <span class="valor" id="res-cobertura">—</span>

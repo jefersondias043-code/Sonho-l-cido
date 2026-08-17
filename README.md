@@ -104,6 +104,12 @@ servem como separador; linhas iniciadas por `#` são comentários.
 O motor **não fica preso às cartelas que você forneceu** (§32). Ele pode
 remover, reorganizar e criar outras — o que importa é a regra de cobertura.
 
+No aplicativo isso fica em **Configurar → "Já tenho um fechamento"**: cole as
+cartelas ou abra um arquivo, e a busca parte dali em vez de começar do zero. É o
+mesmo interpretador de formato do terminal, compilado para o navegador — o que o
+celular aceita é exatamente o que a linha de comando aceita, e um erro de
+digitação é apontado com o número da linha.
+
 ### Histórico de trabalhos
 
 No aplicativo, toda busca é salva sozinha assim que produz a primeira solução, e
@@ -153,27 +159,91 @@ design** `C(p,k,t)` — um problema clássico, NP-difícil, estudado há década
 Essa correspondência não é acidental: é ela que permite **validar o motor contra
 ótimos já provados matematicamente**, em vez de confiar que o código está certo.
 
+## A referência mundial embutida
+
+O motor não trabalha sozinho. Embutidas no aplicativo estão as **8.759
+configurações catalogadas** da [La Jolla Covering
+Repository](https://github.com/dmgordo/LJCR) — para cada `C(v,k,t)`, o melhor
+resultado que a humanidade já produziu e o melhor limite inferior já provado.
+São 134 KiB de texto, funcionam sem internet, e servem a duas coisas.
+
+**Situar o resultado.** A tela mostra "27 cartelas · melhor do mundo: 21 ·
+faltam 6". Um número sozinho não diz nada: 27 cartelas é excelente numa
+configuração e medíocre em outra.
+
+**Saber quando parar.** Em 4.317 das 8.759 configurações (49%) o limite já
+provado na literatura é maior que a cota de Schönheim — e em nenhuma ele é
+menor. Não é detalhe acadêmico: em `C(13,5,2)` Schönheim diz 8, mas já está
+provado que o mínimo é 10. Sem o limite publicado, o motor encontra as 10
+cartelas ótimas em segundos, **não reconhece que terminou**, e segue procurando
+para sempre uma solução de 9 que não existe.
+
+`melhor_conhecido` é um teto (alguém já construiu); `limite_publicado` é um piso
+(está provado que nada menor existe). Só o segundo pode sustentar uma declaração
+de optimalidade — trocá-los faria o aplicativo cravar "ótimo provado" em cima de
+um recorde que ainda pode cair.
+
+## Construções algébricas: a etapa rápida
+
+Alguns formatos têm solução ótima por fórmula, sem busca nenhuma. O plano
+projetivo `PG(2,q)` resolve `C(q²+q+1, q+1, 2)`; o plano afim `AG(2,q)` resolve
+`C(q², q, 2)`. Ambos em milissegundos, e ambos provadamente ótimos.
+
+Isso importa porque eram exatamente os casos em que a busca falhava. `C(21,5,2)`
+é `PG(2,4)` e `C(25,5,2)` é `AG(2,5)`: objetos de estrutura rígida, cuja solução
+ótima não tem vizinhança — qualquer troca de um elemento a destrói. Busca local
+não chega lá por acidente, por mais horas que rode.
+
+Quando o pool não bate exatamente com um plano, a construção é **truncada** para
+o tamanho pedido, e as retas encurtadas são recompletadas. Guloso e construção
+competem a cada partida, e vence quem produzir menos cartelas — de modo que
+acrescentar as construções nunca piora nenhum caso.
+
 ## Aferição contra a literatura
 
-`cargo run --release --example aferir` roda o motor contra covering designs cujo
-mínimo já foi provado, com 3 segundos por caso:
+`cargo run --release --example aferir` roda o motor contra a tabela mundial. Os
+números de comparação não estão escritos no teste: vêm da própria tabela.
 
-| Configuração | Ótimo conhecido | Encontrado | Ótimo provado | Referência |
-|--------------|-----------------|------------|---------------|------------|
-| C(7,3,2)     | 7   | 7   | sim | plano de Fano |
-| C(9,3,2)     | 12  | 12  | sim | sistema de Steiner S(2,3,9) |
-| C(10,3,2)    | 17  | 17  | sim | cota de Schönheim exata |
-| C(11,3,2)    | 19  | 19  | sim | cota de Schönheim exata |
-| C(12,3,2)    | 24  | 24  | sim | cota de Schönheim exata |
-| C(13,3,2)    | 26  | 26  | sim | sistema de Steiner S(2,3,13) |
-| C(8,4,3)     | 14  | 14  | sim | valor clássico |
-| C(13,4,2)    | 13  | 13  | sim | plano projetivo de ordem 3 |
-| C(16,4,2)    | 20  | 20  | sim | sistema de Steiner S(2,4,16) |
-| C(21,5,2)    | 21  | 27  | —   | plano projetivo de ordem 4 |
-| C(25,5,2)    | 30  | 39  | —   | sistema de Steiner S(2,5,25) |
+| Configuração | Melhor do mundo | Encontrado | Ótimo provado | Iterações | Partida |
+|--------------|-----------------|------------|---------------|-----------|---------|
+| C(7,3,2)     | 7   | 7   | sim | 0      | plano projetivo PG(2,2) |
+| C(9,3,2)     | 12  | 12  | sim | 0      | plano afim AG(2,3) |
+| C(10,3,2)    | 17  | 17  | sim | 626    | construção gulosa |
+| C(11,3,2)    | 19  | 19  | sim | 1.200  | construção gulosa |
+| C(12,3,2)    | 24  | 24  | sim | 1.616  | construção gulosa |
+| C(13,3,2)    | 26  | 26  | sim | 54.942 | construção gulosa |
+| C(8,4,3)     | 14  | 14  | sim | 683    | construção gulosa |
+| C(13,4,2)    | 13  | 13  | sim | 0      | plano projetivo PG(2,3) |
+| C(16,4,2)    | 20  | 20  | sim | 0      | plano afim AG(2,4) |
+| C(21,5,2)    | 21  | 21  | sim | 0      | plano projetivo PG(2,4) |
+| C(25,5,2)    | 30  | 30  | sim | 0      | plano afim AG(2,5) |
 
-**9 de 11 no ótimo provado, em segundos.** Os dois últimos precisam de mais
-tempo — são instâncias em que a busca local sabidamente sofre.
+**11 de 11 no melhor conhecido do mundo.** Cinco deles sem uma única iteração de
+busca. Antes das construções algébricas eram 9 de 11, com `C(21,5,2)` parando em
+27 cartelas e `C(25,5,2)` em 39.
+
+### E onde o motor ainda fica atrás
+
+Casos escolhidos a dedo favorecem quem os escolheu. Por isso a aferição também
+varre a faixa inteira sem perguntar nada — 223 configurações, 1 segundo cada:
+
+| Distância do melhor do mundo | Configurações |
+|------------------------------|---------------|
+| empatou ou superou           | 93 (41,7%)    |
+| até 5% acima                 | 16 (7,2%)     |
+| de 5% a 20% acima            | 45 (20,2%)    |
+| mais de 20% acima            | 69 (30,9%)    |
+
+As piores estão todas em `t = 3` com pool grande — `C(26,6,3)` fica 89% acima —
+e é onde não existe construção fechada neste projeto. Um segundo de busca contra
+trinta anos de computação acumulada; a comparação é dura de propósito.
+
+Uma tentação medida e descartada: mirar a meta direto no recorde mundial, em vez
+de descer de uma cartela por vez. Levou os empates de 41,7% para 48,4% — e os
+casos a mais de 20% de distância de 30,9% para **49,3%**, com os piores piorando
+muito. Cortar cem cartelas de uma vez deixa um destroço que a busca não repara.
+Quem ganha com o salto é o caso fácil; quem perde é o difícil, que é o que o
+usuário sente.
 
 ## Arquitetura
 
@@ -187,7 +257,10 @@ crates/
 │   ├── conjunto         conjunto esparso: inserir/remover/sortear em O(1)
 │   ├── solucao          solução + cobertura em sincronia incremental
 │   ├── avaliacao        o que significa "melhor" (chave de custo ordenada)
-│   └── limites          limites inferiores: Schönheim e contagem
+│   ├── limites          limites inferiores: Schönheim, contagem e publicado
+│   ├── referencia       melhor conhecido no mundo (La Jolla, 8.759 casos)
+│   ├── planos           construções algébricas: PG(2,q) e AG(2,q)
+│   └── texto            interpretador de fechamentos, um só para CLI e web
 │
 ├── motor-busca/         a busca persistente e auto-reconstrutiva
 │   ├── operadores       §9    oito formas de destruir parte da solução
@@ -211,7 +284,7 @@ web/                     a interface do aplicativo
 ```
 
 O mesmo motor atende os dois caminhos. A versão do celular não é uma
-reimplementação simplificada: é exatamente o código validado pelos mesmos 162
+reimplementação simplificada: é exatamente o código validado pelos mesmos 185
 testes, compilado para outro alvo.
 
 ### As três decisões que sustentam a performance
@@ -285,8 +358,10 @@ que ele sabe.
   trabalho por cartela evita o pior caso, mas a taxa de iteração cai de centenas
   de milhares para algumas centenas por segundo. Um cache de alvos por cartela
   resolveria a maior parte disso.
-- **Instâncias grandes de covering design ficam acima do ótimo.** C(21,5,2) e
-  C(25,5,2) param 28-30% acima em execuções de segundos.
+- **Coberturas de trincas em pool grande ficam bem acima do melhor conhecido.**
+  C(26,6,3) fica 89% acima num segundo de busca. É onde não há construção
+  algébrica que sirva de atalho, e onde os números do mundo vêm de anos de
+  computação.
 - **Execução em um núcleo só.** O motor é sequencial. Buscar em paralelo, com
   arquivo de elites compartilhado, é o próximo ganho grande. No navegador isso
   esbarra num limite adicional: threads em WebAssembly exigem cabeçalhos HTTP
@@ -298,9 +373,11 @@ que ele sabe.
 ## Desenvolvimento
 
 ```bash
-cargo test --workspace                          # 162 testes
+cargo test --workspace                          # 185 testes
 cargo clippy --workspace --all-targets -- -D warnings
-cargo run --release --example aferir            # aferição contra a literatura
+cargo run --release --example aferir            # aferição contra a tabela mundial
+
+./ferramentas/atualizar-referencia.py           # rebaixa a tabela da La Jolla
 
 ./construir-web.sh                              # monta o site em site/
 ./testar-construcao.sh                          # testa a construção em si

@@ -355,6 +355,74 @@ main { padding: 8px 16px 0; }
   margin-bottom: 10px;
 }
 
+/* Superar o melhor conhecido no mundo é raro o bastante para não se confundir
+   com o selo de ótimo provado, que é comum. Daí a cor própria. */
+.selo.recorde {
+  background: rgba(255, 199, 90, 0.16);
+  border-color: var(--ouro);
+  color: var(--ouro);
+}
+
+/* A comparação com o mundo. Fica logo abaixo do número grande, porque é ela
+   que diz se aquele número é bom. */
+.referencia {
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--texto-fraco);
+  margin: 0 0 12px;
+}
+
+.referencia b {
+  color: var(--texto);
+  font-variant-numeric: tabular-nums;
+}
+
+.referencia em {
+  font-style: normal;
+}
+
+/* ─────────── importar um fechamento ─────────── */
+
+#importar summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 16px;
+  /* Alvo de toque confortável: o triângulo sozinho é pequeno demais para o
+     dedo, e errar o toque num <details> não dá retorno nenhum. */
+  padding: 4px 0;
+}
+
+#texto-fechamento {
+  width: 100%;
+  margin-top: 10px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid var(--borda);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--texto);
+  /* Monoespaçada para as colunas de números ficarem alinhadas, e 16px porque
+     abaixo disso o Safari do iOS dá zoom sozinho ao focar o campo. */
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 16px;
+  line-height: 1.6;
+  resize: vertical;
+}
+
+.acoes-linha {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.acoes-linha > button {
+  flex: 1;
+}
+
+.ajuda.erro {
+  color: var(--vermelho);
+  font-weight: 600;
+}
+
 .barra-limite {
   display: flex;
   gap: 8px;

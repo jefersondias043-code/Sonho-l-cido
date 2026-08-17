@@ -231,7 +231,23 @@ try {
   marcar(true, 'iterações executadas', iteracoes);
 
   const quantosRecordes = await pagina.locator('#lista-recordes li').count();
-  marcar(quantosRecordes > 1, 'a lista de recordes acompanha a evolução', `${quantosRecordes} recordes`);
+  marcar(quantosRecordes >= 1, 'a lista de recordes registra a solução', `${quantosRecordes} recordes`);
+
+  // C(16,4,2) é o plano afim AG(2,4): sai pronto da construção algébrica, sem
+  // uma única iteração de busca. Antes, a mesma configuração levava segundos de
+  // busca para chegar às mesmas 20 cartelas.
+  marcar(
+    Number(iteracoes.replace(/\D/g, '')) === 0,
+    'a construção algébrica resolve antes da primeira iteração',
+    `${iteracoes} iterações`
+  );
+
+  const referencia = (await pagina.locator('#referencia-busca').textContent()).trim();
+  marcar(
+    /melhor conhecido no mundo/i.test(referencia) && referencia.includes('20'),
+    'a tela mostra o melhor conhecido no mundo',
+    referencia.replace(/\s+/g, ' ').slice(0, 78)
+  );
 
   await pagina.screenshot({ path: 'capturas/captura-buscar.png' });
 
@@ -268,17 +284,22 @@ try {
 
   // ─── uma busca longa: relógio, pausa e encerramento ───
   //
-  // C(25,5,2) não é resolvido em segundos, então a busca fica de fato correndo
-  // — que é a condição em que o relógio, o botão de pausa e o de encerrar
-  // precisam funcionar. Num problema que termina antes do primeiro segundo,
-  // nada disso chega a ser exercitado.
+  // Precisa ser uma configuração que fique de fato correndo — é a condição em
+  // que o relógio, o botão de pausa e o de encerrar são exercitados. Num
+  // problema que termina antes do primeiro segundo, nada disso chega a ser
+  // testado.
+  //
+  // Aqui já esteve C(25,5,2), que levava minutos. Não serve mais: é o plano
+  // afim AG(2,5) e agora sai pronto por construção. C(26,6,3) não tem fórmula
+  // fechada neste projeto e o melhor conhecido no mundo (130) está muito
+  // abaixo do que a busca alcança em segundos, então ela não para.
   await pagina.click('.aba[data-painel="configurar"]');
   // O universo precisa acompanhar o pool: um pool maior que o universo é
   // configuração inválida, e a tela recusa iniciar — corretamente.
-  await pagina.fill('#universo', '25');
-  await pagina.fill('#pool', '25');
-  await pagina.fill('#cartela', '5');
-  await pagina.fill('#cobrir', '2');
+  await pagina.fill('#universo', '26');
+  await pagina.fill('#pool', '26');
+  await pagina.fill('#cartela', '6');
+  await pagina.fill('#cobrir', '3');
   await pagina.click('#iniciar');
   await pagina.waitForSelector('#buscar.ativo', { timeout: 15000 });
 
@@ -352,6 +373,33 @@ try {
     { timeout: 8000 }
   );
   marcar(true, 'o relógio corre durante a busca', `saiu de ${relogioAntes}`);
+
+  // Numa configuração difícil as melhorias vêm ao longo de segundos, não no
+  // primeiro instante — esperar por elas é mais fiel do que fotografar a lista
+  // assim que o relógio anda.
+  let recordesLongos = 0;
+  try {
+    await pagina.waitForFunction(
+      () => document.querySelectorAll('#lista-recordes li').length > 1,
+      undefined,
+      { timeout: 20000 }
+    );
+  } catch {
+    /* o marcar abaixo reporta o que houver */
+  }
+  recordesLongos = await pagina.locator('#lista-recordes li').count();
+  marcar(
+    recordesLongos > 1,
+    'a lista de recordes acompanha a evolução',
+    `${recordesLongos} recordes`
+  );
+
+  const distancia = (await pagina.locator('#referencia-busca').textContent()).trim();
+  marcar(
+    /faltam?\s/.test(distancia),
+    'a tela diz quanto falta para o melhor do mundo',
+    distancia.replace(/\s+/g, ' ').slice(0, 78)
+  );
 
   // Pausar precisa congelar de verdade: as iterações param de subir.
   await pagina.click('#pausar');
@@ -438,6 +486,57 @@ try {
 
   await pagina.click('#encerrar');
   await pagina.waitForSelector('#configurar.ativo', { timeout: 10000 });
+
+  // ─── importar um fechamento pronto ───
+  //
+  // É a segunda metade do processo em duas etapas: o resultado de qualquer
+  // outra ferramenta entra aqui e o motor continua a partir dele, em vez de
+  // recomeçar do zero.
+  await pagina.fill('#universo', '9');
+  await pagina.fill('#pool', '9');
+  await pagina.fill('#cartela', '3');
+  await pagina.fill('#cobrir', '2');
+
+  // Um erro de digitação primeiro: precisa apontar a linha e não deixar o
+  // usuário preso na tela de busca com um aviso que some sozinho.
+  await pagina.locator('#importar summary').click();
+  await pagina.fill('#texto-fechamento', '1 2 3\n4 5 seis');
+  await pagina.click('#iniciar');
+  await pagina.waitForSelector('#erro-fechamento:not([hidden])', { timeout: 20000 });
+  const erroImportacao = (await pagina.locator('#erro-fechamento').textContent()).trim();
+  marcar(
+    erroImportacao.includes('linha 2'),
+    'texto inválido aponta a linha, junto da caixa onde foi colado',
+    erroImportacao
+  );
+  marcar(
+    await pagina.locator('#configurar.ativo').isVisible(),
+    'e devolve o usuário à tela onde ele conserta'
+  );
+
+  // Agora um fechamento válido, com os separadores e comentários que aparecem
+  // na prática. É o mesmo interpretador da linha de comando.
+  const fechamentoColado = [
+    '# fechamento vindo de outra ferramenta',
+    '1 2 3',
+    '4,5,6',
+    '7 - 8 - 9',
+  ].join('\n');
+  await pagina.fill('#texto-fechamento', fechamentoColado);
+  await pagina.click('#iniciar');
+  await pagina.waitForSelector('#buscar.ativo', { timeout: 15000 });
+  await pagina.waitForSelector('#selo-otimo:not([hidden])', { timeout: 90000 });
+
+  const partindoDoColado = await pagina.locator('#melhor-cartelas').textContent();
+  marcar(
+    partindoDoColado.trim() === '12',
+    'a busca parte do fechamento colado e chega ao ótimo de C(9,3,2)',
+    `${partindoDoColado.trim()} cartelas`
+  );
+
+  await pagina.click('#encerrar');
+  await pagina.waitForSelector('#configurar.ativo', { timeout: 10000 });
+  await pagina.fill('#texto-fechamento', '');
 
   // ─── persistência ───
   const guardadas = await pagina.evaluate(() => {

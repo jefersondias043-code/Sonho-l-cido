@@ -339,6 +339,17 @@ function garantirTrabalhador() {
         definirFase('falhou', data.mensagem);
         soltarTelaLigada();
         avisar(data.mensagem);
+        // Erro de fechamento é erro de digitação, e a correção é na caixa de
+        // texto. Deixar o usuário parado na tela de busca, diante de um aviso
+        // que some sozinho, esconderia justamente o campo que ele precisa
+        // consertar.
+        if (ehErroDeFechamento(data.mensagem)) {
+          desmontarTrabalhador();
+          definirFase('ocioso');
+          zerarCronometro();
+          mostrarPainel('configurar');
+          mostrarErroDoFechamento(data.mensagem);
+        }
         break;
 
       default:
@@ -434,6 +445,9 @@ function aplicarEstado(estado) {
   $('recordes').textContent = estado.recordes;
 
   $('selo-otimo').hidden = !estado.optimalidade_provada;
+  $('res-selo-otimo').hidden = !estado.optimalidade_provada;
+
+  pintarReferencia(estado);
 
   if (estado.novos_recordes?.length) {
     recordes = [...estado.novos_recordes.reverse(), ...recordes].slice(0, 40);
@@ -443,6 +457,64 @@ function aplicarEstado(estado) {
   $('res-cartelas').textContent = estado.melhor_cartelas || '—';
   $('res-cobertura').textContent = porcento(estado.melhor_cobertura);
   $('res-redundancia').textContent = milhares(estado.melhor_redundancia);
+}
+
+/**
+ * Situa o resultado do usuário diante do melhor que o mundo já obteve.
+ *
+ * O número sozinho não diz nada. "27 cartelas" é excelente numa configuração e
+ * medíocre em outra, e sem referência o usuário não tem como saber em qual das
+ * duas está — nem quando vale a pena continuar procurando.
+ *
+ * Os quatro estados possíveis dizem coisas diferentes, e a redação de cada um
+ * importa:
+ *
+ * - **sem referência** — garantia parcial ou fora da faixa catalogada. Dizer
+ *   isso é mais honesto que esconder a linha, que sugeriria que o resultado é
+ *   bom por não ter comparação.
+ * - **atrás** — quantas cartelas faltam. É a informação acionável.
+ * - **empatado** — chegou ao melhor conhecido no mundo.
+ * - **à frente** — superou o recorde mundial. Merece destaque próprio e a
+ *   instrução do que fazer com isso.
+ */
+function pintarReferencia(estado) {
+  const alvos = ['referencia-busca', 'referencia-resultado'];
+  const nossas = estado.melhor_cartelas || 0;
+  const mundo = estado.melhor_conhecido ?? null;
+  const superou = mundo !== null && nossas > 0 && nossas < mundo;
+
+  $('selo-recorde').hidden = !superou;
+  $('res-selo-recorde').hidden = !superou;
+
+  let texto;
+  if (mundo === null) {
+    texto =
+      '<span class="chave">Sem referência publicada para esta configuração</span> ' +
+      '<em>— a tabela mundial cataloga coberturas completas; ' +
+      'garantias parciais não estão nela.</em>';
+  } else if (superou) {
+    texto =
+      `<span class="chave">Melhor conhecido no mundo:</span> <b>${mundo}</b> ` +
+      `<em>— você chegou a ${nossas}. Vale conferir e submeter à La Jolla ` +
+      `Covering Repository: seria um recorde novo.</em>`;
+  } else if (nossas > 0 && nossas === mundo) {
+    texto =
+      `<span class="chave">Melhor conhecido no mundo:</span> <b>${mundo}</b> ` +
+      `<em>— seu resultado empatou com ele.</em>`;
+  } else if (nossas > 0) {
+    const faltam = nossas - mundo;
+    texto =
+      `<span class="chave">Melhor conhecido no mundo:</span> <b>${mundo}</b> ` +
+      `<em>— ${faltam === 1 ? 'falta 1 cartela' : `faltam ${faltam} cartelas`}.</em>`;
+  } else {
+    texto = `<span class="chave">Melhor conhecido no mundo:</span> <b>${mundo}</b>`;
+  }
+
+  alvos.forEach((id) => {
+    const destino = $(id);
+    destino.hidden = false;
+    destino.innerHTML = texto;
+  });
 }
 
 function pintarRecordes() {
@@ -489,8 +561,64 @@ $('iniciar').addEventListener('click', () => {
     return;
   }
 
-  comecar({ configuracao });
+  // O texto vai cru para o motor: quem interpreta é o mesmo código Rust que a
+  // linha de comando usa, então o que o celular aceita é exatamente o que o
+  // terminal aceita. Um interpretador em JavaScript aqui divergiria daquele
+  // com o tempo, e a divergência apareceria como cartela aceita num lado e
+  // recusada no outro.
+  const fechamento = $('texto-fechamento').value.trim();
+  comecar({ configuracao, fechamento: fechamento || null });
 });
+
+/* ─────────── importar um fechamento pronto ─────────── */
+
+$('escolher-arquivo').addEventListener('click', () => $('arquivo-fechamento').click());
+
+$('arquivo-fechamento').addEventListener('change', async (evento) => {
+  const arquivo = evento.target.files?.[0];
+  if (!arquivo) return;
+  try {
+    $('texto-fechamento').value = await arquivo.text();
+    mostrarErroDoFechamento(null);
+    $('importar').open = true;
+  } catch {
+    mostrarErroDoFechamento('Não consegui ler esse arquivo.');
+  }
+  // Permite escolher o mesmo arquivo de novo depois de editá-lo.
+  evento.target.value = '';
+});
+
+$('limpar-fechamento').addEventListener('click', () => {
+  $('texto-fechamento').value = '';
+  mostrarErroDoFechamento(null);
+});
+
+$('texto-fechamento').addEventListener('input', () => mostrarErroDoFechamento(null));
+
+/**
+ * Mostra o erro do fechamento onde ele foi digitado.
+ *
+ * A mensagem do motor cita a linha ("linha 7: ..."), e o aviso flutuante some
+ * sozinho — cedo demais para quem precisa procurar essa linha numa colagem de
+ * trinta. Por isso ela fica fixa junto da caixa de texto.
+ */
+/**
+ * Reconhece as mensagens que o interpretador de fechamento produz.
+ *
+ * São as únicas que o usuário conserta editando o texto colado; qualquer outra
+ * falha do motor é problema de configuração ou de memória, e mandá-lo mexer nas
+ * cartelas seria apontar para o lugar errado.
+ */
+function ehErroDeFechamento(mensagem) {
+  return /^(linha \d+|cartela \d+|nenhuma cartela)/.test(String(mensagem ?? ''));
+}
+
+function mostrarErroDoFechamento(mensagem) {
+  const destino = $('erro-fechamento');
+  destino.hidden = !mensagem;
+  destino.textContent = mensagem ?? '';
+  if (mensagem) $('importar').open = true;
+}
 
 $('ir-para-historico').addEventListener('click', () => mostrarPainel('historico'));
 
@@ -531,7 +659,7 @@ function continuarSessao(id) {
  * quebrado. Trocando primeiro, o carregamento acontece com o relógio correndo
  * e o ponto pulsando à vista.
  */
-function comecar({ configuracao, salvo, sessaoId = null }, cartelasIniciais = []) {
+function comecar({ configuracao, salvo, fechamento = null, sessaoId = null }, cartelasIniciais = []) {
   // Um motor antigo ainda vivo continuaria consumindo processador e memória.
   desmontarTrabalhador();
 
@@ -552,12 +680,17 @@ function comecar({ configuracao, salvo, sessaoId = null }, cartelasIniciais = []
       $(id).textContent = '—';
     });
   $('selo-otimo').hidden = true;
+  $('selo-recorde').hidden = true;
+  $('res-selo-otimo').hidden = true;
+  $('res-selo-recorde').hidden = true;
+  $('referencia-busca').hidden = true;
+  $('referencia-resultado').hidden = true;
 
   zerarCronometro();
   mostrarPainel('buscar');
   definirFase('carregando');
 
-  garantirTrabalhador().postMessage({ tipo: 'criar', configuracao, salvo });
+  garantirTrabalhador().postMessage({ tipo: 'criar', configuracao, salvo, fechamento });
   segurarTelaLigada();
 }
 
