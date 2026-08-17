@@ -481,7 +481,14 @@ function pintarReferencia(estado) {
   const alvos = ['referencia-busca', 'referencia-resultado'];
   const nossas = estado.melhor_cartelas || 0;
   const mundo = estado.melhor_conhecido ?? null;
-  const superou = mundo !== null && nossas > 0 && nossas < mundo;
+
+  // Só faz sentido comparar contagens de cartelas entre soluções que cobrem
+  // tudo. Com teto de cartelas o objetivo é outro — cobrir o máximo possível
+  // dentro do teto — e a solução tem cobertura parcial de propósito. Comparar
+  // ali anunciaria "acima do melhor conhecido no mundo" para um fechamento
+  // furado, que é a pior mentira que esta tela poderia contar.
+  const completo = estado.melhor_cobertura >= 1;
+  const superou = mundo !== null && completo && nossas > 0 && nossas < mundo;
 
   $('selo-recorde').hidden = !superou;
   $('res-selo-recorde').hidden = !superou;
@@ -493,6 +500,11 @@ function pintarReferencia(estado) {
     texto =
       'Sem referência publicada para esta configuração <em>— a tabela mundial ' +
       'cataloga coberturas completas; garantias parciais não estão nela.</em>';
+  } else if (nossas > 0 && !completo) {
+    texto =
+      `${cabecalho} <em>— com ${nossas} cartelas e cobertura completa. Esta ` +
+      `busca está limitada pelo teto que você definiu, então os números não se ` +
+      `comparam diretamente.</em>`;
   } else if (superou) {
     texto =
       `${cabecalho} <em>— você chegou a ${nossas}. Vale conferir e submeter à ` +

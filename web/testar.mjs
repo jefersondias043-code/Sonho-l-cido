@@ -552,6 +552,48 @@ try {
   await pagina.waitForSelector('#configurar.ativo', { timeout: 10000 });
   await pagina.fill('#texto-fechamento', '');
 
+  // ─── teto de cartelas: a comparação com o mundo tem de se calar ───
+  //
+  // Com teto o objetivo é cobrir o máximo possível dentro dele, e a solução tem
+  // cobertura parcial de propósito. Comparar a contagem de cartelas com o
+  // recorde mundial ali anunciaria "acima do melhor conhecido no mundo" para um
+  // fechamento furado.
+  await pagina.fill('#universo', '21');
+  await pagina.fill('#pool', '21');
+  await pagina.fill('#cartela', '5');
+  await pagina.fill('#cobrir', '2');
+  await pagina.fill('#orcamento', '8');
+  await pagina.click('#iniciar');
+  await pagina.waitForSelector('#buscar.ativo', { timeout: 15000 });
+  await pagina.waitForFunction(
+    () => {
+      const t = document.getElementById('melhor-cartelas').textContent.trim();
+      return t !== '' && t !== '—';
+    },
+    undefined,
+    { timeout: 20000 }
+  );
+
+  const comTeto = await pagina.evaluate(() => ({
+    selo: !document.getElementById('selo-recorde').hidden,
+    texto: document.getElementById('referencia-busca').textContent.trim(),
+    cobertura: document.getElementById('cobertura').textContent.trim(),
+  }));
+  marcar(
+    !comTeto.selo,
+    'com teto de cartelas, nada é anunciado como recorde mundial',
+    `cobertura ${comTeto.cobertura}`
+  );
+  marcar(
+    /não se comparam/.test(comTeto.texto),
+    'e a tela explica por que os números não se comparam',
+    comTeto.texto.replace(/\s+/g, ' ').slice(0, 78)
+  );
+
+  await pagina.click('#encerrar');
+  await pagina.waitForSelector('#configurar.ativo', { timeout: 10000 });
+  await pagina.fill('#orcamento', '');
+
   // ─── persistência ───
   const guardadas = await pagina.evaluate(() => {
     const bruto = localStorage.getItem('sonho-lucido:historico');
