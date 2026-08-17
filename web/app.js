@@ -138,16 +138,22 @@ function definirFase(nova, textoExtra = null) {
 /**
  * Verdadeiro quando não existe fechamento menor que o já encontrado.
  *
- * Duas fontes, e as duas precisam ser consultadas. O motor prova a
- * optimalidade comparando o recorde com o limite inferior que ele calcula — e
- * isso funciona nos covering designs pequenos. Na Lotinha não funciona: o
- * limite dele é a cota de contagem, muito abaixo do mínimo verdadeiro. Ali
- * quem sabe é `lotinha.minimo()`, e é por isso que a referência da busca entra
- * na conta.
+ * Duas fontes, e a ordem entre elas importa.
+ *
+ * O motor prova a optimalidade comparando o recorde com o limite inferior que
+ * ele calcula. Nos dezoito fechamentos da Lotinha de mínimo comprovado isso
+ * basta — medindo, a cota de Schönheim coincide exatamente com o mínimo de
+ * Turán: 16 para C(18,17,15), 51 para C(19,17,15), 40 para C(20,18,15). Mas
+ * é coincidência, e a tela não deve depender de coincidência: quando o mínimo
+ * é conhecido pelo teorema, é o teorema que responde.
+ *
+ * Nos dez casos em aberto não há mínimo conhecido, e aí só resta o motor. Se
+ * ele um dia alcançar o próprio limite inferior ali, terá provado algo que
+ * ninguém provou — e o selo acende com razão.
  */
 function noMinimoComprovado(estado) {
-  if (referenciaDaBusca?.exato) return estado.melhor_cartelas > 0
-    && estado.melhor_cartelas <= referenciaDaBusca.jogos;
+  const nossas = estado.melhor_cartelas;
+  if (referenciaDaBusca?.exato) return nossas > 0 && nossas <= referenciaDaBusca.jogos;
   return Boolean(estado.optimalidade_provada);
 }
 
