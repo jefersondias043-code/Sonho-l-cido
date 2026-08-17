@@ -29,6 +29,22 @@
 
 * { box-sizing: border-box; }
 
+/*
+ * `hidden` precisa ganhar de qualquer `display` daqui.
+ *
+ * O navegador esconde `[hidden]` por uma regra da folha de estilo dele, e
+ * **qualquer** regra deste arquivo vence essa — inclusive
+ * `.selo { display: inline-block }`. O efeito medido: o selo "★ ótimo provado"
+ * ficava visível em toda busca, o tempo inteiro, porque `elemento.hidden =
+ * true` ajustava o atributo e o `display` continuava valendo.
+ *
+ * Isso não era um defeito de aparência. O código da tela toma um cuidado
+ * enorme para nunca afirmar optimalidade nem recorde mundial sem que sejam
+ * verdade — e o CSS desfazia esse cuidado, exibindo as duas afirmações sempre,
+ * inclusive num fechamento a 240 jogos cujo piso conhecido é 114.
+ */
+[hidden] { display: none !important; }
+
 html, body {
   margin: 0;
   padding: 0;
@@ -299,8 +315,6 @@ main { padding: 8px 16px 0; }
 .situacao.trabalhando { border-color: #2f5d43; }
 .situacao.pausada .pulso { background: var(--ouro); }
 .situacao.pausada { border-color: #6b5a2a; }
-.situacao.concluida .pulso { background: var(--verde); }
-.situacao.concluida { border-color: var(--verde); }
 .situacao.falhou .pulso { background: var(--vermelho); }
 .situacao.falhou { border-color: var(--vermelho); }
 

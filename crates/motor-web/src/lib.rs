@@ -26,7 +26,7 @@
 //! navegador.
 
 use motor_busca::{
-    CondicoesDeParada, Configuracao, Controle, Evento, MotivoEncerramento, MotorBusca, Observador,
+    CondicoesDeParada, Configuracao, Controle, Evento, MotorBusca, Observador,
 };
 use motor_core::{interpretar_fechamento, Cartela, Objetivo, Problema, RegraCobertura};
 use serde::{Deserialize, Serialize};
@@ -132,8 +132,6 @@ pub struct Estado {
 
     /// Recordes encontrados neste lote, em ordem cronológica.
     pub novos_recordes: Vec<Recorde>,
-    /// Verdadeiro quando não há mais nada a procurar.
-    pub encerrado: bool,
 }
 
 /// Tudo que é preciso para retomar a busca depois de fechar a página.
@@ -174,7 +172,6 @@ pub struct MotorWeb {
     interno: MotorBusca,
     configuracao: ConfiguracaoEntrada,
     controle: Controle,
-    encerrado: bool,
 }
 
 /// A lógica de verdade, em Rust puro.
@@ -198,7 +195,7 @@ impl MotorWeb {
         let config = Configuracao { semente: configuracao.semente, ..Default::default() };
         let interno = MotorBusca::novo(problema, config).map_err(|e| e.to_string())?;
 
-        Ok(MotorWeb { interno, configuracao, controle: Controle::novo(), encerrado: false })
+        Ok(MotorWeb { interno, configuracao, controle: Controle::novo() })
     }
 
     /// Parte de um fechamento existente (Modo A do §6).
@@ -294,15 +291,10 @@ impl MotorWeb {
         let condicoes = CondicoesDeParada {
             max_iteracoes: Some(self.interno.estatisticas().iteracoes),
             max_duracao: None,
-            parar_em_optimalidade: true,
+            parar_em_optimalidade: false,
         };
 
-        let motivo = self.interno.executar(&self.controle, &condicoes, &mut coletor);
-        if motivo == MotivoEncerramento::OptimalidadeProvada {
-            // Acontece: em problemas pequenos o guloso já acerta o ótimo.
-            self.encerrado = true;
-        }
-
+        self.interno.executar(&self.controle, &condicoes, &mut coletor);
         self.montar_estado(coletor.recordes)
     }
 
@@ -320,24 +312,30 @@ impl MotorWeb {
     pub fn avancar(&mut self, iteracoes: u32) -> String {
         let mut coletor = ColetorDeRecordes::default();
 
-        if !self.encerrado {
-            let teto = self
-                .interno
-                .estatisticas()
-                .iteracoes
-                .saturating_add(u64::from(iteracoes.max(1)));
-            let condicoes = CondicoesDeParada {
-                max_iteracoes: Some(teto),
-                max_duracao: None,
-                parar_em_optimalidade: true,
-            };
+        let teto = self
+            .interno
+            .estatisticas()
+            .iteracoes
+            .saturating_add(u64::from(iteracoes.max(1)));
+        let condicoes = CondicoesDeParada {
+            max_iteracoes: Some(teto),
+            max_duracao: None,
+            // Nunca encerrar sozinho. Quem decide quando parar é o usuário.
+            //
+            // A versão anterior parava ao provar optimalidade, e a intenção era
+            // boa: não gastar bateria procurando o que não existe. Mas ela
+            // decidia por quem está usando, e escondia o caso que mais importa
+            // aqui — nos dez fechamentos da Lotinha cujo mínimo é problema em
+            // aberto, "ótimo" quer dizer apenas "o melhor que se conhece", e
+            // parar ali é justamente desistir onde ainda há o que achar.
+            //
+            // O motor segue. A tela diz quando a optimalidade está provada,
+            // para a decisão de parar ser informada — mas a decisão continua
+            // sendo de quem está olhando.
+            parar_em_optimalidade: false,
+        };
 
-            let motivo = self.interno.executar(&self.controle, &condicoes, &mut coletor);
-            if motivo == MotivoEncerramento::OptimalidadeProvada {
-                self.encerrado = true;
-            }
-        }
-
+        self.interno.executar(&self.controle, &condicoes, &mut coletor);
         self.montar_estado(coletor.recordes)
     }
 
@@ -446,7 +444,6 @@ impl MotorWeb {
             cartelas_trazidas: self.interno.cartelas_trazidas(),
 
             novos_recordes,
-            encerrado: self.encerrado,
         };
 
         serde_json::to_string(&estado).unwrap_or_else(|_| "{}".to_string())
@@ -590,18 +587,34 @@ mod testes {
     }
 
     #[test]
-    fn encerra_e_para_de_trabalhar_quando_prova_a_optimalidade() {
+    fn nao_para_sozinho_quando_prova_a_optimalidade() {
+        // A versão anterior encerrava aqui, e a intenção era boa: não gastar
+        // bateria procurando o que não existe. Mas ela decidia por quem está
+        // usando — e o motor do celular não tem esse direito. Quem manda parar
+        // é quem está olhando a tela.
+        //
+        // O que a optimalidade provada muda é o que a tela *diz*, não se o
+        // motor continua. Isso importa especialmente na Lotinha, onde o limite
+        // inferior é fraco: nos dez fechamentos cujo mínimo é problema aberto,
+        // "ótimo" significaria apenas "o melhor que se conhece", e parar ali
+        // seria desistir justamente onde ainda há o que achar.
         let mut motor = MotorWeb::construir(&configuracao(9, 3, 2)).unwrap();
 
-        let mut estado = estado_de(&motor.avancar(200_000));
+        let estado = estado_de(&motor.avancar(200_000));
         assert!(estado["optimalidade_provada"].as_bool().unwrap());
-        assert!(estado["encerrado"].as_bool().unwrap());
         assert_eq!(estado["melhor_cartelas"].as_u64().unwrap(), 12); // C(9,3,2) = 12
 
-        // Lotes seguintes não devem consumir tempo nenhum.
+        // E o lote seguinte trabalha, em vez de devolver na hora.
         let iteracoes = estado["iteracoes"].as_u64().unwrap();
-        estado = estado_de(&motor.avancar(200_000));
-        assert_eq!(estado["iteracoes"].as_u64().unwrap(), iteracoes);
+        let depois = estado_de(&motor.avancar(50_000));
+        assert!(
+            depois["iteracoes"].as_u64().unwrap() > iteracoes,
+            "o motor parou sozinho: as iterações ficaram em {iteracoes}"
+        );
+
+        // Continuar procurando nunca pode custar o recorde já alcançado.
+        assert_eq!(depois["melhor_cartelas"].as_u64().unwrap(), 12);
+        assert!(depois["optimalidade_provada"].as_bool().unwrap());
     }
 
     #[test]

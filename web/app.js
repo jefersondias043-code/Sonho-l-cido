@@ -14,8 +14,10 @@
  * aparelho está trabalhando ou se travou.
  *
  *   ocioso → carregando → preparando → buscando ⇄ pausado
- *                                          ↓
- *                                      concluida
+ *
+ * Repare que não há estado final. A busca não termina sozinha — nem ao provar
+ * que encontrou o melhor possível. Quem a encerra é o usuário, em `pausar` ou
+ * em `encerrar`; até lá o motor continua procurando.
  */
 
 import * as historico from './historico.js';
@@ -44,6 +46,21 @@ let sessaoAtual = null;
 /* A configuração da busca em curso, guardada porque a tela pode ser editada
    enquanto o motor trabalha e o registro precisa refletir o que está rodando. */
 let configuracaoDaBusca = null;
+
+/*
+ * O que se sabe sobre o mínimo deste problema, quando o motor não sabe.
+ *
+ * O motor conhece a tabela mundial de coberturas, que vai até grupos de 8
+ * números. A Lotinha trabalha com grupos de 15, muito fora dela — então ali o
+ * motor não tem referência nenhuma, e o limite inferior que ele calcula é
+ * fraco: a cota de contagem dá 6 onde o mínimo real, pelo teorema de Turán, é
+ * 16. Sem isto a tela dizia "sem referência publicada" e deixava o usuário sem
+ * saber se ainda havia o que procurar — a pergunta mais importante agora que a
+ * busca não termina sozinha.
+ *
+ * Vem de `lotinha.minimo()`: `{ jogos, exato, piso }`.
+ */
+let referenciaDaBusca = null;
 
 /* O relógio é da interface, não do motor: mede o que o usuário esperou. */
 let inicioDoTrecho = 0;
@@ -93,9 +110,20 @@ const SITUACOES = {
   preparando: { classe: 'trabalhando', texto: 'montando a primeira solução…' },
   buscando: { classe: 'trabalhando', texto: 'procurando soluções melhores' },
   pausado: { classe: 'pausada', texto: 'pausado' },
-  concluida: { classe: 'concluida', texto: 'ótimo provado — não há melhor' },
   falhou: { classe: 'falhou', texto: 'algo deu errado' },
 };
+
+/*
+ * Não existe uma situação "concluída", e a ausência é a mudança.
+ *
+ * Havia: ao alcançar o limite inferior provado, a tela anunciava "ótimo
+ * provado — não há melhor" e desabilitava o Pausar. Do lado de quem usa, o
+ * aplicativo simplesmente parava — sem ter sido mandado parar.
+ *
+ * A optimalidade provada continua sendo anunciada, no selo e no texto da
+ * situação. O que ela não faz mais é decidir. Enquanto o motor estiver vivo,
+ * ele está em `buscando`, e o botão de parar é do usuário.
+ */
 
 function definirFase(nova, textoExtra = null) {
   fase = nova;
@@ -113,7 +141,38 @@ function definirFase(nova, textoExtra = null) {
   else pararCronometro();
 
   $('pausar').textContent = nova === 'pausado' ? 'Continuar' : 'Pausar';
-  $('pausar').disabled = ['ocioso', 'carregando', 'preparando', 'concluida', 'falhou'].includes(nova);
+  $('pausar').disabled = ['ocioso', 'carregando', 'preparando', 'falhou'].includes(nova);
+}
+
+/**
+ * Verdadeiro quando não existe fechamento menor que o já encontrado.
+ *
+ * Duas fontes, e as duas precisam ser consultadas. O motor prova a
+ * optimalidade comparando o recorde com o limite inferior que ele calcula — e
+ * isso funciona nos covering designs pequenos. Na Lotinha não funciona: o
+ * limite dele é a cota de contagem, muito abaixo do mínimo verdadeiro. Ali
+ * quem sabe é `lotinha.minimo()`, e é por isso que a referência da busca entra
+ * na conta.
+ */
+function noMinimoComprovado(estado) {
+  if (referenciaDaBusca?.exato) return estado.melhor_cartelas > 0
+    && estado.melhor_cartelas <= referenciaDaBusca.jogos;
+  return Boolean(estado.optimalidade_provada);
+}
+
+/**
+ * O que a faixa de situação diz enquanto o motor trabalha.
+ *
+ * Quando o mínimo já foi alcançado, a frase muda mas o motor não para. Dizer
+ * "procurando algo menor que 16" num fechamento em que 16 é comprovadamente o
+ * menor seria mentir sobre o que está acontecendo — e é justamente a
+ * informação de que o usuário precisa para decidir quando desligar.
+ */
+function textoDaProcura(estado) {
+  const n = estado.melhor_cartelas;
+  return noMinimoComprovado(estado)
+    ? `${n} é o mínimo comprovado — o motor segue até você mandar parar`
+    : `procurando algo menor que ${n}`;
 }
 
 function iniciarCronometro() {
@@ -296,27 +355,16 @@ function garantirTrabalhador() {
       // vazia — e a partir daqui o número só pode cair.
       case 'preparado':
         aplicarMensagem(data);
-        if (data.estado.encerrado) {
-          definirFase('concluida');
-          avisar('Ótimo provado já na primeira tentativa.', true);
-        } else {
-          trabalhador.postMessage({ tipo: 'rodar' });
-          definirFase('buscando');
-        }
+        // Sem ramo alternativo: existe primeira solução, então há busca a
+        // fazer. Mesmo quando essa primeira solução já é comprovadamente a
+        // melhor possível, quem decide encerrar é o usuário.
+        trabalhador.postMessage({ tipo: 'rodar' });
+        definirFase('buscando');
         break;
 
       case 'estado':
         aplicarMensagem(data);
-        if (fase === 'buscando') {
-          $('texto-situacao').textContent = `procurando algo menor que ${data.estado.melhor_cartelas}`;
-        }
-        break;
-
-      case 'otimo':
-        aplicarMensagem(data);
-        definirFase('concluida');
-        soltarTelaLigada();
-        avisar('Ótimo provado — não existe solução melhor.', true);
+        if (fase === 'buscando') $('texto-situacao').textContent = textoDaProcura(data.estado);
         break;
 
       case 'pausado':
@@ -447,8 +495,9 @@ function aplicarEstado(estado) {
   $('velocidade').textContent = estado.velocidade ? milhares(estado.velocidade) : '—';
   $('recordes').textContent = estado.recordes;
 
-  $('selo-otimo').hidden = !estado.optimalidade_provada;
-  $('res-selo-otimo').hidden = !estado.optimalidade_provada;
+  const noMinimo = noMinimoComprovado(estado);
+  $('selo-otimo').hidden = !noMinimo;
+  $('res-selo-otimo').hidden = !noMinimo;
 
   pintarReferencia(estado);
 
@@ -534,6 +583,20 @@ function pintarReferencia(estado) {
   const nossas = estado.melhor_cartelas || 0;
   const mundo = estado.melhor_conhecido ?? null;
 
+  // Quando a busca traz a própria referência, ela manda. É o caso da Lotinha:
+  // a tabela mundial não alcança grupos de 15, e o que o motor diria ali é
+  // "sem referência publicada" — verdadeiro e imprestável.
+  if (referenciaDaBusca) {
+    const texto = textoDaReferenciaDaBusca(estado);
+    $('selo-recorde').hidden = true;
+    $('res-selo-recorde').hidden = true;
+    alvos.forEach((id) => {
+      $(id).hidden = false;
+      $(id).innerHTML = texto;
+    });
+    return;
+  }
+
   // Só faz sentido comparar contagens de cartelas entre soluções que cobrem
   // tudo. Com teto de cartelas o objetivo é outro — cobrir o máximo possível
   // dentro do teto — e a solução tem cobertura parcial de propósito. Comparar
@@ -593,6 +656,54 @@ function pintarReferencia(estado) {
     destino.hidden = false;
     destino.innerHTML = texto;
   });
+}
+
+/**
+ * A referência quando ela não vem da tabela mundial.
+ *
+ * Os dois casos dizem coisas opostas, e a diferença é o que o usuário precisa
+ * para decidir se vale deixar o aparelho trabalhando:
+ *
+ * - **mínimo comprovado** — o teorema de Turán fecha a questão. O motor pode
+ *   rodar a noite inteira que não vai achar menos. Dizer isso é o oposto de
+ *   desanimar: é devolver a decisão a quem paga a bateria.
+ * - **em aberto** — ninguém no mundo sabe o mínimo, e a única certeza é o
+ *   piso. Aqui o motor não está redescobrindo nada; está procurando de fato.
+ */
+function textoDaReferenciaDaBusca(estado) {
+  const { jogos, exato, piso } = referenciaDaBusca;
+  const nossas = estado.melhor_cartelas || 0;
+
+  if (exato) {
+    const plural = jogos === 1 ? 'jogo' : 'jogos';
+    return (
+      `Mínimo comprovado: <b>${milhares(jogos)}</b> ${plural} <em>— sai do ` +
+      `teorema de Turán, e não existe fechamento menor. O motor continua ` +
+      `procurando enquanto você deixar: ele não vai achar menos, e não vai ` +
+      `parar sozinho.</em>`
+    );
+  }
+
+  // Quanto o motor já cortou do fechamento que veio no aplicativo. É o único
+  // placar honesto aqui: não existe recorde mundial de que se aproximar, mas
+  // existe o número com que esta busca começou, e superá-lo é resultado de
+  // verdade — é o que paga a bateria gasta.
+  const trazidas = estado.cartelas_trazidas || 0;
+  const cortou = trazidas > 0 && nossas > 0 && nossas < trazidas ? trazidas - nossas : 0;
+
+  const onde = nossas > 0 ? `Você está com <b>${milhares(nossas)}</b>` : '';
+  const placar = cortou
+    ? `${onde}, contra os ${milhares(trazidas)} que vieram no aplicativo — o ` +
+      `motor já cortou ${milhares(cortou)}. `
+    : onde
+      ? `${onde}. `
+      : '';
+
+  return (
+    `Ninguém no mundo sabe o mínimo aqui <em>— é problema em aberto. O que se ` +
+    `sabe é que não dá com menos de <b>${milhares(piso)}</b>. ${placar}É onde o ` +
+    `motor tem trabalho de verdade, e onde deixá-lo rodando faz diferença.</em>`
+  );
 }
 
 function pintarRecordes() {
@@ -762,6 +873,30 @@ function lotMontar() {
 
   lotMontarMatriz();
   lotPintarTudo();
+}
+
+/**
+ * O que se sabe sobre o mínimo desta configuração, quando o motor não sabe.
+ *
+ * Derivada da configuração, e não passada à mão, para que continuar um trabalho
+ * salvo do histórico recupere a mesma referência de quando ele começou — sem
+ * isso, retomar uma busca a rebaixaria para "sem referência publicada".
+ *
+ * Devolve `null` fora da Lotinha, e aí a tela volta a usar a tabela mundial que
+ * o motor carrega.
+ */
+function referenciaDe(configuracao) {
+  const pool = configuracao?.pool?.length ?? 0;
+  const ehLotinha =
+    configuracao?.universo === lotinha.UNIVERSO &&
+    configuracao?.alvo === lotinha.SORTEIO &&
+    configuracao?.intersecao === lotinha.SORTEIO &&
+    pool >= lotinha.MENOR_POOL &&
+    pool <= lotinha.MAIOR_POOL &&
+    configuracao.cartela >= lotinha.MENOR_POOL &&
+    configuracao.cartela <= pool;
+
+  return ehLotinha ? lotinha.minimo(pool, configuracao.cartela) : null;
 }
 
 function lotAlternar(n) {
@@ -1202,6 +1337,7 @@ function comecar(
   recordes = [];
   melhorCartelas = cartelasIniciais;
   configuracaoDaBusca = configuracao;
+  referenciaDaBusca = referenciaDe(configuracao);
   // Continuar um trabalho escreve na sessão dele; começar do zero abre outra
   // quando a primeira solução aparecer.
   sessaoAtual = sessaoId;

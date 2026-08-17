@@ -231,16 +231,15 @@ function laco() {
 
   postMessage({ tipo: 'estado', estado, cartelas: cartelasSeMudaram(estado) });
 
-  if (estado.encerrado) {
-    // "Ótimo" e "encerrado" são coisas diferentes: aqui a busca terminou
-    // porque não existe mais nada a procurar; `encerrar` é o usuário mandando
-    // parar. Nomes distintos evitam que a interface confunda os dois.
-    rodando = false;
-    postMessage({ tipo: 'otimo', estado, cartelas: JSON.parse(motor.melhor()) });
-    return;
-  }
-
-  // A fresta por onde as mensagens da interface entram.
+  // Não existe condição aqui que encerre o laço sozinha, e é de propósito.
+  //
+  // Havia: ao provar a optimalidade, o worker parava e avisava a tela. A
+  // intenção era poupar bateria, e o efeito era decidir por quem está usando.
+  // As três formas de isto parar — `pausar`, `encerrar` e um erro — chegam
+  // todas de fora, e as duas primeiras são o dedo do usuário no botão.
+  //
+  // A fresta por onde essas mensagens entram é o `setTimeout` abaixo: um
+  // worker só as recebe quando a pilha de execução esvazia.
   setTimeout(laco, 0);
 }
 
