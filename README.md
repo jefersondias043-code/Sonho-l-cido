@@ -452,10 +452,16 @@ não prova que 28 seja impossível.
   cota de Schönheim ou por contagem.
 - **Gap:** `(UB − LB) / LB`.
 
-Quando `LB == UB`, e só então, o resultado é declarado **ótimo provado** e a
-busca encerra sozinha — não há mais nada a procurar. Em qualquer outro caso o
-sistema diz apenas *"melhor solução conhecida: N cartelas"*, porque é só isso
-que ele sabe.
+Quando `LB == UB`, e só então, o resultado é declarado **ótimo provado**. Em
+qualquer outro caso o sistema diz apenas *"melhor solução conhecida: N
+cartelas"*, porque é só isso que ele sabe.
+
+Provar a optimalidade muda o que a tela **diz**, não se o motor continua. No
+celular ele nunca encerra por conta própria: quem para é o usuário, em Pausar
+ou Encerrar. A decisão de desligar depende de saber se ainda há o que achar, e
+essa informação está na tela — mas a decisão é de quem paga a bateria. Na linha
+de comando o padrão é o oposto, porque ali o processo precisa terminar para
+devolver o terminal; `--sem-parar-no-otimo` inverte.
 
 ## Estado atual
 
@@ -492,7 +498,7 @@ que ele sabe.
 ## Desenvolvimento
 
 ```bash
-cargo test --workspace                          # 185 testes
+cargo test --workspace                          # 193 testes
 cargo clippy --workspace --all-targets -- -D warnings
 cargo run --release --example aferir            # aferição contra a tabela mundial
 
