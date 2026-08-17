@@ -486,28 +486,25 @@ function pintarReferencia(estado) {
   $('selo-recorde').hidden = !superou;
   $('res-selo-recorde').hidden = !superou;
 
+  const cabecalho = `Melhor conhecido no mundo: <b>${mundo}</b>`;
+
   let texto;
   if (mundo === null) {
     texto =
-      '<span class="chave">Sem referência publicada para esta configuração</span> ' +
-      '<em>— a tabela mundial cataloga coberturas completas; ' +
-      'garantias parciais não estão nela.</em>';
+      'Sem referência publicada para esta configuração <em>— a tabela mundial ' +
+      'cataloga coberturas completas; garantias parciais não estão nela.</em>';
   } else if (superou) {
     texto =
-      `<span class="chave">Melhor conhecido no mundo:</span> <b>${mundo}</b> ` +
-      `<em>— você chegou a ${nossas}. Vale conferir e submeter à La Jolla ` +
-      `Covering Repository: seria um recorde novo.</em>`;
-  } else if (nossas > 0 && nossas === mundo) {
-    texto =
-      `<span class="chave">Melhor conhecido no mundo:</span> <b>${mundo}</b> ` +
-      `<em>— seu resultado empatou com ele.</em>`;
+      `${cabecalho} <em>— você chegou a ${nossas}. Vale conferir e submeter à ` +
+      `La Jolla Covering Repository: seria um recorde novo.</em>`;
+  } else if (nossas === mundo) {
+    texto = `${cabecalho} <em>— seu resultado empatou com ele.</em>`;
   } else if (nossas > 0) {
     const faltam = nossas - mundo;
-    texto =
-      `<span class="chave">Melhor conhecido no mundo:</span> <b>${mundo}</b> ` +
-      `<em>— ${faltam === 1 ? 'falta 1 cartela' : `faltam ${faltam} cartelas`}.</em>`;
+    const quantas = faltam === 1 ? 'falta 1 cartela' : `faltam ${faltam} cartelas`;
+    texto = `${cabecalho} <em>— ${quantas}.</em>`;
   } else {
-    texto = `<span class="chave">Melhor conhecido no mundo:</span> <b>${mundo}</b>`;
+    texto = cabecalho;
   }
 
   alvos.forEach((id) => {

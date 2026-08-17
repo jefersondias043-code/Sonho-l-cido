@@ -177,9 +177,18 @@ try {
     `"${situacaoInicial.trim()}"`
   );
 
+  // A faixa precisa estar num estado vivo — trabalhando ou já concluída.
+  //
+  // Exigir só "trabalhando" virou uma corrida depois que a construção algébrica
+  // passou a resolver C(16,4,2) antes da primeira iteração: numa máquina rápida
+  // a busca termina entre o clique e esta leitura, a faixa já está em
+  // "concluída", e o teste acusava um defeito que não existe. O que não pode
+  // acontecer é a faixa ficar morta, sem dizer nada.
+  const faixaViva = await pagina.locator('#situacao').getAttribute('class');
   marcar(
-    await pagina.locator('#situacao.trabalhando').isVisible(),
-    'o indicador de atividade está pulsando'
+    /trabalhando|concluida/.test(faixaViva),
+    'a faixa de situação está viva',
+    faixaViva.replace('situacao', '').trim() || 'sem estado'
   );
 
   // Antes de qualquer iteração já existe uma solução na tela: é a construção
@@ -366,6 +375,11 @@ try {
 
   // O relógio precisa andar. É a prova de vida que não exige entender nada do
   // que está escrito na tela.
+  marcar(
+    await pagina.locator('#situacao.trabalhando').isVisible(),
+    'numa busca que dura, o indicador de atividade pulsa'
+  );
+
   const relogioAntes = await pagina.locator('#relogio').textContent();
   await pagina.waitForFunction(
     (anterior) => document.getElementById('relogio').textContent !== anterior,

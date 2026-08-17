@@ -249,6 +249,9 @@ impl MotorBusca {
     pub fn retomar_de(&mut self, melhor: &[Cartela], iteracoes_anteriores: u64) {
         self.semear(melhor);
         self.estatisticas.iteracoes = iteracoes_anteriores;
+        // `semear` marca "fechamento importado", que é verdade para quem colou
+        // cartelas de fora — mas não para quem só voltou ao próprio trabalho.
+        self.origem_do_inicio = "trabalho retomado".to_string();
     }
 
     /// Escolhe o ponto de partida da busca — a "primeira etapa" do processo em

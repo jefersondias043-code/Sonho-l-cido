@@ -37,7 +37,20 @@ const CLASSICOS: &[(usize, usize, usize, &str)] = &[
 ];
 
 const TEMPO_POR_CASO: Duration = Duration::from_secs(3);
-const TEMPO_NA_VARREDURA: Duration = Duration::from_secs(1);
+
+/// Orçamento por configuração na varredura ampla.
+///
+/// Um segundo por padrão, para a aferição inteira caber em minutos. Dá para
+/// afrouxar com `SEGUNDOS_POR_CASO=10`, e a diferença entre os dois números
+/// responde a uma pergunta que importa: quanto do que falta é o motor, e quanto
+/// é só falta de tempo.
+fn tempo_na_varredura() -> Duration {
+    let segundos = std::env::var("SEGUNDOS_POR_CASO")
+        .ok()
+        .and_then(|v| v.parse::<u64>().ok())
+        .unwrap_or(1);
+    Duration::from_secs(segundos.max(1))
+}
 
 fn main() {
     println!("Aferição contra a tabela mundial ({} configurações catalogadas)", referencia::quantidade_catalogada());
@@ -155,7 +168,8 @@ fn aferir_classicos() {
 /// couber no orçamento de memória e de tempo, e conta quantas vezes o motor
 /// empata com o mundo, chega perto, ou fica longe.
 fn varrer_a_faixa() {
-    println!("Varredura da faixa (1s por configuração)");
+    let orcamento = tempo_na_varredura();
+    println!("Varredura da faixa ({}s por configuração)", orcamento.as_secs());
     println!("{}", "=".repeat(104));
 
     let mut empatou = 0;
@@ -168,7 +182,7 @@ fn varrer_a_faixa() {
     for t in 2..=3 {
         for cartela in 3..=7 {
             for pool in (cartela + 1)..=30 {
-                let Some(m) = medir(pool, cartela, t, TEMPO_NA_VARREDURA) else { continue };
+                let Some(m) = medir(pool, cartela, t, orcamento) else { continue };
                 total += 1;
 
                 let gap =
