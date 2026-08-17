@@ -511,11 +511,20 @@ python3 -m http.server -d site 8000             # experimenta localmente
 ```
 
 O teste do navegador roda a interface num Chromium com viewport de iPhone,
-executa uma busca completa e **confere a cobertura da solução exibida em
-JavaScript** — sem tocar no código Rust que a produziu. Foi ele que revelou dois
-defeitos que nenhum teste unitário pegaria: uma mensagem perdida entre a
-interface e o worker durante o carregamento do WebAssembly, e um parâmetro
-`u64` que o JavaScript recusava por esperar `BigInt`.
+carrega dois fechamentos e **confere a cobertura do que está na tela em
+JavaScript** — sem tocar no código Rust que a produziu, e depois de o motor ter
+tido a chance de reorganizar o resultado. Foi ele que revelou defeitos que
+nenhum teste unitário pegaria: uma mensagem perdida entre a interface e o worker
+durante o carregamento do WebAssembly, um parâmetro `u64` que o JavaScript
+recusava por esperar `BigInt`, e um `display: inline-block` que fazia o selo
+"★ ótimo provado" ficar visível em toda busca, inclusive nas que não tinham
+provado nada.
+
+Os dois fechamentos são escolhidos pelo que provam. **18 dezenas com jogos de
+17** tem mínimo comprovado — 16 jogos, e não há menor: é onde se verifica que o
+motor **não para** ao alcançá-lo. **20 dezenas com jogos de 17** tem mínimo
+desconhecido e roda indefinidamente: é onde o relógio, a pausa e o encerramento
+são exercitados.
 
 O argumento de subpasta importa: o GitHub Pages não serve na raiz do domínio,
 e sim em `/Sonho-l-cido/`. Um caminho absoluto passaria em `localhost:8000/` e

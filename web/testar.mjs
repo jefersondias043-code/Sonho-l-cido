@@ -3,12 +3,22 @@
  *
  * Os testes em Rust provam que a matemática está certa. Este prova que ela
  * chega até a tela: que o WebAssembly carrega, que o worker responde, que o
- * botão faz o que promete e que as cartelas exibidas realmente cobrem o que
- * dizem cobrir.
+ * botão faz o que promete e que os jogos exibidos realmente cobrem o que dizem
+ * cobrir.
  *
- * A verificação final é feita aqui em JavaScript, lendo o que está na tela —
- * sem tocar em nada do Rust. Se a conta fosse refeita pelo mesmo código que a
- * produziu, o teste não provaria nada.
+ * A conferência de cobertura é feita aqui em JavaScript, lendo o que está na
+ * tela — sem tocar em nada do Rust. Se a conta fosse refeita pelo mesmo código
+ * que a produziu, o teste não provaria nada. E ela é feita sobre o resultado
+ * **depois** de o motor ter trabalhado em cima dele, que é justamente o que
+ * `testar-lotinha.mjs` não alcança: lá o fechamento é conferido recém-saído do
+ * banco, antes de a busca poder mexer nele.
+ *
+ * Dois fechamentos guiam o roteiro, e a diferença entre eles é o assunto:
+ *
+ * - **18 dezenas, jogos de 17** — 16 jogos, e 16 é o mínimo comprovado. Serve
+ *   para provar que o motor **não para** nem quando não há mais o que achar.
+ * - **20 dezenas, jogos de 17** — 240 jogos, mínimo desconhecido, piso 114.
+ *   Serve para o relógio, a pausa, o encerramento e a conferência de cobertura.
  *
  *   ./construir-web.sh && node web/testar.mjs
  */
@@ -92,26 +102,54 @@ function servir() {
   return new Promise((ok) => servidor.listen(PORTA, () => ok(servidor)));
 }
 
-/** Confere, de forma independente, que o fechamento cobre todos os pares. */
-function conferirCobertura(cartelas, pool) {
-  const faltando = [];
-  for (let i = 0; i < pool.length; i++) {
-    for (let j = i + 1; j < pool.length; j++) {
-      const a = pool[i];
-      const b = pool[j];
-      if (!cartelas.some((c) => c.includes(a) && c.includes(b))) {
-        faltando.push([a, b]);
+/**
+ * Confere que todo sorteio possível dentro do pool cai em algum jogo.
+ *
+ * Máscaras de bits sobre a posição da dezena no pool: um jogo contém o sorteio
+ * quando `(sorteio | jogo) === jogo`. São 15.504 sorteios contra 240 jogos no
+ * pool de 20 — alguns milhões de operações inteiras, instantâneo.
+ *
+ * O que se está conferindo aqui **não** é o fechamento do banco: é o que a tela
+ * está exibindo agora, depois de o motor ter tido a chance de reorganizá-lo. Um
+ * motor que "melhorasse" quebrando a cobertura passaria por todos os testes de
+ * Rust e seria pego aqui.
+ */
+function conferirCobertura(jogos, dezenas, tamanhoSorteio) {
+  const posicao = new Map(dezenas.map((d, i) => [d, i]));
+  const mascaras = jogos.map((jogo) =>
+    jogo.reduce((m, d) => m | (1 << posicao.get(d)), 0)
+  );
+
+  let total = 0;
+  let descoberto = null;
+  const escolhidas = [];
+
+  (function passo(inicio, mascara) {
+    if (descoberto) return;
+    if (escolhidas.length === tamanhoSorteio) {
+      total += 1;
+      if (!mascaras.some((jogo) => (mascara | jogo) === jogo)) {
+        descoberto = [...escolhidas];
       }
+      return;
     }
-  }
-  return faltando;
+    // Poda: sem dezenas suficientes à frente, não há sorteio a completar.
+    if (dezenas.length - inicio < tamanhoSorteio - escolhidas.length) return;
+
+    for (let i = inicio; i < dezenas.length; i++) {
+      escolhidas.push(dezenas[i]);
+      passo(i + 1, mascara | (1 << i));
+      escolhidas.pop();
+    }
+  })(0, 0);
+
+  return { total, descoberto };
 }
 
 const passos = [];
 function marcar(certo, descricao, detalhe = '') {
   passos.push({ certo, descricao, detalhe });
-  const simbolo = certo ? '  ✓' : '  ✗';
-  console.log(`${simbolo} ${descricao}${detalhe ? ` — ${detalhe}` : ''}`);
+  console.log(`${certo ? '  ✓' : '  ✗'} ${descricao}${detalhe ? ` — ${detalhe}` : ''}`);
 }
 
 await mkdir(CAPTURAS, { recursive: true });
@@ -127,90 +165,83 @@ pagina.on('console', (m) => {
 });
 pagina.on('pageerror', (e) => errosDeConsole.push(String(e)));
 
-
-console.log(`Teste de ponta a ponta — interface no iPhone (servindo em ${BASE})\n`);
-
-try {
-  await pagina.goto(`http://localhost:${PORTA}${BASE}`, { waitUntil: 'networkidle' });
-
-  marcar(await pagina.locator('h1').isVisible(), 'a página carrega');
-
-  // ─── configuração ───
-  // C(16,4,2) = 20, que o motor sabe provar. Assim o teste tem um alvo exato.
-  await pagina.fill('#universo', '16');
-  await pagina.fill('#pool', '16');
-  await pagina.fill('#cartela', '4');
-  await pagina.fill('#cobrir', '2');
-
-  const previsao = await pagina.locator('#texto-previsao').textContent();
-  marcar(
-    previsao.includes('120'),
-    'a previsão calcula o tamanho do problema',
-    previsao.trim().slice(0, 60)
-  );
-
-  await pagina.screenshot({ path: 'capturas/captura-configurar.png' });
-
-
-
-  // ─── a resposta imediata ao toque ───
-  //
-  // O defeito que isto cobre: a tela de busca só aparecia depois de o
-  // WebAssembly carregar. Do lado do usuário, o toque no botão não produzia
-  // reação nenhuma por vários segundos — indistinguível de um aplicativo
-  // quebrado.
-  const antesDoToque = Date.now();
-  await pagina.click('#iniciar');
-  await pagina.waitForSelector('#buscar.ativo', { timeout: 15000 });
-  const atraso = Date.now() - antesDoToque;
-
-  marcar(
-    atraso < 1000,
-    'a tela responde ao toque de imediato',
-    `${atraso} ms até trocar de tela`
-  );
-
-  const situacaoInicial = await pagina.locator('#texto-situacao').textContent();
-  marcar(
-    /carregando|montando|procurando/.test(situacaoInicial),
-    'a tela diz o que está acontecendo',
-    `"${situacaoInicial.trim()}"`
-  );
-
-  // A faixa precisa estar num estado vivo — trabalhando ou já concluída.
-  //
-  // Exigir só "trabalhando" virou uma corrida depois que a construção algébrica
-  // passou a resolver C(16,4,2) antes da primeira iteração: numa máquina rápida
-  // a busca termina entre o clique e esta leitura, a faixa já está em
-  // "concluída", e o teste acusava um defeito que não existe. O que não pode
-  // acontecer é a faixa ficar morta, sem dizer nada.
-  const faixaViva = await pagina.locator('#situacao').getAttribute('class');
-  marcar(
-    /trabalhando|concluida/.test(faixaViva),
-    'a faixa de situação está viva',
-    faixaViva.replace('situacao', '').trim() || 'sem estado'
-  );
-
-  // Antes de qualquer iteração já existe uma solução na tela: é a construção
-  // inicial, separada justamente para o usuário não ficar olhando para o vazio.
+/** Escolhe o pool, marca as dezenas, escolhe o tamanho do jogo e carrega. */
+async function carregarFechamento(pool, jogo, dezenas) {
+  await pagina.click('.aba[data-painel="lotinha"]');
+  await pagina.waitForSelector('#lotinha.ativo');
+  await pagina.click(`#lot-pool .opcao[data-pool="${pool}"]`);
+  await pagina.click('#lot-limpar');
+  for (const n of dezenas) await pagina.click(`#lot-grade .numero[data-n="${n}"]`);
+  await pagina.click(`#lot-jogo .opcao[data-jogo="${jogo}"]`);
+  await pagina.click('#lot-iniciar');
+  await pagina.waitForSelector('#buscar.ativo', { timeout: 30000 });
   await pagina.waitForFunction(
     () => {
       const t = document.getElementById('melhor-cartelas').textContent.trim();
       return t !== '' && t !== '—';
     },
     undefined,
-    { timeout: 20000 }
+    { timeout: 30000 }
   );
-  const primeiraSolucao = await pagina.locator('#melhor-cartelas').textContent();
+}
+
+const texto = async (seletor) => (await pagina.locator(seletor).textContent()).trim();
+const numero = async (seletor) => Number((await texto(seletor)).replace(/\D/g, ''));
+
+const DEZOITO = [1, 2, 4, 5, 7, 8, 10, 11, 13, 14, 16, 17, 19, 20, 22, 23, 24, 25];
+const VINTE = Array.from({ length: 20 }, (_, i) => i + 1);
+
+console.log(`Teste de ponta a ponta — interface no iPhone (servindo em ${BASE})\n`);
+
+try {
+  await pagina.goto(`http://localhost:${PORTA}${BASE}`, { waitUntil: 'networkidle' });
+
+  // ─── 1. o aplicativo é a Lotinha ───
+  marcar(await pagina.locator('h1').isVisible(), 'a página carrega');
+
+  const abas = await pagina.$$eval('.aba', (b) => b.map((x) => x.textContent.trim()));
   marcar(
-    Number(primeiraSolucao) > 0,
-    'uma primeira solução aparece antes da busca',
-    `${primeiraSolucao.trim()} cartelas de partida`
+    abas.join(',') === 'Lotinha,Buscar,Resultado,Histórico',
+    'as abas são as quatro da Lotinha, sem a tela de configuração',
+    abas.join(' · ')
+  );
+  marcar(
+    (await pagina.$eval('.painel.ativo', (e) => e.id)) === 'lotinha',
+    'a Lotinha é a tela de entrada'
   );
 
-  // Só agora o worker existe e o WebAssembly foi buscado. Um caminho absoluto
-  // funcionaria na raiz e falharia aqui — que é exatamente a condição do
-  // GitHub Pages.
+  // O carimbo mudou de casa junto com a tela antiga; sem ele não há como
+  // conferir se uma correção publicada chegou a este aparelho.
+  await pagina.waitForFunction(
+    () => document.getElementById('versao').textContent.trim() !== '',
+    undefined,
+    { timeout: 15000 }
+  );
+  marcar(/^versão \w+/.test(await texto('#versao')), 'o carimbo da versão está na tela', await texto('#versao'));
+
+  await pagina.screenshot({ path: join(CAPTURAS, 'captura-lotinha.png') });
+
+  // ─── 2. a resposta ao toque ───
+  //
+  // O defeito que isto cobre: a tela de busca só aparecia depois de o
+  // WebAssembly carregar. Do lado do usuário, o toque no botão não produzia
+  // reação nenhuma por vários segundos — indistinguível de um aplicativo
+  // quebrado. A troca de tela acontece antes de o worker existir.
+  //
+  // Os 816 sorteios do pool 18 são conferidos antes disso, de propósito: a
+  // cobertura é confirmada antes de qualquer promessa na tela.
+  const antesDoToque = Date.now();
+  await carregarFechamento(18, 17, DEZOITO);
+  const atraso = Date.now() - antesDoToque;
+  marcar(atraso < 5000, 'carregar o fechamento leva menos de cinco segundos', `${atraso} ms`);
+
+  marcar(
+    /Cobertura comprovada: 100%/.test(
+      await pagina.locator('#lot-conferencia').textContent()
+    ),
+    'a cobertura foi conferida antes de a busca começar'
+  );
+
   const wasm = pedidos.find((p) => p.caminho.endsWith('.wasm'));
   marcar(
     !!wasm && wasm.status === 200 && wasm.caminho.startsWith(BASE),
@@ -226,137 +257,166 @@ try {
       `${pedidos.length} pedidos, todos servidos`
   );
 
-  // O motor precisa chegar ao ótimo provado; C(16,4,2) leva alguns segundos.
-  await pagina.waitForSelector('#selo-otimo:not([hidden])', { timeout: 90000 });
-
-  const melhor = await pagina.locator('#melhor-cartelas').textContent();
-  const limite = await pagina.locator('#limite-inferior').textContent();
-  const iteracoes = await pagina.locator('#iteracoes').textContent();
-  const velocidade = await pagina.locator('#velocidade').textContent();
-
-  marcar(melhor.trim() === '20', 'chega ao ótimo conhecido de C(16,4,2)', `${melhor} cartelas`);
-  marcar(limite.trim() === '20', 'o limite inferior confere', `≥ ${limite}`);
-  marcar(true, 'velocidade no navegador', `${velocidade} iterações por segundo`);
-  marcar(true, 'iterações executadas', iteracoes);
-
-  const quantosRecordes = await pagina.locator('#lista-recordes li').count();
-  marcar(quantosRecordes >= 1, 'a lista de recordes registra a solução', `${quantosRecordes} recordes`);
-
-  // C(16,4,2) é o plano afim AG(2,4): sai pronto da construção algébrica, sem
-  // uma única iteração de busca. Antes, a mesma configuração levava segundos de
-  // busca para chegar às mesmas 20 cartelas.
+  // ─── 3. o mínimo comprovado — e o motor que segue mesmo assim ───
+  marcar((await texto('#melhor-cartelas')) === '16', 'o fechamento de 18 dezenas sai com 16 jogos');
   marcar(
-    Number(iteracoes.replace(/\D/g, '')) === 0,
-    'a construção algébrica resolve antes da primeira iteração',
-    `${iteracoes} iterações`
+    !(await pagina.locator('#selo-otimo').isHidden()),
+    'o selo de mínimo comprovado acende'
   );
 
-  const referencia = (await pagina.locator('#referencia-busca').textContent()).trim();
+  const referencia = await texto('#referencia-busca');
   marcar(
-    /melhor conhecido no mundo/i.test(referencia) && referencia.includes('20'),
-    'a tela mostra o melhor conhecido no mundo',
+    /Mínimo comprovado/.test(referencia) && /Turán/.test(referencia),
+    'a tela explica de onde vem o mínimo, em vez de dizer "sem referência"',
     referencia.replace(/\s+/g, ' ').slice(0, 78)
   );
 
-  await pagina.screenshot({ path: 'capturas/captura-buscar.png' });
+  /*
+   * A verificação que dá nome a esta mudança.
+   *
+   * O defeito relatado: ao alcançar o mínimo comprovado o aplicativo parava
+   * sozinho — a faixa dizia "ótimo provado" e o botão Pausar ficava
+   * desabilitado, sem como pedir para continuar. A cota de Schönheim para
+   * C(18,17,15) dá exatamente 16, que é o que o banco entrega, então este
+   * fechamento disparava o defeito na primeira tentativa.
+   *
+   * Agora o motor segue. Quem para é o usuário.
+   */
+  const iteracoesNoMinimo = await numero('#iteracoes');
+  await pagina.waitForFunction(
+    (antes) => Number(document.getElementById('iteracoes').textContent.replace(/\D/g, '')) > antes,
+    iteracoesNoMinimo,
+    { timeout: 15000 }
+  );
+  const iteracoesDepois = await numero('#iteracoes');
+  marcar(
+    iteracoesDepois > iteracoesNoMinimo,
+    'com o mínimo já comprovado, o motor continua trabalhando',
+    `${iteracoesNoMinimo} → ${iteracoesDepois} iterações`
+  );
+  marcar(
+    !(await pagina.locator('#pausar').isDisabled()),
+    'e o botão de parar continua nas mãos do usuário'
+  );
+  marcar(
+    /mínimo comprovado/.test(await texto('#texto-situacao')),
+    'a faixa diz que o mínimo foi alcançado, sem parar por isso',
+    await texto('#texto-situacao')
+  );
+  marcar(
+    (await texto('#melhor-cartelas')) === '16',
+    'e continuar procurando não custa o recorde já alcançado'
+  );
 
-  // ─── resultado ───
+  await pagina.screenshot({ path: join(CAPTURAS, 'captura-buscar.png') });
+
+  // ─── 4. o resultado ───
   await pagina.click('.aba[data-painel="resultado"]');
   await pagina.waitForSelector('#resultado.ativo');
-
-  const cartelas = await pagina.$$eval('#lista-cartelas .cartela span:last-child', (nos) =>
+  const jogos18 = await pagina.$$eval('#lista-cartelas .cartela span:last-child', (nos) =>
     nos.map((n) => n.textContent.trim().split(/\s+/).map(Number))
   );
-
-  marcar(cartelas.length === 20, 'as 20 cartelas aparecem na tela', `${cartelas.length} exibidas`);
+  marcar(jogos18.length === 16, 'os 16 jogos aparecem na tela', `${jogos18.length} exibidos`);
   marcar(
-    cartelas.every((c) => c.length === 4),
-    'toda cartela tem os 4 números pedidos'
+    jogos18.every((j) => j.length === 17),
+    'cada jogo tem 17 dezenas',
+    `tamanhos: ${[...new Set(jogos18.map((j) => j.length))].join(', ')}`
+  );
+  marcar(
+    jogos18.flat().every((n) => DEZOITO.includes(n)),
+    'e todas as dezenas jogadas são as que foram escolhidas'
   );
 
-  const pool = Array.from({ length: 16 }, (_, i) => i + 1);
-  const faltando = conferirCobertura(cartelas, pool);
+  await pagina.screenshot({ path: join(CAPTURAS, 'captura-resultado.png') });
+
+  // ─── 5. encerrar devolve à Lotinha ───
+  //
+  // O defeito que isto cobre: o botão antigo só trocava de aba, e a busca
+  // continuava rodando por baixo, consumindo processador e bateria.
+  await pagina.click('.aba[data-painel="buscar"]');
+  await pagina.click('#encerrar');
+  await pagina.waitForSelector('#lotinha.ativo', { timeout: 15000 });
+  marcar(true, 'encerrar devolve à tela da Lotinha');
+
+  const situacaoFinal = await pagina.locator('#situacao').getAttribute('class');
   marcar(
-    faltando.length === 0,
-    'verificação independente: todos os 120 pares cobertos',
-    faltando.length ? `faltaram ${faltando.length}` : '120 de 120'
+    !situacaoFinal.includes('trabalhando'),
+    'encerrar realmente para o motor',
+    `situação: "${situacaoFinal.replace('situacao', '').trim() || 'parada'}"`
   );
 
-  const redundancia = await pagina.locator('#res-redundancia').textContent();
+  const iteracoesAoEncerrar = await texto('#iteracoes');
+  await pagina.waitForTimeout(2000);
   marcar(
-    redundancia.trim() === '0',
-    'redundância zero: é um sistema de Steiner exato',
-    `redundância ${redundancia}`
+    (await texto('#iteracoes')) === iteracoesAoEncerrar,
+    'nada continua rodando em segundo plano',
+    `congelado em ${iteracoesAoEncerrar}`
   );
 
-  await pagina.screenshot({ path: 'capturas/captura-resultado.png' });
+  // ─── 6. o caso em aberto: relógio, pausa e conferência ───
+  //
+  // 20 dezenas com jogos de 17: 240 jogos, e ninguém no mundo sabe o mínimo.
+  // O motor não vai provar nada aqui, que é exatamente a condição em que o
+  // relógio e a pausa precisam ser exercitados.
+  await carregarFechamento(20, 17, VINTE);
+  marcar(true, 'uma segunda busca roda limpa depois de encerrar', `${await texto('#melhor-cartelas')} jogos`);
 
-  // ─── uma busca longa: relógio, pausa e encerramento ───
-  //
-  // Precisa ser uma configuração que fique de fato correndo — é a condição em
-  // que o relógio, o botão de pausa e o de encerrar são exercitados. Num
-  // problema que termina antes do primeiro segundo, nada disso chega a ser
-  // testado.
-  //
-  // Aqui já esteve C(25,5,2), que levava minutos. Não serve mais: é o plano
-  // afim AG(2,5) e agora sai pronto por construção. C(26,6,3) não tem fórmula
-  // fechada neste projeto e o melhor conhecido no mundo (130) está muito
-  // abaixo do que a busca alcança em segundos, então ela não para.
-  await pagina.click('.aba[data-painel="configurar"]');
-  // O universo precisa acompanhar o pool: um pool maior que o universo é
-  // configuração inválida, e a tela recusa iniciar — corretamente.
-  await pagina.fill('#universo', '26');
-  await pagina.fill('#pool', '26');
-  await pagina.fill('#cartela', '6');
-  await pagina.fill('#cobrir', '3');
-  await pagina.click('#iniciar');
-  await pagina.waitForSelector('#buscar.ativo', { timeout: 15000 });
+  const emAberto = await texto('#referencia-busca');
+  marcar(
+    /problema em aberto/.test(emAberto) && /114/.test(emAberto),
+    'no caso em aberto a tela mostra o piso conhecido, não um mínimo inventado',
+    emAberto.replace(/\s+/g, ' ').slice(0, 78)
+  );
+  marcar(
+    await pagina.locator('#selo-otimo').isHidden(),
+    'e o selo de mínimo comprovado fica apagado onde não há mínimo comprovado'
+  );
 
-  // ─── o resultado durante a busca ───
-  //
-  // O defeito que isto cobre: as cartelas apareciam na aba Resultado só depois
-  // que a busca terminava. Durante a busca — que é quando o usuário vai olhar,
-  // porque o motor já anunciou ter encontrado algo — a aba ficava vazia.
-  //
-  // A causa era o caminho que as cartelas percorriam: worker → armazenamento
-  // local → temporizador → tela. A gravação esperava na fila atrás da leva de
-  // iterações em curso, enquanto o temporizador já lia. O teste antigo não
-  // pegava porque só conferia a aba depois do fim, quando tudo já assentou.
+  marcar(
+    await pagina.locator('#situacao.trabalhando').isVisible(),
+    'numa busca que dura, o indicador de atividade pulsa'
+  );
+
+  const relogioAntes = await texto('#relogio');
   await pagina.waitForFunction(
-    () => {
-      const t = document.getElementById('melhor-cartelas').textContent.trim();
-      return t !== '' && t !== '—';
-    },
-    undefined,
-    { timeout: 30000 }
+    (anterior) => document.getElementById('relogio').textContent.trim() !== anterior,
+    relogioAntes,
+    { timeout: 10000 }
   );
+  marcar(true, 'o relógio corre durante a busca', `saiu de ${relogioAntes}`);
 
-  await pagina.click('.aba[data-painel="resultado"]');
-  await pagina.waitForSelector('#resultado.ativo');
+  marcar(
+    (await pagina.locator('#lista-recordes li').count()) >= 1,
+    'a lista de recordes registra o ponto de partida',
+    `${await pagina.locator('#lista-recordes li').count()} recordes`
+  );
 
   /*
-   * Os dois números são lidos no mesmo instante, dentro de uma única avaliação.
-   * Lê-los em momentos diferentes daria falso negativo numa busca veloz: entre
-   * uma leitura e outra o motor encontra uma solução melhor, e os valores
-   * divergem sem que nada esteja errado.
+   * As cartelas precisam aparecer no Resultado **enquanto** a busca corre.
    *
-   * Com o defeito presente a lista ficaria vazia e a espera estouraria — que é
-   * exatamente o que se quer detectar.
+   * O defeito que isto cobre: elas só apareciam quando a busca terminava.
+   * Durante a busca — que é quando o usuário vai olhar, porque o painel já
+   * anunciou ter encontrado algo — a aba ficava vazia. A causa era o caminho
+   * que percorriam: worker → armazenamento local → temporizador → tela.
    */
+  await pagina.click('.aba[data-painel="resultado"]');
+  await pagina.waitForSelector('#resultado.ativo');
   let durante = { anunciadas: 0, exibidas: 0 };
   let coerente = true;
   try {
-    durante = await pagina.waitForFunction(
-      () => {
-        const anunciadas = Number(
-          document.getElementById('melhor-cartelas').textContent.trim()
-        );
-        const exibidas = document.querySelectorAll('#lista-cartelas .cartela').length;
-        return exibidas > 0 && exibidas === anunciadas ? { anunciadas, exibidas } : null;
-      },
-      undefined,
-      { timeout: 15000 }
-    ).then((alca) => alca.jsonValue());
+    durante = await pagina
+      .waitForFunction(
+        () => {
+          const anunciadas = Number(
+            document.getElementById('melhor-cartelas').textContent.trim()
+          );
+          const exibidas = document.querySelectorAll('#lista-cartelas .cartela').length;
+          return exibidas > 0 && exibidas === anunciadas ? { anunciadas, exibidas } : null;
+        },
+        undefined,
+        { timeout: 20000 }
+      )
+      .then((alca) => alca.jsonValue());
   } catch {
     coerente = false;
     durante = await pagina.evaluate(() => ({
@@ -364,78 +424,34 @@ try {
       exibidas: document.querySelectorAll('#lista-cartelas .cartela').length,
     }));
   }
-
   marcar(
     coerente,
-    'as cartelas aparecem no Resultado enquanto a busca ainda corre',
+    'os jogos aparecem no Resultado enquanto a busca ainda corre',
     `painel anuncia ${durante.anunciadas}, aba mostra ${durante.exibidas}`
   );
 
-  await pagina.click('.aba[data-painel="buscar"]');
-
-  // O relógio precisa andar. É a prova de vida que não exige entender nada do
-  // que está escrito na tela.
-  marcar(
-    await pagina.locator('#situacao.trabalhando').isVisible(),
-    'numa busca que dura, o indicador de atividade pulsa'
-  );
-
-  const relogioAntes = await pagina.locator('#relogio').textContent();
-  await pagina.waitForFunction(
-    (anterior) => document.getElementById('relogio').textContent !== anterior,
-    relogioAntes,
-    { timeout: 8000 }
-  );
-  marcar(true, 'o relógio corre durante a busca', `saiu de ${relogioAntes}`);
-
-  // Numa configuração difícil as melhorias vêm ao longo de segundos, não no
-  // primeiro instante — esperar por elas é mais fiel do que fotografar a lista
-  // assim que o relógio anda.
-  let recordesLongos = 0;
-  try {
-    await pagina.waitForFunction(
-      () => document.querySelectorAll('#lista-recordes li').length > 1,
-      undefined,
-      { timeout: 20000 }
-    );
-  } catch {
-    /* o marcar abaixo reporta o que houver */
-  }
-  recordesLongos = await pagina.locator('#lista-recordes li').count();
-  marcar(
-    recordesLongos > 1,
-    'a lista de recordes acompanha a evolução',
-    `${recordesLongos} recordes`
-  );
-
-  const distancia = (await pagina.locator('#referencia-busca').textContent()).trim();
-  marcar(
-    /faltam?\s/.test(distancia),
-    'a tela diz quanto falta para o melhor do mundo',
-    distancia.replace(/\s+/g, ' ').slice(0, 78)
-  );
-
   // Pausar precisa congelar de verdade: as iterações param de subir.
+  await pagina.click('.aba[data-painel="buscar"]');
   await pagina.click('#pausar');
   await pagina.waitForFunction(
     () => document.getElementById('texto-situacao').textContent.includes('pausado'),
     undefined,
     { timeout: 10000 }
   );
-  const iteracoesAoPausar = await pagina.locator('#iteracoes').textContent();
+  const iteracoesAoPausar = await texto('#iteracoes');
   await pagina.waitForTimeout(1500);
   marcar(
-    (await pagina.locator('#iteracoes').textContent()) === iteracoesAoPausar,
+    (await texto('#iteracoes')) === iteracoesAoPausar,
     'pausar congela a busca de verdade',
     `parada em ${iteracoesAoPausar} iterações`
   );
   marcar(
-    (await pagina.locator('#pausar').textContent()).includes('Continuar'),
+    (await texto('#pausar')).includes('Continuar'),
     'o botão passa a oferecer continuar'
   );
 
-  // Pausado, o resultado tem de estar completo e coerente com o painel.
-  // Pausado nada mais muda, então uma leitura única já é confiável.
+  // Pausado, o resultado tem de estar completo — e é o momento certo de
+  // conferir a cobertura, porque nada mais muda enquanto se lê.
   await pagina.click('.aba[data-painel="resultado"]');
   await pagina.waitForSelector('#resultado.ativo');
   const aoPausar = await pagina.evaluate(() => ({
@@ -445,332 +461,33 @@ try {
   marcar(
     aoPausar.exibidas > 0 && aoPausar.exibidas === aoPausar.anunciadas,
     'com a busca pausada, o resultado continua completo',
-    `${aoPausar.exibidas} cartelas`
+    `${aoPausar.exibidas} jogos`
   );
-  await pagina.click('.aba[data-painel="buscar"]');
+
+  const jogos20 = await pagina.$$eval('#lista-cartelas .cartela span:last-child', (nos) =>
+    nos.map((n) => n.textContent.trim().split(/\s+/).map(Number))
+  );
+  const { total, descoberto } = conferirCobertura(jogos20, VINTE, 15);
+  marcar(
+    total === 15504 && descoberto === null,
+    'o que está na tela cobre os 15.504 sorteios, conferido fora do motor',
+    descoberto ? `descoberto: ${descoberto.join(' ')}` : `${total} de 15.504`
+  );
 
   // Continuar retoma de onde parou.
+  await pagina.click('.aba[data-painel="buscar"]');
   await pagina.click('#pausar');
   await pagina.waitForFunction(
-    (anterior) => document.getElementById('iteracoes').textContent !== anterior,
+    (anterior) => document.getElementById('iteracoes').textContent.trim() !== anterior,
     iteracoesAoPausar,
-    { timeout: 10000 }
+    { timeout: 15000 }
   );
   marcar(true, 'continuar retoma de onde parou');
 
-  // ─── encerrar ───
-  //
-  // O defeito que isto cobre: o botão antigo só trocava de aba, e a busca
-  // continuava rodando por baixo, consumindo processador e bateria.
   await pagina.click('#encerrar');
-  await pagina.waitForSelector('#configurar.ativo', { timeout: 10000 });
-  marcar(true, 'encerrar devolve à tela de configuração');
+  await pagina.waitForSelector('#lotinha.ativo', { timeout: 15000 });
 
-  const situacaoFinal = await pagina.locator('#situacao').getAttribute('class');
-  marcar(
-    !situacaoFinal.includes('trabalhando'),
-    'encerrar realmente para o motor',
-    `situação: "${situacaoFinal.replace('situacao', '').trim() || 'parada'}"`
-  );
-
-  // E as iterações param de subir de vez — se o worker tivesse sobrevivido,
-  // continuariam correndo em segundo plano.
-  const iteracoesAoEncerrar = await pagina.locator('#iteracoes').textContent();
-  await pagina.waitForTimeout(2000);
-  marcar(
-    (await pagina.locator('#iteracoes').textContent()) === iteracoesAoEncerrar,
-    'nada continua rodando em segundo plano',
-    `congelado em ${iteracoesAoEncerrar}`
-  );
-
-  // E dá para começar outra busca em seguida, com outra configuração.
-  await pagina.fill('#universo', '13');
-  await pagina.fill('#pool', '13');
-  await pagina.fill('#cartela', '4');
-  await pagina.fill('#cobrir', '2');
-  await pagina.click('#iniciar');
-  await pagina.waitForSelector('#buscar.ativo', { timeout: 15000 });
-  await pagina.waitForSelector('#selo-otimo:not([hidden])', { timeout: 60000 });
-  const segunda = await pagina.locator('#melhor-cartelas').textContent();
-  marcar(
-    segunda.trim() === '13',
-    'uma segunda busca roda limpa depois de encerrar',
-    `C(13,4,2) = 13, encontrou ${segunda.trim()}`
-  );
-
-  await pagina.click('#encerrar');
-  await pagina.waitForSelector('#configurar.ativo', { timeout: 10000 });
-
-  // ─── importar um fechamento pronto ───
-  //
-  // É a segunda metade do processo em duas etapas: o resultado de qualquer
-  // outra ferramenta entra aqui e o motor continua a partir dele, em vez de
-  // recomeçar do zero.
-  await pagina.fill('#universo', '9');
-  await pagina.fill('#pool', '9');
-  await pagina.fill('#cartela', '3');
-  await pagina.fill('#cobrir', '2');
-
-  // Um erro de digitação primeiro: precisa apontar a linha e não deixar o
-  // usuário preso na tela de busca com um aviso que some sozinho.
-  await pagina.locator('#importar summary').click();
-  await pagina.fill('#texto-fechamento', '1 2 3\n4 5 seis');
-  await pagina.click('#iniciar');
-  await pagina.waitForSelector('#erro-fechamento:not([hidden])', { timeout: 20000 });
-  const erroImportacao = (await pagina.locator('#erro-fechamento').textContent()).trim();
-  marcar(
-    erroImportacao.includes('linha 2'),
-    'texto inválido aponta a linha, junto da caixa onde foi colado',
-    erroImportacao
-  );
-  marcar(
-    await pagina.locator('#configurar.ativo').isVisible(),
-    'e devolve o usuário à tela onde ele conserta'
-  );
-
-  // Agora um fechamento válido, com os separadores e comentários que aparecem
-  // na prática. É o mesmo interpretador da linha de comando.
-  const fechamentoColado = [
-    '# fechamento vindo de outra ferramenta',
-    '1 2 3',
-    '4,5,6',
-    '7 - 8 - 9',
-  ].join('\n');
-  await pagina.fill('#texto-fechamento', fechamentoColado);
-  await pagina.click('#iniciar');
-  await pagina.waitForSelector('#buscar.ativo', { timeout: 15000 });
-  await pagina.waitForSelector('#selo-otimo:not([hidden])', { timeout: 90000 });
-
-  const partindoDoColado = await pagina.locator('#melhor-cartelas').textContent();
-  marcar(
-    partindoDoColado.trim() === '12',
-    'a busca parte do fechamento colado e chega ao ótimo de C(9,3,2)',
-    `${partindoDoColado.trim()} cartelas`
-  );
-
-  // Aqui o fechamento colado tinha 3 cartelas e não cobria nada; a construção
-  // algébrica venceu, e a tela precisa dizer isso em vez de fingir que partiu
-  // do que o usuário trouxe.
-  const partidaColada = (await pagina.locator('#partida').textContent()).trim();
-  marcar(
-    /^Partiu de:/.test(partidaColada) && /não foi perdido/.test(partidaColada),
-    'um fechamento incompleto é preterido, e a tela explica',
-    partidaColada.replace(/\s+/g, ' ').slice(0, 78)
-  );
-
-  await pagina.click('#encerrar');
-  await pagina.waitForSelector('#configurar.ativo', { timeout: 10000 });
-
-  // ─── um fechamento pior que a construção interna não pode vencer ───
-  //
-  // O defeito que isto cobre: semear pulava a escolha de partida. Em C(21,5,2)
-  // o motor constrói as 21 ótimas por fórmula, mas colar um fechamento ruim
-  // desligava isso — importar deixava o resultado pior do que não importar.
-  await pagina.fill('#universo', '21');
-  await pagina.fill('#pool', '21');
-  await pagina.fill('#cartela', '5');
-  await pagina.fill('#cobrir', '2');
-
-  // Um fechamento válido e redundante: as cartelas 1..5, 6..10, … repetidas.
-  const ruim = [];
-  for (let volta = 0; volta < 8; volta++) {
-    for (let i = 0; i < 21; i += 5) {
-      const cartela = [];
-      for (let j = 0; j < 5; j++) cartela.push(((i + j + volta) % 21) + 1);
-      ruim.push(cartela.join(' '));
-    }
-  }
-  await pagina.fill('#texto-fechamento', ruim.join('\n'));
-  await pagina.click('#iniciar');
-  await pagina.waitForSelector('#buscar.ativo', { timeout: 15000 });
-  await pagina.waitForSelector('#selo-otimo:not([hidden])', { timeout: 60000 });
-
-  const comRuim = await pagina.evaluate(() => ({
-    cartelas: Number(document.getElementById('melhor-cartelas').textContent.trim()),
-    partida: document.getElementById('partida').textContent.trim(),
-  }));
-  marcar(
-    comRuim.cartelas === 21,
-    'um fechamento ruim não estraga a construção interna',
-    `${ruim.length} cartelas coladas, o motor entregou ${comRuim.cartelas}`
-  );
-  marcar(
-    /não foi perdido|melhor que/i.test(comRuim.partida),
-    'e a tela explica por que o fechamento colado não foi o ponto de partida',
-    comRuim.partida.replace(/\s+/g, ' ').slice(0, 78)
-  );
-
-  await pagina.click('#encerrar');
-  await pagina.waitForSelector('#configurar.ativo', { timeout: 10000 });
-  await pagina.fill('#texto-fechamento', '');
-
-  // ─── o ciclo completo das duas etapas ───
-  //
-  // É o pedido inteiro, de ponta a ponta: rodar uma busca, pegar o resultado
-  // dela, e recomeçar a partir dele — sem refazer o trabalho já feito.
-  //
-  // C(12,5,3) não tem construção fechada neste projeto e não se resolve em
-  // segundos, então o que o usuário traz é de fato o melhor disponível e tem de
-  // ser aproveitado.
-  await pagina.fill('#universo', '12');
-  await pagina.fill('#pool', '12');
-  await pagina.fill('#cartela', '5');
-  await pagina.fill('#cobrir', '3');
-  await pagina.click('#iniciar');
-  await pagina.waitForSelector('#buscar.ativo', { timeout: 15000 });
-  await pagina.waitForFunction(
-    () => {
-      const t = document.getElementById('melhor-cartelas').textContent.trim();
-      return t !== '' && t !== '—';
-    },
-    undefined,
-    { timeout: 30000 }
-  );
-  await pagina.waitForTimeout(4000);
-
-  const primeiraEtapa = await pagina.evaluate(() => ({
-    cartelas: Number(document.getElementById('melhor-cartelas').textContent.trim()),
-    texto: [...document.querySelectorAll('#lista-cartelas .cartela span:last-child')]
-      .map((n) => n.textContent.trim())
-      .join('\n'),
-  }));
-
-  await pagina.click('#encerrar');
-  await pagina.waitForSelector('#configurar.ativo', { timeout: 10000 });
-
-  // Segunda etapa: o resultado da primeira volta como ponto de partida.
-  await pagina.fill('#texto-fechamento', primeiraEtapa.texto);
-  await pagina.fill('#semente', '987654321');
-  await pagina.click('#iniciar');
-  await pagina.waitForSelector('#buscar.ativo', { timeout: 15000 });
-  await pagina.waitForFunction(
-    () => {
-      const t = document.getElementById('melhor-cartelas').textContent.trim();
-      return t !== '' && t !== '—';
-    },
-    undefined,
-    { timeout: 30000 }
-  );
-
-  const segundaEtapa = await pagina.evaluate(() => ({
-    cartelas: Number(document.getElementById('melhor-cartelas').textContent.trim()),
-    partida: document.getElementById('partida').textContent.trim(),
-    trazidas: 0,
-  }));
-
-  marcar(
-    segundaEtapa.cartelas <= primeiraEtapa.cartelas,
-    'a segunda etapa nunca começa pior que o resultado da primeira',
-    `${primeiraEtapa.cartelas} → ${segundaEtapa.cartelas} cartelas`
-  );
-  marcar(
-    /^Partiu do <?b?>?seu fechamento|^Partiu do seu fechamento/.test(segundaEtapa.partida),
-    'e a tela confirma que partiu do trabalho já feito',
-    segundaEtapa.partida.replace(/\s+/g, ' ').slice(0, 78)
-  );
-
-  await pagina.waitForTimeout(4000);
-  const depoisDeContinuar = await pagina.evaluate(() =>
-    Number(document.getElementById('melhor-cartelas').textContent.trim())
-  );
-  marcar(
-    depoisDeContinuar <= segundaEtapa.cartelas,
-    'e continua otimizando a partir dali',
-    `${segundaEtapa.cartelas} → ${depoisDeContinuar} cartelas`
-  );
-
-  await pagina.click('#encerrar');
-  await pagina.waitForSelector('#configurar.ativo', { timeout: 10000 });
-  await pagina.fill('#texto-fechamento', '');
-  await pagina.fill('#semente', '1361508949');
-
-  // ─── fechamento de loteria: a garantia parcial também tem referência ───
-  //
-  // O defeito que isto cobre: em "garantir X acertos se saírem Y" a tela dizia
-  // "sem referência publicada para esta configuração" — sempre, para qualquer
-  // número. Era o uso mais comum do aplicativo ficando sem nenhum ponto de
-  // comparação.
-  await pagina.fill('#universo', '60');
-  await pagina.fill('#pool', '20');
-  await pagina.fill('#cartela', '6');
-  await pagina.click('#tipo-regra .opcao[data-regra="garantir"]');
-  await pagina.fill('#alvo', '6');
-  await pagina.fill('#intersecao', '4');
-  await pagina.click('#iniciar');
-  await pagina.waitForSelector('#buscar.ativo', { timeout: 15000 });
-  await pagina.waitForFunction(
-    () => {
-      const t = document.getElementById('melhor-cartelas').textContent.trim();
-      return t !== '' && t !== '—';
-    },
-    undefined,
-    { timeout: 40000 }
-  );
-
-  const parcial = await pagina.evaluate(() => ({
-    texto: document.getElementById('referencia-busca').textContent.trim(),
-    selo: !document.getElementById('selo-recorde').hidden,
-    cartelas: Number(document.getElementById('melhor-cartelas').textContent.trim()),
-  }));
-
-  marcar(
-    !/sem referência/i.test(parcial.texto) && /\d/.test(parcial.texto),
-    'garantia parcial recebe um número de referência, não um vazio',
-    parcial.texto.replace(/\s+/g, ' ').slice(0, 88)
-  );
-  marcar(
-    !parcial.selo,
-    'e ficar abaixo do teto não é anunciado como recorde mundial',
-    `${parcial.cartelas} cartelas, bem abaixo do teto`
-  );
-
-  await pagina.click('#encerrar');
-  await pagina.waitForSelector('#configurar.ativo', { timeout: 10000 });
-  await pagina.click('#tipo-regra .opcao[data-regra="cobrir"]');
-
-  // ─── teto de cartelas: a comparação com o mundo tem de se calar ───
-  //
-  // Com teto o objetivo é cobrir o máximo possível dentro dele, e a solução tem
-  // cobertura parcial de propósito. Comparar a contagem de cartelas com o
-  // recorde mundial ali anunciaria "acima do melhor conhecido no mundo" para um
-  // fechamento furado.
-  await pagina.fill('#universo', '21');
-  await pagina.fill('#pool', '21');
-  await pagina.fill('#cartela', '5');
-  await pagina.fill('#cobrir', '2');
-  await pagina.fill('#orcamento', '8');
-  await pagina.click('#iniciar');
-  await pagina.waitForSelector('#buscar.ativo', { timeout: 15000 });
-  await pagina.waitForFunction(
-    () => {
-      const t = document.getElementById('melhor-cartelas').textContent.trim();
-      return t !== '' && t !== '—';
-    },
-    undefined,
-    { timeout: 20000 }
-  );
-
-  const comTeto = await pagina.evaluate(() => ({
-    selo: !document.getElementById('selo-recorde').hidden,
-    texto: document.getElementById('referencia-busca').textContent.trim(),
-    cobertura: document.getElementById('cobertura').textContent.trim(),
-  }));
-  marcar(
-    !comTeto.selo,
-    'com teto de cartelas, nada é anunciado como recorde mundial',
-    `cobertura ${comTeto.cobertura}`
-  );
-  marcar(
-    /não se comparam/.test(comTeto.texto),
-    'e a tela explica por que os números não se comparam',
-    comTeto.texto.replace(/\s+/g, ' ').slice(0, 78)
-  );
-
-  await pagina.click('#encerrar');
-  await pagina.waitForSelector('#configurar.ativo', { timeout: 10000 });
-  await pagina.fill('#orcamento', '');
-
-  // ─── persistência ───
+  // ─── 7. persistência ───
   const guardadas = await pagina.evaluate(() => {
     const bruto = localStorage.getItem('sonho-lucido:historico');
     return bruto ? JSON.parse(bruto).length : 0;
@@ -785,6 +502,13 @@ try {
     listadas === guardadas,
     'ao reabrir, o histórico continua lá',
     `${listadas} trabalhos listados`
+  );
+
+  const descricao = (await pagina.locator('.sessao-config').first().textContent()).trim();
+  marcar(
+    /dezenas · jogos de/.test(descricao),
+    'e descreve os trabalhos na língua da modalidade',
+    descricao.replace(/\s+/g, ' ').slice(0, 60)
   );
 
   marcar(errosDeConsole.length === 0, 'nenhum erro no console', errosDeConsole.join(' | ').slice(0, 120));

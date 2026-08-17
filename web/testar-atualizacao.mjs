@@ -146,7 +146,13 @@ try {
   );
 
   // E o aplicativo continua funcionando depois da troca.
-  marcar(await pagina.locator('#iniciar').isEnabled(), 'o aplicativo segue utilizável após atualizar');
+  // O botão nasce desabilitado, com o rótulo servindo de instrução — é a
+  // seleção das dezenas que o libera. Que ele exista e diga o que falta já
+  // prova que os módulos carregaram e a tela reagiu.
+  marcar(
+    /Escolha \d+ dezenas?/.test(await pagina.locator('#lot-iniciar').textContent()),
+    'o aplicativo segue utilizável após atualizar'
+  );
 
   // ─── 4. sem internet ───
   //
@@ -164,8 +170,10 @@ try {
   // faltasse, os ouvintes não existiriam e a tela não reagiria a nada.
   let offlineUtilizavel = true;
   try {
+    // A matriz das 28 combinações é desenhada por `lotinha.js`, importado por
+    // `app.js` — se o módulo faltasse no cache, a tabela ficaria vazia.
     await pagina.waitForFunction(
-      () => document.getElementById('texto-previsao').textContent.includes('combinações'),
+      () => document.querySelectorAll('#lot-matriz tbody tr').length === 28,
       undefined,
       { timeout: 10000 }
     );
@@ -179,12 +187,12 @@ try {
   // E o motor — que é o arquivo maior — precisa rodar a partir do cache.
   let motorOffline = true;
   try {
-    await pagina.click('.aba[data-painel="configurar"]');
-    await pagina.fill('#universo', '13');
-    await pagina.fill('#pool', '13');
-    await pagina.fill('#cartela', '4');
-    await pagina.fill('#cobrir', '2');
-    await pagina.click('#iniciar');
+    await pagina.click('.aba[data-painel="lotinha"]');
+    await pagina.waitForSelector('#lotinha.ativo');
+    await pagina.click('#lot-pool .opcao[data-pool="18"]');
+    for (let n = 1; n <= 18; n++) await pagina.click(`#lot-grade .numero[data-n="${n}"]`);
+    await pagina.click('#lot-jogo .opcao[data-jogo="17"]');
+    await pagina.click('#lot-iniciar');
     await pagina.waitForFunction(
       () => {
         const t = document.getElementById('melhor-cartelas').textContent.trim();

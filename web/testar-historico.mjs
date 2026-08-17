@@ -79,15 +79,22 @@ const sessoesGravadas = () =>
     return bruto ? JSON.parse(bruto) : [];
   });
 
-/** Configura e roda uma busca até ela registrar ao menos uma solução. */
-async function buscar({ universo, pool, cartela, cobrir }) {
-  await pagina.click('.aba[data-painel="configurar"]');
-  await pagina.fill('#universo', String(universo));
-  await pagina.fill('#pool', String(pool));
-  await pagina.fill('#cartela', String(cartela));
-  await pagina.fill('#cobrir', String(cobrir));
-  await pagina.click('#iniciar');
-  await pagina.waitForSelector('#buscar.ativo', { timeout: 15000 });
+/**
+ * Carrega um fechamento da Lotinha e espera a busca registrar uma solução.
+ *
+ * As dezenas são sempre as `pool` primeiras: quais são não muda nada aqui — o
+ * fechamento vem do banco em posições, e o histórico grava a configuração, não
+ * a sorte de quem escolheu.
+ */
+async function buscar({ pool, jogo }) {
+  await pagina.click('.aba[data-painel="lotinha"]');
+  await pagina.waitForSelector('#lotinha.ativo');
+  await pagina.click(`#lot-pool .opcao[data-pool="${pool}"]`);
+  await pagina.click('#lot-limpar');
+  for (let n = 1; n <= pool; n++) await pagina.click(`#lot-grade .numero[data-n="${n}"]`);
+  await pagina.click(`#lot-jogo .opcao[data-jogo="${jogo}"]`);
+  await pagina.click('#lot-iniciar');
+  await pagina.waitForSelector('#buscar.ativo', { timeout: 30000 });
   await esperarSolucao();
 }
 
@@ -106,7 +113,7 @@ async function esperarSolucao() {
 async function encerrar() {
   await pagina.click('.aba[data-painel="buscar"]');
   await pagina.click('#encerrar');
-  await pagina.waitForSelector('#configurar.ativo', { timeout: 15000 });
+  await pagina.waitForSelector('#lotinha.ativo', { timeout: 15000 });
 }
 
 console.log('Teste do histórico de trabalhos\n');
@@ -125,22 +132,22 @@ try {
   );
 
   // ─── 1. toda busca é salva sozinha ───
-  await buscar({ universo: 16, pool: 16, cartela: 4, cobrir: 2 });
+  await buscar({ pool: 18, jogo: 17 });
   await encerrar();
 
   let sessoes = await sessoesGravadas();
   marcar(sessoes.length === 1, 'a busca é salva sem o usuário pedir', `${sessoes.length} registro`);
   marcar(
-    sessoes[0].melhor.length > 0 && sessoes[0].melhor.every((c) => c.length === 4),
-    'o registro guarda as cartelas de verdade',
-    `${sessoes[0].melhor.length} cartelas de 4 números`
+    sessoes[0].melhor.length > 0 && sessoes[0].melhor.every((c) => c.length === 17),
+    'o registro guarda os jogos de verdade',
+    `${sessoes[0].melhor.length} jogos de 17 dezenas`
   );
 
   // ─── 2. uma busca nova não apaga a anterior ───
   //
   // Era exatamente o defeito da versão anterior: existia um único espaço de
   // gravação, e começar outro trabalho apagava o primeiro sem aviso.
-  await buscar({ universo: 13, pool: 13, cartela: 4, cobrir: 2 });
+  await buscar({ pool: 19, jogo: 17 });
   await encerrar();
 
   sessoes = await sessoesGravadas();
@@ -152,27 +159,24 @@ try {
 
   const configuracoes = sessoes.map((s) => s.configuracao.pool.length).sort();
   marcar(
-    configuracoes.join(',') === '13,16',
+    configuracoes.join(',') === '18,19',
     'cada registro guarda a própria configuração',
     `pools ${configuracoes.join(' e ')}`
   );
 
   // ─── 3. continuar retoma e atualiza o mesmo registro ───
   //
-  // Usa um problema que não se resolve em segundos, para que continuar tenha
-  // mesmo o que melhorar.
-  //
-  // Aqui já esteve C(25,5,2). Não serve mais: é o plano afim AG(2,5) e agora
-  // sai pronto por construção algébrica, em zero iterações — e um teste de
-  // "continuar avançou" sobre ele mede 0 → 0. C(22,6,3) não tem construção
-  // fechada e continua rodando.
-  await buscar({ universo: 22, pool: 22, cartela: 6, cobrir: 3 });
+  // Usa um fechamento cujo mínimo é problema em aberto, para que continuar
+  // tenha mesmo o que melhorar. Vinte dezenas com jogos de 17: 240 jogos, piso
+  // conhecido 114, e ninguém no mundo sabe o mínimo — o motor não vai provar
+  // nada ali e segue rodando enquanto deixarem.
+  await buscar({ pool: 20, jogo: 17 });
   await pagina.waitForTimeout(2500);
   await encerrar();
 
   sessoes = await sessoesGravadas();
-  const antes = sessoes.find((s) => s.configuracao.pool.length === 22);
-  marcar(!!antes, 'o trabalho longo também foi salvo', `${antes?.melhor.length} cartelas`);
+  const antes = sessoes.find((s) => s.configuracao.pool.length === 20);
+  marcar(!!antes, 'o trabalho longo também foi salvo', `${antes?.melhor.length} jogos`);
 
   await pagina.click('.aba[data-painel="historico"]');
   await pagina.waitForSelector('#historico.ativo');
@@ -182,7 +186,7 @@ try {
   );
   await pagina.screenshot({ path: 'capturas/captura-historico.png' });
 
-  // Continua justamente o trabalho de pool 22.
+  // Continua justamente o trabalho de 20 dezenas.
   const posicao = await pagina.evaluate((id) => {
     const botoes = [...document.querySelectorAll('[data-acao="continuar"]')];
     return botoes.findIndex((b) => b.dataset.id === id);
@@ -222,7 +226,7 @@ try {
   marcar(
     depois.melhor.length <= antes.melhor.length,
     'a solução só pode ter melhorado',
-    `${antes.melhor.length} → ${depois.melhor.length} cartelas`
+    `${antes.melhor.length} → ${depois.melhor.length} jogos`
   );
   marcar(
     depois.criadaEm === antes.criadaEm && depois.atualizadaEm > antes.atualizadaEm,
