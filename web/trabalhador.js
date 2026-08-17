@@ -115,22 +115,23 @@ function tratar(mensagem) {
   }
 }
 
-function criar({ configuracao, fechamento, doMundo, salvo }) {
+function criar({ configuracao, fechamento, doBanco, salvo }) {
   descartarMotor();
 
   motor = new MotorWeb(JSON.stringify(configuracao));
 
   if (salvo) {
     motor.retomar(salvo);
-  } else if (Array.isArray(doMundo) && doMundo.length > 0) {
-    // A cobertura do mundo, vinda da biblioteca guardada no aparelho, entra
-    // pelo mesmo caminho de qualquer fechamento: vira candidata a ponto de
-    // partida e concorre com a construção interna.
-    motor.semear_do_mundo(JSON.stringify(doMundo));
+  } else if (Array.isArray(doBanco) && doBanco.length > 0) {
+    // O fechamento pronto do aplicativo entra pelo mesmo caminho de qualquer
+    // outro: vira candidato a ponto de partida e concorre com a construção
+    // interna. Ele costuma vencer — foi produzido com minutos de busca, não
+    // com os milissegundos que a construção tem — mas quem decide é a poda.
+    motor.semear_do_banco(JSON.stringify(doBanco));
 
-    // E se o usuário também colou algo, oferece as duas. Semear de novo não
-    // descarta a primeira: do lado do Rust, a solução já escolhida entra como
-    // mais um candidato, todas são podadas, e vence a menor.
+    // Semear de novo não descarta a primeira semente: do lado do Rust, a
+    // solução já escolhida entra como mais um candidato, todas são podadas, e
+    // vence a menor.
     if (typeof fechamento === 'string' && fechamento.trim().length > 0) {
       motor.semear_texto(fechamento);
     }

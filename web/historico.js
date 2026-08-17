@@ -226,6 +226,21 @@ export function descrever(configuracao) {
   const { universo, pool, cartela, alvo, intersecao, orcamento } = configuracao;
   const tamanhoPool = Array.isArray(pool) ? pool.length : pool;
 
+  // Na linguagem da modalidade, quando é dela que se trata. "18 dezenas ·
+  // jogos de 17" diz a mesma coisa que "universo 25 · pool 18 · cartela 17 ·
+  // cobrir grupos de 15" e não exige tradução de quem está lendo.
+  //
+  // A forma geral continua para os trabalhos gravados pelas versões antigas do
+  // aplicativo, que resolviam qualquer cobertura: eles estão no histórico de
+  // quem já usava, e descrevê-los errado seria pior do que descrevê-los em
+  // jargão.
+  const ehLotinha = universo === 25 && alvo === 15 && intersecao === 15 && !orcamento;
+  if (ehLotinha) {
+    return cartela === tamanhoPool
+      ? `${tamanhoPool} dezenas · aposta única`
+      : `${tamanhoPool} dezenas · jogos de ${cartela}`;
+  }
+
   const regra =
     alvo === intersecao
       ? `cobrir grupos de ${alvo}`

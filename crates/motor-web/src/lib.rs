@@ -209,16 +209,16 @@ impl MotorWeb {
         Ok(())
     }
 
-    /// Parte de uma cobertura vinda da biblioteca guardada no aparelho.
+    /// Parte do fechamento que já vem pronto dentro do aplicativo.
     ///
     /// Idêntico a [`Self::semear_com`], exceto pelo rótulo que aparece na tela:
-    /// o usuário precisa saber que aquelas cartelas vieram do catálogo mundial,
-    /// e não de algo que ele mesmo colou.
-    pub fn semear_do_mundo_com(&mut self, cartelas_json: &str) -> Result<(), String> {
+    /// o usuário precisa saber que aquelas cartelas vieram prontas, e não de
+    /// algo que o motor construiu na hora.
+    pub fn semear_do_banco_com(&mut self, cartelas_json: &str) -> Result<(), String> {
         let rotulos: Vec<Vec<u32>> = serde_json::from_str(cartelas_json)
             .map_err(|e| format!("cartelas ilegíveis: {e}"))?;
         let cartelas = self.converter(&rotulos)?;
-        self.interno.semear_como(&cartelas, "cobertura do mundo");
+        self.interno.semear_como(&cartelas, "fechamento do aplicativo");
         Ok(())
     }
 
@@ -262,8 +262,8 @@ impl MotorWeb {
         self.semear_com(cartelas_json).map_err(|e| JsValue::from_str(&e))
     }
 
-    pub fn semear_do_mundo(&mut self, cartelas_json: &str) -> Result<(), JsValue> {
-        self.semear_do_mundo_com(cartelas_json).map_err(|e| JsValue::from_str(&e))
+    pub fn semear_do_banco(&mut self, cartelas_json: &str) -> Result<(), JsValue> {
+        self.semear_do_banco_com(cartelas_json).map_err(|e| JsValue::from_str(&e))
     }
 
     pub fn semear_texto(&mut self, texto: &str) -> Result<(), JsValue> {

@@ -250,13 +250,13 @@ impl MotorBusca {
     /// Como [`Self::semear`], dizendo de onde as cartelas vieram.
     ///
     /// O rótulo aparece na tela, e a diferença importa: "partiu do seu
-    /// fechamento" e "partiu da cobertura do mundo guardada no aparelho" contam
-    /// histórias diferentes para quem está olhando.
+    /// fechamento" e "partiu de um fechamento pronto" contam histórias
+    /// diferentes para quem está olhando.
     pub fn semear_como(&mut self, cartelas: &[Cartela], origem: &str) {
         // Semear de novo não descarta o que já foi escolhido: a solução atual
         // entra como mais um candidato. É o que permite oferecer duas fontes em
-        // sequência — a cobertura do mundo guardada no aparelho e o fechamento
-        // que o usuário colou — sem que a segunda apague a primeira.
+        // sequência — um fechamento pronto e outro que o usuário trouxe — sem
+        // que a segunda apague a primeira.
         let ja_havia_partida = self.comecou;
         self.comecou = true;
         self.cartelas_trazidas += cartelas.len();

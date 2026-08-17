@@ -94,10 +94,6 @@ jobs:
           # trabalho tem de atualizar o registro dele, não criar outro ao lado.
           node web/testar-historico.mjs
 
-          # E a biblioteca de coberturas do mundo: importar, guardar no
-          # aparelho, e partir dali em vez de reconstruir do zero.
-          node web/testar-biblioteca.mjs
-
           # E a Lotinha: os fechamentos do banco embutido são conferidos
           # sorteio a sorteio por uma terceira implementação, que não
           # compartilha código nem com o motor nem com o validador do app.

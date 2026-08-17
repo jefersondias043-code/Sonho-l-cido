@@ -6,7 +6,7 @@
      espaço da ilha dinâmica e do indicador de início via safe-area. -->
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0b1020">
-<meta name="description" content="Motor universal de otimização combinatória persistente">
+<meta name="description" content="Fechamentos matemáticos para a Lotinha — 17 a 23 dezenas entre 25, conferidos sorteio a sorteio">
 
 <!-- Faz o iPhone abrir em tela cheia quando adicionado à tela de início. -->
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -24,161 +24,17 @@
 
 <header class="topo">
   <h1>Sonho Lúcido</h1>
-  <p class="subtitulo">motor de otimização combinatória</p>
+  <p class="subtitulo">fechamentos da Lotinha, conferidos um a um</p>
 </header>
 
 <nav class="abas" role="tablist">
-  <button class="aba ativa" role="tab" data-painel="configurar">Configurar</button>
-  <button class="aba" role="tab" data-painel="lotinha">Lotinha</button>
+  <button class="aba ativa" role="tab" data-painel="lotinha">Lotinha</button>
   <button class="aba" role="tab" data-painel="buscar">Buscar</button>
   <button class="aba" role="tab" data-painel="resultado">Resultado</button>
   <button class="aba" role="tab" data-painel="historico">Histórico</button>
 </nav>
 
 <main>
-
-<!-- ══════════════════ CONFIGURAR ══════════════════ -->
-<section id="configurar" class="painel ativo">
-
-  <div class="cartao">
-    <h2>O problema</h2>
-    <p class="ajuda">
-      O motor não conhece nenhuma modalidade de jogo. Ele resolve o problema
-      matemático que você descrever aqui.
-    </p>
-
-    <label class="campo">
-      <span>Universo <em>— quantos números existem no total</em></span>
-      <input type="number" id="universo" value="60" min="1" max="999" inputmode="numeric">
-    </label>
-
-    <label class="campo">
-      <span>Pool <em>— quantos você vai jogar</em></span>
-      <input type="number" id="pool" value="16" min="1" max="128" inputmode="numeric">
-    </label>
-
-    <label class="campo">
-      <span>Números por cartela</span>
-      <input type="number" id="cartela" value="4" min="1" max="128" inputmode="numeric">
-    </label>
-  </div>
-
-  <div class="cartao">
-    <h2>A garantia</h2>
-
-    <div class="opcoes" id="tipo-regra">
-      <button class="opcao ativa" data-regra="cobrir">Cobrir subconjuntos</button>
-      <button class="opcao" data-regra="garantir">Garantir acertos</button>
-    </div>
-
-    <div id="regra-cobrir">
-      <label class="campo">
-        <span>Cobrir todo grupo de quantos números</span>
-        <input type="number" id="cobrir" value="2" min="1" max="20" inputmode="numeric">
-      </label>
-      <p class="ajuda" id="explicacao-cobrir"></p>
-    </div>
-
-    <div id="regra-garantir" hidden>
-      <label class="campo">
-        <span>Se saírem quantos do meu pool</span>
-        <input type="number" id="alvo" value="6" min="1" max="20" inputmode="numeric">
-      </label>
-      <label class="campo">
-        <span>Quero garantir quantos acertos</span>
-        <input type="number" id="intersecao" value="4" min="1" max="20" inputmode="numeric">
-      </label>
-      <p class="ajuda" id="explicacao-garantir"></p>
-    </div>
-  </div>
-
-  <div class="cartao">
-    <h2>Avançado</h2>
-    <label class="campo linha">
-      <span>Teto de cartelas <em>— deixe vazio para buscar o mínimo</em></span>
-      <input type="number" id="orcamento" placeholder="sem teto" min="1" inputmode="numeric">
-    </label>
-    <label class="campo linha">
-      <span>Semente <em>— a mesma semente repete a mesma busca</em></span>
-      <input type="number" id="semente" value="1361508949" min="0" inputmode="numeric">
-    </label>
-  </div>
-
-  <!-- Importar um fechamento pronto: a segunda metade do processo em duas
-       etapas. Qualquer resultado, de qualquer ferramenta, entra aqui e o motor
-       continua a partir dele em vez de recomeçar do zero. -->
-  <details class="cartao" id="importar">
-    <summary>Já tenho um fechamento</summary>
-    <p class="ajuda">
-      Cole as cartelas que você já tem — de outro programa, de uma planilha ou de
-      uma busca anterior. O motor parte delas e tenta melhorar, em vez de
-      começar do zero.
-    </p>
-    <textarea id="texto-fechamento" rows="6" spellcheck="false"
-      placeholder="01 04 07 12&#10;02 05 08 14&#10;03 06 09 16"></textarea>
-    <p class="ajuda">
-      Uma cartela por linha. Separe por espaço, vírgula, ponto e vírgula ou
-      hífen. Linhas com <code>#</code> são comentários.
-    </p>
-    <div class="acoes-linha">
-      <button class="secundario" id="escolher-arquivo">Abrir um arquivo</button>
-      <button class="secundario" id="limpar-fechamento">Limpar</button>
-    </div>
-    <input type="file" id="arquivo-fechamento" accept=".txt,.csv,text/plain" hidden>
-    <p class="ajuda erro" id="erro-fechamento" hidden></p>
-  </details>
-
-  <!-- A biblioteca de coberturas do mundo, guardada no aparelho. Depois de
-       importada, toda busca que tiver um design correspondente parte dele em
-       vez de construir do zero. -->
-  <details class="cartao" id="biblioteca">
-    <summary>Biblioteca de coberturas do mundo</summary>
-    <p class="ajuda">
-      As melhores coberturas já construídas no mundo — as cartelas, não só os
-      números. Uma vez importadas, ficam salvas neste aparelho e viram o ponto
-      de partida das suas buscas, sem internet.
-    </p>
-    <div class="referencia" id="resumo-biblioteca">nenhuma cobertura guardada ainda</div>
-    <div class="acoes-linha">
-      <button class="secundario" id="importar-biblioteca">Importar arquivo</button>
-      <button class="secundario perigo" id="limpar-biblioteca">Apagar</button>
-    </div>
-    <input type="file" id="arquivo-biblioteca" accept=".json,application/json" hidden>
-    <p class="ajuda erro" id="erro-biblioteca" hidden></p>
-    <p class="ajuda">
-      O arquivo é o <code>covers.json</code> da
-      <a href="https://dmgordon.org" target="_blank" rel="noopener">La Jolla
-      Covering Repository</a>. Ele tem 2,7 GB inteiro, mas quase tudo ali é
-      grande demais para um celular carregar — o recorte que você de fato usa
-      cabe em cerca de 29 MB. Veja
-      <code>ferramentas/preparar-biblioteca.py</code> no repositório do projeto.
-    </p>
-  </details>
-
-  <div class="cartao" id="previsao">
-    <h2>Antes de começar</h2>
-    <div id="texto-previsao" class="ajuda">calculando…</div>
-  </div>
-
-  <button class="principal" id="iniciar">Iniciar busca</button>
-  <button class="secundario" id="ir-para-historico" hidden>
-    Continuar um trabalho salvo
-  </button>
-
-  <p class="rodape-nota">
-    Tudo roda dentro do seu aparelho. Nenhum dado sai daqui, e depois da
-    primeira visita funciona sem internet.
-    <br>
-    Os números de "melhor conhecido no mundo" vêm da
-    <a href="https://github.com/dmgordo/LJCR" target="_blank" rel="noopener">La
-    Jolla Covering Repository</a>, de D. M. Gordon, sob licença CC BY 4.0, e
-    estão embutidos no aplicativo.
-    <br>
-    <!-- Torna verificável, sem adivinhação, se uma correção publicada chegou
-         mesmo a este aparelho. -->
-    <span id="versao" class="versao"></span>
-  </p>
-</section>
 
 <!-- ══════════════════ LOTINHA ══════════════════ -->
 <!--
@@ -190,7 +46,7 @@
   pronto no aplicativo, conferido antes de ser gravado — o motor não recalcula
   nada ao abrir a tela; ele entra depois, para tentar superar o que já existe.
 -->
-<section id="lotinha" class="painel">
+<section id="lotinha" class="painel ativo">
 
   <div class="cartao">
     <h2>1 · Quantas dezenas você vai jogar</h2>
@@ -265,10 +121,41 @@
     <div class="rolagem"><table class="matriz" id="lot-matriz"></table></div>
   </details>
 
+  <details class="cartao" id="lot-avancado">
+    <summary>Avançado</summary>
+    <label class="campo linha">
+      <span>Semente <em>— a mesma semente repete a mesma busca</em></span>
+      <input type="number" id="semente" value="1361508949" min="0" inputmode="numeric">
+    </label>
+    <p class="ajuda">
+      O motor sorteia os caminhos que tenta. Trocar a semente faz ele explorar
+      outros; repetir a semente reproduz a mesma busca, jogada por jogada.
+    </p>
+  </details>
+
+  <button class="secundario" id="ir-para-historico" hidden>
+    Continuar um trabalho salvo
+  </button>
+
   <p class="rodape-nota">
     A conta de "dividir os sorteios pelo que cada jogo cobre" subestima o número
     de jogos por duas a três vezes. Os números aqui vêm da fórmula correta, e
     cada fechamento foi conferido sorteio a sorteio antes de entrar no aplicativo.
+    <br>
+    Tudo roda dentro do seu aparelho. Nenhum dado sai daqui, e depois da
+    primeira visita funciona sem internet.
+    <br>
+    <!-- A tabela da LJCR viaja embutida no motor, alimentando o limite inferior
+         de qualquer cobertura. A licença CC BY 4.0 pede o crédito onde o dado
+         é distribuído — e ele é, em todo aparelho que instala o aplicativo. -->
+    Os limites publicados que o motor usa vêm da
+    <a href="https://github.com/dmgordo/LJCR" target="_blank" rel="noopener">La
+    Jolla Covering Repository</a>, de D. M. Gordon, sob licença CC BY 4.0, e
+    estão embutidos no aplicativo.
+    <br>
+    <!-- Torna verificável, sem adivinhação, se uma correção publicada chegou
+         mesmo a este aparelho. -->
+    <span id="versao" class="versao"></span>
   </p>
 </section>
 
@@ -331,10 +218,11 @@
     <button class="secundario perigo" id="encerrar">Encerrar</button>
   </div>
   <p class="ajuda">
-    <strong>Pausar</strong> congela a busca e guarda tudo — dá para continuar do
-    mesmo ponto. <strong>Encerrar</strong> desliga o motor de vez e libera a
-    memória, para você configurar outra busca. O resultado já encontrado
-    continua na aba Resultado.
+    O motor não para sozinho — nem quando já encontrou o menor fechamento que
+    existe. Quem decide é você. <strong>Pausar</strong> congela a busca e guarda
+    tudo, dá para continuar do mesmo ponto. <strong>Encerrar</strong> desliga o
+    motor de vez e libera a memória, para você montar outro fechamento. O
+    resultado já encontrado continua na aba Resultado.
   </p>
 
   <label class="alternador">

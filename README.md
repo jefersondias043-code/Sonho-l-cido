@@ -29,8 +29,14 @@ apenas uma escolha diferente de números.
 
 ## No celular, sem instalar nada
 
-O motor inteiro roda **dentro do seu aparelho**, compilado para WebAssembly.
-Não há servidor, não há conta, não há nada saindo do telefone.
+O aplicativo é a **Lotinha**, e só ela: escolhem-se de 17 a 23 dezenas entre
+25, o fechamento vem pronto e conferido, e o motor entra depois para tentar
+superá-lo. O motor inteiro roda **dentro do seu aparelho**, compilado para
+WebAssembly. Não há servidor, não há conta, não há nada saindo do telefone.
+
+Para qualquer outro problema de cobertura — outro universo, outra cartela, outra
+regra — o lugar é a linha de comando, mais abaixo. Ela resolve o caso geral; o
+celular resolve um caso, bem.
 
 **→ [Abrir o aplicativo](https://jefersondias043-code.github.io/Sonho-l-cido/)**
 
@@ -39,20 +45,20 @@ botão de compartilhar e escolha **Adicionar à Tela de Início**. Depois disso 
 abre em tela cheia, com ícone próprio, e funciona **sem internet**.
 
 Medido num navegador com perfil de iPhone: **168 mil iterações por segundo** —
-cerca de metade da velocidade nativa, e o suficiente para resolver `C(16,4,2)`
-até o ótimo provado em poucos segundos.
+cerca de metade da velocidade nativa.
 
 Duas coisas que valem saber antes de usar:
 
 - **Quando a tela apaga, o iOS congela a página** e a busca para. Há um
   interruptor "manter a tela ligada" que evita isso; sem ele, a busca pausa e
   retoma quando você volta — o progresso fica salvo de qualquer forma.
-- **A memória do celular é bem menor que a do computador.** A tela de
-  configuração calcula o tamanho do problema antes de começar e avisa quando
-  ele é pesado demais, em vez de deixar o navegador derrubar a página.
+- **O motor não para sozinho.** Nem quando já encontrou o menor fechamento que
+  existe. Quem encerra é você, em Pausar ou Encerrar. A tela diz qual dos dois
+  casos é o seu: quando o mínimo é comprovado, ela avisa que não há o que achar;
+  quando é problema em aberto, avisa o piso e o quanto o motor já cortou.
 
-Para buscas longas, em problemas grandes, o computador continua sendo o lugar
-certo — e é para isso que existe a linha de comando abaixo.
+Para buscas longas, o computador continua sendo o lugar certo — e é para isso
+que existe a linha de comando abaixo.
 
 ## No computador
 
@@ -104,45 +110,19 @@ servem como separador; linhas iniciadas por `#` são comentários.
 O motor **não fica preso às cartelas que você forneceu** (§32). Ele pode
 remover, reorganizar e criar outras — o que importa é a regra de cobertura.
 
-No aplicativo isso fica em **Configurar → "Já tenho um fechamento"**: cole as
-cartelas ou abra um arquivo, e a busca parte dali em vez de começar do zero. É o
-mesmo interpretador de formato do terminal, compilado para o navegador — o que o
-celular aceita é exatamente o que a linha de comando aceita, e um erro de
-digitação é apontado com o número da linha.
-
-### A biblioteca de coberturas do mundo, guardada no aparelho
-
-O catálogo embutido traz os **números** do mundo. As **cartelas** ficam noutro
-arquivo, o `covers.json` da La Jolla — 2,7 GB, 61,7 milhões de blocos. Baixar
-tudo isso num celular não faz sentido, e a medição diz por quê:
-
-| faixa | designs | tamanho |
-|---|---|---|
-| tudo | 8.759 | 2.216 MB |
-| o que cabe na memória de um celular | 7.191 | 560 MB |
-| **faixa de uso real** (`v ≤ 40, k ≤ 12, t ≤ 5`) | **1.082** | **29 MB** |
-
-98% do arquivo são configurações que o aparelho não carrega: `C(99,25,8)` tem
-bilhões de combinações a cobrir, e o motor precisa de 12 bytes por combinação só
-para começar.
-
-`ferramentas/preparar-biblioteca.py` faz o recorte, lendo **em fluxo** — um
-design por vez, porque `json.load` sobre 2,7 GB pediria dezenas de gigabytes de
-RAM. O aplicativo importa o resultado em **Configurar → Biblioteca de coberturas
-do mundo**, guarda em IndexedDB (o `localStorage` do histórico tem 5 MB e não
-serviria) e consulta a cada busca.
+Isto é da linha de comando. No aplicativo o ponto de partida é sempre o
+fechamento pronto da Lotinha, e não há o que colar.
 
 ### O ponto de partida é escolhido, não obedecido
 
-Quatro candidatos concorrem a cada partida, e todos custam milissegundos: a
-cobertura do mundo guardada no aparelho, o fechamento trazido pelo usuário, a
-construção algébrica (quando existe) e o guloso com ruído. Todos são podados
-antes de serem julgados, e vence o de menor custo pela mesma régua que a busca
-usa.
+Quatro candidatos concorrem a cada partida, e todos custam milissegundos: o
+fechamento pronto do aplicativo, o fechamento trazido pelo usuário, a construção
+algébrica (quando existe) e o guloso com ruído. Todos são podados antes de serem
+julgados, e vence o de menor custo pela mesma régua que a busca usa.
 
 Semear de novo não descarta a semente anterior: a solução já escolhida entra
-como mais um candidato. É o que permite oferecer duas fontes em sequência — a
-biblioteca e o que o usuário colou — sem que a segunda apague a primeira.
+como mais um candidato. É o que permite oferecer duas fontes em sequência sem
+que a segunda apague a primeira.
 
 Comparar não é preciosismo. A primeira versão obedecia — importar instalava o
 fechamento direto, sem podar e sem comparar — e isso produzia dois defeitos
@@ -524,11 +504,9 @@ node web/testar.mjs                             # testa a interface na raiz
 node web/testar.mjs /Sonho-l-cido/              # testa sob a subpasta do Pages
 node web/testar-atualizacao.mjs                 # testa a atualização automática
 node web/testar-historico.mjs                   # testa o histórico de trabalhos
-node web/testar-biblioteca.mjs                  # testa a biblioteca do mundo
 node web/testar-lotinha.mjs                     # testa a ferramenta Lotinha
 cargo run --release --example gerar-lotinha     # regera o banco de fechamentos
 
-./ferramentas/preparar-biblioteca.py            # recorta o covers.json da La Jolla
 python3 -m http.server -d site 8000             # experimenta localmente
 ```
 

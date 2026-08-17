@@ -21,7 +21,6 @@
  */
 
 import * as historico from './historico.js';
-import * as biblioteca from './biblioteca.js';
 import * as lotinha from './lotinha.js';
 
 const $ = (id) => document.getElementById(id);
@@ -92,14 +91,6 @@ function duracao(ms) {
   const partes = [(total % 3600) / 60, total % 60];
   if (total >= 3600) partes.unshift(total / 3600);
   return partes.map(doisDigitos).join(':');
-}
-
-/** `C(n, k)` em ponto flutuante — só para estimar o tamanho do problema. */
-function combinacoes(n, k) {
-  if (k < 0 || k > n) return 0;
-  let total = 1;
-  for (let i = 0; i < k; i++) total = (total * (n - i)) / (i + 1);
-  return total;
 }
 
 /* ─────────── situação e relógio ─────────── */
@@ -217,121 +208,6 @@ function mostrarPainel(nome) {
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
-/* ─────────── escolha da regra ─────────── */
-
-let tipoDeRegra = 'cobrir';
-
-document.querySelectorAll('#tipo-regra .opcao').forEach((botao) => {
-  botao.addEventListener('click', () => {
-    tipoDeRegra = botao.dataset.regra;
-    document.querySelectorAll('#tipo-regra .opcao').forEach((b) => {
-      b.classList.toggle('ativa', b === botao);
-    });
-    $('regra-cobrir').hidden = tipoDeRegra !== 'cobrir';
-    $('regra-garantir').hidden = tipoDeRegra !== 'garantir';
-    atualizarPrevisao();
-  });
-});
-
-/** Lê a tela e devolve a configuração no formato que o motor espera. */
-function lerConfiguracao() {
-  const universo = Number($('universo').value);
-  const tamanhoPool = Number($('pool').value);
-  const cartela = Number($('cartela').value);
-
-  const alvo = tipoDeRegra === 'cobrir' ? Number($('cobrir').value) : Number($('alvo').value);
-  const intersecao =
-    tipoDeRegra === 'cobrir' ? Number($('cobrir').value) : Number($('intersecao').value);
-
-  const orcamentoBruto = $('orcamento').value.trim();
-
-  return {
-    universo,
-    pool: Array.from({ length: tamanhoPool }, (_, i) => i + 1),
-    cartela,
-    alvo,
-    intersecao,
-    orcamento: orcamentoBruto === '' ? null : Number(orcamentoBruto),
-    semente: Number($('semente').value) || 1,
-  };
-}
-
-/* ─────────── previsão antes de começar ─────────── */
-
-/*
- * Um celular tem muito menos memória que um computador, e o Safari do iOS não
- * avisa quando estoura: ele simplesmente recarrega a página. Por isso a conta é
- * feita aqui, na interface, antes de o motor ser criado.
- */
-const ALVOS_CONFORTAVEIS = 2_000_000;
-const ALVOS_ARRISCADOS = 8_000_000;
-
-['universo', 'pool', 'cartela', 'cobrir', 'alvo', 'intersecao', 'orcamento'].forEach((id) => {
-  $(id).addEventListener('input', atualizarPrevisao);
-});
-
-function atualizarPrevisao() {
-  const c = lerConfiguracao();
-  const destino = $('texto-previsao');
-  const explicacao = tipoDeRegra === 'cobrir' ? $('explicacao-cobrir') : $('explicacao-garantir');
-
-  if (tipoDeRegra === 'cobrir') {
-    explicacao.textContent =
-      `Toda combinação de ${c.alvo} números dentro do seu pool de ${c.pool.length} ` +
-      `vai aparecer inteira em alguma cartela.`;
-  } else {
-    explicacao.textContent =
-      `Se ${c.alvo} dos seus ${c.pool.length} números forem sorteados, ` +
-      `alguma cartela terá pelo menos ${c.intersecao} deles.`;
-  }
-
-  const problemas = validar(c);
-  if (problemas) {
-    destino.innerHTML = `<strong style="color:var(--vermelho)">${problemas}</strong>`;
-    $('iniciar').disabled = true;
-    return;
-  }
-
-  const alvos = combinacoes(c.pool.length, c.alvo);
-  const memoria = (alvos * 12) / 1e6;
-
-  let recado;
-  if (alvos > ALVOS_ARRISCADOS) {
-    recado =
-      `<strong style="color:var(--vermelho)">Pesado demais para um celular.</strong> ` +
-      `São ${milhares(alvos)} combinações a cobrir (cerca de ${Math.round(memoria)} MB). ` +
-      `Diminua o pool ou o tamanho do grupo a cobrir.`;
-    $('iniciar').disabled = true;
-  } else {
-    if (alvos > ALVOS_CONFORTAVEIS) {
-      recado =
-        `<strong style="color:var(--ouro)">Vai puxar o aparelho.</strong> ` +
-        `${milhares(alvos)} combinações a cobrir, cerca de ${Math.round(memoria)} MB. ` +
-        `Deve funcionar, mas devagar.`;
-    } else {
-      recado = `${milhares(alvos)} combinações a cobrir. Tamanho tranquilo para o aparelho.`;
-    }
-    $('iniciar').disabled = false;
-  }
-
-  destino.innerHTML = recado;
-}
-
-function validar(c) {
-  if (!(c.universo >= 1)) return 'O universo precisa ser pelo menos 1.';
-  if (!(c.pool.length >= 1)) return 'O pool precisa ter pelo menos 1 número.';
-  if (c.pool.length > c.universo) return 'O pool não pode ser maior que o universo.';
-  if (c.pool.length > 128) return 'O pool máximo suportado é 128 números.';
-  if (!(c.cartela >= 1)) return 'A cartela precisa ter pelo menos 1 número.';
-  if (c.cartela > c.pool.length) return 'A cartela não pode ser maior que o pool.';
-  if (!(c.alvo >= 1) || c.alvo > c.pool.length) return 'O grupo a cobrir precisa caber no pool.';
-  if (!(c.intersecao >= 1) || c.intersecao > Math.min(c.alvo, c.cartela)) {
-    return 'Os acertos garantidos precisam caber no grupo e na cartela.';
-  }
-  if (c.orcamento !== null && !(c.orcamento >= 1)) return 'O teto de cartelas precisa ser positivo.';
-  return null;
-}
-
 /* ─────────── conversa com o worker ─────────── */
 
 function garantirTrabalhador() {
@@ -373,7 +249,7 @@ function garantirTrabalhador() {
         break;
 
       // O usuário mandou encerrar. O worker já devolveu tudo e liberou a
-      // memória; aqui só resta desmontá-lo e voltar à configuração.
+      // memória; aqui só resta desmontá-lo e voltar à Lotinha.
       case 'encerrado':
         aplicarMensagem(data);
         desmontarTrabalhador();
@@ -381,7 +257,7 @@ function garantirTrabalhador() {
         zerarCronometro();
         soltarTelaLigada();
         atualizarAtalhoDoHistorico();
-        mostrarPainel('configurar');
+        mostrarPainel('lotinha');
         avisar('Busca encerrada. O resultado ficou salvo.', true);
         break;
 
@@ -389,17 +265,6 @@ function garantirTrabalhador() {
         definirFase('falhou', data.mensagem);
         soltarTelaLigada();
         avisar(data.mensagem);
-        // Erro de fechamento é erro de digitação, e a correção é na caixa de
-        // texto. Deixar o usuário parado na tela de busca, diante de um aviso
-        // que some sozinho, esconderia justamente o campo que ele precisa
-        // consertar.
-        if (ehErroDeFechamento(data.mensagem)) {
-          desmontarTrabalhador();
-          definirFase('ocioso');
-          zerarCronometro();
-          mostrarPainel('configurar');
-          mostrarErroDoFechamento(data.mensagem);
-        }
         break;
 
       default:
@@ -533,13 +398,13 @@ function pintarPartida(estado) {
   let texto;
   if (trazidas === 0) {
     texto = `Partiu de: <b>${escapar(origem)}</b>`;
-  } else if (origem === 'cobertura do mundo') {
+  } else if (origem === 'fechamento do aplicativo') {
     const podadas = trazidas - (estado.melhor_cartelas || trazidas);
     texto =
-      `Partiu da <b>cobertura do mundo</b> guardada neste aparelho ` +
+      `Partiu do <b>fechamento que já vem no aplicativo</b> ` +
       (podadas > 0
-        ? `<em>— ${trazidas} cartelas, das quais ${podadas} eram dispensáveis.</em>`
-        : `<em>— ${trazidas} cartelas prontas, sem reconstruir nada.</em>`);
+        ? `<em>— ${milhares(trazidas)} jogos, dos quais ${milhares(podadas)} eram dispensáveis.</em>`
+        : `<em>— ${milhares(trazidas)} jogos prontos, sem reconstruir nada.</em>`);
   } else if (origem === 'fechamento importado') {
     const podadas = trazidas - (estado.melhor_cartelas || trazidas);
     texto =
@@ -738,57 +603,6 @@ function pintarCartelas() {
       </div>`
     )
     .join('');
-}
-
-/* ─────────── botões ─────────── */
-
-$('iniciar').addEventListener('click', () => {
-  const configuracao = lerConfiguracao();
-  const problema = validar(configuracao);
-  if (problema) {
-    avisar(problema);
-    return;
-  }
-
-  // O texto vai cru para o motor: quem interpreta é o mesmo código Rust que a
-  // linha de comando usa, então o que o celular aceita é exatamente o que o
-  // terminal aceita. Um interpretador em JavaScript aqui divergiria daquele
-  // com o tempo, e a divergência apareceria como cartela aceita num lado e
-  // recusada no outro.
-  const fechamento = $('texto-fechamento').value.trim();
-  iniciarBusca(configuracao, fechamento || null);
-});
-
-/**
- * Dá a partida, consultando antes a biblioteca guardada no aparelho.
- *
- * Se existir uma cobertura do mundo para esta configuração, ela entra como
- * ponto de partida. Não substitui o que o usuário colou nem manda no motor: as
- * duas coisas viram candidatas, e `escolher_partida`, do lado do Rust, fica com
- * a melhor depois de podar todas. O que a biblioteca faz é garantir que o
- * melhor resultado já produzido no mundo esteja entre os candidatos, em vez de
- * o motor ter de reconstruí-lo do zero.
- */
-async function iniciarBusca(configuracao, fechamentoColado) {
-  let doMundo = null;
-  try {
-    // A biblioteca cataloga coberturas completas de t-uplas. Numa garantia
-    // parcial isso continua servindo: cobrir todas as t-uplas resolve a
-    // garantia com folga — é o mesmo argumento do teto mostrado na tela.
-    const blocos = await biblioteca.obter(
-      configuracao.pool.length,
-      configuracao.cartela,
-      configuracao.intersecao
-    );
-    if (blocos) {
-      // Os blocos vêm em 1..v; o pool pode ter rótulos quaisquer.
-      doMundo = blocos.map((bloco) => bloco.map((n) => configuracao.pool[n - 1]));
-    }
-  } catch {
-    /* sem biblioteca a busca começa igual, só sem o atalho */
-  }
-
-  comecar({ configuracao, fechamento: fechamentoColado, doMundo });
 }
 
 /* ─────────── Lotinha ─────────── */
@@ -1153,7 +967,7 @@ $('lot-iniciar').addEventListener('click', async () => {
     // exibida — e a aba Resultado ficaria vazia entre carregar o fechamento e o
     // motor devolver o primeiro estado, que é justamente quando o usuário vai
     // olhar.
-    comecar({ configuracao, doMundo: lotFechamento }, lotFechamento);
+    comecar({ configuracao, doBanco: lotFechamento }, lotFechamento);
   } catch (erro) {
     destino.innerHTML = `<b>Falhou:</b> ${escapar(String(erro?.message ?? erro))}`;
   }
@@ -1187,106 +1001,7 @@ $('lot-simular').addEventListener('click', () => {
     '</div>';
 });
 
-/* ─────────── a biblioteca de coberturas do mundo ─────────── */
-
-async function pintarBiblioteca() {
-  const { designs, blocos } = await biblioteca.resumo();
-  $('resumo-biblioteca').innerHTML = designs
-    ? `<b>${milhares(designs)}</b> coberturas guardadas neste aparelho ` +
-      `<em>— ${milhares(blocos)} cartelas prontas, disponíveis sem internet.</em>`
-    : 'nenhuma cobertura guardada ainda';
-  $('limpar-biblioteca').hidden = designs === 0;
-}
-
-$('importar-biblioteca').addEventListener('click', () => $('arquivo-biblioteca').click());
-
-$('arquivo-biblioteca').addEventListener('change', async (evento) => {
-  const arquivo = evento.target.files?.[0];
-  evento.target.value = '';
-  if (!arquivo) return;
-
-  const erro = $('erro-biblioteca');
-  erro.hidden = true;
-  $('biblioteca').open = true;
-
-  try {
-    $('resumo-biblioteca').textContent = 'lendo o arquivo…';
-    const texto = await arquivo.text();
-
-    // Guardar dezenas de megabytes leva segundos, e sem notícia disso a tela
-    // parece travada — o mesmo defeito que já apareceu na busca.
-    const guardados = await biblioteca.importar(texto, (feitos, total) => {
-      $('resumo-biblioteca').textContent = `guardando ${milhares(feitos)} de ${milhares(total)}…`;
-    });
-
-    await biblioteca.pedirPersistencia();
-    await pintarBiblioteca();
-    avisar(`${milhares(guardados)} coberturas do mundo guardadas no aparelho.`, true);
-  } catch (falha) {
-    erro.hidden = false;
-    erro.textContent = String(falha?.message ?? falha);
-    await pintarBiblioteca();
-  }
-});
-
-$('limpar-biblioteca').addEventListener('click', async () => {
-  await biblioteca.limpar();
-  await pintarBiblioteca();
-  avisar('Biblioteca apagada.', true);
-});
-
-pintarBiblioteca();
 lotMontar();
-
-/* ─────────── importar um fechamento pronto ─────────── */
-
-$('escolher-arquivo').addEventListener('click', () => $('arquivo-fechamento').click());
-
-$('arquivo-fechamento').addEventListener('change', async (evento) => {
-  const arquivo = evento.target.files?.[0];
-  if (!arquivo) return;
-  try {
-    $('texto-fechamento').value = await arquivo.text();
-    mostrarErroDoFechamento(null);
-    $('importar').open = true;
-  } catch {
-    mostrarErroDoFechamento('Não consegui ler esse arquivo.');
-  }
-  // Permite escolher o mesmo arquivo de novo depois de editá-lo.
-  evento.target.value = '';
-});
-
-$('limpar-fechamento').addEventListener('click', () => {
-  $('texto-fechamento').value = '';
-  mostrarErroDoFechamento(null);
-});
-
-$('texto-fechamento').addEventListener('input', () => mostrarErroDoFechamento(null));
-
-/**
- * Mostra o erro do fechamento onde ele foi digitado.
- *
- * A mensagem do motor cita a linha ("linha 7: ..."), e o aviso flutuante some
- * sozinho — cedo demais para quem precisa procurar essa linha numa colagem de
- * trinta. Por isso ela fica fixa junto da caixa de texto.
- */
-/**
- * Reconhece as mensagens que o interpretador de fechamento produz.
- *
- * São as únicas que o usuário conserta editando o texto colado; qualquer outra
- * falha do motor é problema de configuração ou de memória, e mandá-lo mexer nas
- * cartelas seria apontar para o lugar errado.
- */
-function ehErroDeFechamento(mensagem) {
-  return /^(linha \d+|cartela \d+|nenhuma cartela)/.test(String(mensagem ?? ''));
-}
-
-function mostrarErroDoFechamento(mensagem) {
-  const destino = $('erro-fechamento');
-  destino.hidden = !mensagem;
-  destino.textContent = mensagem ?? '';
-  if (mensagem) $('importar').open = true;
-}
 
 $('ir-para-historico').addEventListener('click', () => mostrarPainel('historico'));
 
@@ -1328,7 +1043,7 @@ function continuarSessao(id) {
  * e o ponto pulsando à vista.
  */
 function comecar(
-  { configuracao, salvo, fechamento = null, doMundo = null, sessaoId = null },
+  { configuracao, salvo, fechamento = null, doBanco = null, sessaoId = null },
   cartelasIniciais = []
 ) {
   // Um motor antigo ainda vivo continuaria consumindo processador e memória.
@@ -1362,7 +1077,7 @@ function comecar(
   mostrarPainel('buscar');
   definirFase('carregando');
 
-  garantirTrabalhador().postMessage({ tipo: 'criar', configuracao, salvo, fechamento, doMundo });
+  garantirTrabalhador().postMessage({ tipo: 'criar', configuracao, salvo, fechamento, doBanco });
   segurarTelaLigada();
 }
 
@@ -1382,11 +1097,11 @@ $('pausar').addEventListener('click', () => {
 $('encerrar').addEventListener('click', () => {
   if (!trabalhador) {
     definirFase('ocioso');
-    mostrarPainel('configurar');
+    mostrarPainel('lotinha');
     return;
   }
   // O worker devolve o estado final e libera a memória; a resposta 'encerrado'
-  // é quem desmonta tudo e traz o usuário de volta à configuração.
+  // é quem desmonta tudo e traz o usuário de volta à Lotinha.
   definirFase('ocioso', 'encerrando…');
   trabalhador.postMessage({ tipo: 'encerrar' });
 });
@@ -1420,14 +1135,14 @@ $('compartilhar').addEventListener('click', async () => {
 });
 
 function textoDoFechamento() {
-  // A configuração da busca em curso, e não o que está no formulário: a
-  // tela Configurar pode ter sido editada durante a busca, e a ferramenta
-  // 18 de 25 nem passa por ela. O cabeçalho tem de descrever o que produziu
-  // estas cartelas.
-  const c = configuracaoDaBusca ?? lerConfiguracao();
-  const cabecalho =
-    `# Sonho Lúcido — ${melhorCartelas.length} cartelas\n` +
-    `# universo ${c.universo}, pool ${c.pool.length}, ${c.cartela} por cartela\n`;
+  // O cabeçalho descreve o que produziu estas cartelas. Sem busca em curso —
+  // ao ver um trabalho antigo pelo histórico, por exemplo — não há o que
+  // afirmar, e é melhor exportar sem cabeçalho do que inventar um.
+  const c = configuracaoDaBusca;
+  const cabecalho = c
+    ? `# Sonho Lúcido — ${melhorCartelas.length} jogos de ${c.cartela} dezenas\n` +
+      `# fechamento de ${c.pool.length} dezenas escolhidas entre ${c.universo}\n`
+    : `# Sonho Lúcido — ${melhorCartelas.length} jogos\n`;
   const corpo = melhorCartelas
     .map((cartela) => cartela.map((n) => String(n).padStart(2, '0')).join(' '))
     .join('\n');
@@ -1610,7 +1325,6 @@ function avisar(mensagem, bom = false) {
 
 /* ─────────── partida ─────────── */
 
-atualizarPrevisao();
 pintarRecordes();
 definirFase('ocioso');
 
