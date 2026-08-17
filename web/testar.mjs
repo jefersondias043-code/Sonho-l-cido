@@ -548,9 +548,141 @@ try {
     `${partindoDoColado.trim()} cartelas`
   );
 
+  // Aqui o fechamento colado tinha 3 cartelas e não cobria nada; a construção
+  // algébrica venceu, e a tela precisa dizer isso em vez de fingir que partiu
+  // do que o usuário trouxe.
+  const partidaColada = (await pagina.locator('#partida').textContent()).trim();
+  marcar(
+    /^Partiu de:/.test(partidaColada) && /não foi perdido/.test(partidaColada),
+    'um fechamento incompleto é preterido, e a tela explica',
+    partidaColada.replace(/\s+/g, ' ').slice(0, 78)
+  );
+
+  await pagina.click('#encerrar');
+  await pagina.waitForSelector('#configurar.ativo', { timeout: 10000 });
+
+  // ─── um fechamento pior que a construção interna não pode vencer ───
+  //
+  // O defeito que isto cobre: semear pulava a escolha de partida. Em C(21,5,2)
+  // o motor constrói as 21 ótimas por fórmula, mas colar um fechamento ruim
+  // desligava isso — importar deixava o resultado pior do que não importar.
+  await pagina.fill('#universo', '21');
+  await pagina.fill('#pool', '21');
+  await pagina.fill('#cartela', '5');
+  await pagina.fill('#cobrir', '2');
+
+  // Um fechamento válido e redundante: as cartelas 1..5, 6..10, … repetidas.
+  const ruim = [];
+  for (let volta = 0; volta < 8; volta++) {
+    for (let i = 0; i < 21; i += 5) {
+      const cartela = [];
+      for (let j = 0; j < 5; j++) cartela.push(((i + j + volta) % 21) + 1);
+      ruim.push(cartela.join(' '));
+    }
+  }
+  await pagina.fill('#texto-fechamento', ruim.join('\n'));
+  await pagina.click('#iniciar');
+  await pagina.waitForSelector('#buscar.ativo', { timeout: 15000 });
+  await pagina.waitForSelector('#selo-otimo:not([hidden])', { timeout: 60000 });
+
+  const comRuim = await pagina.evaluate(() => ({
+    cartelas: Number(document.getElementById('melhor-cartelas').textContent.trim()),
+    partida: document.getElementById('partida').textContent.trim(),
+  }));
+  marcar(
+    comRuim.cartelas === 21,
+    'um fechamento ruim não estraga a construção interna',
+    `${ruim.length} cartelas coladas, o motor entregou ${comRuim.cartelas}`
+  );
+  marcar(
+    /não foi perdido|melhor que/i.test(comRuim.partida),
+    'e a tela explica por que o fechamento colado não foi o ponto de partida',
+    comRuim.partida.replace(/\s+/g, ' ').slice(0, 78)
+  );
+
   await pagina.click('#encerrar');
   await pagina.waitForSelector('#configurar.ativo', { timeout: 10000 });
   await pagina.fill('#texto-fechamento', '');
+
+  // ─── o ciclo completo das duas etapas ───
+  //
+  // É o pedido inteiro, de ponta a ponta: rodar uma busca, pegar o resultado
+  // dela, e recomeçar a partir dele — sem refazer o trabalho já feito.
+  //
+  // C(12,5,3) não tem construção fechada neste projeto e não se resolve em
+  // segundos, então o que o usuário traz é de fato o melhor disponível e tem de
+  // ser aproveitado.
+  await pagina.fill('#universo', '12');
+  await pagina.fill('#pool', '12');
+  await pagina.fill('#cartela', '5');
+  await pagina.fill('#cobrir', '3');
+  await pagina.click('#iniciar');
+  await pagina.waitForSelector('#buscar.ativo', { timeout: 15000 });
+  await pagina.waitForFunction(
+    () => {
+      const t = document.getElementById('melhor-cartelas').textContent.trim();
+      return t !== '' && t !== '—';
+    },
+    undefined,
+    { timeout: 30000 }
+  );
+  await pagina.waitForTimeout(4000);
+
+  const primeiraEtapa = await pagina.evaluate(() => ({
+    cartelas: Number(document.getElementById('melhor-cartelas').textContent.trim()),
+    texto: [...document.querySelectorAll('#lista-cartelas .cartela span:last-child')]
+      .map((n) => n.textContent.trim())
+      .join('\n'),
+  }));
+
+  await pagina.click('#encerrar');
+  await pagina.waitForSelector('#configurar.ativo', { timeout: 10000 });
+
+  // Segunda etapa: o resultado da primeira volta como ponto de partida.
+  await pagina.fill('#texto-fechamento', primeiraEtapa.texto);
+  await pagina.fill('#semente', '987654321');
+  await pagina.click('#iniciar');
+  await pagina.waitForSelector('#buscar.ativo', { timeout: 15000 });
+  await pagina.waitForFunction(
+    () => {
+      const t = document.getElementById('melhor-cartelas').textContent.trim();
+      return t !== '' && t !== '—';
+    },
+    undefined,
+    { timeout: 30000 }
+  );
+
+  const segundaEtapa = await pagina.evaluate(() => ({
+    cartelas: Number(document.getElementById('melhor-cartelas').textContent.trim()),
+    partida: document.getElementById('partida').textContent.trim(),
+    trazidas: 0,
+  }));
+
+  marcar(
+    segundaEtapa.cartelas <= primeiraEtapa.cartelas,
+    'a segunda etapa nunca começa pior que o resultado da primeira',
+    `${primeiraEtapa.cartelas} → ${segundaEtapa.cartelas} cartelas`
+  );
+  marcar(
+    /^Partiu do <?b?>?seu fechamento|^Partiu do seu fechamento/.test(segundaEtapa.partida),
+    'e a tela confirma que partiu do trabalho já feito',
+    segundaEtapa.partida.replace(/\s+/g, ' ').slice(0, 78)
+  );
+
+  await pagina.waitForTimeout(4000);
+  const depoisDeContinuar = await pagina.evaluate(() =>
+    Number(document.getElementById('melhor-cartelas').textContent.trim())
+  );
+  marcar(
+    depoisDeContinuar <= segundaEtapa.cartelas,
+    'e continua otimizando a partir dali',
+    `${segundaEtapa.cartelas} → ${depoisDeContinuar} cartelas`
+  );
+
+  await pagina.click('#encerrar');
+  await pagina.waitForSelector('#configurar.ativo', { timeout: 10000 });
+  await pagina.fill('#texto-fechamento', '');
+  await pagina.fill('#semente', '1361508949');
 
   // ─── fechamento de loteria: a garantia parcial também tem referência ───
   //

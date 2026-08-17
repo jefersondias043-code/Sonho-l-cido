@@ -110,6 +110,29 @@ mesmo interpretador de formato do terminal, compilado para o navegador — o que
 celular aceita é exatamente o que a linha de comando aceita, e um erro de
 digitação é apontado com o número da linha.
 
+### O ponto de partida é escolhido, não obedecido
+
+Três candidatos concorrem a cada partida, e todos custam milissegundos: o
+fechamento trazido pelo usuário, a construção algébrica (quando existe) e o
+guloso com ruído. Todos são podados antes de serem julgados, e vence o de menor
+custo pela mesma régua que a busca usa.
+
+Comparar não é preciosismo. A primeira versão obedecia — importar instalava o
+fechamento direto, sem podar e sem comparar — e isso produzia dois defeitos
+medidos em `C(21,5,2)`:
+
+- Um fechamento com as 21 cartelas ótimas mais 5 duplicatas entrava como 26. A
+  poda tira as 5 de graça, e sem ela o motor nem percebia que já estava com o
+  ótimo na mão: `optimalidade_provada` dava falso.
+- Pior: nessa configuração a construção algébrica dá as 21 ótimas em
+  milissegundos, e semear pulava `garantir_inicio`. **Trazer uma solução deixava
+  o resultado pior do que não trazer nada.**
+
+A tela mostra o que aconteceu — "partiu do seu fechamento", "das 26 que você
+trouxe, 5 eram dispensáveis e saíram de graça", ou "partiu de PG(2,4), melhor
+que as 40 que você trouxe". Aproveitar o trabalho já feito é o objetivo; jogar
+fora um trabalho melhor que já estava disponível seria o contrário dele.
+
 ### Histórico de trabalhos
 
 No aplicativo, toda busca é salva sozinha assim que produz a primeira solução, e

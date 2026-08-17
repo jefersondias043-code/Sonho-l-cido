@@ -158,9 +158,17 @@ pub struct MotorBusca {
     /// parcial. `None` só fora da faixa catalogada.
     referencia: Option<Consulta>,
 
-    /// Como o ponto de partida foi obtido — "guloso", "plano projetivo PG(2,4)",
-    /// "fechamento importado". Aparece na tela e nos registros.
+    /// Como o ponto de partida foi obtido — "construção gulosa", "plano
+    /// projetivo PG(2,4)", "fechamento importado". Aparece na tela.
     origem_do_inicio: String,
+
+    /// Quantas cartelas o usuário trouxe, quando trouxe alguma.
+    ///
+    /// Guardado à parte do ponto de partida escolhido, porque a tela precisa
+    /// poder dizer as duas coisas: "você trouxe 26, parti de 21". Sem esse
+    /// número, um fechamento importado que perde para a construção interna
+    /// desapareceria sem explicação.
+    cartelas_trazidas: usize,
 
     estatisticas: Estatisticas,
     duracao_acumulada: Duration,
@@ -223,6 +231,7 @@ impl MotorBusca {
                 intersecao,
             ),
             origem_do_inicio: String::new(),
+            cartelas_trazidas: 0,
             estatisticas: Estatisticas::default(),
             duracao_acumulada: Duration::ZERO,
             iteracoes_sem_recorde: 0,
@@ -235,12 +244,9 @@ impl MotorBusca {
     /// As cartelas fornecidas são o ponto de partida, não uma restrição: o
     /// motor pode remover, substituir e criar outras livremente (§32).
     pub fn semear(&mut self, cartelas: &[Cartela]) {
-        self.atual.reiniciar();
-        for &cartela in cartelas {
-            self.atual.adicionar(&self.cobertura, cartela, &mut self.oficina.rascunho);
-        }
         self.comecou = true;
-        self.origem_do_inicio = "fechamento importado".to_string();
+        self.cartelas_trazidas = cartelas.len();
+        self.escolher_partida(cartelas);
         self.consolidar_inicio();
     }
 
@@ -270,9 +276,65 @@ impl MotorBusca {
     /// importa: em pools bem menores que o plano de onde a construção veio, a
     /// truncagem sobra e o guloso ganha. Comparar custa quase nada e garante que
     /// acrescentar as construções nunca piore nenhum caso.
-    fn garantir_inicio(&mut self, observador: &mut dyn Observador) {
-        if self.comecou {
-            return;
+    /// Escolhe o ponto de partida da busca — a "primeira etapa" do processo em
+    /// duas fases.
+    ///
+    /// Três candidatos concorrem, e todos custam milissegundos:
+    ///
+    /// 1. **O fechamento trazido pelo usuário**, quando há um. É o resultado que
+    ///    algum outro motor já produziu, e não faz sentido refazer esse trabalho.
+    /// 2. **Construção algébrica** ([`semente_algebrica`]), que só existe para
+    ///    alguns formatos, mas quando existe entrega a solução ótima pronta.
+    /// 3. **Guloso com ruído** ([`construir_do_zero`]), que funciona em qualquer
+    ///    configuração.
+    ///
+    /// Todos passam por [`podar`] antes de serem julgados, e vence o de menor
+    /// custo pela mesma régua que a busca usa.
+    ///
+    /// ## Por que comparar, em vez de simplesmente obedecer
+    ///
+    /// A primeira versão obedecia: importar um fechamento o instalava direto,
+    /// sem podar e sem comparar. Duas consequências medidas em `C(21,5,2)`:
+    ///
+    /// - Um fechamento com as 21 cartelas ótimas mais 5 duplicatas entrava como
+    ///   26. A poda tira as 5 de graça, e sem ela o motor nem percebia que já
+    ///   estava com o ótimo na mão — `optimalidade_provada` dava falso.
+    /// - Pior: para essa configuração a construção algébrica dá as 21 ótimas em
+    ///   milissegundos, mas semear pulava `garantir_inicio` e desligava isso.
+    ///   Trazer uma solução deixava o resultado **pior** do que não trazer nada.
+    ///
+    /// Aproveitar o trabalho já feito é o objetivo; jogar fora um trabalho
+    /// melhor que já estava disponível seria o contrário dele.
+    fn escolher_partida(&mut self, trazidas: &[Cartela]) {
+        let objetivo = self.problema.objetivo();
+        let mut vencedor: Option<(Vec<Cartela>, ChaveCusto, String)> = None;
+
+        // `map_or(true, …)` e não `is_none_or`: este projeto compila a partir do
+        // Rust 1.80, e `is_none_or` só estabilizou no 1.82.
+        let considerar =
+            |motor: &mut Self, origem: String, vencedor: &mut Option<(Vec<Cartela>, ChaveCusto, String)>| {
+                podar(&motor.cobertura, &mut motor.atual, &mut motor.oficina);
+                let chave = motor.atual.avaliacao().chave(objetivo);
+                let vence = vencedor.as_ref().map_or(true, |(_, c, _)| chave.melhor_que(c));
+                if vence {
+                    *vencedor = Some((motor.atual.cartelas().to_vec(), chave, origem));
+                }
+            };
+
+        if !trazidas.is_empty() {
+            self.atual.reiniciar();
+            for &cartela in trazidas {
+                self.atual.adicionar(&self.cobertura, cartela, &mut self.oficina.rascunho);
+            }
+            considerar(self, "fechamento importado".to_string(), &mut vencedor);
+        }
+
+        if let Some(semente) = semente_algebrica(&self.problema) {
+            self.atual.reiniciar();
+            for &cartela in &semente.cartelas {
+                self.atual.adicionar(&self.cobertura, cartela, &mut self.oficina.rascunho);
+            }
+            considerar(self, semente.origem, &mut vencedor);
         }
 
         construir_do_zero(
@@ -283,36 +345,22 @@ impl MotorBusca {
             &mut self.rng,
             &mut self.oficina,
         );
-        podar(&self.cobertura, &mut self.atual, &mut self.oficina);
-        self.origem_do_inicio = "construção gulosa".to_string();
+        considerar(self, "construção gulosa".to_string(), &mut vencedor);
 
-        if let Some(semente) = semente_algebrica(&self.problema) {
-            let guloso: Vec<Cartela> = self.atual.cartelas().to_vec();
-
-            self.atual.reiniciar();
-            for &cartela in &semente.cartelas {
-                self.atual.adicionar(&self.cobertura, cartela, &mut self.oficina.rascunho);
-            }
-            podar(&self.cobertura, &mut self.atual, &mut self.oficina);
-
-            // A construção só entra se cobrir tudo *e* usar menos cartelas. A
-            // conferência de cobertura não é formalidade: uma construção que
-            // deixasse um alvo descoberto entregaria um fechamento furado com
-            // cara de ótimo.
-            let venceu =
-                self.atual.cobertura_total() && self.atual.quantidade() < guloso.len();
-
-            if venceu {
-                self.origem_do_inicio = semente.origem;
-            } else {
-                self.atual.reiniciar();
-                for &cartela in &guloso {
-                    self.atual.adicionar(&self.cobertura, cartela, &mut self.oficina.rascunho);
-                }
-            }
+        let (cartelas, _, origem) = vencedor.expect("o guloso sempre produz um candidato");
+        self.atual.reiniciar();
+        for cartela in cartelas {
+            self.atual.adicionar(&self.cobertura, cartela, &mut self.oficina.rascunho);
         }
+        self.origem_do_inicio = origem;
+    }
 
+    fn garantir_inicio(&mut self, observador: &mut dyn Observador) {
+        if self.comecou {
+            return;
+        }
         self.comecou = true;
+        self.escolher_partida(&[]);
         self.consolidar_inicio();
 
         observador.ao_evento(&Evento::Iniciado {
@@ -738,6 +786,12 @@ impl MotorBusca {
         &self.origem_do_inicio
     }
 
+    /// Quantas cartelas o usuário trouxe, ou zero se a busca começou sem
+    /// fechamento de partida.
+    pub fn cartelas_trazidas(&self) -> usize {
+        self.cartelas_trazidas
+    }
+
     pub fn pesos_dos_operadores(&self) -> Vec<(&'static str, f64)> {
         Operador::TODOS
             .iter()
@@ -804,6 +858,102 @@ mod testes {
             intervalo_progresso: 0,
             ..Default::default()
         }
+    }
+
+    /// Importar um fechamento redundante não pode carregar a redundância adiante.
+    #[test]
+    fn um_fechamento_importado_e_podado_de_graca() {
+        use motor_core::planos::plano_projetivo;
+
+        let mut motor = MotorBusca::novo(problema(21, 5, 2), config_rapida(1)).unwrap();
+
+        // As 21 cartelas ótimas de PG(2,4), com 5 duplicatas puras coladas
+        // junto — o que acontece quando alguém junta duas fontes.
+        let retas = plano_projetivo(4).unwrap();
+        let mut cartelas: Vec<Cartela> = retas.iter().map(|r| Cartela::dos_indices(r)).collect();
+        for i in 0..5 {
+            cartelas.push(cartelas[i]);
+        }
+
+        motor.semear(&cartelas);
+
+        assert_eq!(motor.cartelas_trazidas(), 26);
+        assert_eq!(
+            motor.melhor_avaliacao().cartelas,
+            21,
+            "as 5 duplicatas tinham de sair de graça"
+        );
+        assert!(
+            motor.optimalidade_provada(),
+            "o ótimo estava dentro do que foi trazido e o motor precisa reconhecê-lo"
+        );
+        assert!(motor.melhor_solucao().cobertura_total());
+    }
+
+    /// Importar nunca pode piorar o resultado em relação a não importar nada.
+    #[test]
+    fn um_fechamento_ruim_nao_apaga_uma_construcao_melhor() {
+        // O defeito medido: semear pulava a escolha de partida, então trazer um
+        // fechamento medíocre desligava a construção algébrica. Em C(21,5,2) o
+        // motor tem as 21 ótimas por fórmula; um fechamento de 40 cartelas não
+        // pode fazê-lo partir de 40.
+        let mut motor = MotorBusca::novo(problema(21, 5, 2), config_rapida(2)).unwrap();
+
+        // Um fechamento válido porém ruim: cada cartela cobre uma fatia, e há
+        // muitas sobras. Construído para cobrir tudo com folga.
+        let mut ruim = Vec::new();
+        for a in 0..21 {
+            for b in (a + 1)..21 {
+                if ruim.len() >= 60 {
+                    break;
+                }
+                let outros: Vec<usize> = (0..21).filter(|&x| x != a && x != b).take(3).collect();
+                let mut indices = vec![a, b];
+                indices.extend(outros);
+                ruim.push(Cartela::dos_indices(&indices));
+            }
+        }
+
+        motor.semear(&ruim);
+
+        assert!(
+            motor.melhor_avaliacao().cartelas <= 21,
+            "importar deixou o motor em {} cartelas, pior que as 21 que ele constrói sozinho",
+            motor.melhor_avaliacao().cartelas
+        );
+        assert!(
+            motor.origem_do_inicio().contains("PG(2,4)"),
+            "a construção melhor deveria ter vencido; origem foi \"{}\"",
+            motor.origem_do_inicio()
+        );
+    }
+
+    /// E um fechamento bom precisa ser respeitado onde não há construção melhor.
+    #[test]
+    fn um_fechamento_bom_e_aproveitado_onde_nada_o_supera() {
+        // C(12,5,3) não tem construção fechada neste projeto, e o guloso fica
+        // bem acima do melhor conhecido (29). Um fechamento de 29 cartelas tem
+        // de ser aproveitado, não descartado.
+        let problema = problema(12, 5, 3);
+        let mut referencia = MotorBusca::novo(problema.clone(), config_rapida(3)).unwrap();
+        referencia.executar(
+            &Controle::novo(),
+            &CondicoesDeParada::por_iteracoes(60_000),
+            &mut Silencioso,
+        );
+        let bom = referencia.melhor_cartelas().to_vec();
+        let quantas = bom.len();
+
+        let mut motor = MotorBusca::novo(problema, config_rapida(4)).unwrap();
+        motor.semear(&bom);
+
+        assert_eq!(
+            motor.melhor_avaliacao().cartelas,
+            quantas,
+            "o fechamento trazido era o melhor disponível e tinha de ser mantido"
+        );
+        assert_eq!(motor.origem_do_inicio(), "fechamento importado");
+        assert!(motor.melhor_solucao().cobertura_total());
     }
 
     #[test]

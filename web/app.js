@@ -431,6 +431,7 @@ function aplicarMensagem({ estado, cartelas }) {
 }
 
 function aplicarEstado(estado) {
+  pintarPartida(estado);
   $('melhor-cartelas').textContent = estado.melhor_cartelas || '—';
   $('limite-inferior').textContent = estado.limite_inferior || '—';
   $('gap').textContent = estado.gap === null ? '—' : porcento(estado.gap);
@@ -457,6 +458,48 @@ function aplicarEstado(estado) {
   $('res-cartelas').textContent = estado.melhor_cartelas || '—';
   $('res-cobertura').textContent = porcento(estado.melhor_cobertura);
   $('res-redundancia').textContent = milhares(estado.melhor_redundancia);
+}
+
+/**
+ * Diz de onde a busca partiu — e, quando o usuário trouxe um fechamento, o que
+ * aconteceu com ele.
+ *
+ * Sem isto, o aproveitamento fica invisível. Quem cola 26 cartelas e vê o motor
+ * começar em 21 não tem como saber se as suas foram usadas, podadas ou
+ * ignoradas — e a diferença importa: as três coisas acontecem, cada uma por um
+ * motivo diferente.
+ */
+function pintarPartida(estado) {
+  const destino = $('partida');
+  const origem = estado.origem_do_inicio || '';
+  const trazidas = estado.cartelas_trazidas || 0;
+
+  if (!origem) {
+    destino.hidden = true;
+    return;
+  }
+
+  let texto;
+  if (trazidas === 0) {
+    texto = `Partiu de: <b>${escapar(origem)}</b>`;
+  } else if (origem === 'fechamento importado') {
+    const podadas = trazidas - (estado.melhor_cartelas || trazidas);
+    texto =
+      `Partiu do <b>seu fechamento</b> ` +
+      (podadas > 0
+        ? `<em>— das ${trazidas} cartelas que você trouxe, ${podadas} eram ` +
+          `dispensáveis e saíram de graça.</em>`
+        : `<em>— as ${trazidas} cartelas que você trouxe, aproveitadas ` +
+          `inteiras.</em>`);
+  } else {
+    texto =
+      `Partiu de: <b>${escapar(origem)}</b> <em>— melhor que as ${trazidas} ` +
+      `cartelas que você trouxe, então o motor começou daqui. Seu fechamento ` +
+      `não foi perdido: ele só não era o melhor ponto de partida disponível.</em>`;
+  }
+
+  destino.hidden = false;
+  destino.innerHTML = texto;
 }
 
 /**

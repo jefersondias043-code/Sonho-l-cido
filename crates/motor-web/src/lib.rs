@@ -123,6 +123,12 @@ pub struct Estado {
     pub referencia_resolvida: bool,
     /// Como o ponto de partida foi construído.
     pub origem_do_inicio: String,
+    /// Quantas cartelas o usuário trouxe, ou zero se começou sem fechamento.
+    ///
+    /// A tela precisa dos dois números para ser honesta: "você trouxe 26, o
+    /// motor partiu de 21". Sem isso, um fechamento importado que perde para a
+    /// construção interna sumiria sem explicação.
+    pub cartelas_trazidas: usize,
 
     /// Recordes encontrados neste lote, em ordem cronológica.
     pub novos_recordes: Vec<Recorde>,
@@ -420,6 +426,7 @@ impl MotorWeb {
                 .referencia()
                 .is_some_and(|c| c.aplicacao == motor_core::Aplicacao::Exata && c.referencia.resolvido()),
             origem_do_inicio: self.interno.origem_do_inicio().to_string(),
+            cartelas_trazidas: self.interno.cartelas_trazidas(),
 
             novos_recordes,
             encerrado: self.encerrado,
@@ -714,17 +721,18 @@ mod testes {
 
         motor.semear_com_texto(colado).expect("o texto precisa ser aceito");
 
-        let cartelas: Vec<Vec<u32>> =
-            serde_json::from_str(&motor.melhor()).unwrap_or_default();
+        // O que este teste garante é a leitura do texto: três linhas, com
+        // comentário, separadores variados e espaçamento irregular, viram três
+        // cartelas.
         let estado = estado_de(&motor.estado());
-        assert_eq!(estado["atual_cartelas"].as_u64().unwrap(), 3);
-        assert_eq!(
-            estado["origem_do_inicio"].as_str().unwrap(),
-            "fechamento importado"
-        );
-        // Três cartelas não cobrem C(13,4,2), então ainda não há recorde válido
-        // — mas a busca parte delas.
-        assert!(cartelas.is_empty() || cartelas.len() == 3);
+        assert_eq!(estado["cartelas_trazidas"].as_u64().unwrap(), 3);
+
+        // Onde a busca de fato começa é outra decisão, e ela é comparativa:
+        // três cartelas não cobrem C(13,4,2), enquanto a construção algébrica
+        // entrega as 13 ótimas. O motor parte da melhor — trazer um fechamento
+        // incompleto não pode piorar o ponto de partida.
+        assert_eq!(estado["melhor_cartelas"].as_u64().unwrap(), 13);
+        assert_eq!(estado["melhor_cobertura"].as_f64().unwrap(), 1.0);
     }
 
     #[test]

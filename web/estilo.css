@@ -381,6 +381,14 @@ main { padding: 8px 16px 0; }
   font-style: normal;
 }
 
+/* De onde a busca partiu. Fica logo abaixo da comparação com o mundo, um pouco
+   mais discreta: é contexto do processo, não o resultado. */
+.referencia.partida {
+  padding-top: 8px;
+  border-top: 1px dashed var(--borda);
+  font-size: 13px;
+}
+
 /* ─────────── importar um fechamento ─────────── */
 
 #importar summary {
