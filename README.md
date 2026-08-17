@@ -227,16 +227,23 @@ busca. Antes das construções algébricas eram 9 de 11, com `C(21,5,2)` parando
 Casos escolhidos a dedo favorecem quem os escolheu. Por isso a aferição também
 varre a faixa inteira sem perguntar nada — 223 configurações, 1 segundo cada:
 
-| Distância do melhor do mundo | Configurações |
-|------------------------------|---------------|
-| empatou ou superou           | 93 (41,7%)    |
-| até 5% acima                 | 16 (7,2%)     |
-| de 5% a 20% acima            | 45 (20,2%)    |
-| mais de 20% acima            | 69 (30,9%)    |
+| Distância do melhor do mundo | com 1s por caso | com 10s por caso |
+|------------------------------|-----------------|------------------|
+| empatou ou superou           | 93 (41,7%)      | 122 (54,7%)      |
+| até 5% acima                 | 16 (7,2%)       | 13 (5,8%)        |
+| de 5% a 20% acima            | 45 (20,2%)      | 40 (17,9%)       |
+| mais de 20% acima            | 69 (30,9%)      | 48 (21,5%)       |
 
-As piores estão todas em `t = 3` com pool grande — `C(26,6,3)` fica 89% acima —
-e é onde não existe construção fechada neste projeto. Um segundo de busca contra
-trinta anos de computação acumulada; a comparação é dura de propósito.
+A segunda coluna sai de `SEGUNDOS_POR_CASO=10`, e existe para separar o que é
+limitação do motor do que é só falta de tempo. Dez vezes mais tempo leva os
+empates de 41,7% a 54,7% — ganho real, e ainda assim modesto para dez vezes o
+orçamento.
+
+O que ele **não** move são os casos difíceis. `C(26,6,3)` sai de 246 para 233
+cartelas contra as 130 do mundo: continua 79% acima. As piores estão todas em
+`t = 3` com pool grande, que é justamente onde não existe construção fechada
+neste projeto. Ali a distância é de algoritmo, não de relógio — dar mais tempo
+não resolve, e é o próximo lugar onde vale trabalhar.
 
 Uma tentação medida e descartada: mirar a meta direto no recorde mundial, em vez
 de descer de uma cartela por vez. Levou os empates de 41,7% para 48,4% — e os
@@ -359,9 +366,9 @@ que ele sabe.
   de milhares para algumas centenas por segundo. Um cache de alvos por cartela
   resolveria a maior parte disso.
 - **Coberturas de trincas em pool grande ficam bem acima do melhor conhecido.**
-  C(26,6,3) fica 89% acima num segundo de busca. É onde não há construção
-  algébrica que sirva de atalho, e onde os números do mundo vêm de anos de
-  computação.
+  C(26,6,3) fica 89% acima com um segundo de busca, e ainda 79% acima com dez —
+  dar mais tempo quase não move. É onde não há construção algébrica que sirva de
+  atalho, e é a limitação mais séria que o motor tem hoje.
 - **Execução em um núcleo só.** O motor é sequencial. Buscar em paralelo, com
   arquivo de elites compartilhado, é o próximo ganho grande. No navegador isso
   esbarra num limite adicional: threads em WebAssembly exigem cabeçalhos HTTP
