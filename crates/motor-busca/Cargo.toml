@@ -11,3 +11,8 @@ description = "Motor de busca persistente e auto-reconstrutiva"
 motor-core = { workspace = true }
 rand = { workspace = true }
 rand_pcg = { workspace = true }
+
+# No navegador não existe relógio de sistema; `web-time` cobre `Instant` com
+# `performance.now()` mantendo a mesma interface.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+web-time = "1"

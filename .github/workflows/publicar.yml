@@ -1,0 +1,82 @@
+name: Publicar no GitHub Pages
+
+# Cada envio para a main reconstrói o WebAssembly e republica o site. Não há
+# passo manual: o que está na main é o que está no ar.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Uma publicação por vez. Envios em sequência não devem se atropelar, mas
+# também não vale cancelar uma que já começou — ela pode ser a boa.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  construir:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar o alvo WebAssembly
+        run: rustup target add wasm32-unknown-unknown
+
+      - name: Descobrir a versão exigida do wasm-bindgen
+        id: versao
+        run: |
+          # A biblioteca e a ferramenta precisam ser exatamente da mesma versão:
+          # elas trocam dados por um formato interno que ainda muda. Ler a
+          # versão do Cargo.toml evita que a CI e o desenvolvimento divirjam.
+          versao=$(grep -oP 'wasm-bindgen = "=\K[0-9.]+' crates/motor-web/Cargo.toml)
+          echo "wasm_bindgen=$versao" >> "$GITHUB_OUTPUT"
+          echo "wasm-bindgen exigido: $versao"
+
+      - name: Reaproveitar compilações anteriores
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.cargo/bin
+            target
+          key: wasm-${{ runner.os }}-${{ steps.versao.outputs.wasm_bindgen }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            wasm-${{ runner.os }}-${{ steps.versao.outputs.wasm_bindgen }}-
+
+      - name: Instalar o wasm-bindgen
+        run: |
+          instalada=$(wasm-bindgen --version 2>/dev/null | awk '{print $2}' || echo "")
+          if [ "$instalada" != "${{ steps.versao.outputs.wasm_bindgen }}" ]; then
+            cargo install wasm-bindgen-cli \
+              --version "${{ steps.versao.outputs.wasm_bindgen }}" --force
+          else
+            echo "já instalada"
+          fi
+
+      - name: Rodar os testes
+        run: cargo test --workspace
+
+      - name: Construir o site
+        run: ./construir-web.sh
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  publicar:
+    needs: construir
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.publicacao.outputs.page_url }}
+    steps:
+      - id: publicacao
+        uses: actions/deploy-pages@v4

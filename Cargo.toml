@@ -5,6 +5,7 @@ members = [
     "crates/motor-busca",
     "crates/motor-persistencia",
     "crates/motor-cli",
+    "crates/motor-web",
 ]
 
 [workspace.package]

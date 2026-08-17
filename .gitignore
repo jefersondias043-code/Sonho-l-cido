@@ -9,3 +9,6 @@
 /execucoes
 
 .DS_Store
+node_modules/
+capturas/
+/site/

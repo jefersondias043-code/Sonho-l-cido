@@ -1,0 +1,29 @@
+[package]
+name = "motor-web"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Ponte entre o motor e o navegador, via WebAssembly"
+
+[lib]
+# `cdylib` é o formato que o WebAssembly exige; `rlib` mantém o crate testável
+# pelo `cargo test` normal na máquina de desenvolvimento.
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+motor-core = { workspace = true }
+motor-busca = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+# Versão exata, de propósito. A biblioteca e a ferramenta `wasm-bindgen`
+# trocam dados por um formato interno que ainda muda entre versões: se as duas
+# não baterem exatamente, o build falha com um erro difícil de interpretar.
+# O script `construir-web.sh` confere isso antes de compilar.
+wasm-bindgen = "=0.2.127"
+
+# `rand` puxa `getrandom`, que só compila para navegador com a feature `js`.
+# Sem isto o build falha com "target não suportado".
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+getrandom = { version = "0.2", features = ["js"] }

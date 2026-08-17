@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<!-- `viewport-fit=cover` deixa o fundo ir até as bordas; o CSS devolve o
+     espaço da ilha dinâmica e do indicador de início via safe-area. -->
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b1020">
+<meta name="description" content="Motor universal de otimização combinatória persistente">
+
+<!-- Faz o iPhone abrir em tela cheia quando adicionado à tela de início. -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Sonho Lúcido">
+
+<title>Sonho Lúcido</title>
+
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="apple-touch-icon" href="./icone-180.png">
+<link rel="icon" type="image/svg+xml" href="./icone.svg">
+<link rel="stylesheet" href="./estilo.css">
+</head>
+<body>
+
+<header class="topo">
+  <h1>Sonho Lúcido</h1>
+  <p class="subtitulo">motor de otimização combinatória</p>
+</header>
+
+<nav class="abas" role="tablist">
+  <button class="aba ativa" role="tab" data-painel="configurar">Configurar</button>
+  <button class="aba" role="tab" data-painel="buscar">Buscar</button>
+  <button class="aba" role="tab" data-painel="resultado">Resultado</button>
+</nav>
+
+<main>
+
+<!-- ══════════════════ CONFIGURAR ══════════════════ -->
+<section id="configurar" class="painel ativo">
+
+  <div class="cartao">
+    <h2>O problema</h2>
+    <p class="ajuda">
+      O motor não conhece nenhuma modalidade de jogo. Ele resolve o problema
+      matemático que você descrever aqui.
+    </p>
+
+    <label class="campo">
+      <span>Universo <em>— quantos números existem no total</em></span>
+      <input type="number" id="universo" value="60" min="1" max="999" inputmode="numeric">
+    </label>
+
+    <label class="campo">
+      <span>Pool <em>— quantos você vai jogar</em></span>
+      <input type="number" id="pool" value="16" min="1" max="128" inputmode="numeric">
+    </label>
+
+    <label class="campo">
+      <span>Números por cartela</span>
+      <input type="number" id="cartela" value="4" min="1" max="128" inputmode="numeric">
+    </label>
+  </div>
+
+  <div class="cartao">
+    <h2>A garantia</h2>
+
+    <div class="opcoes" id="tipo-regra">
+      <button class="opcao ativa" data-regra="cobrir">Cobrir subconjuntos</button>
+      <button class="opcao" data-regra="garantir">Garantir acertos</button>
+    </div>
+
+    <div id="regra-cobrir">
+      <label class="campo">
+        <span>Cobrir todo grupo de quantos números</span>
+        <input type="number" id="cobrir" value="2" min="1" max="20" inputmode="numeric">
+      </label>
+      <p class="ajuda" id="explicacao-cobrir"></p>
+    </div>
+
+    <div id="regra-garantir" hidden>
+      <label class="campo">
+        <span>Se saírem quantos do meu pool</span>
+        <input type="number" id="alvo" value="6" min="1" max="20" inputmode="numeric">
+      </label>
+      <label class="campo">
+        <span>Quero garantir quantos acertos</span>
+        <input type="number" id="intersecao" value="4" min="1" max="20" inputmode="numeric">
+      </label>
+      <p class="ajuda" id="explicacao-garantir"></p>
+    </div>
+  </div>
+
+  <div class="cartao">
+    <h2>Avançado</h2>
+    <label class="campo linha">
+      <span>Teto de cartelas <em>— deixe vazio para buscar o mínimo</em></span>
+      <input type="number" id="orcamento" placeholder="sem teto" min="1" inputmode="numeric">
+    </label>
+    <label class="campo linha">
+      <span>Semente <em>— a mesma semente repete a mesma busca</em></span>
+      <input type="number" id="semente" value="1361508949" min="0" inputmode="numeric">
+    </label>
+  </div>
+
+  <div class="cartao" id="previsao">
+    <h2>Antes de começar</h2>
+    <div id="texto-previsao" class="ajuda">calculando…</div>
+  </div>
+
+  <button class="principal" id="iniciar">Iniciar busca</button>
+  <button class="secundario" id="retomar" hidden>Retomar busca salva</button>
+
+  <p class="rodape-nota">
+    Tudo roda dentro do seu aparelho. Nenhum dado sai daqui, e depois da
+    primeira visita funciona sem internet.
+  </p>
+</section>
+
+<!-- ══════════════════ BUSCAR ══════════════════ -->
+<section id="buscar" class="painel">
+
+  <div class="cartao destaque">
+    <div class="rotulo">Melhor solução conhecida</div>
+    <div class="numerao"><span id="melhor-cartelas">—</span><small>cartelas</small></div>
+    <div class="selo" id="selo-otimo" hidden>★ ótimo provado</div>
+    <div class="barra-limite">
+      <div class="marca">
+        <span class="valor" id="limite-inferior">—</span>
+        <span class="chave">mínimo</span>
+      </div>
+      <div class="marca">
+        <span class="valor" id="gap">—</span>
+        <span class="chave">distância</span>
+      </div>
+      <div class="marca">
+        <span class="valor" id="cobertura">—</span>
+        <span class="chave">cobertura</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="cartao">
+    <div class="rotulo">Explorando agora</div>
+    <p class="ajuda">
+      A solução atual pode ficar bem pior que o recorde. Isso não é falha — é o
+      motor saindo de uma região para procurar em outra. O recorde acima nunca
+      é destruído.
+    </p>
+    <div class="grade">
+      <div class="item"><span id="atual-cartelas">—</span><small>cartelas agora</small></div>
+      <div class="item"><span id="atual-descobertos">—</span><small>ainda a cobrir</small></div>
+      <div class="item"><span id="meta">—</span><small>meta perseguida</small></div>
+      <div class="item"><span id="elites">—</span><small>soluções guardadas</small></div>
+      <div class="item"><span id="iteracoes">—</span><small>iterações</small></div>
+      <div class="item"><span id="velocidade">—</span><small>por segundo</small></div>
+    </div>
+  </div>
+
+  <div class="controles">
+    <button class="principal" id="pausar">Pausar</button>
+    <button class="secundario" id="reiniciar">Recomeçar</button>
+  </div>
+
+  <label class="alternador">
+    <input type="checkbox" id="manter-tela">
+    <span>Manter a tela ligada enquanto busca</span>
+  </label>
+  <p class="ajuda" id="aviso-tela">
+    O iPhone congela a página quando a tela apaga. Com isto ligado a busca
+    continua; sem isto ela pausa sozinha e retoma quando você voltar.
+  </p>
+
+  <div class="cartao">
+    <div class="rotulo">Recordes</div>
+    <ol class="recordes" id="lista-recordes"></ol>
+  </div>
+</section>
+
+<!-- ══════════════════ RESULTADO ══════════════════ -->
+<section id="resultado" class="painel">
+  <div class="cartao destaque">
+    <div class="rotulo">Fechamento encontrado</div>
+    <div class="numerao"><span id="res-cartelas">—</span><small>cartelas</small></div>
+    <div class="barra-limite">
+      <div class="marca">
+        <span class="valor" id="res-cobertura">—</span>
+        <span class="chave">cobertura</span>
+      </div>
+      <div class="marca">
+        <span class="valor" id="res-redundancia">—</span>
+        <span class="chave">redundância</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="controles">
+    <button class="principal" id="compartilhar">Compartilhar</button>
+    <button class="secundario" id="copiar">Copiar</button>
+  </div>
+
+  <div class="cartao">
+    <div class="rotulo">As cartelas</div>
+    <div class="cartelas" id="lista-cartelas">
+      <p class="ajuda">Nenhuma solução ainda. Inicie uma busca.</p>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<div class="aviso" id="aviso" hidden></div>
+
+<script type="module" src="./app.js"></script>
+</body>
+</html>

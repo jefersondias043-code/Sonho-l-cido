@@ -1,0 +1,429 @@
+/*
+ * Interface do Sonho Lúcido.
+ *
+ * Pensada primeiro para o iPhone. Três coisas guiaram as decisões:
+ *
+ * 1. Áreas de toque nunca abaixo de 44px, que é o mínimo confortável.
+ * 2. Campos de entrada com 16px ou mais, porque abaixo disso o Safari do iOS
+ *    dá zoom sozinho ao focar e desalinha a tela toda.
+ * 3. `safe-area-inset` em cima e embaixo, para o conteúdo não ficar sob a ilha
+ *    dinâmica nem sob o indicador de início.
+ *
+ * O tema é escuro por escolha: a busca fica minutos na tela, e em telas OLED
+ * isso gasta bem menos bateria.
+ */
+
+:root {
+  --fundo: #0b1020;
+  --fundo-cartao: #151b31;
+  --fundo-campo: #1e2540;
+  --borda: #2a3352;
+  --texto: #e8ecf8;
+  --texto-fraco: #93a0c4;
+  --acento: #7aa2ff;
+  --ouro: #ffc75a;
+  --verde: #4ade80;
+  --vermelho: #ff8a8a;
+  --raio: 14px;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--fundo);
+  color: var(--texto);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 17px;
+  line-height: 1.45;
+  -webkit-text-size-adjust: 100%;
+  overscroll-behavior-y: contain;
+}
+
+body {
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: calc(env(safe-area-inset-bottom) + 24px);
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+/* ─────────── topo e abas ─────────── */
+
+.topo {
+  padding: 20px 20px 8px;
+}
+
+.topo h1 {
+  margin: 0;
+  font-size: 26px;
+  letter-spacing: -0.4px;
+  background: linear-gradient(100deg, var(--acento), var(--ouro));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.subtitulo {
+  margin: 2px 0 0;
+  color: var(--texto-fraco);
+  font-size: 13px;
+}
+
+.abas {
+  display: flex;
+  gap: 6px;
+  padding: 12px 16px 4px;
+  position: sticky;
+  top: env(safe-area-inset-top);
+  background: var(--fundo);
+  z-index: 10;
+}
+
+.aba {
+  flex: 1;
+  min-height: 44px;
+  border: 1px solid var(--borda);
+  background: transparent;
+  color: var(--texto-fraco);
+  border-radius: 999px;
+  font-size: 15px;
+  font-family: inherit;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.aba.ativa {
+  background: var(--acento);
+  border-color: var(--acento);
+  color: #0b1020;
+  font-weight: 600;
+}
+
+main { padding: 8px 16px 0; }
+
+.painel { display: none; }
+.painel.ativo { display: block; animation: entrar 0.18s ease-out; }
+
+@keyframes entrar {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* ─────────── cartões ─────────── */
+
+.cartao {
+  background: var(--fundo-cartao);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  padding: 16px;
+  margin-bottom: 14px;
+}
+
+.cartao h2 {
+  margin: 0 0 4px;
+  font-size: 15px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--texto-fraco);
+  font-weight: 600;
+}
+
+.cartao.destaque {
+  background: linear-gradient(155deg, #1d2745 0%, #151b31 100%);
+  border-color: #33406b;
+}
+
+.rotulo {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--texto-fraco);
+  margin-bottom: 6px;
+}
+
+.ajuda {
+  color: var(--texto-fraco);
+  font-size: 13.5px;
+  margin: 6px 0 0;
+}
+
+/* ─────────── campos ─────────── */
+
+.campo {
+  display: block;
+  margin-top: 14px;
+}
+
+.campo > span {
+  display: block;
+  font-size: 14px;
+  margin-bottom: 6px;
+}
+
+.campo em {
+  color: var(--texto-fraco);
+  font-style: normal;
+  font-size: 13px;
+}
+
+.campo input {
+  width: 100%;
+  min-height: 48px;
+  padding: 10px 14px;
+  /* 17px evita o zoom automático do Safari no iOS ao focar o campo. */
+  font-size: 17px;
+  font-family: inherit;
+  color: var(--texto);
+  background: var(--fundo-campo);
+  border: 1px solid var(--borda);
+  border-radius: 10px;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.campo input:focus {
+  outline: none;
+  border-color: var(--acento);
+}
+
+.opcoes {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.opcao {
+  flex: 1;
+  min-height: 46px;
+  border: 1px solid var(--borda);
+  background: var(--fundo-campo);
+  color: var(--texto-fraco);
+  border-radius: 10px;
+  font-size: 14.5px;
+  font-family: inherit;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.opcao.ativa {
+  border-color: var(--acento);
+  color: var(--texto);
+  background: #24325c;
+}
+
+/* ─────────── botões ─────────── */
+
+.principal, .secundario {
+  display: block;
+  width: 100%;
+  min-height: 54px;
+  border-radius: 12px;
+  font-size: 17px;
+  font-weight: 600;
+  font-family: inherit;
+  margin-bottom: 10px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.principal { background: var(--acento); color: #0b1020; }
+.principal:active { filter: brightness(0.9); }
+.principal:disabled { opacity: 0.4; }
+
+.secundario {
+  background: transparent;
+  border-color: var(--borda);
+  color: var(--texto);
+}
+
+.controles { display: flex; gap: 10px; }
+.controles > button { flex: 1; }
+
+/* ─────────── números grandes ─────────── */
+
+.numerao {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 2px 0 10px;
+}
+
+.numerao span {
+  font-size: 58px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -2px;
+  font-variant-numeric: tabular-nums;
+}
+
+.numerao small {
+  color: var(--texto-fraco);
+  font-size: 15px;
+}
+
+.selo {
+  display: inline-block;
+  background: rgba(74, 222, 128, 0.14);
+  border: 1px solid var(--verde);
+  color: var(--verde);
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+
+.barra-limite {
+  display: flex;
+  gap: 8px;
+  border-top: 1px solid var(--borda);
+  padding-top: 12px;
+}
+
+.marca { flex: 1; }
+
+.marca .valor {
+  display: block;
+  font-size: 19px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.marca .chave {
+  display: block;
+  font-size: 11.5px;
+  color: var(--texto-fraco);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.grade {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px 8px;
+  margin-top: 12px;
+}
+
+.grade .item span {
+  display: block;
+  font-size: 21px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.grade .item small {
+  display: block;
+  font-size: 11.5px;
+  color: var(--texto-fraco);
+  line-height: 1.25;
+}
+
+/* ─────────── listas ─────────── */
+
+.recordes {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  max-height: 260px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.recordes li {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--borda);
+  font-size: 14px;
+}
+
+.recordes li:last-child { border-bottom: none; }
+
+.recordes .quantia {
+  font-weight: 700;
+  font-size: 17px;
+  color: var(--ouro);
+  font-variant-numeric: tabular-nums;
+}
+
+.recordes .via {
+  color: var(--texto-fraco);
+  font-size: 12.5px;
+  text-align: right;
+}
+
+.cartelas {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px;
+}
+
+.cartelas .cartela {
+  background: var(--fundo-campo);
+  border: 1px solid var(--borda);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-variant-numeric: tabular-nums;
+  font-size: 15px;
+  letter-spacing: 0.6px;
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.cartelas .indice {
+  color: var(--texto-fraco);
+  font-size: 11px;
+  min-width: 20px;
+}
+
+.alternador {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+  padding: 0 4px;
+  font-size: 15px;
+}
+
+.alternador input {
+  width: 26px;
+  height: 26px;
+  accent-color: var(--acento);
+}
+
+.rodape-nota {
+  color: var(--texto-fraco);
+  font-size: 12.5px;
+  text-align: center;
+  padding: 4px 8px 0;
+}
+
+/* ─────────── aviso flutuante ─────────── */
+
+.aviso {
+  position: fixed;
+  left: 16px;
+  right: 16px;
+  bottom: calc(env(safe-area-inset-bottom) + 16px);
+  background: var(--fundo-campo);
+  border: 1px solid var(--vermelho);
+  color: var(--texto);
+  padding: 14px 16px;
+  border-radius: 12px;
+  font-size: 14.5px;
+  z-index: 100;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+
+.aviso.bom { border-color: var(--verde); }
+
+/* Em telas largas, o painel de busca ganha respiro lateral. */
+@media (min-width: 560px) {
+  .grade { grid-template-columns: repeat(6, 1fr); }
+}

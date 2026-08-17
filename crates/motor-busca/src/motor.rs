@@ -27,7 +27,17 @@
 //! O mesmo mecanismo atende o objetivo de cobertura máxima sob orçamento: a
 //! meta simplesmente fica parada no orçamento, em vez de descer.
 
-use std::time::{Duration, Instant};
+use std::time::Duration;
+
+// `std::time::Instant` entra em pânico no navegador: em `wasm32-unknown-unknown`
+// não existe relógio do sistema. `web-time` oferece a mesma interface apoiada em
+// `performance.now()`, então o laço do motor não precisa saber onde está
+// rodando.
+#[cfg(target_arch = "wasm32")]
+use web_time::Instant;
+
+#[cfg(not(target_arch = "wasm32"))]
+use std::time::Instant;
 
 use motor_core::{
     limite_inferior, Avaliacao, Cartela, ChaveCusto, LimiteInferior, MotorCobertura, Objetivo,
@@ -580,6 +590,13 @@ impl MotorBusca {
 
     pub fn melhor_avaliacao(&self) -> Avaliacao {
         self.melhor_avaliacao
+    }
+
+    /// Onde a busca está *agora* — pode estar bem pior que o recorde, e é
+    /// justamente isso que o painel do §27 precisa mostrar para que o usuário
+    /// entenda que exploração não é regressão.
+    pub fn avaliacao_atual(&self) -> Avaliacao {
+        self.atual.avaliacao()
     }
 
     pub fn melhor_assinatura(&self) -> u64 {
