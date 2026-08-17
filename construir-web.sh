@@ -60,6 +60,21 @@ rm -f "$destino/gerar-icones.py" "$destino"/testar*.mjs
 # Derivando o carimbo do conteúdo, a regra passa a ser automática nos dois
 # sentidos: se algum arquivo mudou, o carimbo muda; se nada mudou, ele
 # permanece igual e o navegador não reinstala à toa.
+# Monta a lista de arquivos que o service worker guarda para funcionar sem
+# internet, a partir do que existe de fato no site.
+#
+# Escrita à mão, a lista sai de sincronia no dia em que alguém acrescenta um
+# arquivo — e um módulo faltando derruba o aplicativo inteiro offline, porque
+# uma importação que falha impede o módulo que a fez de carregar.
+echo "==> montando a lista de arquivos para uso sem internet"
+arquivos=$(
+    cd "$destino" && find . -type f ! -name sw.js ! -name .nojekyll \
+        | sed 's|^\./|./|' | sort \
+        | awk '{printf "%s\"%s\"", (NR>1 ? "," : ""), $0}'
+)
+sed -i "s|__ARQUIVOS_DA_CONSTRUCAO__|[$arquivos]|" "$destino/sw.js"
+echo "    $(echo "$arquivos" | tr ',' '\n' | wc -l) arquivos guardados para uso offline"
+
 echo "==> carimbando o service worker"
 carimbo=$(
     find "$destino" -type f ! -name sw.js -exec sha256sum {} + \

@@ -147,6 +147,58 @@ try {
 
   // E o aplicativo continua funcionando depois da troca.
   marcar(await pagina.locator('#iniciar').isEnabled(), 'o aplicativo segue utilizável após atualizar');
+
+  // ─── 4. sem internet ───
+  //
+  // O defeito que isto cobre: a lista de arquivos guardados era escrita à mão,
+  // e saiu de sincronia quando `historico.js` foi acrescentado. Um módulo
+  // faltando no cache derruba o aplicativo inteiro offline — uma importação
+  // que falha impede o módulo que a fez de carregar, e a tela fica em branco
+  // sem erro visível para o usuário.
+  await contexto.setOffline(true);
+  await pagina.reload({ waitUntil: 'domcontentloaded' });
+
+  marcar(await pagina.locator('h1').isVisible(), 'sem internet, o aplicativo abre');
+
+  // Abrir não basta: os módulos precisam ter carregado de verdade. Se algum
+  // faltasse, os ouvintes não existiriam e a tela não reagiria a nada.
+  let offlineUtilizavel = true;
+  try {
+    await pagina.waitForFunction(
+      () => document.getElementById('texto-previsao').textContent.includes('combinações'),
+      undefined,
+      { timeout: 10000 }
+    );
+    await pagina.click('.aba[data-painel="historico"]');
+    await pagina.waitForSelector('#historico.ativo', { timeout: 5000 });
+  } catch {
+    offlineUtilizavel = false;
+  }
+  marcar(offlineUtilizavel, 'sem internet, todos os módulos carregam e a tela responde');
+
+  // E o motor — que é o arquivo maior — precisa rodar a partir do cache.
+  let motorOffline = true;
+  try {
+    await pagina.click('.aba[data-painel="configurar"]');
+    await pagina.fill('#universo', '13');
+    await pagina.fill('#pool', '13');
+    await pagina.fill('#cartela', '4');
+    await pagina.fill('#cobrir', '2');
+    await pagina.click('#iniciar');
+    await pagina.waitForFunction(
+      () => {
+        const t = document.getElementById('melhor-cartelas').textContent.trim();
+        return t !== '' && t !== '—' && Number(t) > 0;
+      },
+      undefined,
+      { timeout: 30000 }
+    );
+  } catch {
+    motorOffline = false;
+  }
+  marcar(motorOffline, 'sem internet, o motor roda a partir do cache');
+
+  await contexto.setOffline(false);
 } finally {
   await writeFile(caminhoSw, swOriginal);
   await writeFile(caminhoEstilo, estiloOriginal);

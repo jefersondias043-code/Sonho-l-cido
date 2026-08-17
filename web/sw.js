@@ -36,18 +36,20 @@
 const CARIMBO = '__CARIMBO_DA_CONSTRUCAO__';
 const VERSAO = `sonho-lucido-${CARIMBO}`;
 
-const ARQUIVOS = [
-  './',
-  './index.html',
-  './estilo.css',
-  './app.js',
-  './trabalhador.js',
-  './manifest.webmanifest',
-  './icone.svg',
-  './icone-180.png',
-  './wasm/motor_web.js',
-  './wasm/motor_web_bg.wasm',
-];
+/*
+ * A lista é gerada por `construir-web.sh` a partir do que existe de fato em
+ * `site/`, e não escrita à mão.
+ *
+ * O motivo: escrita à mão, ela sai de sincronia no dia em que alguém acrescenta
+ * um arquivo — foi o que aconteceu com `historico.js`, que o `app.js` importa e
+ * que ficou de fora. Um módulo faltando no cache derruba o aplicativo inteiro
+ * sem internet, porque uma importação que falha impede o módulo que a fez de
+ * carregar.
+ *
+ * O valor literal só aparece em desenvolvimento, quando o site é servido direto
+ * de `web/`; nesse caso a lista fica vazia e tudo é buscado sob demanda.
+ */
+const ARQUIVOS = ['./', ...__ARQUIVOS_DA_CONSTRUCAO__];
 
 /** Caminhos cujo conteúdo define o que o usuário vê e como o app se comporta. */
 function ehDoAplicativo(url) {
