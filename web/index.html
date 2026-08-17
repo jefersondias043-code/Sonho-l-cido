@@ -29,6 +29,7 @@
 
 <nav class="abas" role="tablist">
   <button class="aba ativa" role="tab" data-painel="configurar">Configurar</button>
+  <button class="aba" role="tab" data-painel="fechamento18">18 de 25</button>
   <button class="aba" role="tab" data-painel="buscar">Buscar</button>
   <button class="aba" role="tab" data-painel="resultado">Resultado</button>
   <button class="aba" role="tab" data-painel="historico">Histórico</button>
@@ -176,6 +177,70 @@
     <!-- Torna verificável, sem adivinhação, se uma correção publicada chegou
          mesmo a este aparelho. -->
     <span id="versao" class="versao"></span>
+  </p>
+</section>
+
+<!-- ══════════════════ FECHAMENTO 18 DE 25 ══════════════════ -->
+<!--
+  Uma ferramenta fechada em torno de um cenário só: 25 números no universo, 18
+  escolhidos por você, e os 816 grupos de 15 que existem dentro deles.
+
+  Existe porque a tela Configurar é geral demais para esse uso. Ali são sete
+  campos a acertar, e errar um só produz um problema diferente do pretendido —
+  sem nenhum aviso, porque todos são configurações legítimas. Aqui os números
+  que definem o cenário são fixos, e a única escolha que sobra é a que de fato
+  pertence a você: quais 18 números jogar, e qual garantia perseguir.
+-->
+<section id="fechamento18" class="painel">
+
+  <div class="cartao">
+    <h2>Escolha os seus 18 números</h2>
+    <p class="ajuda">
+      Toque para marcar. O sistema não escolhe por você — a seleção é sua, e o
+      motor trabalha exclusivamente com os números que você marcar.
+    </p>
+    <div class="grade-numeros" id="grade-25"></div>
+    <div class="referencia" id="contagem-18">0 de 18 escolhidos</div>
+    <div class="acoes-linha">
+      <button class="secundario" id="limpar-18">Limpar</button>
+      <button class="secundario" id="sortear-18">Preencher ao acaso</button>
+    </div>
+    <p class="ajuda">
+      "Preencher ao acaso" é atalho para testar rápido, não recomendação: nenhum
+      conjunto de 18 tem vantagem sobre outro num sorteio.
+    </p>
+  </div>
+
+  <div class="cartao">
+    <h2>A garantia</h2>
+    <p class="ajuda">
+      Dentro dos seus 18 números existem <b>816</b> grupos de 15. O fechamento
+      precisa dar conta de todos eles.
+    </p>
+
+    <label class="campo">
+      <span>Números por jogo</span>
+      <div class="opcoes" id="tamanho-jogo">
+        <button class="opcao ativa" data-k="15">15</button>
+        <button class="opcao" data-k="16">16</button>
+        <button class="opcao" data-k="17">17</button>
+        <button class="opcao" data-k="18">18</button>
+      </div>
+    </label>
+
+    <label class="campo">
+      <span>Acertos garantidos, saindo os 15</span>
+      <div class="opcoes" id="acertos-garantidos"></div>
+    </label>
+
+    <div class="referencia" id="explicacao-18"></div>
+  </div>
+
+  <button class="principal" id="iniciar-18" disabled>Montar o fechamento</button>
+
+  <p class="rodape-nota">
+    O resultado aparece na aba Resultado, e o motor continua procurando algo
+    menor até você mandar parar.
   </p>
 </section>
 

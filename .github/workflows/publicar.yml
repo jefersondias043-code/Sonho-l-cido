@@ -98,6 +98,10 @@ jobs:
           # aparelho, e partir dali em vez de reconstruir do zero.
           node web/testar-biblioteca.mjs
 
+          # E a ferramenta 18 de 25, onde a garantia prometida é conferida
+          # grupo a grupo, fora do motor que a produziu.
+          node web/testar-fechamento18.mjs
+
       - name: Publicar na branch gh-pages
         run: |
           set -euo pipefail

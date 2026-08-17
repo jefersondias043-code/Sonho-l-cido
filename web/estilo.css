@@ -389,6 +389,50 @@ main { padding: 8px 16px 0; }
   font-size: 13px;
 }
 
+/* ─────────── a grade dos 25 números ─────────── */
+
+/*
+ * Cinco por linha, como no volante impresso. O reconhecimento é visual: quem
+ * marca números numa cartela de papel procura pela posição, e uma grade com
+ * outro número de colunas obriga a reler tudo.
+ */
+.grade-numeros {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.numero {
+  /* Quadrado, e nunca abaixo de 44px: são 25 alvos lado a lado, e errar o toque
+     aqui significa jogar um número que a pessoa não escolheu. */
+  aspect-ratio: 1;
+  min-height: 44px;
+  border: 1px solid var(--borda);
+  background: var(--fundo-campo);
+  color: var(--texto-fraco);
+  border-radius: 10px;
+  font-size: 16px;
+  font-weight: 600;
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 0.08s ease-out;
+}
+
+.numero:active { transform: scale(0.92); }
+
+.numero.escolhido {
+  background: var(--acento);
+  border-color: var(--acento);
+  color: #0b1020;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .numero { transition: none; }
+}
+
 /* ─────────── importar um fechamento ─────────── */
 
 #importar summary {

@@ -679,6 +679,189 @@ async function iniciarBusca(configuracao, fechamentoColado) {
   comecar({ configuracao, fechamento: fechamentoColado, doMundo });
 }
 
+/* ─────────── fechamento 18 de 25 ─────────── */
+
+/*
+ * Uma ferramenta fechada em torno de um cenário só.
+ *
+ * Todo o resto do aplicativo é deliberadamente geral: o motor não conhece
+ * modalidade nenhuma, e a tela Configurar expõe os sete números que definem
+ * qualquer problema. Isso é força, e também é o problema — para quem sempre
+ * resolve o mesmo cenário, são sete oportunidades de errar, e um erro produz um
+ * problema diferente do pretendido sem nenhum aviso, porque todos os valores
+ * são configurações legítimas.
+ *
+ * Aqui os números do cenário são fixos, e a escolha que sobra é a que pertence
+ * ao usuário: quais 18 números jogar, e qual garantia perseguir.
+ *
+ * ## A matemática que a tela precisa explicar
+ *
+ * Jogo e grupo vivem dentro dos mesmos 18 números, então qualquer jogo de `k`
+ * números já acerta pelo menos `k + 15 − 18` de qualquer grupo de 15, sem
+ * esforço nenhum. Um jogo de 15 sempre acerta 12; um de 18 sempre acerta os 15.
+ *
+ * Isso muda o que faz sentido pedir: garantir 12 com jogos de 15 é gratuito — um
+ * jogo só — e garantir 15 exige os 816 grupos inteiros, porque só o próprio
+ * grupo contém o grupo. O trabalho de verdade fica no meio, e a tela precisa
+ * dizer isso, em vez de deixar alguém pedir o gratuito achando que otimizou.
+ */
+
+const UNIVERSO_18 = 25;
+const ESCOLHER = 18;
+const GRUPO = 15;
+
+let escolhidos = new Set();
+let tamanhoJogo = 15;
+let acertosPedidos = 13;
+
+function montarGrade25() {
+  const grade = $('grade-25');
+  grade.innerHTML = '';
+  for (let n = 1; n <= UNIVERSO_18; n++) {
+    const botao = document.createElement('button');
+    botao.type = 'button';
+    botao.className = 'numero';
+    botao.textContent = String(n).padStart(2, '0');
+    botao.dataset.n = String(n);
+    botao.addEventListener('click', () => alternarNumero(n));
+    grade.appendChild(botao);
+  }
+  pintarSelecao18();
+}
+
+function alternarNumero(n) {
+  if (escolhidos.has(n)) {
+    escolhidos.delete(n);
+  } else if (escolhidos.size < ESCOLHER) {
+    escolhidos.add(n);
+  } else {
+    avisar(`Já são ${ESCOLHER} números. Desmarque um antes de trocar.`);
+    return;
+  }
+  pintarSelecao18();
+}
+
+function pintarSelecao18() {
+  document.querySelectorAll('#grade-25 .numero').forEach((b) => {
+    b.classList.toggle('escolhido', escolhidos.has(Number(b.dataset.n)));
+  });
+
+  const faltam = ESCOLHER - escolhidos.size;
+  $('contagem-18').innerHTML =
+    faltam === 0
+      ? `<b>18 de 18 escolhidos</b> <em>— ${milhares(
+          combinacoes(ESCOLHER, GRUPO)
+        )} grupos de ${GRUPO} a cobrir.</em>`
+      : `<b>${escolhidos.size} de 18 escolhidos</b> <em>— ${
+          faltam === 1 ? 'falta 1 número' : `faltam ${faltam} números`
+        }.</em>`;
+
+  $('iniciar-18').disabled = faltam !== 0;
+}
+
+/**
+ * As opções de garantia que fazem sentido para o tamanho de jogo escolhido.
+ *
+ * Abaixo do mínimo automático não há o que pedir, e no topo está o caso em que
+ * só o próprio grupo serve. Mostrar os dois extremos, dizendo o que cada um
+ * custa, evita que alguém escolha o gratuito imaginando ter otimizado algo.
+ */
+function montarOpcoesDeAcerto() {
+  const minimoAutomatico = tamanhoJogo + GRUPO - ESCOLHER;
+  const destino = $('acertos-garantidos');
+  destino.innerHTML = '';
+
+  for (let acertos = minimoAutomatico; acertos <= GRUPO; acertos++) {
+    const botao = document.createElement('button');
+    botao.type = 'button';
+    botao.className = 'opcao';
+    botao.textContent = String(acertos);
+    botao.dataset.acertos = String(acertos);
+    botao.addEventListener('click', () => {
+      acertosPedidos = acertos;
+      pintarOpcoesDeAcerto();
+    });
+    destino.appendChild(botao);
+  }
+
+  // Começa uma casa acima do gratuito, que é onde o motor tem trabalho a fazer.
+  if (acertosPedidos <= minimoAutomatico || acertosPedidos > GRUPO) {
+    acertosPedidos = Math.min(minimoAutomatico + 1, GRUPO);
+  }
+  pintarOpcoesDeAcerto();
+}
+
+function pintarOpcoesDeAcerto() {
+  document.querySelectorAll('#acertos-garantidos .opcao').forEach((b) => {
+    b.classList.toggle('ativa', Number(b.dataset.acertos) === acertosPedidos);
+  });
+
+  const minimoAutomatico = tamanhoJogo + GRUPO - ESCOLHER;
+  const destino = $('explicacao-18');
+
+  if (acertosPedidos <= minimoAutomatico) {
+    destino.innerHTML =
+      `<b>Um jogo só resolve.</b> <em>Como o jogo e o grupo saem dos mesmos 18 ` +
+      `números, qualquer jogo de ${tamanhoJogo} já acerta ${minimoAutomatico} de ` +
+      `qualquer grupo de 15. Não há o que otimizar aqui — suba a garantia para o ` +
+      `motor ter trabalho.</em>`;
+  } else if (acertosPedidos === GRUPO && tamanhoJogo === GRUPO) {
+    destino.innerHTML =
+      `<b>Exige os 816 jogos.</b> <em>Acertar os 15 de um grupo de 15 com um jogo ` +
+      `de 15 só acontece quando o jogo é aquele grupo. Isso não é fechamento, é a ` +
+      `lista inteira.</em>`;
+  } else {
+    destino.innerHTML =
+      `Cada jogo de ${tamanhoJogo} já acerta <b>${minimoAutomatico}</b> de ` +
+      `qualquer grupo, sem esforço. <em>Você está pedindo <b>${acertosPedidos}</b> ` +
+      `— é aí que o motor trabalha.</em>`;
+  }
+}
+
+document.querySelectorAll('#tamanho-jogo .opcao').forEach((botao) => {
+  botao.addEventListener('click', () => {
+    tamanhoJogo = Number(botao.dataset.k);
+    document.querySelectorAll('#tamanho-jogo .opcao').forEach((b) => {
+      b.classList.toggle('ativa', b === botao);
+    });
+    montarOpcoesDeAcerto();
+  });
+});
+
+$('limpar-18').addEventListener('click', () => {
+  escolhidos.clear();
+  pintarSelecao18();
+});
+
+$('sortear-18').addEventListener('click', () => {
+  const todos = Array.from({ length: UNIVERSO_18 }, (_, i) => i + 1);
+  for (let i = todos.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [todos[i], todos[j]] = [todos[j], todos[i]];
+  }
+  escolhidos = new Set(todos.slice(0, ESCOLHER).sort((a, b) => a - b));
+  pintarSelecao18();
+});
+
+$('iniciar-18').addEventListener('click', () => {
+  if (escolhidos.size !== ESCOLHER) return;
+
+  // O pool é a seleção do usuário, com os rótulos que ele marcou — não `1..18`.
+  // O motor sempre aceitou pool esparso; é o que faz as cartelas saírem com os
+  // números de verdade, prontos para apostar.
+  const configuracao = {
+    universo: UNIVERSO_18,
+    pool: [...escolhidos].sort((a, b) => a - b),
+    cartela: tamanhoJogo,
+    alvo: GRUPO,
+    intersecao: acertosPedidos,
+    orcamento: null,
+    semente: Number($('semente').value) || 1,
+  };
+
+  iniciarBusca(configuracao, null);
+});
+
 /* ─────────── a biblioteca de coberturas do mundo ─────────── */
 
 async function pintarBiblioteca() {
@@ -728,6 +911,8 @@ $('limpar-biblioteca').addEventListener('click', async () => {
 });
 
 pintarBiblioteca();
+montarGrade25();
+montarOpcoesDeAcerto();
 
 /* ─────────── importar um fechamento pronto ─────────── */
 
@@ -910,7 +1095,11 @@ $('compartilhar').addEventListener('click', async () => {
 });
 
 function textoDoFechamento() {
-  const c = lerConfiguracao();
+  // A configuração da busca em curso, e não o que está no formulário: a
+  // tela Configurar pode ter sido editada durante a busca, e a ferramenta
+  // 18 de 25 nem passa por ela. O cabeçalho tem de descrever o que produziu
+  // estas cartelas.
+  const c = configuracaoDaBusca ?? lerConfiguracao();
   const cabecalho =
     `# Sonho Lúcido — ${melhorCartelas.length} cartelas\n` +
     `# universo ${c.universo}, pool ${c.pool.length}, ${c.cartela} por cartela\n`;
