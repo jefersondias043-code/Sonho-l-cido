@@ -3,6 +3,8 @@ resolver = "2"
 members = [
     "crates/motor-core",
     "crates/motor-busca",
+    "crates/motor-persistencia",
+    "crates/motor-cli",
 ]
 
 [workspace.package]

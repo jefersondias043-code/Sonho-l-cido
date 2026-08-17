@@ -1,0 +1,21 @@
+[package]
+name = "motor-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Interface de linha de comando do Sonho Lúcido"
+
+[[bin]]
+name = "sonho-lucido"
+path = "src/main.rs"
+
+[dependencies]
+motor-core = { workspace = true }
+motor-busca = { workspace = true }
+motor-persistencia = { workspace = true }
+
+anyhow = { workspace = true }
+clap = { workspace = true }
+ctrlc = "3"

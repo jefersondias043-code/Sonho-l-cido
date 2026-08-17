@@ -11,7 +11,8 @@ enquanto houver tempo computacional disponível.
 > solução possível."*
 
 A especificação conceitual completa está em
-[`docs/conceito-original.txt`](docs/conceito-original.txt).
+[`docs/conceito-original.txt`](docs/conceito-original.txt). Os parágrafos citados
+ao longo do código (§7, §9.4, §36…) referem-se a ela.
 
 ---
 
@@ -26,7 +27,74 @@ Ele conhece apenas parâmetros matemáticos. Não existe — e não deve existir
 nenhum `if` de modalidade em lugar nenhum do código. Uma modalidade nova é
 apenas uma escolha diferente de números.
 
-## A regra de cobertura
+## Começando
+
+```bash
+cargo build --release
+```
+
+O binário sai em `target/release/sonho-lucido`.
+
+### Criar um fechamento do zero
+
+```bash
+sonho-lucido criar --universo 60 --pool 16 --cartela 4 --cobrir 2 --tempo 5s
+```
+
+```
+  universo 60 | pool 16 | cartela 4
+  regra: cobrir todo subconjunto de 2 elementos do pool
+  limite inferior: ≥ 20 cartelas (cota de Schönheim)
+
+  solução inicial: 34 cartelas
+  ★ 29 cartelas | cobertura 100,0% | iteração 72        | via remover piores
+  ★ 25 cartelas | cobertura 100,0% | iteração 410       | via remover piores
+  ★ 23 cartelas | cobertura 100,0% | iteração 9.651     | via remover aleatórias
+  ↻ estagnação na iteração 59.651: reconstrução completa do zero
+  ★ 20 cartelas | cobertura 100,0% | iteração 71.105    | via remover piores
+
+  encerrado: optimalidade provada
+  ÓTIMO PROVADO: 20 cartelas é o mínimo matematicamente possível.
+```
+
+### Otimizar um fechamento que você já tem
+
+Universo, pool e tamanho da cartela são deduzidos do próprio arquivo:
+
+```bash
+sonho-lucido otimizar --arquivo meu-fechamento.txt --cobrir 2 --tempo 10m
+```
+
+O arquivo é uma cartela por linha. Espaço, vírgula, ponto e vírgula ou hífen
+servem como separador; linhas iniciadas por `#` são comentários.
+
+```
+# meu fechamento
+01 04 07 12
+02 05 08 14
+```
+
+O motor **não fica preso às cartelas que você forneceu** (§32). Ele pode
+remover, reorganizar e criar outras — o que importa é a regra de cobertura.
+
+### Parar e continuar
+
+`Ctrl+C` interrompe a qualquer momento. Nada se perde: cada recorde vai para o
+banco no instante em que aparece.
+
+```bash
+sonho-lucido retomar --tempo 2h
+```
+
+### Consultar o que já foi encontrado
+
+```bash
+sonho-lucido listar                    # todas as buscas gravadas
+sonho-lucido ranking --limite 10       # as melhores soluções de uma busca
+sonho-lucido exportar --saida saida.txt
+```
+
+### A regra de cobertura
 
 Toda a variedade descrita no documento conceitual (cobrir pares, cobrir trincas,
 cobrir subconjuntos, garantir acertos) cabe em **uma única formulação**:
@@ -34,27 +102,39 @@ cobrir subconjuntos, garantir acertos) cabe em **uma única formulação**:
 > Para todo subconjunto do pool com `alvo` elementos, alguma cartela precisa ter
 > pelo menos `intersecao` elementos em comum com ele.
 
-| O que se quer                             | `alvo` | `intersecao` |
-|-------------------------------------------|--------|--------------|
-| cobrir todos os pares                     | 2      | 2            |
-| cobrir todas as trincas                   | 3      | 3            |
-| cobrir todos os subconjuntos de `t`       | t      | t            |
-| garantir `t` acertos se saírem `j`        | j      | t            |
+| O que se quer                        | Argumento         |
+|--------------------------------------|-------------------|
+| cobrir todos os pares                | `--cobrir 2`      |
+| cobrir todas as trincas              | `--cobrir 3`      |
+| cobrir todo subconjunto de `t`       | `--cobrir T`      |
+| garantir `t` acertos se saírem `j`   | `--garantir J:T`  |
 
-Quando `alvo == intersecao`, isso é exatamente um **covering design** `C(p,k,t)`
-— um problema clássico, NP-difícil, estudado há décadas. Essa correspondência
-não é acidental: é ela que permite **validar o motor contra ótimos já provados
-matematicamente**, em vez de confiar que o código está certo.
+Quando alvo e interseção coincidem, o problema é exatamente um **covering
+design** `C(p,k,t)` — um problema clássico, NP-difícil, estudado há décadas.
+Essa correspondência não é acidental: é ela que permite **validar o motor contra
+ótimos já provados matematicamente**, em vez de confiar que o código está certo.
 
-## Estado atual
+## Aferição contra a literatura
 
-| Camada | Situação |
-|--------|----------|
-| Núcleo matemático (`motor-core`) | ✅ implementado e validado |
-| Motor de busca persistente (`motor-busca`) | 🚧 em construção |
-| Persistência e retomada (`motor-persistencia`) | ⬜ planejado |
-| Interface de linha de comando (`motor-cli`) | ⬜ planejado |
-| Interface visual | ⬜ planejado |
+`cargo run --release --example aferir` roda o motor contra covering designs cujo
+mínimo já foi provado, com 3 segundos por caso:
+
+| Configuração | Ótimo conhecido | Encontrado | Ótimo provado | Referência |
+|--------------|-----------------|------------|---------------|------------|
+| C(7,3,2)     | 7   | 7   | sim | plano de Fano |
+| C(9,3,2)     | 12  | 12  | sim | sistema de Steiner S(2,3,9) |
+| C(10,3,2)    | 17  | 17  | sim | cota de Schönheim exata |
+| C(11,3,2)    | 19  | 19  | sim | cota de Schönheim exata |
+| C(12,3,2)    | 24  | 24  | sim | cota de Schönheim exata |
+| C(13,3,2)    | 26  | 26  | sim | sistema de Steiner S(2,3,13) |
+| C(8,4,3)     | 14  | 14  | sim | valor clássico |
+| C(13,4,2)    | 13  | 13  | sim | plano projetivo de ordem 3 |
+| C(16,4,2)    | 20  | 20  | sim | sistema de Steiner S(2,4,16) |
+| C(21,5,2)    | 21  | 27  | —   | plano projetivo de ordem 4 |
+| C(25,5,2)    | 30  | 39  | —   | sistema de Steiner S(2,5,25) |
+
+**9 de 11 no ótimo provado, em segundos.** Os dois últimos precisam de mais
+tempo — são instâncias em que a busca local sabidamente sofre.
 
 ## Arquitetura
 
@@ -66,9 +146,21 @@ crates/
 │   ├── problema         configuração do usuário → problema matemático
 │   ├── cobertura        índice cartela → alvos atendidos (caminho quente)
 │   ├── conjunto         conjunto esparso: inserir/remover/sortear em O(1)
-│   ├── solucao          solução + cobertura mantidas em sincronia incremental
+│   ├── solucao          solução + cobertura em sincronia incremental
 │   ├── avaliacao        o que significa "melhor" (chave de custo ordenada)
 │   └── limites          limites inferiores: Schönheim e contagem
+│
+├── motor-busca/         a busca persistente e auto-reconstrutiva
+│   ├── operadores       §9    oito formas de destruir parte da solução
+│   ├── construcao       §9.4  reconstrução gulosa com ruído (GRASP)
+│   ├── aceitacao        §11   aceitação tardia: quando aceitar piorar
+│   ├── adaptativo       §36   pesos que aprendem qual operador serve
+│   ├── arquivo          §17-20 elites por qualidade e diversidade
+│   ├── controle         §15-16 parar e continuar
+│   └── motor            §7-8  o laço, com o recorde protegido
+│
+├── motor-persistencia/  banco SQLite de soluções e retomada
+└── motor-cli/           a linha de comando
 ```
 
 ### As três decisões que sustentam a performance
@@ -79,8 +171,21 @@ crates/
    subconjunto um inteiro único em `0..C(p,j)`, então a cobertura é um vetor
    plano, não um mapa de conjuntos.
 3. **A cobertura é incremental.** Adicionar ou remover uma cartela atualiza
-   apenas os alvos daquela cartela — dezenas ou centenas de posições — em vez de
-   recalcular dezenas de milhares.
+   apenas os alvos daquela cartela; desfazer uma tentativa recusada mexe só na
+   diferença. Recalcular do zero custaria `O(total_alvos)` por iteração e
+   inviabilizaria a busca.
+
+### A estratégia de busca: perseguir cardinalidade fixa
+
+"Minimizar cartelas" é vago demais para guiar uma busca local. O motor fixa uma
+meta — *resolver com exatamente N cartelas* — e minimiza apenas os alvos
+descobertos. Ao fechar a cobertura, registra o recorde e baixa a meta para
+`N − 1`.
+
+Isso transforma um problema de otimização difuso em uma sequência de problemas
+de viabilidade bem definidos, cada um com um gradiente claro para seguir. O
+mesmo mecanismo atende cobertura máxima sob orçamento: a meta simplesmente para
+de descer.
 
 ### As duas defesas que sustentam a confiança
 
@@ -89,11 +194,10 @@ Um otimizador rápido que devolve resposta errada é pior que um lento.
 1. **Oráculo independente.** `contagens_por_forca_bruta` recalcula a cobertura
    por enumeração exaustiva, sem compartilhar caminho de código com a versão
    incremental. Os testes confrontam as duas ao longo de sequências aleatórias
-   de inserção e remoção.
+   de inserção e remoção, e depois de cada operador.
 2. **Validação contra a literatura.** Os limites inferiores reproduzem números
-   de cobertura já provados — `C(v,3,2)` para `v = 3..13`, o plano projetivo
-   `S(2,4,13)`, o sistema de Steiner `S(2,4,16)`. Se a matemática do projeto
-   divergir da matemática publicada, os testes quebram.
+   de cobertura já provados. Se a matemática do projeto divergir da matemática
+   publicada, os testes quebram.
 
 ## Melhor encontrado ≠ melhor possível
 
@@ -105,16 +209,40 @@ não prova que 28 seja impossível.
   cota de Schönheim ou por contagem.
 - **Gap:** `(UB − LB) / LB`.
 
-Quando `LB == UB`, e só então, o resultado é declarado **ótimo provado**. Em
-qualquer outro caso o sistema diz apenas *"melhor solução conhecida: N cartelas"*
-— porque é só isso que ele sabe.
+Quando `LB == UB`, e só então, o resultado é declarado **ótimo provado** e a
+busca encerra sozinha — não há mais nada a procurar. Em qualquer outro caso o
+sistema diz apenas *"melhor solução conhecida: N cartelas"*, porque é só isso
+que ele sabe.
+
+## Estado atual
+
+| Camada | Situação |
+|--------|----------|
+| Núcleo matemático (`motor-core`) | ✅ implementado e validado |
+| Motor de busca persistente (`motor-busca`) | ✅ implementado e aferido |
+| Persistência e retomada (`motor-persistencia`) | ✅ implementado |
+| Interface de linha de comando (`motor-cli`) | ✅ implementado |
+| Interface visual | ⬜ planejado |
+| Busca em paralelo (múltiplos núcleos) | ⬜ planejado |
+
+### Limitações conhecidas
+
+- **Garantias parciais grandes são lentas.** Quando `alvo > interseção` e o pool
+  é grande, cada avaliação de cartela percorre milhares de alvos. O orçamento de
+  trabalho por cartela evita o pior caso, mas a taxa de iteração cai de centenas
+  de milhares para algumas centenas por segundo. Um cache de alvos por cartela
+  resolveria a maior parte disso.
+- **Instâncias grandes de covering design ficam acima do ótimo.** C(21,5,2) e
+  C(25,5,2) param 28-30% acima em execuções de segundos.
+- **Execução em um núcleo só.** O motor é sequencial. Buscar em paralelo, com
+  arquivo de elites compartilhado, é o próximo ganho grande.
 
 ## Desenvolvimento
 
 ```bash
-cargo test              # inclui a validação contra a literatura
-cargo clippy --all-targets -- -D warnings
-cargo build --release
+cargo test --workspace                          # 149 testes
+cargo clippy --workspace --all-targets -- -D warnings
+cargo run --release --example aferir            # aferição contra a literatura
 ```
 
 ## Nota sobre uso em jogos de sorteio
@@ -128,10 +256,10 @@ menos `t` acertos. É um resultado real e verificável — e é exatamente isso 
 este motor otimiza.
 
 O que um fechamento **não** faz é alterar a probabilidade de os números
-sorteados caírem no pool, nem o valor esperado de qualquer aposta. Reduzir de 100
-para 29 cartelas preservando a mesma garantia economiza 71% do custo para obter
-a mesma propriedade matemática — isso é otimização de custo, não previsão de
-resultado. Nenhuma parte deste projeto prevê sorteios.
+sorteados caírem no pool, nem o valor esperado de qualquer aposta. Reduzir de
+100 para 29 cartelas preservando a mesma garantia economiza 71% do custo para
+obter a mesma propriedade matemática — isso é otimização de custo, não previsão
+de resultado. Nenhuma parte deste projeto prevê sorteios.
 
 ## Licença
 
