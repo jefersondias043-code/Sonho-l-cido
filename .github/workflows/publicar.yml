@@ -7,19 +7,26 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# Publica empurrando o conteúdo para a branch `gh-pages`.
+#
+# O caminho "oficial" (actions/configure-pages + deploy-pages) exige que o
+# GitHub Pages já esteja habilitado nas configurações do repositório, e o token
+# do fluxo não tem permissão para habilitá-lo — nem com `enablement: true`. Isso
+# criava um impasse: a primeira publicação sempre falhava até alguém abrir as
+# configurações manualmente.
+#
+# Uma branch chamada `gh-pages` liga o Pages sozinha na primeira vez que
+# aparece. Só precisa de permissão de escrita no repositório, que o fluxo já
+# tem.
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
-# Uma publicação por vez. Envios em sequência não devem se atropelar, mas
-# também não vale cancelar uma que já começou — ela pode ser a boa.
 concurrency:
   group: pages
   cancel-in-progress: false
 
 jobs:
-  construir:
+  publicar:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -65,22 +72,41 @@ jobs:
       - name: Construir o site
         run: ./construir-web.sh
 
-      # `enablement` liga o GitHub Pages sozinho na primeira execução, em vez
-      # de exigir que alguém vá às configurações do repositório marcar a opção.
-      - uses: actions/configure-pages@v5
-        with:
-          enablement: true
+      - name: Testar a interface num navegador
+        run: |
+          # Sob a mesma subpasta em que o GitHub Pages serve. Um caminho
+          # absoluto funcionaria na raiz e quebraria só depois de publicado.
+          npm install --no-save playwright
+          npx playwright install --with-deps chromium
+          node web/testar.mjs "/${GITHUB_REPOSITORY#*/}/"
 
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: site
+      - name: Publicar na branch gh-pages
+        run: |
+          set -euo pipefail
 
-  publicar:
-    needs: construir
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.publicacao.outputs.page_url }}
-    steps:
-      - id: publicacao
-        uses: actions/deploy-pages@v4
+          # Um repositório novo dentro de site/, com um único commit. A branch
+          # de publicação não guarda histórico de propósito: ela é resultado de
+          # build, e manter versões antigas de WebAssembly só faria o clone
+          # crescer sem servir para nada.
+          cd site
+          git init -q
+          git checkout -qb gh-pages
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -qm "Publicação de ${GITHUB_SHA::7}
+
+          Conteúdo gerado por construir-web.sh. Esta branch existe apenas para o
+          GitHub Pages servir; não editar aqui."
+
+          git push -q --force \
+            "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+            gh-pages
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Onde ficou
+        run: |
+          dono="${GITHUB_REPOSITORY%%/*}"
+          nome="${GITHUB_REPOSITORY#*/}"
+          echo "Publicado em https://${dono}.github.io/${nome}/"

@@ -21,6 +21,24 @@ import { extname, join, normalize } from 'node:path';
 const RAIZ = new URL('../site/', import.meta.url).pathname;
 const PORTA = 8123;
 
+/*
+ * Sob qual caminho servir o site.
+ *
+ * O GitHub Pages de um projeto não serve na raiz do domínio, e sim em
+ * `/nome-do-repositorio/`. Um caminho absoluto que funciona perfeitamente em
+ * `localhost:8123/` aponta para o lugar errado em produção — e a falha só
+ * apareceria depois de publicado. Rodar o teste sob uma subpasta reproduz a
+ * condição real antes de qualquer publicação.
+ *
+ *   node web/testar.mjs                    # na raiz
+ *   node web/testar.mjs /Sonho-l-cido/     # como no GitHub Pages
+ */
+const BASE = (() => {
+  const bruto = process.argv[2] ?? '/';
+  const comInicio = bruto.startsWith('/') ? bruto : `/${bruto}`;
+  return comInicio.endsWith('/') ? comInicio : `${comInicio}/`;
+})();
+
 // As capturas ficam fora de `site/`: aquilo é o que vai ao ar, e captura de
 // tela de teste não tem por que ser publicada.
 const CAPTURAS = new URL('../capturas/', import.meta.url).pathname;
@@ -37,10 +55,27 @@ const TIPOS = {
   '.svg': 'image/svg+xml',
 };
 
+/*
+ * Tudo que o navegador pediu, com o que o servidor respondeu.
+ *
+ * Registrar aqui, e não no navegador, é o que torna a checagem completa: o
+ * WebAssembly é buscado de dentro do Web Worker, e os eventos de rede da
+ * página principal não enxergam as requisições dele.
+ */
+const pedidos = [];
+
 function servir() {
   const servidor = createServer(async (req, res) => {
+    const alvo = req.url.split('?')[0];
     try {
       let caminho = decodeURIComponent(req.url.split('?')[0]);
+      if (BASE !== '/') {
+        if (!caminho.startsWith(BASE)) {
+          res.writeHead(404).end('fora da base');
+          return;
+        }
+        caminho = caminho.slice(BASE.length - 1);
+      }
       if (caminho.endsWith('/')) caminho += 'index.html';
       const arquivo = join(RAIZ, normalize(caminho).replace(/^(\.\.[/\\])+/, ''));
       const conteudo = await readFile(arquivo);
@@ -48,8 +83,10 @@ function servir() {
         'Content-Type': TIPOS[extname(arquivo)] ?? 'application/octet-stream',
       });
       res.end(conteudo);
+      pedidos.push({ caminho: alvo, status: 200 });
     } catch {
       res.writeHead(404).end('não encontrado');
+      pedidos.push({ caminho: alvo, status: 404 });
     }
   });
   return new Promise((ok) => servidor.listen(PORTA, () => ok(servidor)));
@@ -90,10 +127,11 @@ pagina.on('console', (m) => {
 });
 pagina.on('pageerror', (e) => errosDeConsole.push(String(e)));
 
-console.log('Teste de ponta a ponta — interface no iPhone\n');
+
+console.log(`Teste de ponta a ponta — interface no iPhone (servindo em ${BASE})\n`);
 
 try {
-  await pagina.goto(`http://localhost:${PORTA}/`, { waitUntil: 'networkidle' });
+  await pagina.goto(`http://localhost:${PORTA}${BASE}`, { waitUntil: 'networkidle' });
 
   marcar(await pagina.locator('h1').isVisible(), 'a página carrega');
 
@@ -113,10 +151,30 @@ try {
 
   await pagina.screenshot({ path: 'capturas/captura-configurar.png' });
 
+
+
   // ─── busca ───
   await pagina.click('#iniciar');
   await pagina.waitForSelector('#buscar.ativo', { timeout: 15000 });
   marcar(true, 'iniciar leva para a tela de busca');
+
+  // Só agora o worker existe e o WebAssembly foi buscado. Um caminho absoluto
+  // funcionaria na raiz e falharia aqui — que é exatamente a condição do
+  // GitHub Pages.
+  const wasm = pedidos.find((p) => p.caminho.endsWith('.wasm'));
+  marcar(
+    !!wasm && wasm.status === 200 && wasm.caminho.startsWith(BASE),
+    'o WebAssembly veio do caminho certo',
+    wasm ? `${wasm.caminho} → ${wasm.status}` : 'nenhuma requisição .wasm'
+  );
+
+  const naoServidos = pedidos.filter((p) => p.status >= 400);
+  marcar(
+    naoServidos.length === 0,
+    'nenhum arquivo faltando sob a subpasta',
+    naoServidos.map((p) => `${p.caminho} → ${p.status}`).join(', ') ||
+      `${pedidos.length} pedidos, todos servidos`
+  );
 
   // O motor precisa chegar ao ótimo provado; C(16,4,2) leva alguns segundos.
   await pagina.waitForSelector('#selo-otimo:not([hidden])', { timeout: 90000 });

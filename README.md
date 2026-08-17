@@ -285,7 +285,8 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo run --release --example aferir            # aferição contra a literatura
 
 ./construir-web.sh                              # monta o site em site/
-node web/testar.mjs                             # testa a interface num navegador
+node web/testar.mjs                             # testa a interface na raiz
+node web/testar.mjs /Sonho-l-cido/              # testa sob a subpasta do Pages
 python3 -m http.server -d site 8000             # experimenta localmente
 ```
 
@@ -295,6 +296,12 @@ JavaScript** — sem tocar no código Rust que a produziu. Foi ele que revelou d
 defeitos que nenhum teste unitário pegaria: uma mensagem perdida entre a
 interface e o worker durante o carregamento do WebAssembly, e um parâmetro
 `u64` que o JavaScript recusava por esperar `BigInt`.
+
+O argumento de subpasta importa: o GitHub Pages não serve na raiz do domínio,
+e sim em `/Sonho-l-cido/`. Um caminho absoluto passaria em `localhost:8000/` e
+quebraria só depois de publicado. O teste roda sob a subpasta e confere, pelo
+registro do próprio servidor, que todo arquivo — inclusive o WebAssembly, que
+é buscado de dentro do Web Worker — veio do lugar certo.
 
 ## Nota sobre uso em jogos de sorteio
 

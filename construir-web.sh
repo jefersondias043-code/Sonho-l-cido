@@ -30,8 +30,12 @@ fi
 echo "==> compilando motor-web para wasm32-unknown-unknown"
 cargo build --release --target wasm32-unknown-unknown -p motor-web
 
+# Recomeça do zero. Sem isto, arquivos de uma construção anterior que já não
+# fazem parte do projeto continuariam sendo publicados junto.
+rm -rf "$destino"
+mkdir -p "$destino"
+
 echo "==> gerando as ligações JavaScript"
-rm -rf "$destino/wasm"
 wasm-bindgen \
     --target web \
     --no-typescript \
@@ -41,9 +45,9 @@ wasm-bindgen \
 echo "==> copiando a interface"
 cp -r web/. "$destino/"
 
-# O gerador de ícones é ferramenta de desenvolvimento; os PNGs que ele produz
-# são versionados, então ele não precisa ir para o ar.
-rm -f "$destino/gerar-icones.py"
+# Ferramentas de desenvolvimento não vão ao ar: o gerador de ícones (os PNGs
+# que ele produz são versionados) e o teste de navegador.
+rm -f "$destino/gerar-icones.py" "$destino/testar.mjs"
 
 # O GitHub Pages roda Jekyll por padrão, que ignora arquivos e pastas iniciadas
 # por underline e pode mexer no que não deve. Este arquivo desliga isso.
