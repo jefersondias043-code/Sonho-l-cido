@@ -793,7 +793,17 @@ function lotPintarTudo() {
         }.</em>`;
 
   lotMontarOpcoesDeJogo();
-  $('lot-iniciar').disabled = faltam !== 0;
+  // Um botão desabilitado que não diz o que falta parece quebrado: a pessoa
+  // toca, nada acontece, e nada na tela explica. O rótulo passa a ser a
+  // instrução enquanto a seleção não está completa.
+  const botao = $('lot-iniciar');
+  botao.disabled = faltam !== 0;
+  botao.textContent =
+    faltam === 0
+      ? 'Carregar fechamento'
+      : `Escolha ${faltam === lotPool ? lotPool : `mais ${faltam}`} dezena${
+          faltam === 1 ? '' : 's'
+        }`;
 }
 
 function lotMontarOpcoesDeJogo() {
@@ -991,7 +1001,6 @@ $('lot-iniciar').addEventListener('click', async () => {
             total - cobertos
           )} sorteios ficaram de fora. O primeiro deles: ${falha.join(' ')}.</em>`;
 
-    $('lot-simulador-cartao').hidden = false;
     lotPintarEconomia();
 
     // E agora o motor, para tentar superar o que o banco entregou.

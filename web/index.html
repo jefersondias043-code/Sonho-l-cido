@@ -193,7 +193,7 @@
 <section id="lotinha" class="painel">
 
   <div class="cartao">
-    <h2>Quantas dezenas você vai jogar</h2>
+    <h2>1 · Quantas dezenas você vai jogar</h2>
     <div class="opcoes" id="lot-pool"></div>
     <div class="grade-numeros" id="lot-grade"></div>
     <div class="referencia" id="lot-contagem"></div>
@@ -204,9 +204,10 @@
   </div>
 
   <div class="cartao">
-    <h2>Tamanho de cada jogo</h2>
+    <h2>2 · Tamanho de cada jogo</h2>
     <p class="ajuda">
-      Jogos menores pagam mais, mas exigem mais jogos para fechar o pool.
+      Jogos menores pagam mais, mas exigem mais jogos para fechar o pool. As
+      opções mudam conforme o pool: o jogo nunca pode ser maior que ele.
     </p>
     <div class="opcoes" id="lot-jogo"></div>
     <div class="referencia" id="lot-explicacao"></div>
@@ -234,15 +235,18 @@
 
   <button class="principal" id="lot-iniciar" disabled>Carregar fechamento</button>
 
-  <div class="cartao" id="lot-resultado-cartao" hidden>
-    <div class="rotulo">Conferência independente</div>
-    <div class="referencia" id="lot-conferencia">conferindo…</div>
+  <div class="cartao" id="lot-resultado-cartao">
+    <div class="rotulo">3 · Conferência independente</div>
+    <div class="referencia" id="lot-conferencia">
+      <em>Ao carregar, cada sorteio possível dentro do seu pool é conferido um a
+      um — sem consultar o motor que produziu o fechamento.</em>
+    </div>
   </div>
 
   <!-- O simulador: testar a estrutura contra qualquer resultado hipotético,
        sem esperar sorteio nenhum. -->
-  <details class="cartao" id="lot-simulador-cartao" hidden>
-    <summary>Simular um resultado</summary>
+  <details class="cartao" id="lot-simulador-cartao">
+    <summary>4 · Simular um resultado</summary>
     <p class="ajuda">
       Digite 15 dezenas e veja como o seu fechamento teria se saído.
     </p>
@@ -252,8 +256,8 @@
     <div class="referencia" id="lot-simulacao" hidden></div>
   </details>
 
-  <details class="cartao">
-    <summary>Comparar todas as combinações</summary>
+  <details class="cartao" open>
+    <summary>As 28 combinações da modalidade</summary>
     <p class="ajuda">
       As 28 combinações da modalidade. Onde diz "em aberto", ninguém no mundo
       sabe o mínimo — é onde o motor tem trabalho de verdade.
