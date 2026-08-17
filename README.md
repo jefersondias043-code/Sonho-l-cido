@@ -287,6 +287,7 @@ cargo run --release --example aferir            # aferição contra a literatura
 ./construir-web.sh                              # monta o site em site/
 node web/testar.mjs                             # testa a interface na raiz
 node web/testar.mjs /Sonho-l-cido/              # testa sob a subpasta do Pages
+node web/testar-atualizacao.mjs                 # testa a atualização automática
 python3 -m http.server -d site 8000             # experimenta localmente
 ```
 

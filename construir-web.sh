@@ -47,7 +47,28 @@ cp -r web/. "$destino/"
 
 # Ferramentas de desenvolvimento não vão ao ar: o gerador de ícones (os PNGs
 # que ele produz são versionados) e o teste de navegador.
-rm -f "$destino/gerar-icones.py" "$destino/testar.mjs"
+rm -f "$destino/gerar-icones.py" "$destino"/testar*.mjs
+
+# Carimba o service worker com um resumo do conteúdo do site.
+#
+# É isto que faz uma publicação nova de fato chegar ao aparelho do usuário. O
+# navegador só atualiza um service worker quando os bytes daquele arquivo
+# mudam; com um número de versão escrito à mão, basta esquecer de trocá-lo uma
+# vez para congelar o aplicativo de todo mundo na versão antiga — foi
+# exatamente o que aconteceu.
+#
+# Derivando o carimbo do conteúdo, a regra passa a ser automática nos dois
+# sentidos: se algum arquivo mudou, o carimbo muda; se nada mudou, ele
+# permanece igual e o navegador não reinstala à toa.
+echo "==> carimbando o service worker"
+carimbo=$(
+    find "$destino" -type f ! -name sw.js -exec sha256sum {} + \
+        | awk '{print $1}' | sort | sha256sum | cut -c1-12
+)
+# `sw.js` está fora do resumo por necessidade: ele contém o próprio carimbo, e
+# incluí-lo criaria uma dependência circular.
+sed -i "s/__CARIMBO_DA_CONSTRUCAO__/$carimbo/" "$destino/sw.js"
+echo "    versão desta construção: $carimbo"
 
 # O GitHub Pages roda Jekyll por padrão, que ignora arquivos e pastas iniciadas
 # por underline e pode mexer no que não deve. Este arquivo desliga isso.

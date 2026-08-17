@@ -634,8 +634,83 @@ if (localStorage.getItem(CHAVE_SALVO)) {
   }
 }
 
-// O service worker é o que faz o aplicativo abrir sem internet depois da
-// primeira visita. A ausência dele não impede nada de funcionar.
+/* ─────────── atualização do aplicativo ─────────── */
+
+/*
+ * O service worker faz o aplicativo abrir sem internet — e, mal configurado,
+ * faz o usuário ficar preso numa versão antiga para sempre. Foi o que
+ * aconteceu: uma correção era publicada, chegava ao servidor, e o aparelho
+ * continuava servindo a cópia guardada, sem sinal nenhum de que havia algo
+ * novo.
+ *
+ * Três medidas fecham essa porta, e nenhuma depende de o usuário fazer nada:
+ *
+ * - `updateViaCache: 'none'` impede que o próprio `sw.js` venha do cache do
+ *   navegador. Se ele viesse, a atualização nunca seria percebida.
+ * - `update()` a cada abertura força a verificação, em vez de esperar a
+ *   heurística do navegador.
+ * - Quando a versão nova assume o controle, a página recarrega uma vez
+ *   sozinha. Sem isso, o usuário veria o código antigo até fechar e abrir de
+ *   novo por conta própria — e não teria como saber que precisava.
+ */
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('./sw.js').catch(() => {});
+  // Guardado antes de qualquer registro: numa primeira visita não existe
+  // controlador, e a tomada de controle inicial não deve provocar recarga.
+  const jaEraControlada = Boolean(navigator.serviceWorker.controller);
+  let recarregando = false;
+
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!jaEraControlada || recarregando) return;
+    recarregando = true;
+    location.reload();
+  });
+
+  navigator.serviceWorker.addEventListener('message', ({ data }) => {
+    if (data?.tipo === 'versao') mostrarVersao(data.versao);
+  });
+
+  navigator.serviceWorker
+    .register('./sw.js', { updateViaCache: 'none' })
+    .then((registro) => {
+      registro.update().catch(() => {});
+      perguntarVersao();
+    })
+    .catch(() => {});
+
+  // A versão é perguntada de novo a cada troca de controlador, para o número
+  // na tela acompanhar a atualização em vez de ficar mostrando a anterior.
+  navigator.serviceWorker.addEventListener('controllerchange', perguntarVersao);
+} else {
+  mostrarVersao(null);
+}
+
+/**
+ * Pergunta ao service worker em que versão ele está.
+ *
+ * Espera por `ready` de propósito: numa primeira visita ainda não existe
+ * controlador, e perguntar naquele instante seria falar com ninguém — o número
+ * simplesmente nunca apareceria. `ready` resolve quando há um service worker
+ * ativo, controlando esta página ou não.
+ */
+async function perguntarVersao() {
+  if (!('serviceWorker' in navigator)) return;
+  try {
+    const registro = await navigator.serviceWorker.ready;
+    (navigator.serviceWorker.controller ?? registro.active)?.postMessage({ tipo: 'versao' });
+  } catch {
+    /* sem service worker: a versão fica em branco, e nada mais é afetado */
+  }
+}
+
+/**
+ * Mostra qual versão está de fato rodando no aparelho.
+ *
+ * Serve para responder, sem adivinhação, à pergunta "a correção chegou aqui?".
+ * Sem esse número, a única forma de saber era comparar comportamentos — que é
+ * exatamente o que falha quando o cache serve código velho.
+ */
+function mostrarVersao(versao) {
+  const destino = $('versao');
+  if (!destino) return;
+  destino.textContent = versao ? `versão ${versao.replace('sonho-lucido-', '')}` : '';
 }

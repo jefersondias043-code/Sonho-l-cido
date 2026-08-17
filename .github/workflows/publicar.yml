@@ -80,6 +80,10 @@ jobs:
           npx playwright install --with-deps chromium
           node web/testar.mjs "/${GITHUB_REPOSITORY#*/}/"
 
+          # E a atualização automática, que é o que garante que uma correção
+          # publicada chegue de fato ao aparelho de quem já usava o aplicativo.
+          node web/testar-atualizacao.mjs
+
       - name: Publicar na branch gh-pages
         run: |
           set -euo pipefail

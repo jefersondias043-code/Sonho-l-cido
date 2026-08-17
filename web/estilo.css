@@ -499,3 +499,13 @@ main { padding: 8px 16px 0; }
 @media (min-width: 560px) {
   .grade { grid-template-columns: repeat(6, 1fr); }
 }
+
+/* Marca da construção que está rodando no aparelho. Discreta, mas presente:
+   é o que permite conferir se uma correção publicada chegou até aqui. */
+.versao {
+  display: inline-block;
+  margin-top: 6px;
+  font-variant-numeric: tabular-nums;
+  font-size: 11.5px;
+  opacity: 0.65;
+}
