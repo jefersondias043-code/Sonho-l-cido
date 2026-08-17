@@ -20,6 +20,7 @@
 
 import * as historico from './historico.js';
 import * as biblioteca from './biblioteca.js';
+import * as lotinha from './lotinha.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -679,187 +680,367 @@ async function iniciarBusca(configuracao, fechamentoColado) {
   comecar({ configuracao, fechamento: fechamentoColado, doMundo });
 }
 
-/* ─────────── fechamento 18 de 25 ─────────── */
+/* ─────────── Lotinha ─────────── */
 
 /*
- * Uma ferramenta fechada em torno de um cenário só.
+ * A modalidade inteira, numa tela só.
  *
- * Todo o resto do aplicativo é deliberadamente geral: o motor não conhece
- * modalidade nenhuma, e a tela Configurar expõe os sete números que definem
- * qualquer problema. Isso é força, e também é o problema — para quem sempre
- * resolve o mesmo cenário, são sete oportunidades de errar, e um erro produz um
- * problema diferente do pretendido sem nenhum aviso, porque todos os valores
- * são configurações legítimas.
+ * Escolhem-se de 17 a 23 dezenas entre 25; ganha-se quando as 15 sorteadas caem
+ * todas dentro do conjunto escolhido. São 28 combinações de (pool, tamanho do
+ * jogo), e o fechamento de cada uma já vem pronto no aplicativo — conferido
+ * sorteio a sorteio antes de ser gravado.
  *
- * Aqui os números do cenário são fixos, e a escolha que sobra é a que pertence
- * ao usuário: quais 18 números jogar, e qual garantia perseguir.
- *
- * ## A matemática que a tela precisa explicar
- *
- * Jogo e grupo vivem dentro dos mesmos 18 números, então qualquer jogo de `k`
- * números já acerta pelo menos `k + 15 − 18` de qualquer grupo de 15, sem
- * esforço nenhum. Um jogo de 15 sempre acerta 12; um de 18 sempre acerta os 15.
- *
- * Isso muda o que faz sentido pedir: garantir 12 com jogos de 15 é gratuito — um
- * jogo só — e garantir 15 exige os 816 grupos inteiros, porque só o próprio
- * grupo contém o grupo. O trabalho de verdade fica no meio, e a tela precisa
- * dizer isso, em vez de deixar alguém pedir o gratuito achando que otimizou.
+ * A tela não recalcula nada ao abrir: consulta o banco, valida, mostra. O motor
+ * entra depois, para tentar superar o que já existe. Nos dez casos em que o
+ * mínimo é problema aberto na matemática, é aí que ele tem trabalho de verdade.
  */
 
-const UNIVERSO_18 = 25;
-const ESCOLHER = 18;
-const GRUPO = 15;
+let lotPool = 18;
+let lotJogo = 17;
+let lotDezenas = new Set();
+let lotFechamento = null;
 
-let escolhidos = new Set();
-let tamanhoJogo = 15;
-let acertosPedidos = 13;
+const lotCotacao = {};
 
-function montarGrade25() {
-  const grade = $('grade-25');
-  grade.innerHTML = '';
-  for (let n = 1; n <= UNIVERSO_18; n++) {
-    const botao = document.createElement('button');
-    botao.type = 'button';
-    botao.className = 'numero';
-    botao.textContent = String(n).padStart(2, '0');
-    botao.dataset.n = String(n);
-    botao.addEventListener('click', () => alternarNumero(n));
-    grade.appendChild(botao);
+function lotMontar() {
+  // Tamanho do pool.
+  const alvoPool = $('lot-pool');
+  alvoPool.innerHTML = '';
+  for (let p = lotinha.MENOR_POOL; p <= lotinha.MAIOR_POOL; p++) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'opcao';
+    b.textContent = String(p);
+    b.dataset.pool = String(p);
+    b.addEventListener('click', () => {
+      lotPool = p;
+      // A seleção que sobra vira inválida se o pool encolheu.
+      if (lotDezenas.size > p) lotDezenas = new Set([...lotDezenas].slice(0, p));
+      if (lotJogo > p) lotJogo = p;
+      lotPintarTudo();
+    });
+    alvoPool.appendChild(b);
   }
-  pintarSelecao18();
+
+  // Grade das 25 dezenas.
+  const grade = $('lot-grade');
+  grade.innerHTML = '';
+  for (let n = 1; n <= lotinha.UNIVERSO; n++) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'numero';
+    b.textContent = String(n).padStart(2, '0');
+    b.dataset.n = String(n);
+    b.addEventListener('click', () => lotAlternar(n));
+    grade.appendChild(b);
+  }
+
+  // Cotação: um campo por tamanho de jogo, vazio de propósito.
+  const cot = $('lot-cotacao');
+  cot.innerHTML = '';
+  for (let k = lotinha.MENOR_POOL; k <= lotinha.MAIOR_POOL; k++) {
+    const rotulo = document.createElement('label');
+    rotulo.className = 'campo linha';
+    rotulo.innerHTML =
+      `<span>${k} dezenas <em>— chance 1 em ` +
+      `${milhares(1 / lotinha.chanceDe(k))}</em></span>`;
+    const campo = document.createElement('input');
+    campo.type = 'number';
+    campo.min = '0';
+    campo.step = '0.01';
+    campo.inputMode = 'decimal';
+    campo.placeholder = 'quanto paga';
+    campo.addEventListener('input', () => {
+      const v = Number(campo.value);
+      if (v > 0) lotCotacao[k] = v;
+      else delete lotCotacao[k];
+      lotPintarEconomia();
+    });
+    rotulo.appendChild(campo);
+    cot.appendChild(rotulo);
+  }
+
+  lotMontarMatriz();
+  lotPintarTudo();
 }
 
-function alternarNumero(n) {
-  if (escolhidos.has(n)) {
-    escolhidos.delete(n);
-  } else if (escolhidos.size < ESCOLHER) {
-    escolhidos.add(n);
-  } else {
-    avisar(`Já são ${ESCOLHER} números. Desmarque um antes de trocar.`);
+function lotAlternar(n) {
+  if (lotDezenas.has(n)) lotDezenas.delete(n);
+  else if (lotDezenas.size < lotPool) lotDezenas.add(n);
+  else {
+    avisar(`Já são ${lotPool} dezenas. Desmarque uma antes de trocar.`);
     return;
   }
-  pintarSelecao18();
+  lotPintarTudo();
 }
 
-function pintarSelecao18() {
-  document.querySelectorAll('#grade-25 .numero').forEach((b) => {
-    b.classList.toggle('escolhido', escolhidos.has(Number(b.dataset.n)));
+function lotPintarTudo() {
+  document.querySelectorAll('#lot-pool .opcao').forEach((b) => {
+    b.classList.toggle('ativa', Number(b.dataset.pool) === lotPool);
+  });
+  document.querySelectorAll('#lot-grade .numero').forEach((b) => {
+    b.classList.toggle('escolhido', lotDezenas.has(Number(b.dataset.n)));
   });
 
-  const faltam = ESCOLHER - escolhidos.size;
-  $('contagem-18').innerHTML =
+  const faltam = lotPool - lotDezenas.size;
+  $('lot-contagem').innerHTML =
     faltam === 0
-      ? `<b>18 de 18 escolhidos</b> <em>— ${milhares(
-          combinacoes(ESCOLHER, GRUPO)
-        )} grupos de ${GRUPO} a cobrir.</em>`
-      : `<b>${escolhidos.size} de 18 escolhidos</b> <em>— ${
-          faltam === 1 ? 'falta 1 número' : `faltam ${faltam} números`
+      ? `<b>${lotPool} de ${lotPool} escolhidas</b> <em>— ` +
+        `${milhares(lotinha.combinacoes(lotPool, 15))} sorteios possíveis dentro delas, ` +
+        `e chance de 1 em ${milhares(1 / lotinha.chanceDe(lotPool))} de o sorteio cair aqui.</em>`
+      : `<b>${lotDezenas.size} de ${lotPool} escolhidas</b> <em>— ${
+          faltam === 1 ? 'falta 1 dezena' : `faltam ${faltam} dezenas`
         }.</em>`;
 
-  $('iniciar-18').disabled = faltam !== 0;
+  lotMontarOpcoesDeJogo();
+  $('lot-iniciar').disabled = faltam !== 0;
+}
+
+function lotMontarOpcoesDeJogo() {
+  const alvo = $('lot-jogo');
+  alvo.innerHTML = '';
+  for (let k = lotinha.MENOR_POOL; k <= lotPool; k++) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'opcao';
+    b.textContent = String(k);
+    b.dataset.jogo = String(k);
+    b.addEventListener('click', () => {
+      lotJogo = k;
+      lotPintarExplicacao();
+      lotPintarEconomia();
+    });
+    alvo.appendChild(b);
+  }
+  if (lotJogo > lotPool) lotJogo = lotPool;
+  lotPintarExplicacao();
+  lotPintarEconomia();
+}
+
+function lotPintarExplicacao() {
+  document.querySelectorAll('#lot-jogo .opcao').forEach((b) => {
+    b.classList.toggle('ativa', Number(b.dataset.jogo) === lotJogo);
+  });
+
+  const { jogos, exato, piso } = lotinha.minimo(lotPool, lotJogo);
+  const destino = $('lot-explicacao');
+
+  if (lotJogo === lotPool) {
+    destino.innerHTML =
+      `<b>Um jogo só.</b> <em>Jogar as ${lotPool} dezenas de uma vez é uma aposta ` +
+      `única: ou as 15 caem dentro, ou não. Não há fechamento a fazer — para ` +
+      `fechar, o jogo precisa ser menor que o pool.</em>`;
+  } else if (exato) {
+    destino.innerHTML =
+      `<b>${milhares(jogos)} jogos</b> fecham o seu pool. <em>Este número é o ` +
+      `mínimo comprovado — não existe fechamento menor. ` +
+      (lotPool - lotJogo === 1
+        ? 'Curiosamente são sempre 16 quando o jogo tem uma dezena a menos que o pool, seja qual for o pool.'
+        : 'Vem do teorema de Turán.') +
+      `</em>`;
+  } else {
+    destino.innerHTML =
+      `<b>Mínimo desconhecido.</b> <em>Ninguém no mundo sabe quantos jogos bastam ` +
+      `aqui — é problema em aberto. O que se sabe é que não dá com menos de ` +
+      `<b>${milhares(piso)}</b>. O aplicativo traz o melhor fechamento que o ` +
+      `motor já encontrou, e você pode deixá-lo procurando um menor.</em>`;
+  }
 }
 
 /**
- * As opções de garantia que fazem sentido para o tamanho de jogo escolhido.
+ * A economia do fechamento — com os dois ramos sempre juntos.
  *
- * Abaixo do mínimo automático não há o que pedir, e no topo está o caso em que
- * só o próprio grupo serve. Mostrar os dois extremos, dizendo o que cada um
- * custa, evita que alguém escolha o gratuito imaginando ter otimizado algo.
+ * O ramo vencedor é sedutor: dezesseis jogos de 17 dezenas custam R$16 e pagam
+ * no mínimo alguns milhares. Mostrá-lo sozinho seria enganoso, porque o outro
+ * ramo acontece em mais de 99% das vezes e devolve zero. Os dois aparecem lado
+ * a lado, e o retorno esperado fecha a conta.
  */
-function montarOpcoesDeAcerto() {
-  const minimoAutomatico = tamanhoJogo + GRUPO - ESCOLHER;
-  const destino = $('acertos-garantidos');
-  destino.innerHTML = '';
+function lotPintarEconomia() {
+  const destino = $('lot-economia');
+  const cartao = $('lot-economia-cartao');
+  const { jogos, exato, piso } = lotinha.minimo(lotPool, lotJogo);
+  const quantidade = lotFechamento?.length ?? jogos ?? piso;
 
-  for (let acertos = minimoAutomatico; acertos <= GRUPO; acertos++) {
-    const botao = document.createElement('button');
-    botao.type = 'button';
-    botao.className = 'opcao';
-    botao.textContent = String(acertos);
-    botao.dataset.acertos = String(acertos);
-    botao.addEventListener('click', () => {
-      acertosPedidos = acertos;
-      pintarOpcoesDeAcerto();
-    });
-    destino.appendChild(botao);
+  if (!quantidade) {
+    cartao.hidden = true;
+    return;
   }
 
-  // Começa uma casa acima do gratuito, que é onde o motor tem trabalho a fazer.
-  if (acertosPedidos <= minimoAutomatico || acertosPedidos > GRUPO) {
-    acertosPedidos = Math.min(minimoAutomatico + 1, GRUPO);
-  }
-  pintarOpcoesDeAcerto();
-}
-
-function pintarOpcoesDeAcerto() {
-  document.querySelectorAll('#acertos-garantidos .opcao').forEach((b) => {
-    b.classList.toggle('ativa', Number(b.dataset.acertos) === acertosPedidos);
+  const valor = Number($('lot-valor').value) || 1;
+  const e = lotinha.economia({
+    pool: lotPool,
+    jogo: lotJogo,
+    quantidade,
+    cotacao: lotCotacao,
+    valorDoJogo: valor,
   });
 
-  const minimoAutomatico = tamanhoJogo + GRUPO - ESCOLHER;
-  const destino = $('explicacao-18');
+  cartao.hidden = false;
 
-  if (acertosPedidos <= minimoAutomatico) {
+  const dinheiro = (v) =>
+    v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+  if (e.multiplicador === null) {
     destino.innerHTML =
-      `<b>Um jogo só resolve.</b> <em>Como o jogo e o grupo saem dos mesmos 18 ` +
-      `números, qualquer jogo de ${tamanhoJogo} já acerta ${minimoAutomatico} de ` +
-      `qualquer grupo de 15. Não há o que otimizar aqui — suba a garantia para o ` +
-      `motor ter trabalho.</em>`;
-  } else if (acertosPedidos === GRUPO && tamanhoJogo === GRUPO) {
-    destino.innerHTML =
-      `<b>Exige os 816 jogos.</b> <em>Acertar os 15 de um grupo de 15 com um jogo ` +
-      `de 15 só acontece quando o jogo é aquele grupo. Isso não é fechamento, é a ` +
-      `lista inteira.</em>`;
-  } else {
-    destino.innerHTML =
-      `Cada jogo de ${tamanhoJogo} já acerta <b>${minimoAutomatico}</b> de ` +
-      `qualquer grupo, sem esforço. <em>Você está pedindo <b>${acertosPedidos}</b> ` +
-      `— é aí que o motor trabalha.</em>`;
+      `<div class="linha-economia"><span>Custo do fechamento</span>` +
+      `<b>${dinheiro(e.custo)}</b></div>` +
+      `<div class="linha-economia"><span>Chance de o sorteio cair no seu pool</span>` +
+      `<b>1 em ${milhares(1 / e.chanceDoPool)}</b></div>` +
+      `<p class="ajuda">Informe a cotação da sua banca acima para ver quanto ` +
+      `isso pagaria e qual o retorno esperado.</p>`;
+    return;
   }
+
+  const lucro = e.premioMinimo - e.custo;
+  destino.innerHTML =
+    `<div class="linha-economia"><span>Custo do fechamento</span>` +
+    `<b>${dinheiro(e.custo)}</b> <em>${milhares(quantidade)} jogos</em></div>` +
+
+    `<div class="linha-economia ganha"><span>Se o sorteio cair no seu pool ` +
+    `<em>(1 em ${milhares(1 / e.chanceDoPool)})</em></span>` +
+    `<b>${dinheiro(e.premioMinimo)}</b> no mínimo, ` +
+    `<em>${dinheiro(e.premioMedioQuandoGanha)} em média — saldo ` +
+    `${lucro >= 0 ? '+' : ''}${dinheiro(lucro)}</em></div>` +
+
+    `<div class="linha-economia perde"><span>Se não cair ` +
+    `<em>(${porcento(e.chanceDePerder)} das vezes)</em></span>` +
+    `<b>−${dinheiro(e.perdaQuandoPerde)}</b> <em>nada volta</em></div>` +
+
+    `<div class="linha-economia total"><span>Retorno esperado</span>` +
+    `<b>${dinheiro(e.retornoEsperado)}</b> <em>por real apostado</em></div>` +
+
+    `<p class="ajuda">O retorno esperado é fixo por jogo e apenas soma: ` +
+    `<b>nenhum arranjo de fechamento o altera</b>. Fechar muda quando você ganha ` +
+    `— com que frequência e quanto de cada vez — nunca a média.</p>`;
 }
 
-document.querySelectorAll('#tamanho-jogo .opcao').forEach((botao) => {
-  botao.addEventListener('click', () => {
-    tamanhoJogo = Number(botao.dataset.k);
-    document.querySelectorAll('#tamanho-jogo .opcao').forEach((b) => {
-      b.classList.toggle('ativa', b === botao);
-    });
-    montarOpcoesDeAcerto();
-  });
+function lotMontarMatriz() {
+  const linhas = lotinha
+    .matriz()
+    .map((l) => {
+      const quantos = l.exato ? milhares(l.jogos) : `≥ ${milhares(l.piso)}`;
+      const situacao = l.jogo === l.pool ? 'aposta única' : l.exato ? 'exato' : 'em aberto';
+      return (
+        `<tr><td>${l.pool}</td><td>${l.jogo}</td><td>${quantos}</td>` +
+        `<td class="${l.exato ? '' : 'aberto'}">${situacao}</td>` +
+        `<td>1 em ${milhares(1 / lotinha.chanceDe(l.jogo))}</td></tr>`
+      );
+    })
+    .join('');
+
+  $('lot-matriz').innerHTML =
+    '<thead><tr><th>pool</th><th>jogo</th><th>jogos</th><th>mínimo</th>' +
+    '<th>chance de 1 jogo</th></tr></thead><tbody>' + linhas + '</tbody>';
+}
+
+$('lot-limpar').addEventListener('click', () => {
+  lotDezenas.clear();
+  lotPintarTudo();
 });
 
-$('limpar-18').addEventListener('click', () => {
-  escolhidos.clear();
-  pintarSelecao18();
-});
-
-$('sortear-18').addEventListener('click', () => {
-  const todos = Array.from({ length: UNIVERSO_18 }, (_, i) => i + 1);
-  for (let i = todos.length - 1; i > 0; i--) {
+$('lot-sortear').addEventListener('click', () => {
+  const todas = Array.from({ length: lotinha.UNIVERSO }, (_, i) => i + 1);
+  for (let i = todas.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
-    [todos[i], todos[j]] = [todos[j], todos[i]];
+    [todas[i], todas[j]] = [todas[j], todas[i]];
   }
-  escolhidos = new Set(todos.slice(0, ESCOLHER).sort((a, b) => a - b));
-  pintarSelecao18();
+  lotDezenas = new Set(todas.slice(0, lotPool).sort((a, b) => a - b));
+  lotPintarTudo();
 });
 
-$('iniciar-18').addEventListener('click', () => {
-  if (escolhidos.size !== ESCOLHER) return;
+$('lot-valor').addEventListener('input', lotPintarEconomia);
 
-  // O pool é a seleção do usuário, com os rótulos que ele marcou — não `1..18`.
-  // O motor sempre aceitou pool esparso; é o que faz as cartelas saírem com os
-  // números de verdade, prontos para apostar.
-  const configuracao = {
-    universo: UNIVERSO_18,
-    pool: [...escolhidos].sort((a, b) => a - b),
-    cartela: tamanhoJogo,
-    alvo: GRUPO,
-    intersecao: acertosPedidos,
-    orcamento: null,
-    semente: Number($('semente').value) || 1,
-  };
+/**
+ * Carrega o fechamento pronto, confere, mostra — e só então oferece o motor.
+ *
+ * A ordem importa. O banco entrega a solução na hora, sem cálculo; o validador
+ * independente confirma a cobertura sem consultar quem a produziu; e a
+ * otimização é um passo separado, que o usuário decide se quer.
+ */
+$('lot-iniciar').addEventListener('click', async () => {
+  if (lotDezenas.size !== lotPool) return;
 
-  iniciarBusca(configuracao, null);
+  const dezenas = [...lotDezenas].sort((a, b) => a - b);
+  const cartao = $('lot-resultado-cartao');
+  const destino = $('lot-conferencia');
+  cartao.hidden = false;
+  destino.textContent = 'carregando o fechamento…';
+
+  try {
+    lotFechamento = await lotinha.fechamentoPara(lotPool, lotJogo, dezenas);
+    if (!lotFechamento) {
+      destino.innerHTML = '<b>Combinação sem fechamento no banco.</b>';
+      return;
+    }
+
+    destino.textContent = `conferindo ${milhares(
+      lotinha.combinacoes(lotPool, 15)
+    )} sorteios, um a um…`;
+
+    // Cede um quadro à tela antes da conferência, que pode levar segundos no
+    // pool 23 — sem isto a mensagem acima nunca chegaria a aparecer.
+    await new Promise((r) => setTimeout(r, 0));
+    const { total, cobertos, falha } = lotinha.conferirCobertura(dezenas, lotFechamento);
+
+    destino.innerHTML =
+      cobertos === total
+        ? `<b>Cobertura comprovada: 100%</b> <em>— ${milhares(total)} sorteios ` +
+          `conferidos um a um, e todos caem em algum dos ${milhares(lotFechamento.length)} ` +
+          `jogos. A conferência não consultou o motor que produziu o fechamento.</em>`
+        : `<b>Cobertura: ${porcento(cobertos / total)}</b> <em>— ${milhares(
+            total - cobertos
+          )} sorteios ficaram de fora. O primeiro deles: ${falha.join(' ')}.</em>`;
+
+    $('lot-simulador-cartao').hidden = false;
+    lotPintarEconomia();
+
+    // E agora o motor, para tentar superar o que o banco entregou.
+    const configuracao = {
+      universo: lotinha.UNIVERSO,
+      pool: dezenas,
+      cartela: lotJogo,
+      alvo: lotinha.SORTEIO,
+      intersecao: lotinha.SORTEIO,
+      orcamento: null,
+      semente: Number($('semente').value) || 1,
+    };
+    // O fechamento vai duas vezes de propósito: como semente para o motor, e
+    // como cartelas já na tela. Sem o segundo argumento, `comecar` zera a lista
+    // exibida — e a aba Resultado ficaria vazia entre carregar o fechamento e o
+    // motor devolver o primeiro estado, que é justamente quando o usuário vai
+    // olhar.
+    comecar({ configuracao, doMundo: lotFechamento }, lotFechamento);
+  } catch (erro) {
+    destino.innerHTML = `<b>Falhou:</b> ${escapar(String(erro?.message ?? erro))}`;
+  }
+});
+
+$('lot-simular').addEventListener('click', () => {
+  if (!lotFechamento) return;
+
+  const numeros = ($('lot-resultado').value.match(/\d+/g) ?? []).map(Number);
+  const destino = $('lot-simulacao');
+  destino.hidden = false;
+
+  if (numeros.length !== lotinha.SORTEIO) {
+    destino.innerHTML = `<b>Digite exatamente 15 dezenas.</b> <em>Você digitou ${numeros.length}.</em>`;
+    return;
+  }
+
+  const { distribuicao, premiados } = lotinha.simular(lotFechamento, numeros);
+  const faixas = [...distribuicao.entries()].sort((a, b) => b[0] - a[0]);
+
+  destino.innerHTML =
+    (premiados.length
+      ? `<b>${premiados.length} jogo${premiados.length > 1 ? 's' : ''} com 15 acertos.</b> ` +
+        `<em>Jogo ${premiados.map((p) => p.indice).join(', ')}.</em>`
+      : `<b>Nenhum jogo com 15.</b> <em>Nesta modalidade só 15 paga — as faixas ` +
+        `abaixo mostram o quão perto se chegou, não prêmio.</em>`) +
+    '<div class="faixas">' +
+    faixas
+      .map(([acertos, quantos]) => `<span><b>${quantos}</b> com ${acertos}</span>`)
+      .join('') +
+    '</div>';
 });
 
 /* ─────────── a biblioteca de coberturas do mundo ─────────── */
@@ -911,8 +1092,7 @@ $('limpar-biblioteca').addEventListener('click', async () => {
 });
 
 pintarBiblioteca();
-montarGrade25();
-montarOpcoesDeAcerto();
+lotMontar();
 
 /* ─────────── importar um fechamento pronto ─────────── */
 

@@ -29,7 +29,7 @@
 
 <nav class="abas" role="tablist">
   <button class="aba ativa" role="tab" data-painel="configurar">Configurar</button>
-  <button class="aba" role="tab" data-painel="fechamento18">18 de 25</button>
+  <button class="aba" role="tab" data-painel="lotinha">Lotinha</button>
   <button class="aba" role="tab" data-painel="buscar">Buscar</button>
   <button class="aba" role="tab" data-painel="resultado">Resultado</button>
   <button class="aba" role="tab" data-painel="historico">Histórico</button>
@@ -180,67 +180,91 @@
   </p>
 </section>
 
-<!-- ══════════════════ FECHAMENTO 18 DE 25 ══════════════════ -->
+<!-- ══════════════════ LOTINHA ══════════════════ -->
 <!--
-  Uma ferramenta fechada em torno de um cenário só: 25 números no universo, 18
-  escolhidos por você, e os 816 grupos de 15 que existem dentro deles.
+  A modalidade inteira: escolhem-se de 17 a 23 dezenas entre 25, o resultado da
+  Lotofácil é a referência, e ganha-se quando as 15 sorteadas caem todas dentro
+  do conjunto escolhido.
 
-  Existe porque a tela Configurar é geral demais para esse uso. Ali são sete
-  campos a acertar, e errar um só produz um problema diferente do pretendido —
-  sem nenhum aviso, porque todos são configurações legítimas. Aqui os números
-  que definem o cenário são fixos, e a única escolha que sobra é a que de fato
-  pertence a você: quais 18 números jogar, e qual garantia perseguir.
+  São 28 combinações de (pool, tamanho do jogo). O fechamento de cada uma já vem
+  pronto no aplicativo, conferido antes de ser gravado — o motor não recalcula
+  nada ao abrir a tela; ele entra depois, para tentar superar o que já existe.
 -->
-<section id="fechamento18" class="painel">
+<section id="lotinha" class="painel">
 
   <div class="cartao">
-    <h2>Escolha os seus 18 números</h2>
-    <p class="ajuda">
-      Toque para marcar. O sistema não escolhe por você — a seleção é sua, e o
-      motor trabalha exclusivamente com os números que você marcar.
-    </p>
-    <div class="grade-numeros" id="grade-25"></div>
-    <div class="referencia" id="contagem-18">0 de 18 escolhidos</div>
+    <h2>Quantas dezenas você vai jogar</h2>
+    <div class="opcoes" id="lot-pool"></div>
+    <div class="grade-numeros" id="lot-grade"></div>
+    <div class="referencia" id="lot-contagem"></div>
     <div class="acoes-linha">
-      <button class="secundario" id="limpar-18">Limpar</button>
-      <button class="secundario" id="sortear-18">Preencher ao acaso</button>
+      <button class="secundario" id="lot-limpar">Limpar</button>
+      <button class="secundario" id="lot-sortear">Preencher ao acaso</button>
     </div>
-    <p class="ajuda">
-      "Preencher ao acaso" é atalho para testar rápido, não recomendação: nenhum
-      conjunto de 18 tem vantagem sobre outro num sorteio.
-    </p>
   </div>
 
   <div class="cartao">
-    <h2>A garantia</h2>
+    <h2>Tamanho de cada jogo</h2>
     <p class="ajuda">
-      Dentro dos seus 18 números existem <b>816</b> grupos de 15. O fechamento
-      precisa dar conta de todos eles.
+      Jogos menores pagam mais, mas exigem mais jogos para fechar o pool.
     </p>
-
-    <label class="campo">
-      <span>Números por jogo</span>
-      <div class="opcoes" id="tamanho-jogo">
-        <button class="opcao ativa" data-k="15">15</button>
-        <button class="opcao" data-k="16">16</button>
-        <button class="opcao" data-k="17">17</button>
-        <button class="opcao" data-k="18">18</button>
-      </div>
-    </label>
-
-    <label class="campo">
-      <span>Acertos garantidos, saindo os 15</span>
-      <div class="opcoes" id="acertos-garantidos"></div>
-    </label>
-
-    <div class="referencia" id="explicacao-18"></div>
+    <div class="opcoes" id="lot-jogo"></div>
+    <div class="referencia" id="lot-explicacao"></div>
   </div>
 
-  <button class="principal" id="iniciar-18" disabled>Montar o fechamento</button>
+  <!-- O motor financeiro, separado do combinatório de propósito: as cotações
+       mudam por banca e não são auditadas, então quem as informa é você. -->
+  <details class="cartao" id="lot-cotacao-cartao">
+    <summary>Cotação da sua banca</summary>
+    <p class="ajuda">
+      Quanto a sua banca paga por R$&nbsp;1 apostado, em cada tamanho de jogo.
+      Nada vem preenchido: esses valores variam e não são auditados por ninguém.
+    </p>
+    <div id="lot-cotacao"></div>
+    <label class="campo linha">
+      <span>Valor de cada jogo (R$)</span>
+      <input type="number" id="lot-valor" value="1" min="0.01" step="0.01" inputmode="decimal">
+    </label>
+  </details>
+
+  <div class="cartao destaque" id="lot-economia-cartao" hidden>
+    <div class="rotulo">O que esse fechamento significa em dinheiro</div>
+    <div id="lot-economia"></div>
+  </div>
+
+  <button class="principal" id="lot-iniciar" disabled>Carregar fechamento</button>
+
+  <div class="cartao" id="lot-resultado-cartao" hidden>
+    <div class="rotulo">Conferência independente</div>
+    <div class="referencia" id="lot-conferencia">conferindo…</div>
+  </div>
+
+  <!-- O simulador: testar a estrutura contra qualquer resultado hipotético,
+       sem esperar sorteio nenhum. -->
+  <details class="cartao" id="lot-simulador-cartao" hidden>
+    <summary>Simular um resultado</summary>
+    <p class="ajuda">
+      Digite 15 dezenas e veja como o seu fechamento teria se saído.
+    </p>
+    <textarea id="lot-resultado" rows="2" spellcheck="false"
+      placeholder="01 03 04 05 07 08 10 11 13 14 16 18 20 22 24"></textarea>
+    <button class="secundario" id="lot-simular">Simular</button>
+    <div class="referencia" id="lot-simulacao" hidden></div>
+  </details>
+
+  <details class="cartao">
+    <summary>Comparar todas as combinações</summary>
+    <p class="ajuda">
+      As 28 combinações da modalidade. Onde diz "em aberto", ninguém no mundo
+      sabe o mínimo — é onde o motor tem trabalho de verdade.
+    </p>
+    <div class="rolagem"><table class="matriz" id="lot-matriz"></table></div>
+  </details>
 
   <p class="rodape-nota">
-    O resultado aparece na aba Resultado, e o motor continua procurando algo
-    menor até você mandar parar.
+    A conta de "dividir os sorteios pelo que cada jogo cobre" subestima o número
+    de jogos por duas a três vezes. Os números aqui vêm da fórmula correta, e
+    cada fechamento foi conferido sorteio a sorteio antes de entrar no aplicativo.
   </p>
 </section>
 

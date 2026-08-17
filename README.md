@@ -160,31 +160,64 @@ trouxe, 5 eram dispensáveis e saíram de graça", ou "partiu de PG(2,4), melhor
 que as 40 que você trouxe". Aproveitar o trabalho já feito é o objetivo; jogar
 fora um trabalho melhor que já estava disponível seria o contrário dele.
 
-### A ferramenta "18 de 25"
+### A ferramenta Lotinha
 
-Uma página fechada em torno de um cenário só: 25 números no universo, 18
-escolhidos por você, e os **816 grupos de 15** que existem dentro deles.
+Uma aba dedicada à modalidade paralela: escolhem-se de **17 a 23 dezenas** entre
+25, o resultado da Lotofácil é a referência, e ganha-se quando as 15 sorteadas
+caem **todas** dentro do conjunto escolhido.
 
-Existe porque a tela Configurar é geral demais para quem sempre resolve o mesmo
-problema: são sete campos a acertar, e errar um produz um problema diferente do
-pretendido sem nenhum aviso — todos os valores são configurações legítimas.
+#### A conta que quase todo mundo erra
 
-A matemática tem uma particularidade que a tela precisa explicar. Jogo e grupo
-saem dos mesmos 18 números, então **qualquer jogo de `k` números já acerta pelo
-menos `k + 15 − 18`** de qualquer grupo, sem esforço nenhum:
+Para fechar um pool de `P` dezenas com jogos de `k`, a intuição manda dividir os
+sorteios pelo que cada jogo cobre. Isso **subestima por duas a três vezes** —
+quem orça assim compra metade dos jogos e fica com um fechamento furado.
 
-| jogos de | acerta sempre | garantir 13 | garantir 14 |
-|----------|---------------|-------------|-------------|
-| 15 números | 12, com 1 jogo | **6 jogos** | **24 jogos** |
-| 18 números | os 15, com 1 jogo | — | — |
+A conta certa vem de uma troca de ponto de vista: um jogo de `k` dentro de um
+pool de `P` é o **complemento** de `a = P − k` dezenas, e um sorteio de 15 é o
+complemento de `b = P − 15`. Então *o jogo contém o sorteio* ⟺ *as `a` que faltam
+ao jogo estão entre as `b` que faltam ao sorteio*. O problema deixa de ser
+"cobrir" e vira "caber": um **sistema de Turán**.
 
-Garantir 12 com jogos de 15 é gratuito; garantir 15 exige os 816 grupos
-inteiros, porque só o próprio grupo contém o grupo. O trabalho fica no meio, e a
-tela diz isso em vez de deixar alguém escolher o gratuito achando que otimizou.
+| pool | jogo | dividir sugere | verdade |
+|---|---|---|---|
+| 18 | 17 | 6 | **16** |
+| 20 | 18 | 19 | **40** |
+| 22 | 20 | 11 | **30** |
 
-A garantia não é afirmada, é conferida: `web/testar-fechamento18.mjs` percorre os
-816 grupos um a um, em JavaScript, sem tocar no código que produziu o
-fechamento.
+Conferido por força bruta num caso pequeno (pool 8, jogos de 7, sorteios de 5): a
+verdade é 6, a divisão diz 3.
+
+#### O que é sabido e o que está em aberto
+
+Das 28 combinações da modalidade: **7 são triviais** (jogo = pool, aposta única),
+**11 têm mínimo exato** — `a = 1` dá sempre 16 jogos, qualquer que seja o pool, e
+`a = 2` sai do teorema de Turán — e **10 são problema em aberto na matemática**.
+
+Nessas 10 é que o motor persistente trabalha de verdade. O banco embutido traz o
+melhor fechamento encontrado até agora, com o piso conhecido ao lado, e o usuário
+pode deixar o motor procurando um menor.
+
+#### Três opiniões independentes sobre a cobertura
+
+Um fechamento que afirme cobrir e não cubra é o pior defeito que esta ferramenta
+poderia ter. Contra isso há três verificações que não compartilham código:
+
+1. o gerador confere cada solução antes de gravá-la no banco;
+2. o aplicativo reconfere na tela, sem consultar o motor que a produziu;
+3. `web/testar-lotinha.mjs` confere de novo, com um algoritmo ingênuo escrito de
+   propósito para não repetir a ideia dos outros dois.
+
+#### O motor financeiro, separado do combinatório
+
+As cotações não estão no código: variam por banca, não são auditadas, e quem as
+conhece é o usuário. O painel mostra os dois ramos **sempre juntos** — o que
+ganha e o que perde — porque o ramo vencedor de um fechamento é sedutor (16 jogos
+de 17 dezenas custam R$16 e pagam milhares) e mostrá-lo sozinho seria enganoso: o
+outro ramo acontece em mais de 99% das vezes.
+
+E o painel diz o que a matemática obriga: como a aposta é binária, o retorno
+esperado é fixo por jogo e apenas soma. **Nenhum arranjo de fechamento o altera.**
+Fechar muda quando se ganha, nunca quanto em média.
 
 ### Histórico de trabalhos
 
@@ -492,7 +525,8 @@ node web/testar.mjs /Sonho-l-cido/              # testa sob a subpasta do Pages
 node web/testar-atualizacao.mjs                 # testa a atualização automática
 node web/testar-historico.mjs                   # testa o histórico de trabalhos
 node web/testar-biblioteca.mjs                  # testa a biblioteca do mundo
-node web/testar-fechamento18.mjs                # testa a ferramenta 18 de 25
+node web/testar-lotinha.mjs                     # testa a ferramenta Lotinha
+cargo run --release --example gerar-lotinha     # regera o banco de fechamentos
 
 ./ferramentas/preparar-biblioteca.py            # recorta o covers.json da La Jolla
 python3 -m http.server -d site 8000             # experimenta localmente

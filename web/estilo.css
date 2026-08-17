@@ -433,6 +433,82 @@ main { padding: 8px 16px 0; }
   .numero { transition: none; }
 }
 
+/* ─────────── painel de economia da Lotinha ─────────── */
+
+/*
+ * Os dois ramos aparecem sempre juntos, e é por isso que cada um tem cor
+ * própria. O ramo vencedor de um fechamento é sedutor — custa pouco e paga
+ * muito — e mostrá-lo sozinho seria enganoso, porque o outro acontece em mais
+ * de 99% das vezes.
+ */
+.linha-economia {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--borda);
+  font-size: 14px;
+}
+
+.linha-economia:last-of-type { border-bottom: none; }
+.linha-economia > span { color: var(--texto-fraco); }
+.linha-economia b { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.linha-economia em { font-style: normal; color: var(--texto-fraco); font-size: 12.5px; }
+
+.linha-economia.ganha b { color: var(--verde); }
+.linha-economia.perde b { color: var(--vermelho); }
+
+.linha-economia.total {
+  border-top: 2px solid var(--borda);
+  margin-top: 4px;
+  padding-top: 12px;
+}
+.linha-economia.total b { color: var(--ouro); font-size: 18px; }
+
+/* Distribuição de acertos do simulador. */
+.faixas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.faixas > span {
+  background: var(--fundo-campo);
+  border: 1px solid var(--borda);
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 13px;
+}
+
+/* A matriz das 28 combinações. Rola sozinha em vez de espremer a página. */
+.rolagem { overflow-x: auto; margin-top: 10px; }
+
+.matriz {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.matriz th, .matriz td {
+  padding: 7px 10px;
+  text-align: right;
+  border-bottom: 1px solid var(--borda);
+  white-space: nowrap;
+}
+
+.matriz th {
+  color: var(--texto-fraco);
+  font-weight: 600;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.matriz td.aberto { color: var(--ouro); }
+
 /* ─────────── importar um fechamento ─────────── */
 
 #importar summary {
