@@ -183,6 +183,29 @@ para sempre uma solução de 9 que não existe.
 de optimalidade — trocá-los faria o aplicativo cravar "ótimo provado" em cima de
 um recorde que ainda pode cair.
 
+### E para garantias parciais, que é o uso mais comum
+
+Um fechamento de loteria quase nunca é uma cobertura completa: o usual é
+*"garantir 4 acertos se saírem 6"*, com `alvo = 6` e `intersecao = 4`. A tabela
+não cataloga esses — e a primeira versão do aplicativo respondia "sem referência
+publicada" para eles. Tecnicamente correto, e praticamente inútil.
+
+Mas a tabela **tem** o que dizer, por um argumento curto: se toda `t`-upla do
+pool está contida em alguma cartela, então qualquer sorteio de `j ≥ t` números
+contém uma `t`-upla que alguma cartela cobre inteira — e portanto acerta ao menos
+`t`. Logo o melhor conhecido para `C(pool, cartela, t)` é um **teto válido** para
+a garantia parcial.
+
+Em `pool 20, cartela 6, garantir 4` o teto é 382 cartelas e o motor entrega 114.
+Um teto folgado, mas um número real e publicado, muito melhor que nada.
+
+O que esse teto **não** é: limite inferior. O limite publicado de
+`C(pool, cartela, t)` vale para a cobertura completa, não para a garantia parcial
+— que se resolve com muito menos. Por isso `limites.rs` só aceita a tabela quando
+`alvo == intersecao`; confundir os dois faria o motor declarar impossível o que
+ele mesmo acabou de encontrar. O argumento do teto é conferido por enumeração nos
+testes, não por raciocínio escrito.
+
 ## Construções algébricas: a etapa rápida
 
 Alguns formatos têm solução ótima por fórmula, sem busca nenhuma. O plano

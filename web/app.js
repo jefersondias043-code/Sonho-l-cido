@@ -488,7 +488,16 @@ function pintarReferencia(estado) {
   // ali anunciaria "acima do melhor conhecido no mundo" para um fechamento
   // furado, que é a pior mentira que esta tela poderia contar.
   const completo = estado.melhor_cobertura >= 1;
-  const superou = mundo !== null && completo && nossas > 0 && nossas < mundo;
+
+  // `referencia_exata` separa dois números muito diferentes:
+  //
+  // - **exata** — o problema é a cobertura completa catalogada, e o número é o
+  //   melhor que o mundo já obteve *nela*. Ficar abaixo é recorde mundial.
+  // - **teto** — garantia parcial. Cobrir todas as t-uplas resolve o problema
+  //   com folga, então o número é um teto válido e nada mais. Ficar bem abaixo
+  //   é o esperado, não façanha — anunciar recorde ali seria falso.
+  const exata = estado.referencia_exata === true;
+  const superou = mundo !== null && exata && completo && nossas > 0 && nossas < mundo;
 
   $('selo-recorde').hidden = !superou;
   $('res-selo-recorde').hidden = !superou;
@@ -499,7 +508,15 @@ function pintarReferencia(estado) {
   if (mundo === null) {
     texto =
       'Sem referência publicada para esta configuração <em>— a tabela mundial ' +
-      'cataloga coberturas completas; garantias parciais não estão nela.</em>';
+      'vai até 99 números no pool, 25 por cartela e grupos de até 8.</em>';
+  } else if (!exata) {
+    // O caso do fechamento de loteria, que é o uso mais comum do aplicativo.
+    const acertos = estado.melhor_cartelas > 0 && completo ? `Você está com <b>${nossas}</b>. ` : '';
+    texto =
+      `Cobrir <b>todos</b> os grupos garantiria seu resultado com ` +
+      `<b>${mundo}</b> cartelas <em>— é o melhor conhecido no mundo para a ` +
+      `cobertura completa, e serve de teto. ${acertos}Como sua garantia é ` +
+      `parcial, dá para usar bem menos: é exatamente o que o motor procura.</em>`;
   } else if (nossas > 0 && !completo) {
     texto =
       `${cabecalho} <em>— com ${nossas} cartelas e cobertura completa. Esta ` +

@@ -552,6 +552,50 @@ try {
   await pagina.waitForSelector('#configurar.ativo', { timeout: 10000 });
   await pagina.fill('#texto-fechamento', '');
 
+  // ─── fechamento de loteria: a garantia parcial também tem referência ───
+  //
+  // O defeito que isto cobre: em "garantir X acertos se saírem Y" a tela dizia
+  // "sem referência publicada para esta configuração" — sempre, para qualquer
+  // número. Era o uso mais comum do aplicativo ficando sem nenhum ponto de
+  // comparação.
+  await pagina.fill('#universo', '60');
+  await pagina.fill('#pool', '20');
+  await pagina.fill('#cartela', '6');
+  await pagina.click('#tipo-regra .opcao[data-regra="garantir"]');
+  await pagina.fill('#alvo', '6');
+  await pagina.fill('#intersecao', '4');
+  await pagina.click('#iniciar');
+  await pagina.waitForSelector('#buscar.ativo', { timeout: 15000 });
+  await pagina.waitForFunction(
+    () => {
+      const t = document.getElementById('melhor-cartelas').textContent.trim();
+      return t !== '' && t !== '—';
+    },
+    undefined,
+    { timeout: 40000 }
+  );
+
+  const parcial = await pagina.evaluate(() => ({
+    texto: document.getElementById('referencia-busca').textContent.trim(),
+    selo: !document.getElementById('selo-recorde').hidden,
+    cartelas: Number(document.getElementById('melhor-cartelas').textContent.trim()),
+  }));
+
+  marcar(
+    !/sem referência/i.test(parcial.texto) && /\d/.test(parcial.texto),
+    'garantia parcial recebe um número de referência, não um vazio',
+    parcial.texto.replace(/\s+/g, ' ').slice(0, 88)
+  );
+  marcar(
+    !parcial.selo,
+    'e ficar abaixo do teto não é anunciado como recorde mundial',
+    `${parcial.cartelas} cartelas, bem abaixo do teto`
+  );
+
+  await pagina.click('#encerrar');
+  await pagina.waitForSelector('#configurar.ativo', { timeout: 10000 });
+  await pagina.click('#tipo-regra .opcao[data-regra="cobrir"]');
+
   // ─── teto de cartelas: a comparação com o mundo tem de se calar ───
   //
   // Com teto o objetivo é cobrir o máximo possível dentro dele, e a solução tem

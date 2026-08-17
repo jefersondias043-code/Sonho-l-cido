@@ -106,14 +106,18 @@ pub struct Estado {
     pub gap: Option<f64>,
     pub optimalidade_provada: bool,
 
-    /// Melhor resultado já obtido no mundo para esta configuração, quando ela é
-    /// um covering design catalogado. `None` em garantias parciais e fora da
-    /// faixa da tabela.
+    /// O número da tabela mundial para esta configuração. `None` só fora da
+    /// faixa catalogada.
     ///
-    /// É um limite **superior**, e a tela precisa tratá-lo como tal: serve para
-    /// dizer "faltam 6 para o recorde mundial", nunca para declarar optimalidade
-    /// — isso é papel de `limite_inferior`.
+    /// É sempre um limite **superior**, e a tela precisa tratá-lo como tal:
+    /// serve para dizer "faltam 6 para o recorde mundial", nunca para declarar
+    /// optimalidade — isso é papel de `limite_inferior`.
     pub melhor_conhecido: Option<u64>,
+    /// Verdadeiro quando o número é o melhor conhecido **desta** configuração
+    /// (cobertura completa). Falso quando é apenas um teto válido, o que
+    /// acontece em garantia parcial — aí ficar abaixo dele é esperado, não
+    /// recorde.
+    pub referencia_exata: bool,
     /// Verdadeiro quando o melhor conhecido já encostou no limite provado: o
     /// mundo considera essa configuração encerrada.
     pub referencia_resolvida: bool,
@@ -406,8 +410,15 @@ impl MotorWeb {
             gap: self.interno.gap(),
             optimalidade_provada: self.interno.optimalidade_provada(),
 
-            melhor_conhecido: self.interno.referencia().map(|r| r.melhor_conhecido),
-            referencia_resolvida: self.interno.referencia().is_some_and(|r| r.resolvido()),
+            melhor_conhecido: self.interno.referencia().map(|c| c.referencia.melhor_conhecido),
+            referencia_exata: self
+                .interno
+                .referencia()
+                .is_some_and(|c| c.aplicacao == motor_core::Aplicacao::Exata),
+            referencia_resolvida: self
+                .interno
+                .referencia()
+                .is_some_and(|c| c.aplicacao == motor_core::Aplicacao::Exata && c.referencia.resolvido()),
             origem_do_inicio: self.interno.origem_do_inicio().to_string(),
 
             novos_recordes,
@@ -616,11 +627,10 @@ mod testes {
         assert!(estado["referencia_resolvida"].as_bool().unwrap());
     }
 
-    #[test]
-    fn garantia_parcial_nao_finge_ter_referencia() {
-        // A tabela mundial cataloga covering designs. Com garantia parcial não
-        // há número publicado, e mostrar um seria mentira.
-        let texto = serde_json::to_string(&ConfiguracaoEntrada {
+    fn fechamento_de_loteria() -> String {
+        // O uso mais comum do aplicativo: pool de 20, cartelas de 6, garantir 4
+        // acertos se saírem 6.
+        serde_json::to_string(&ConfiguracaoEntrada {
             universo: 20,
             pool: (1..=20).collect(),
             cartela: 6,
@@ -629,12 +639,52 @@ mod testes {
             orcamento: None,
             semente: 42,
         })
-        .unwrap();
+        .unwrap()
+    }
 
-        let motor = MotorWeb::construir(&texto).unwrap();
+    #[test]
+    fn garantia_parcial_recebe_um_teto_e_nao_um_vazio() {
+        // A primeira versão devolvia nada aqui, por a tabela catalogar apenas
+        // coberturas completas. Tecnicamente correto e praticamente inútil: é a
+        // configuração que a maioria das pessoas usa, e ela ficava sem
+        // referência nenhuma.
+        //
+        // Cobrir todas as 4-uplas resolve esta garantia com folga, então
+        // C(20,6,4) é um teto válido e publicado.
+        let motor = MotorWeb::construir(&fechamento_de_loteria()).unwrap();
         let estado = estado_de(&motor.estado());
-        assert!(estado["melhor_conhecido"].is_null());
+
+        let teto = estado["melhor_conhecido"].as_u64().expect("há teto publicado");
+        assert_eq!(teto, motor_core::referencia::consultar(20, 6, 4).unwrap().melhor_conhecido);
+
+        // Mas é teto, não o número desta configuração.
+        assert!(!estado["referencia_exata"].as_bool().unwrap());
         assert!(!estado["referencia_resolvida"].as_bool().unwrap());
+    }
+
+    #[test]
+    fn o_teto_da_garantia_parcial_nao_vira_limite_inferior() {
+        // A confusão que arruinaria tudo: o limite provado de C(20,6,4) vale
+        // para a cobertura completa, não para a garantia parcial — que se
+        // resolve com muito menos. Usá-lo como piso faria o motor declarar
+        // impossível aquilo que ele mesmo acabou de encontrar.
+        let mut motor = MotorWeb::construir(&fechamento_de_loteria()).unwrap();
+        let estado = estado_de(&motor.preparar());
+
+        let limite = estado["limite_inferior"].as_u64().unwrap();
+        let teto = estado["melhor_conhecido"].as_u64().unwrap();
+        let achado = estado["melhor_cartelas"].as_u64().unwrap();
+
+        assert!(limite < teto, "o limite inferior ({limite}) não pode ser o teto ({teto})");
+        assert!(
+            achado >= limite,
+            "a solução ({achado}) ficou abaixo do limite inferior ({limite})"
+        );
+        assert!(
+            achado < teto,
+            "com garantia parcial a solução ({achado}) deve ficar bem abaixo do teto ({teto})"
+        );
+        assert!(!estado["optimalidade_provada"].as_bool().unwrap());
     }
 
     #[test]

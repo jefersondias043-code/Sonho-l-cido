@@ -40,8 +40,8 @@ use web_time::Instant;
 use std::time::Instant;
 
 use motor_core::{
-    limite_inferior, referencia, semente_algebrica, Avaliacao, Cartela, ChaveCusto, LimiteInferior,
-    MotorCobertura, Objetivo, Problema, Referencia, Solucao,
+    limite_inferior, referencia, semente_algebrica, Avaliacao, Cartela, ChaveCusto, Consulta,
+    LimiteInferior, MotorCobertura, Objetivo, Problema, Solucao,
 };
 use rand::{Rng, SeedableRng};
 use rand_pcg::Pcg64Mcg;
@@ -153,9 +153,10 @@ pub struct MotorBusca {
     /// Cartelas da elite escolhida para recombinação nesta iteração.
     elite_atual: Vec<Cartela>,
 
-    /// O que o mundo já sabe sobre esta configuração, quando ela é um covering
-    /// design catalogado. `None` em garantias parciais e fora da faixa.
-    referencia: Option<Referencia>,
+    /// O que a tabela mundial tem a dizer sobre esta configuração — o número
+    /// exato quando é uma cobertura completa, um teto válido quando é garantia
+    /// parcial. `None` só fora da faixa catalogada.
+    referencia: Option<Consulta>,
 
     /// Como o ponto de partida foi obtido — "guloso", "plano projetivo PG(2,4)",
     /// "fechamento importado". Aparece na tela e nos registros.
@@ -192,9 +193,9 @@ impl MotorBusca {
         let max_candidatos =
             crate::construcao::candidatos_por_posicao(&cobertura, config.orcamento_por_cartela);
 
-        let problema_regra_e_covering_design = problema.regra().e_covering_design();
-        let (tamanho_pool, tamanho_cartela, intersecao) =
-            (problema.tamanho_pool(), problema.tamanho_cartela(), problema.regra().intersecao);
+        let (tamanho_pool, tamanho_cartela) =
+            (problema.tamanho_pool(), problema.tamanho_cartela());
+        let (alvo, intersecao) = (problema.regra().alvo, problema.regra().intersecao);
 
         Ok(Self {
             problema,
@@ -215,11 +216,12 @@ impl MotorBusca {
             rng,
             oficina: Oficina::nova(),
             elite_atual: Vec::new(),
-            referencia: if problema_regra_e_covering_design {
-                referencia::consultar(tamanho_pool, tamanho_cartela, intersecao)
-            } else {
-                None
-            },
+            referencia: referencia::consultar_problema(
+                tamanho_pool,
+                tamanho_cartela,
+                alvo,
+                intersecao,
+            ),
             origem_do_inicio: String::new(),
             estatisticas: Estatisticas::default(),
             duracao_acumulada: Duration::ZERO,
@@ -720,13 +722,14 @@ impl MotorBusca {
         self.alvo_cartelas
     }
 
-    /// O melhor resultado já conhecido no mundo para esta configuração, quando
-    /// ela é um covering design catalogado.
+    /// O que a tabela mundial diz sobre esta configuração.
     ///
-    /// É um **limite superior**: alguém já construiu uma solução desse tamanho.
-    /// Nunca deve ser usado como limite inferior — para isso existe
-    /// [`Self::limite_inferior`], que já incorpora o limite publicado.
-    pub fn referencia(&self) -> Option<Referencia> {
+    /// Sempre um **limite superior** — o melhor resultado conhecido quando o
+    /// problema é a cobertura completa catalogada, e um teto válido quando é
+    /// garantia parcial. Nunca serve de limite inferior: para isso existe
+    /// [`Self::limite_inferior`], que só aceita a tabela onde ela de fato se
+    /// aplica.
+    pub fn referencia(&self) -> Option<Consulta> {
         self.referencia
     }
 

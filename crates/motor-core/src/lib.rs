@@ -80,6 +80,6 @@ pub use planos::semente_algebrica;
 pub use problema::{
     ErroProblema, ErroViabilidade, Objetivo, Problema, RegraCobertura, Viabilidade,
 };
-pub use referencia::Referencia;
+pub use referencia::{Aplicacao, Consulta, Referencia};
 pub use solucao::{Restaurador, Solucao};
 pub use texto::{interpretar_fechamento, ErroFechamento};

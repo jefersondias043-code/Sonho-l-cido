@@ -77,6 +77,67 @@ impl Referencia {
     }
 }
 
+/// Como o número catalogado se relaciona com o problema que o usuário montou.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Aplicacao {
+    /// O problema **é** o covering design catalogado (`alvo == intersecao`).
+    /// O número é o melhor resultado conhecido para ele, e o alvo a perseguir.
+    Exata,
+    /// Garantia parcial (`alvo > intersecao`). O número catalogado é um **teto
+    /// válido**, quase sempre bem acima do necessário.
+    Teto,
+}
+
+/// O que a tabela tem a dizer sobre um problema.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Consulta {
+    pub referencia: Referencia,
+    pub aplicacao: Aplicacao,
+}
+
+/// Consulta a tabela para a configuração completa do usuário.
+///
+/// ## O caso que faltava: garantia parcial
+///
+/// A tabela cataloga coberturas completas. Um fechamento de loteria quase nunca
+/// é uma: o usual é *"garantir 4 acertos se saírem 6"*, com `alvo = 6` e
+/// `intersecao = 4`. Para esses, a primeira versão desta função devolvia nada —
+/// tecnicamente correto e praticamente inútil, porque é justamente a
+/// configuração mais usada.
+///
+/// Mas a tabela **tem** o que dizer, e o argumento é curto:
+///
+/// > Se toda `t`-upla do pool está contida em alguma cartela, então para
+/// > qualquer sorteio de `j ≥ t` números basta tomar uma `t`-upla dentro dele —
+/// > alguma cartela a contém inteira, e portanto acerta pelo menos `t`.
+///
+/// Logo, uma cobertura completa de `t`-uplas resolve a garantia parcial com
+/// folga, e o melhor conhecido para `C(pool, cartela, t)` é um **teto** para o
+/// problema do usuário. Um teto folgado — em `pool 20, cartela 6, garantir 4` o
+/// teto é 382 cartelas e o motor acha 114 — mas um número real, publicado, e
+/// muito melhor que "sem referência".
+///
+/// A validação de [`crate::problema::Problema`] garante `intersecao ≤ alvo`, que
+/// é a única condição de que o argumento precisa.
+///
+/// ## O que este teto **não** é
+///
+/// Não é limite inferior. O limite publicado de `C(pool, cartela, t)` vale para
+/// a cobertura completa, não para a garantia parcial — que pode (e costuma) ser
+/// resolvida com muito menos. Por isso [`crate::limites`] continua usando a
+/// tabela **apenas** quando `alvo == intersecao`. Confundir os dois faria o motor
+/// declarar impossível o que ele mesmo acabou de encontrar.
+pub fn consultar_problema(
+    pool: usize,
+    cartela: usize,
+    alvo: usize,
+    intersecao: usize,
+) -> Option<Consulta> {
+    let referencia = consultar(pool, cartela, intersecao)?;
+    let aplicacao = if alvo == intersecao { Aplicacao::Exata } else { Aplicacao::Teto };
+    Some(Consulta { referencia, aplicacao })
+}
+
 /// Uma linha da tabela, compactada. `v`, `k` e `t` cabem em um byte; os
 /// tamanhos chegam a seis dígitos nas configurações maiores.
 #[derive(Debug, Clone, Copy)]
@@ -224,6 +285,70 @@ mod testes {
         let r = consultar(13, 5, 2).unwrap();
         assert_eq!(r.limite_publicado, 10);
         assert_eq!(r.melhor_conhecido, 10);
+    }
+
+    #[test]
+    fn garantia_parcial_recebe_um_teto_em_vez_de_nada() {
+        // O caso do fechamento de loteria: pool 20, cartelas de 6, garantir 4
+        // acertos se saírem 6. Não é covering design, mas cobrir todas as
+        // 4-uplas resolve com folga — e isso é um número publicado.
+        let c = consultar_problema(20, 6, 6, 4).expect("há teto para esta configuração");
+        assert_eq!(c.aplicacao, Aplicacao::Teto);
+        assert_eq!(c.referencia.melhor_conhecido, consultar(20, 6, 4).unwrap().melhor_conhecido);
+    }
+
+    #[test]
+    fn cobertura_completa_recebe_o_numero_exato() {
+        let c = consultar_problema(21, 5, 2, 2).expect("C(21,5,2) está na tabela");
+        assert_eq!(c.aplicacao, Aplicacao::Exata);
+        assert_eq!(c.referencia.melhor_conhecido, 21);
+    }
+
+    /// O teto tem de ser **de verdade** um teto: uma cobertura completa das
+    /// `t`-uplas precisa satisfazer a garantia parcial.
+    ///
+    /// Confere o argumento por enumeração, não por raciocínio: para cada
+    /// `j`-subconjunto do pool, alguma cartela do plano tem ao menos `t`
+    /// elementos em comum com ele.
+    #[test]
+    fn uma_cobertura_de_t_uplas_realmente_garante_t_acertos() {
+        use crate::cartela::Cartela;
+        use crate::planos::plano_projetivo;
+
+        // PG(2,3): cobre todos os pares de um pool de 13, com cartelas de 4.
+        let retas = plano_projetivo(3).unwrap();
+        let cartelas: Vec<Cartela> = retas.iter().map(|r| Cartela::dos_indices(r)).collect();
+
+        // Então, para todo sorteio de j = 2..=5 números, alguma cartela acerta 2.
+        for j in 2..=5usize {
+            for combinacao in combinacoes(13, j) {
+                let sorteio = Cartela::dos_indices(&combinacao);
+                assert!(
+                    cartelas.iter().any(|c| c.tamanho_intersecao(sorteio) >= 2),
+                    "sorteio {combinacao:?} não recebeu 2 acertos de nenhuma cartela"
+                );
+            }
+        }
+    }
+
+    /// Todos os `k`-subconjuntos de `0..n`, para o teste acima.
+    #[cfg(test)]
+    fn combinacoes(n: usize, k: usize) -> Vec<Vec<usize>> {
+        let mut saida = Vec::new();
+        let mut atual = Vec::with_capacity(k);
+        fn passo(n: usize, k: usize, inicio: usize, atual: &mut Vec<usize>, saida: &mut Vec<Vec<usize>>) {
+            if atual.len() == k {
+                saida.push(atual.clone());
+                return;
+            }
+            for i in inicio..n {
+                atual.push(i);
+                passo(n, k, i + 1, atual, saida);
+                atual.pop();
+            }
+        }
+        passo(n, k, 0, &mut atual, &mut saida);
+        saida
     }
 
     #[test]
