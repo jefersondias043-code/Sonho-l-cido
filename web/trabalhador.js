@@ -102,13 +102,8 @@ function tratar(mensagem) {
           tipo: 'encerrado',
           estado: motor ? lerEstado() : null,
           cartelas: motor ? JSON.parse(motor.melhor()) : null,
-          salvo: motor ? motor.exportar() : null,
         });
         descartarMotor();
-        break;
-
-      case 'exportar':
-        postMessage({ tipo: 'exportado', estado: motor ? motor.exportar() : null });
         break;
 
       default:

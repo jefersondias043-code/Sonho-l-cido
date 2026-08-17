@@ -18,6 +18,8 @@
  *                                      concluida
  */
 
+import * as historico from './historico.js';
+
 const $ = (id) => document.getElementById(id);
 
 /* ─────────── estado da página ─────────── */
@@ -28,12 +30,24 @@ let recordes = [];
 let melhorCartelas = [];
 let travaDeTela = null;
 
+/*
+ * A sessão do histórico que esta busca está escrevendo.
+ *
+ * Ao iniciar do zero, nasce quando a primeira solução existe. Ao continuar um
+ * trabalho salvo, é a sessão daquele trabalho — de modo que continuar melhora o
+ * registro em vez de criar um segundo, quase igual, ao lado.
+ */
+let sessaoAtual = null;
+
+/* A configuração da busca em curso, guardada porque a tela pode ser editada
+   enquanto o motor trabalha e o registro precisa refletir o que está rodando. */
+let configuracaoDaBusca = null;
+
 /* O relógio é da interface, não do motor: mede o que o usuário esperou. */
 let inicioDoTrecho = 0;
 let tempoAcumulado = 0;
 let cronometro = null;
 
-const CHAVE_SALVO = 'sonho-lucido:busca';
 
 /* ─────────── formatação ─────────── */
 
@@ -312,18 +326,13 @@ function garantirTrabalhador() {
       // memória; aqui só resta desmontá-lo e voltar à configuração.
       case 'encerrado':
         aplicarMensagem(data);
-        if (data.salvo) localStorage.setItem(CHAVE_SALVO, data.salvo);
         desmontarTrabalhador();
         definirFase('ocioso');
         zerarCronometro();
         soltarTelaLigada();
-        $('retomar').hidden = !localStorage.getItem(CHAVE_SALVO);
+        atualizarAtalhoDoHistorico();
         mostrarPainel('configurar');
         avisar('Busca encerrada. O resultado ficou salvo.', true);
-        break;
-
-      case 'exportado':
-        if (data.estado) localStorage.setItem(CHAVE_SALVO, data.estado);
         break;
 
       case 'erro':
@@ -354,6 +363,44 @@ function desmontarTrabalhador() {
 /* ─────────── pintar a tela ─────────── */
 
 /**
+ * Registra o progresso desta busca no histórico.
+ *
+ * A sessão nasce quando existe a primeira solução — não ao tocar em iniciar.
+ * Uma busca abandonada antes de produzir qualquer coisa não é um trabalho, e
+ * encheria a lista de linhas vazias.
+ *
+ * Daí em diante cada melhoria atualiza a mesma sessão. É isso que faz continuar
+ * um trabalho aprimorar o registro existente, em vez de espalhar cópias quase
+ * idênticas pelo histórico.
+ */
+function salvarNoHistorico(estado) {
+  if (!melhorCartelas.length || !estado) return;
+
+  const dados = {
+    melhor: melhorCartelas,
+    iteracoes: estado.iteracoes ?? 0,
+    avaliacao: {
+      cartelas: estado.melhor_cartelas,
+      cobertura: estado.melhor_cobertura,
+      redundancia: estado.melhor_redundancia,
+      limiteInferior: estado.limite_inferior,
+      otimo: Boolean(estado.optimalidade_provada),
+    },
+  };
+
+  if (sessaoAtual) {
+    // A sessão pode ter sido excluída pelo usuário enquanto a busca corria.
+    // Nesse caso o trabalho continua, mas passa a registrar-se numa nova.
+    const atualizada = historico.atualizar(sessaoAtual, dados);
+    if (!atualizada) sessaoAtual = historico.criar(configuracaoDaBusca, dados).id;
+  } else {
+    sessaoAtual = historico.criar(configuracaoDaBusca, dados).id;
+  }
+
+  pintarHistorico();
+}
+
+/**
  * Atualiza a tela a partir de uma mensagem do worker.
  *
  * `cartelas` vem preenchido sempre que a solução mudou. Pintar a partir daqui
@@ -361,11 +408,15 @@ function desmontarTrabalhador() {
  * aba Resultado mostre o que o painel de busca acabou de anunciar.
  */
 function aplicarMensagem({ estado, cartelas }) {
-  if (Array.isArray(cartelas)) {
+  const mudou = Array.isArray(cartelas);
+  if (mudou) {
     melhorCartelas = cartelas;
     pintarCartelas();
   }
   if (estado) aplicarEstado(estado);
+  // Grava logo após pintar: o que está na tela e o que está no histórico saem
+  // do mesmo dado, no mesmo instante.
+  if (mudou) salvarNoHistorico(estado);
 }
 
 function aplicarEstado(estado) {
@@ -387,10 +438,6 @@ function aplicarEstado(estado) {
   if (estado.novos_recordes?.length) {
     recordes = [...estado.novos_recordes.reverse(), ...recordes].slice(0, 40);
     pintarRecordes();
-    // A gravação serve só para sobreviver ao fechamento da aba. As cartelas
-    // exibidas não dependem dela: vieram na mesma mensagem que trouxe o
-    // recorde.
-    trabalhador?.postMessage({ tipo: 'exportar' });
   }
 
   $('res-cartelas').textContent = estado.melhor_cartelas || '—';
@@ -445,19 +492,33 @@ $('iniciar').addEventListener('click', () => {
   comecar({ configuracao });
 });
 
-$('retomar').addEventListener('click', () => {
-  const salvo = localStorage.getItem(CHAVE_SALVO);
-  if (!salvo) return;
+$('ir-para-historico').addEventListener('click', () => mostrarPainel('historico'));
 
-  try {
-    const estado = JSON.parse(salvo);
-    comecar({ configuracao: estado.configuracao, salvo }, estado.melhor || []);
-  } catch {
-    avisar('A busca salva está corrompida. Comece uma nova.');
-    localStorage.removeItem(CHAVE_SALVO);
-    $('retomar').hidden = true;
+/**
+ * Retoma um trabalho do histórico exatamente de onde parou.
+ *
+ * A sessão continua sendo a mesma: o motor recebe a solução já alcançada e a
+ * contagem de iterações anterior, e cada melhoria daqui em diante atualiza
+ * aquele mesmo registro. É o que diferencia continuar um trabalho de começar
+ * outro parecido.
+ */
+function continuarSessao(id) {
+  const sessao = historico.obter(id);
+  if (!sessao) {
+    avisar('Esse trabalho não está mais no histórico.');
+    pintarHistorico();
+    return;
   }
-});
+
+  comecar(
+    {
+      configuracao: sessao.configuracao,
+      salvo: historico.paraRetomada(sessao),
+      sessaoId: sessao.id,
+    },
+    sessao.melhor
+  );
+}
 
 /**
  * Dá a partida, mostrando a tela de busca **antes** de qualquer trabalho
@@ -470,15 +531,18 @@ $('retomar').addEventListener('click', () => {
  * quebrado. Trocando primeiro, o carregamento acontece com o relógio correndo
  * e o ponto pulsando à vista.
  */
-function comecar({ configuracao, salvo }, cartelasIniciais = []) {
+function comecar({ configuracao, salvo, sessaoId = null }, cartelasIniciais = []) {
   // Um motor antigo ainda vivo continuaria consumindo processador e memória.
   desmontarTrabalhador();
 
   recordes = [];
   melhorCartelas = cartelasIniciais;
+  configuracaoDaBusca = configuracao;
+  // Continuar um trabalho escreve na sessão dele; começar do zero abre outra
+  // quando a primeira solução aparecer.
+  sessaoAtual = sessaoId;
   pintarRecordes();
   pintarCartelas();
-  if (!salvo) localStorage.removeItem(CHAVE_SALVO);
 
   ['melhor-cartelas', 'limite-inferior', 'gap', 'cobertura'].forEach((id) => {
     $(id).textContent = '—';
@@ -502,7 +566,6 @@ $('pausar').addEventListener('click', () => {
 
   if (fase === 'buscando') {
     trabalhador.postMessage({ tipo: 'pausar' });
-    trabalhador.postMessage({ tipo: 'exportar' });
     soltarTelaLigada();
   } else if (fase === 'pausado') {
     trabalhador.postMessage({ tipo: 'rodar' });
@@ -562,6 +625,130 @@ function textoDoFechamento() {
   return `${cabecalho}${corpo}\n`;
 }
 
+/* ─────────── a tela do histórico ─────────── */
+
+/**
+ * Desenha a lista de trabalhos salvos.
+ *
+ * A quantidade de cartelas vem grande e primeiro porque é por ela que o usuário
+ * reconhece o trabalho. A configuração e a data ficam logo abaixo, para separar
+ * buscas parecidas — sem elas, dois trabalhos com o mesmo número de cartelas
+ * ficariam indistinguíveis.
+ */
+function pintarHistorico() {
+  const sessoes = historico.listar();
+  const destino = $('lista-historico');
+  $('limpar-historico').hidden = sessoes.length === 0;
+  atualizarAtalhoDoHistorico(sessoes.length);
+
+  if (!sessoes.length) {
+    destino.innerHTML =
+      '<p class="historico-vazio">Nenhum trabalho salvo ainda.<br>' +
+      'Toda busca que você iniciar aparece aqui automaticamente.</p>';
+    return;
+  }
+
+  destino.innerHTML = sessoes.map(cartaoDaSessao).join('');
+
+  destino.querySelectorAll('[data-acao]').forEach((botao) => {
+    botao.addEventListener('click', () => {
+      const { acao, id } = botao.dataset;
+      if (acao === 'continuar') continuarSessao(id);
+      else if (acao === 'ver') verSessao(id);
+      else if (acao === 'excluir') excluirSessao(id);
+    });
+  });
+}
+
+function cartaoDaSessao(sessao) {
+  const avaliacao = sessao.avaliacao ?? {};
+  const emAndamento = sessao.id === sessaoAtual;
+
+  const marca = avaliacao.otimo
+    ? '<span class="sessao-marca otima">★ ótimo provado</span>'
+    : emAndamento
+      ? '<span class="sessao-marca viva">em andamento</span>'
+      : avaliacao.limiteInferior
+        ? `<span class="sessao-marca">mínimo ${avaliacao.limiteInferior}</span>`
+        : '';
+
+  const cobertura =
+    typeof avaliacao.cobertura === 'number' ? ` · cobertura ${porcento(avaliacao.cobertura)}` : '';
+
+  return `
+    <div class="sessao${emAndamento ? ' em-andamento' : ''}">
+      <div class="sessao-topo">
+        <span class="sessao-quantia">${avaliacao.cartelas ?? sessao.melhor.length}</span>
+        <span class="sessao-unidade">cartelas</span>
+        ${marca}
+      </div>
+      <div class="sessao-config">
+        ${escapar(historico.descrever(sessao.configuracao))}<br>
+        ${historico.quando(sessao.atualizadaEm)} ·
+        ${milhares(sessao.iteracoes ?? 0)} iterações${cobertura}
+      </div>
+      <div class="sessao-acoes">
+        <button class="continuar" data-acao="continuar" data-id="${sessao.id}">Continuar</button>
+        <button data-acao="ver" data-id="${sessao.id}">Ver cartelas</button>
+        <button class="excluir" data-acao="excluir" data-id="${sessao.id}"
+                aria-label="Excluir este trabalho">✕</button>
+      </div>
+    </div>`;
+}
+
+/** Impede que um valor gravado acabe interpretado como marcação. */
+function escapar(texto) {
+  return String(texto).replace(/[&<>"']/g, (c) =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]
+  );
+}
+
+function verSessao(id) {
+  const sessao = historico.obter(id);
+  if (!sessao) return;
+
+  melhorCartelas = sessao.melhor;
+  pintarCartelas();
+
+  const avaliacao = sessao.avaliacao ?? {};
+  $('res-cartelas').textContent = avaliacao.cartelas ?? sessao.melhor.length;
+  $('res-cobertura').textContent =
+    typeof avaliacao.cobertura === 'number' ? porcento(avaliacao.cobertura) : '—';
+  $('res-redundancia').textContent =
+    typeof avaliacao.redundancia === 'number' ? milhares(avaliacao.redundancia) : '—';
+
+  mostrarPainel('resultado');
+}
+
+function excluirSessao(id) {
+  const sessao = historico.obter(id);
+  if (!sessao) return;
+
+  const quantas = sessao.avaliacao?.cartelas ?? sessao.melhor.length;
+  if (!confirm(`Excluir este trabalho de ${quantas} cartelas? Não dá para desfazer.`)) return;
+
+  historico.remover(id);
+  if (sessaoAtual === id) sessaoAtual = null;
+  pintarHistorico();
+  avisar('Trabalho excluído.', true);
+}
+
+$('limpar-historico').addEventListener('click', () => {
+  const total = historico.quantidade();
+  if (!total) return;
+  if (!confirm(`Apagar todos os ${total} trabalhos do histórico? Não dá para desfazer.`)) return;
+
+  historico.limpar();
+  sessaoAtual = null;
+  pintarHistorico();
+  avisar('Histórico apagado.', true);
+});
+
+/** Mostra o atalho da tela inicial só quando há o que continuar. */
+function atualizarAtalhoDoHistorico(total = historico.quantidade()) {
+  $('ir-para-historico').hidden = total === 0;
+}
+
 /* ─────────── manter a tela ligada ─────────── */
 
 /*
@@ -618,16 +805,10 @@ atualizarPrevisao();
 pintarRecordes();
 definirFase('ocioso');
 
-if (localStorage.getItem(CHAVE_SALVO)) {
-  $('retomar').hidden = false;
-  try {
-    melhorCartelas = JSON.parse(localStorage.getItem(CHAVE_SALVO)).melhor || [];
-    pintarCartelas();
-  } catch {
-    localStorage.removeItem(CHAVE_SALVO);
-    $('retomar').hidden = true;
-  }
-}
+// Traz a busca única da versão anterior para dentro do histórico, para quem
+// já usava o aplicativo não perder o trabalho em andamento na atualização.
+historico.migrarDaVersaoAntiga();
+pintarHistorico();
 
 /* ─────────── atualização do aplicativo ─────────── */
 

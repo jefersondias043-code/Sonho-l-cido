@@ -31,6 +31,7 @@
   <button class="aba ativa" role="tab" data-painel="configurar">Configurar</button>
   <button class="aba" role="tab" data-painel="buscar">Buscar</button>
   <button class="aba" role="tab" data-painel="resultado">Resultado</button>
+  <button class="aba" role="tab" data-painel="historico">Histórico</button>
 </nav>
 
 <main>
@@ -108,7 +109,9 @@
   </div>
 
   <button class="principal" id="iniciar">Iniciar busca</button>
-  <button class="secundario" id="retomar" hidden>Retomar busca salva</button>
+  <button class="secundario" id="ir-para-historico" hidden>
+    Continuar um trabalho salvo
+  </button>
 
   <p class="rodape-nota">
     Tudo roda dentro do seu aparelho. Nenhum dado sai daqui, e depois da
@@ -223,6 +226,29 @@
       <p class="ajuda">Nenhuma solução ainda. Inicie uma busca.</p>
     </div>
   </div>
+</section>
+
+<!-- ══════════════════ HISTÓRICO ══════════════════ -->
+<section id="historico" class="painel">
+  <div class="cartao">
+    <h2>Seus trabalhos</h2>
+    <p class="ajuda">
+      Cada busca é salva sozinha, e vai sendo atualizada a cada melhoria
+      encontrada. Você pode voltar a qualquer uma delas e continuar de onde
+      parou — o motor retoma com a solução que já havia alcançado.
+    </p>
+  </div>
+
+  <div id="lista-historico"></div>
+
+  <button class="secundario perigo" id="limpar-historico" hidden>
+    Apagar todo o histórico
+  </button>
+
+  <p class="rodape-nota">
+    O histórico fica guardado neste aparelho. Apagar os dados do navegador
+    apaga o histórico junto — exporte as cartelas que quiser guardar de vez.
+  </p>
 </section>
 
 </main>

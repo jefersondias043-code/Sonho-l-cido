@@ -440,12 +440,21 @@ try {
   await pagina.waitForSelector('#configurar.ativo', { timeout: 10000 });
 
   // ─── persistência ───
-  const salvo = await pagina.evaluate(() => localStorage.getItem('sonho-lucido:busca'));
-  marcar(!!salvo, 'a busca fica salva no aparelho');
+  const guardadas = await pagina.evaluate(() => {
+    const bruto = localStorage.getItem('sonho-lucido:historico');
+    return bruto ? JSON.parse(bruto).length : 0;
+  });
+  marcar(guardadas > 0, 'os trabalhos ficam salvos no aparelho', `${guardadas} no histórico`);
 
   await pagina.reload({ waitUntil: 'networkidle' });
-  const temRetomar = await pagina.locator('#retomar').isVisible();
-  marcar(temRetomar, 'ao reabrir, o app oferece retomar de onde parou');
+  await pagina.click('.aba[data-painel="historico"]');
+  await pagina.waitForSelector('#historico.ativo');
+  const listadas = await pagina.locator('.sessao').count();
+  marcar(
+    listadas === guardadas,
+    'ao reabrir, o histórico continua lá',
+    `${listadas} trabalhos listados`
+  );
 
   marcar(errosDeConsole.length === 0, 'nenhum erro no console', errosDeConsole.join(' | ').slice(0, 120));
 } finally {

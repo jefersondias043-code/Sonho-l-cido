@@ -84,6 +84,10 @@ jobs:
           # publicada chegue de fato ao aparelho de quem já usava o aplicativo.
           node web/testar-atualizacao.mjs
 
+          # E o histórico: nenhum trabalho pode se perder, e continuar um
+          # trabalho tem de atualizar o registro dele, não criar outro ao lado.
+          node web/testar-historico.mjs
+
       - name: Publicar na branch gh-pages
         run: |
           set -euo pipefail

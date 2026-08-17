@@ -104,6 +104,18 @@ servem como separador; linhas iniciadas por `#` são comentários.
 O motor **não fica preso às cartelas que você forneceu** (§32). Ele pode
 remover, reorganizar e criar outras — o que importa é a regra de cobertura.
 
+### Histórico de trabalhos
+
+No aplicativo, toda busca é salva sozinha assim que produz a primeira solução, e
+o registro vai sendo atualizado a cada melhoria. A aba **Histórico** lista os
+trabalhos; **Continuar** retoma qualquer um deles com a solução já alcançada e a
+contagem de iterações de onde parou — e aprimora **aquele mesmo registro**, em
+vez de criar uma cópia ao lado.
+
+Fica tudo no armazenamento do próprio aparelho. Armazenamento de navegador não é
+cofre: o iOS pode limpar dados de sites pouco visitados, e apagar os dados do
+navegador leva o histórico junto. Para guardar de vez, exporte as cartelas.
+
 ### Parar e continuar
 
 `Ctrl+C` interrompe a qualquer momento. Nada se perde: cada recorde vai para o
@@ -190,7 +202,12 @@ crates/
 ├── motor-cli/           a linha de comando
 └── motor-web/           a ponte para o navegador, via WebAssembly
 
-web/                     a interface do aplicativo (HTML, CSS, JavaScript)
+web/                     a interface do aplicativo
+├── index.html           as quatro telas
+├── app.js               a interface: só apresentação e ciclo de vida
+├── trabalhador.js       o motor rodando num Web Worker, em lotes
+├── historico.js         os trabalhos salvos no aparelho
+└── sw.js                funcionamento sem internet e atualização automática
 ```
 
 O mesmo motor atende os dois caminhos. A versão do celular não é uma
@@ -258,6 +275,7 @@ que ele sabe.
 | Interface de linha de comando (`motor-cli`) | ✅ implementado |
 | Motor no navegador (`motor-web`, WebAssembly) | ✅ implementado |
 | Aplicativo para celular (instalável, offline) | ✅ implementado |
+| Histórico de trabalhos, com retomada | ✅ implementado |
 | Busca em paralelo (múltiplos núcleos) | ⬜ planejado |
 
 ### Limitações conhecidas
@@ -288,6 +306,7 @@ cargo run --release --example aferir            # aferição contra a literatura
 node web/testar.mjs                             # testa a interface na raiz
 node web/testar.mjs /Sonho-l-cido/              # testa sob a subpasta do Pages
 node web/testar-atualizacao.mjs                 # testa a atualização automática
+node web/testar-historico.mjs                   # testa o histórico de trabalhos
 python3 -m http.server -d site 8000             # experimenta localmente
 ```
 
