@@ -119,6 +119,14 @@
 <!-- ══════════════════ BUSCAR ══════════════════ -->
 <section id="buscar" class="painel">
 
+  <!-- Fica no topo e sempre visível: é aqui que o usuário confere, de relance,
+       se o motor está trabalhando ou parado. -->
+  <div class="situacao" id="situacao">
+    <span class="pulso" id="pulso"></span>
+    <span id="texto-situacao">preparando…</span>
+    <span class="relogio" id="relogio">0,0 s</span>
+  </div>
+
   <div class="cartao destaque">
     <div class="rotulo">Melhor solução conhecida</div>
     <div class="numerao"><span id="melhor-cartelas">—</span><small>cartelas</small></div>
@@ -153,13 +161,20 @@
       <div class="item"><span id="elites">—</span><small>soluções guardadas</small></div>
       <div class="item"><span id="iteracoes">—</span><small>iterações</small></div>
       <div class="item"><span id="velocidade">—</span><small>por segundo</small></div>
+      <div class="item"><span id="recordes">—</span><small>melhorias</small></div>
     </div>
   </div>
 
   <div class="controles">
     <button class="principal" id="pausar">Pausar</button>
-    <button class="secundario" id="reiniciar">Recomeçar</button>
+    <button class="secundario perigo" id="encerrar">Encerrar</button>
   </div>
+  <p class="ajuda">
+    <strong>Pausar</strong> congela a busca e guarda tudo — dá para continuar do
+    mesmo ponto. <strong>Encerrar</strong> desliga o motor de vez e libera a
+    memória, para você configurar outra busca. O resultado já encontrado
+    continua na aba Resultado.
+  </p>
 
   <label class="alternador">
     <input type="checkbox" id="manter-tela">

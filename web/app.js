@@ -4,6 +4,18 @@
  * Não faz conta nenhuma: toda a matemática está no WebAssembly, dentro do
  * worker. Aqui só existe o que é de interface — trocar de aba, formatar
  * número, guardar o progresso e conversar com o worker.
+ *
+ * ## O ciclo de vida da busca
+ *
+ * A tela sempre diz em qual destes pontos ela está. Isso não é enfeite: entre
+ * tocar em "Iniciar" e o primeiro número aparecer há dois trabalhos demorados
+ * — baixar e instanciar o WebAssembly, e construir a solução inicial. Sem
+ * anunciar cada um, o usuário fica olhando para uma tela parada sem saber se o
+ * aparelho está trabalhando ou se travou.
+ *
+ *   ocioso → carregando → preparando → buscando ⇄ pausado
+ *                                          ↓
+ *                                      concluida
  */
 
 const $ = (id) => document.getElementById(id);
@@ -11,10 +23,16 @@ const $ = (id) => document.getElementById(id);
 /* ─────────── estado da página ─────────── */
 
 let trabalhador = null;
-let rodando = false;
+let fase = 'ocioso';
 let recordes = [];
 let melhorCartelas = [];
 let travaDeTela = null;
+
+/* O relógio é da interface, não do motor: mede o que o usuário esperou. */
+let inicioDoTrecho = 0;
+let tempoAcumulado = 0;
+let cronometro = null;
+
 const CHAVE_SALVO = 'sonho-lucido:busca';
 
 /* ─────────── formatação ─────────── */
@@ -22,12 +40,90 @@ const CHAVE_SALVO = 'sonho-lucido:busca';
 const milhares = (n) => Math.round(n).toLocaleString('pt-BR');
 const porcento = (f) => `${(f * 100).toFixed(1).replace('.', ',')}%`;
 
+/**
+ * Tempo decorrido, na precisão que faz sentido para a escala.
+ *
+ * Um relógio fixo em `HH:MM:SS` mostra `00:00:00` numa busca que termina em
+ * setecentos milissegundos — e um zero parado é exatamente o que faz o usuário
+ * achar que nada aconteceu. Abaixo de um minuto, décimos de segundo mostram
+ * que o tempo correu de verdade.
+ */
+function duracao(ms) {
+  const segundos = ms / 1000;
+  if (segundos < 60) {
+    return `${segundos.toFixed(1).replace('.', ',')} s`;
+  }
+
+  const total = Math.floor(segundos);
+  const doisDigitos = (n) => String(Math.floor(n)).padStart(2, '0');
+  const partes = [(total % 3600) / 60, total % 60];
+  if (total >= 3600) partes.unshift(total / 3600);
+  return partes.map(doisDigitos).join(':');
+}
+
 /** `C(n, k)` em ponto flutuante — só para estimar o tamanho do problema. */
 function combinacoes(n, k) {
   if (k < 0 || k > n) return 0;
   let total = 1;
   for (let i = 0; i < k; i++) total = (total * (n - i)) / (i + 1);
   return total;
+}
+
+/* ─────────── situação e relógio ─────────── */
+
+const SITUACOES = {
+  ocioso: { classe: '', texto: 'parado' },
+  carregando: { classe: 'trabalhando', texto: 'carregando o motor…' },
+  preparando: { classe: 'trabalhando', texto: 'montando a primeira solução…' },
+  buscando: { classe: 'trabalhando', texto: 'procurando soluções melhores' },
+  pausado: { classe: 'pausada', texto: 'pausado' },
+  concluida: { classe: 'concluida', texto: 'ótimo provado — não há melhor' },
+  falhou: { classe: 'falhou', texto: 'algo deu errado' },
+};
+
+function definirFase(nova, textoExtra = null) {
+  fase = nova;
+  const { classe, texto } = SITUACOES[nova] ?? SITUACOES.ocioso;
+
+  const faixa = $('situacao');
+  faixa.className = `situacao ${classe}`;
+  $('texto-situacao').textContent = textoExtra ?? texto;
+
+  // O relógio corre enquanto há trabalho acontecendo — inclusive durante o
+  // carregamento e a construção inicial, que é justamente quando o usuário
+  // mais precisa ver que algo se move.
+  const trabalhando = ['carregando', 'preparando', 'buscando'].includes(nova);
+  if (trabalhando) iniciarCronometro();
+  else pararCronometro();
+
+  $('pausar').textContent = nova === 'pausado' ? 'Continuar' : 'Pausar';
+  $('pausar').disabled = ['ocioso', 'carregando', 'preparando', 'concluida', 'falhou'].includes(nova);
+}
+
+function iniciarCronometro() {
+  if (cronometro) return;
+  inicioDoTrecho = performance.now();
+  const tique = () => {
+    $('relogio').textContent = duracao(tempoAcumulado + (performance.now() - inicioDoTrecho));
+  };
+  tique();
+  // Cinco vezes por segundo: barato (é uma atribuição de texto) e suficiente
+  // para os décimos se moverem visivelmente numa busca curta.
+  cronometro = setInterval(tique, 200);
+}
+
+function pararCronometro() {
+  if (!cronometro) return;
+  clearInterval(cronometro);
+  cronometro = null;
+  tempoAcumulado += performance.now() - inicioDoTrecho;
+  $('relogio').textContent = duracao(tempoAcumulado);
+}
+
+function zerarCronometro() {
+  pararCronometro();
+  tempoAcumulado = 0;
+  $('relogio').textContent = duracao(0);
 }
 
 /* ─────────── abas ─────────── */
@@ -170,28 +266,59 @@ function garantirTrabalhador() {
 
   trabalhador.onmessage = ({ data }) => {
     switch (data.tipo) {
+      // O WebAssembly terminou de carregar. Ainda não há solução nenhuma.
+      case 'pronto':
+        definirFase('preparando');
+        break;
+
+      // A configuração foi aceita; a construção inicial vem a seguir.
       case 'criado':
+        definirFase('preparando');
+        break;
+
+      // Existe uma primeira solução. É o momento em que a tela deixa de estar
+      // vazia — e a partir daqui o número só pode cair.
+      case 'preparado':
         aplicarEstado(data.estado);
-        mostrarPainel('buscar');
-        trabalhador.postMessage({ tipo: 'rodar' });
-        rodando = true;
-        $('pausar').textContent = 'Pausar';
+        if (data.estado.encerrado) {
+          definirFase('concluida');
+          avisar('Ótimo provado já na primeira tentativa.', true);
+        } else {
+          trabalhador.postMessage({ tipo: 'rodar' });
+          definirFase('buscando');
+        }
         break;
 
       case 'estado':
         aplicarEstado(data.estado);
+        if (fase === 'buscando') {
+          $('texto-situacao').textContent = `procurando algo menor que ${data.estado.melhor_cartelas}`;
+        }
         break;
 
-      case 'encerrado':
+      case 'otimo':
         aplicarEstado(data.estado);
-        rodando = false;
-        $('pausar').textContent = 'Continuar';
+        definirFase('concluida');
         soltarTelaLigada();
         avisar('Ótimo provado — não existe solução melhor.', true);
         break;
 
       case 'pausado':
         aplicarEstado(data.estado);
+        definirFase('pausado');
+        break;
+
+      // O usuário mandou encerrar. O worker já devolveu tudo e liberou a
+      // memória; aqui só resta desmontá-lo e voltar à configuração.
+      case 'encerrado':
+        if (data.salvo) localStorage.setItem(CHAVE_SALVO, data.salvo);
+        desmontarTrabalhador();
+        definirFase('ocioso');
+        zerarCronometro();
+        soltarTelaLigada();
+        $('retomar').hidden = !localStorage.getItem(CHAVE_SALVO);
+        mostrarPainel('configurar');
+        avisar('Busca encerrada. O resultado ficou salvo.', true);
         break;
 
       case 'exportado':
@@ -199,8 +326,8 @@ function garantirTrabalhador() {
         break;
 
       case 'erro':
-        rodando = false;
-        $('pausar').textContent = 'Continuar';
+        definirFase('falhou', data.mensagem);
+        soltarTelaLigada();
         avisar(data.mensagem);
         break;
 
@@ -210,10 +337,17 @@ function garantirTrabalhador() {
   };
 
   trabalhador.onerror = (erro) => {
+    definirFase('falhou');
     avisar(`Falha no motor: ${erro.message || 'erro desconhecido'}`);
   };
 
   return trabalhador;
+}
+
+function desmontarTrabalhador() {
+  if (!trabalhador) return;
+  trabalhador.terminate();
+  trabalhador = null;
 }
 
 /* ─────────── pintar a tela ─────────── */
@@ -230,6 +364,7 @@ function aplicarEstado(estado) {
   $('elites').textContent = estado.elites;
   $('iteracoes').textContent = milhares(estado.iteracoes);
   $('velocidade').textContent = estado.velocidade ? milhares(estado.velocidade) : '—';
+  $('recordes').textContent = estado.recordes;
 
   $('selo-otimo').hidden = !estado.optimalidade_provada;
 
@@ -239,7 +374,7 @@ function aplicarEstado(estado) {
     pedirMelhorSolucao();
     // Cada recorde é gravado na hora. Se a aba morrer — e no celular ela morre
     // com frequência — o que já foi encontrado continua aqui.
-    trabalhador.postMessage({ tipo: 'exportar' });
+    trabalhador?.postMessage({ tipo: 'exportar' });
   }
 
   $('res-cartelas').textContent = estado.melhor_cartelas || '—';
@@ -248,6 +383,11 @@ function aplicarEstado(estado) {
 }
 
 function pintarRecordes() {
+  if (!recordes.length) {
+    $('lista-recordes').innerHTML =
+      '<li class="ajuda">as melhorias vão aparecer aqui conforme forem encontradas</li>';
+    return;
+  }
   $('lista-recordes').innerHTML = recordes
     .map(
       (r) => `
@@ -307,33 +447,8 @@ $('iniciar').addEventListener('click', () => {
     return;
   }
 
-  recordes = [];
-  melhorCartelas = [];
-  pintarRecordes();
-  pintarCartelas();
-  localStorage.removeItem(CHAVE_SALVO);
-
-  garantirTrabalhador().postMessage({ tipo: 'criar', configuracao });
-  segurarTelaLigada();
+  comecar({ configuracao });
 });
-
-$('pausar').addEventListener('click', () => {
-  if (!trabalhador) return;
-  if (rodando) {
-    trabalhador.postMessage({ tipo: 'pausar' });
-    trabalhador.postMessage({ tipo: 'exportar' });
-    rodando = false;
-    $('pausar').textContent = 'Continuar';
-    soltarTelaLigada();
-  } else {
-    trabalhador.postMessage({ tipo: 'rodar' });
-    rodando = true;
-    $('pausar').textContent = 'Pausar';
-    segurarTelaLigada();
-  }
-});
-
-$('reiniciar').addEventListener('click', () => mostrarPainel('configurar'));
 
 $('retomar').addEventListener('click', () => {
   const salvo = localStorage.getItem(CHAVE_SALVO);
@@ -341,19 +456,76 @@ $('retomar').addEventListener('click', () => {
 
   try {
     const estado = JSON.parse(salvo);
-    recordes = [];
-    melhorCartelas = estado.melhor || [];
-    pintarCartelas();
-    garantirTrabalhador().postMessage({
-      tipo: 'criar',
-      configuracao: estado.configuracao,
-      salvo,
-    });
-    segurarTelaLigada();
+    comecar({ configuracao: estado.configuracao, salvo }, estado.melhor || []);
   } catch {
     avisar('A busca salva está corrompida. Comece uma nova.');
     localStorage.removeItem(CHAVE_SALVO);
+    $('retomar').hidden = true;
   }
+});
+
+/**
+ * Dá a partida, mostrando a tela de busca **antes** de qualquer trabalho
+ * pesado.
+ *
+ * A ordem importa mais do que parece. Criar o worker e instanciar o
+ * WebAssembly leva de centenas de milissegundos a alguns segundos num celular.
+ * Trocar de tela só ao fim disso deixava o toque no botão sem resposta
+ * nenhuma — o usuário tocava e nada acontecia, o que parece um aplicativo
+ * quebrado. Trocando primeiro, o carregamento acontece com o relógio correndo
+ * e o ponto pulsando à vista.
+ */
+function comecar({ configuracao, salvo }, cartelasIniciais = []) {
+  // Um motor antigo ainda vivo continuaria consumindo processador e memória.
+  desmontarTrabalhador();
+
+  recordes = [];
+  melhorCartelas = cartelasIniciais;
+  pintarRecordes();
+  pintarCartelas();
+  if (!salvo) localStorage.removeItem(CHAVE_SALVO);
+
+  ['melhor-cartelas', 'limite-inferior', 'gap', 'cobertura'].forEach((id) => {
+    $(id).textContent = '—';
+  });
+  ['atual-cartelas', 'atual-descobertos', 'meta', 'elites', 'iteracoes', 'velocidade', 'recordes']
+    .forEach((id) => {
+      $(id).textContent = '—';
+    });
+  $('selo-otimo').hidden = true;
+
+  zerarCronometro();
+  mostrarPainel('buscar');
+  definirFase('carregando');
+
+  garantirTrabalhador().postMessage({ tipo: 'criar', configuracao, salvo });
+  segurarTelaLigada();
+}
+
+$('pausar').addEventListener('click', () => {
+  if (!trabalhador) return;
+
+  if (fase === 'buscando') {
+    trabalhador.postMessage({ tipo: 'pausar' });
+    trabalhador.postMessage({ tipo: 'exportar' });
+    soltarTelaLigada();
+  } else if (fase === 'pausado') {
+    trabalhador.postMessage({ tipo: 'rodar' });
+    definirFase('buscando');
+    segurarTelaLigada();
+  }
+});
+
+$('encerrar').addEventListener('click', () => {
+  if (!trabalhador) {
+    definirFase('ocioso');
+    mostrarPainel('configurar');
+    return;
+  }
+  // O worker devolve o estado final e libera a memória; a resposta 'encerrado'
+  // é quem desmonta tudo e traz o usuário de volta à configuração.
+  definirFase('ocioso', 'encerrando…');
+  trabalhador.postMessage({ tipo: 'encerrar' });
 });
 
 $('copiar').addEventListener('click', async () => {
@@ -418,12 +590,12 @@ function soltarTelaLigada() {
 }
 
 $('manter-tela').addEventListener('change', () => {
-  if ($('manter-tela').checked && rodando) segurarTelaLigada();
+  if ($('manter-tela').checked && fase === 'buscando') segurarTelaLigada();
   else soltarTelaLigada();
 });
 
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible' && rodando) segurarTelaLigada();
+  if (document.visibilityState === 'visible' && fase === 'buscando') segurarTelaLigada();
 });
 
 if (!('wakeLock' in navigator)) {
@@ -448,6 +620,8 @@ function avisar(mensagem, bom = false) {
 /* ─────────── partida ─────────── */
 
 atualizarPrevisao();
+pintarRecordes();
+definirFase('ocioso');
 
 if (localStorage.getItem(CHAVE_SALVO)) {
   $('retomar').hidden = false;

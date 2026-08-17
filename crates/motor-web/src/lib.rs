@@ -218,6 +218,35 @@ impl MotorWeb {
         self.retomar_com(estado_json).map_err(|e| JsValue::from_str(&e))
     }
 
+    /// Constrói a solução inicial sem começar a busca.
+    ///
+    /// Existe para a interface ter o que mostrar. A construção gulosa acontece
+    /// dentro da primeira chamada de [`Self::avancar`], e num problema grande
+    /// ela sozinha leva segundos — durante os quais a tela ficaria parada, sem
+    /// número nenhum, indistinguível de um travamento.
+    ///
+    /// Separando-a, o usuário vê de imediato quantas cartelas o ponto de
+    /// partida usa, e a partir daí acompanha o número cair.
+    pub fn preparar(&mut self) -> String {
+        let mut coletor = ColetorDeRecordes::default();
+
+        // Teto igual à contagem atual: a construção inicial roda, o laço de
+        // busca não chega a dar uma volta.
+        let condicoes = CondicoesDeParada {
+            max_iteracoes: Some(self.interno.estatisticas().iteracoes),
+            max_duracao: None,
+            parar_em_optimalidade: true,
+        };
+
+        let motivo = self.interno.executar(&self.controle, &condicoes, &mut coletor);
+        if motivo == MotivoEncerramento::OptimalidadeProvada {
+            // Acontece: em problemas pequenos o guloso já acerta o ótimo.
+            self.encerrado = true;
+        }
+
+        self.montar_estado(coletor.recordes)
+    }
+
     /// Roda um lote de iterações e devolve o estado resultante em JSON.
     ///
     /// Um lote grande demais trava a interface; pequeno demais gasta mais tempo
@@ -399,6 +428,41 @@ mod testes {
     fn json_malformado_devolve_erro_legivel() {
         let texto = mensagem_de_erro(MotorWeb::construir("{isto não é json}"));
         assert!(texto.contains("ilegível"), "mensagem foi: {texto}");
+    }
+
+    #[test]
+    fn preparar_da_um_ponto_de_partida_sem_iterar() {
+        // É o que tira a interface do escuro: um número na tela antes de a
+        // busca começar.
+        let mut motor = MotorWeb::construir(&configuracao(16, 4, 2)).unwrap();
+
+        let antes = estado_de(&motor.estado());
+        assert_eq!(antes["melhor_cartelas"].as_u64().unwrap(), 0, "nada ainda");
+
+        let depois = estado_de(&motor.preparar());
+        assert!(
+            depois["melhor_cartelas"].as_u64().unwrap() > 0,
+            "a construção inicial precisa produzir uma solução"
+        );
+        assert_eq!(
+            depois["iteracoes"].as_u64().unwrap(),
+            0,
+            "preparar não pode consumir iterações da busca"
+        );
+        assert_eq!(depois["melhor_cobertura"].as_f64().unwrap(), 1.0);
+    }
+
+    #[test]
+    fn preparar_e_avancar_se_encaixam() {
+        let mut motor = MotorWeb::construir(&configuracao(16, 4, 2)).unwrap();
+        let inicial = estado_de(&motor.preparar())["melhor_cartelas"].as_u64().unwrap();
+
+        let depois = estado_de(&motor.avancar(20_000));
+        assert!(
+            depois["melhor_cartelas"].as_u64().unwrap() <= inicial,
+            "a busca só pode melhorar o que a construção entregou"
+        );
+        assert!(depois["iteracoes"].as_u64().unwrap() > 0);
     }
 
     #[test]

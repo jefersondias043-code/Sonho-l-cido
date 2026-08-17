@@ -238,8 +238,80 @@ main { padding: 8px 16px 0; }
   color: var(--texto);
 }
 
+/* Encerrar descarta o motor e a memória dele; a cor avisa antes do toque. */
+.secundario.perigo {
+  border-color: #6b3a3a;
+  color: var(--vermelho);
+}
+
+.principal[data-ocupado="sim"] {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
 .controles { display: flex; gap: 10px; }
 .controles > button { flex: 1; }
+
+/* ─────────── situação da busca ─────────── */
+
+/*
+ * A faixa de situação responde à pergunta que o usuário faz o tempo todo:
+ * "isso está funcionando ou travou?". Por isso fica grudada no topo, sempre
+ * visível, e o ponto pulsa — movimento é a única prova de vida que não exige
+ * ler nada.
+ */
+.situacao {
+  position: sticky;
+  top: calc(env(safe-area-inset-top) + 56px);
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--fundo-campo);
+  border: 1px solid var(--borda);
+  border-radius: 999px;
+  padding: 10px 16px;
+  margin-bottom: 14px;
+  font-size: 14px;
+}
+
+.pulso {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--texto-fraco);
+  flex-shrink: 0;
+}
+
+.situacao.trabalhando .pulso {
+  background: var(--verde);
+  animation: pulsar 1.1s ease-in-out infinite;
+}
+
+.situacao.trabalhando { border-color: #2f5d43; }
+.situacao.pausada .pulso { background: var(--ouro); }
+.situacao.pausada { border-color: #6b5a2a; }
+.situacao.concluida .pulso { background: var(--verde); }
+.situacao.concluida { border-color: var(--verde); }
+.situacao.falhou .pulso { background: var(--vermelho); }
+.situacao.falhou { border-color: var(--vermelho); }
+
+@keyframes pulsar {
+  0%, 100% { opacity: 1; transform: scale(1); box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.5); }
+  50% { opacity: 0.65; transform: scale(1.25); box-shadow: 0 0 0 6px rgba(74, 222, 128, 0); }
+}
+
+/* Quem pediu menos animação não recebe o pulso — só a cor. */
+@media (prefers-reduced-motion: reduce) {
+  .situacao.trabalhando .pulso { animation: none; }
+}
+
+.relogio {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  color: var(--texto-fraco);
+  font-size: 13.5px;
+}
 
 /* ─────────── números grandes ─────────── */
 

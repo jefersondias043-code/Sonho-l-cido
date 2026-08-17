@@ -153,10 +153,51 @@ try {
 
 
 
-  // ─── busca ───
+  // ─── a resposta imediata ao toque ───
+  //
+  // O defeito que isto cobre: a tela de busca só aparecia depois de o
+  // WebAssembly carregar. Do lado do usuário, o toque no botão não produzia
+  // reação nenhuma por vários segundos — indistinguível de um aplicativo
+  // quebrado.
+  const antesDoToque = Date.now();
   await pagina.click('#iniciar');
   await pagina.waitForSelector('#buscar.ativo', { timeout: 15000 });
-  marcar(true, 'iniciar leva para a tela de busca');
+  const atraso = Date.now() - antesDoToque;
+
+  marcar(
+    atraso < 1000,
+    'a tela responde ao toque de imediato',
+    `${atraso} ms até trocar de tela`
+  );
+
+  const situacaoInicial = await pagina.locator('#texto-situacao').textContent();
+  marcar(
+    /carregando|montando|procurando/.test(situacaoInicial),
+    'a tela diz o que está acontecendo',
+    `"${situacaoInicial.trim()}"`
+  );
+
+  marcar(
+    await pagina.locator('#situacao.trabalhando').isVisible(),
+    'o indicador de atividade está pulsando'
+  );
+
+  // Antes de qualquer iteração já existe uma solução na tela: é a construção
+  // inicial, separada justamente para o usuário não ficar olhando para o vazio.
+  await pagina.waitForFunction(
+    () => {
+      const t = document.getElementById('melhor-cartelas').textContent.trim();
+      return t !== '' && t !== '—';
+    },
+    undefined,
+    { timeout: 20000 }
+  );
+  const primeiraSolucao = await pagina.locator('#melhor-cartelas').textContent();
+  marcar(
+    Number(primeiraSolucao) > 0,
+    'uma primeira solução aparece antes da busca',
+    `${primeiraSolucao.trim()} cartelas de partida`
+  );
 
   // Só agora o worker existe e o WebAssembly foi buscado. Um caminho absoluto
   // funcionaria na raiz e falharia aqui — que é exatamente a condição do
@@ -224,6 +265,103 @@ try {
   );
 
   await pagina.screenshot({ path: 'capturas/captura-resultado.png' });
+
+  // ─── uma busca longa: relógio, pausa e encerramento ───
+  //
+  // C(25,5,2) não é resolvido em segundos, então a busca fica de fato correndo
+  // — que é a condição em que o relógio, o botão de pausa e o de encerrar
+  // precisam funcionar. Num problema que termina antes do primeiro segundo,
+  // nada disso chega a ser exercitado.
+  await pagina.click('.aba[data-painel="configurar"]');
+  // O universo precisa acompanhar o pool: um pool maior que o universo é
+  // configuração inválida, e a tela recusa iniciar — corretamente.
+  await pagina.fill('#universo', '25');
+  await pagina.fill('#pool', '25');
+  await pagina.fill('#cartela', '5');
+  await pagina.fill('#cobrir', '2');
+  await pagina.click('#iniciar');
+  await pagina.waitForSelector('#buscar.ativo', { timeout: 15000 });
+
+  // O relógio precisa andar. É a prova de vida que não exige entender nada do
+  // que está escrito na tela.
+  const relogioAntes = await pagina.locator('#relogio').textContent();
+  await pagina.waitForFunction(
+    (anterior) => document.getElementById('relogio').textContent !== anterior,
+    relogioAntes,
+    { timeout: 8000 }
+  );
+  marcar(true, 'o relógio corre durante a busca', `saiu de ${relogioAntes}`);
+
+  // Pausar precisa congelar de verdade: as iterações param de subir.
+  await pagina.click('#pausar');
+  await pagina.waitForFunction(
+    () => document.getElementById('texto-situacao').textContent.includes('pausado'),
+    undefined,
+    { timeout: 10000 }
+  );
+  const iteracoesAoPausar = await pagina.locator('#iteracoes').textContent();
+  await pagina.waitForTimeout(1500);
+  marcar(
+    (await pagina.locator('#iteracoes').textContent()) === iteracoesAoPausar,
+    'pausar congela a busca de verdade',
+    `parada em ${iteracoesAoPausar} iterações`
+  );
+  marcar(
+    (await pagina.locator('#pausar').textContent()).includes('Continuar'),
+    'o botão passa a oferecer continuar'
+  );
+
+  // Continuar retoma de onde parou.
+  await pagina.click('#pausar');
+  await pagina.waitForFunction(
+    (anterior) => document.getElementById('iteracoes').textContent !== anterior,
+    iteracoesAoPausar,
+    { timeout: 10000 }
+  );
+  marcar(true, 'continuar retoma de onde parou');
+
+  // ─── encerrar ───
+  //
+  // O defeito que isto cobre: o botão antigo só trocava de aba, e a busca
+  // continuava rodando por baixo, consumindo processador e bateria.
+  await pagina.click('#encerrar');
+  await pagina.waitForSelector('#configurar.ativo', { timeout: 10000 });
+  marcar(true, 'encerrar devolve à tela de configuração');
+
+  const situacaoFinal = await pagina.locator('#situacao').getAttribute('class');
+  marcar(
+    !situacaoFinal.includes('trabalhando'),
+    'encerrar realmente para o motor',
+    `situação: "${situacaoFinal.replace('situacao', '').trim() || 'parada'}"`
+  );
+
+  // E as iterações param de subir de vez — se o worker tivesse sobrevivido,
+  // continuariam correndo em segundo plano.
+  const iteracoesAoEncerrar = await pagina.locator('#iteracoes').textContent();
+  await pagina.waitForTimeout(2000);
+  marcar(
+    (await pagina.locator('#iteracoes').textContent()) === iteracoesAoEncerrar,
+    'nada continua rodando em segundo plano',
+    `congelado em ${iteracoesAoEncerrar}`
+  );
+
+  // E dá para começar outra busca em seguida, com outra configuração.
+  await pagina.fill('#universo', '13');
+  await pagina.fill('#pool', '13');
+  await pagina.fill('#cartela', '4');
+  await pagina.fill('#cobrir', '2');
+  await pagina.click('#iniciar');
+  await pagina.waitForSelector('#buscar.ativo', { timeout: 15000 });
+  await pagina.waitForSelector('#selo-otimo:not([hidden])', { timeout: 60000 });
+  const segunda = await pagina.locator('#melhor-cartelas').textContent();
+  marcar(
+    segunda.trim() === '13',
+    'uma segunda busca roda limpa depois de encerrar',
+    `C(13,4,2) = 13, encontrou ${segunda.trim()}`
+  );
+
+  await pagina.click('#encerrar');
+  await pagina.waitForSelector('#configurar.ativo', { timeout: 10000 });
 
   // ─── persistência ───
   const salvo = await pagina.evaluate(() => localStorage.getItem('sonho-lucido:busca'));

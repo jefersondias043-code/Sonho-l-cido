@@ -21,9 +21,23 @@ const ALVO_MS_POR_LOTE = 220;
 const LOTE_MINIMO = 20;
 const LOTE_MAXIMO = 2_000_000;
 
+/**
+ * Tamanho do primeiro lote, antes de haver qualquer medição.
+ *
+ * Deliberadamente pequeno. A calibragem só age a partir do segundo lote, então
+ * o primeiro é um chute — e um chute grande custa caro: numa configuração
+ * pesada, onde o motor faz algumas centenas de iterações por segundo, duas mil
+ * iterações são mais de dez segundos de tela parada, sem número nenhum
+ * mudando. Do lado do usuário isso é indistinguível de um travamento.
+ *
+ * Começar pequeno atrasa em milissegundos o caso rápido e evita o silêncio
+ * longo no caso lento.
+ */
+const LOTE_INICIAL = 250;
+
 let motor = null;
 let rodando = false;
-let lote = 2_000;
+let lote = LOTE_INICIAL;
 let iniciadoEm = 0;
 let iteracoesNoInicio = 0;
 
@@ -81,6 +95,17 @@ function tratar(mensagem) {
         postMessage({ tipo: 'pausado', estado: lerEstado() });
         break;
 
+      case 'encerrar':
+        // Devolve o estado antes de liberar: é a última chance de guardar o
+        // resultado, e o usuário acabou de pedir para parar de vez.
+        postMessage({
+          tipo: 'encerrado',
+          estado: motor ? lerEstado() : null,
+          salvo: motor ? motor.exportar() : null,
+        });
+        descartarMotor();
+        break;
+
       case 'exportar':
         postMessage({ tipo: 'exportado', estado: motor ? motor.exportar() : null });
         break;
@@ -95,12 +120,7 @@ function tratar(mensagem) {
 }
 
 function criar({ configuracao, fechamento, salvo }) {
-  // Libera a memória do motor anterior. Sem isto, recomeçar várias vezes num
-  // celular acumula heaps de WebAssembly até o navegador derrubar a aba.
-  if (motor) {
-    motor.free();
-    motor = null;
-  }
+  descartarMotor();
 
   motor = new MotorWeb(JSON.stringify(configuracao));
 
@@ -110,8 +130,37 @@ function criar({ configuracao, fechamento, salvo }) {
     motor.semear(JSON.stringify(fechamento));
   }
 
-  lote = 2_000;
-  postMessage({ tipo: 'criado', estado: lerEstado(), totalAlvos: motor.total_alvos() });
+  lote = LOTE_INICIAL;
+  postMessage({ tipo: 'criado', totalAlvos: motor.total_alvos() });
+
+  // A construção inicial fica para o próximo tique. Ela pode levar segundos
+  // num problema grande, e assim a interface consegue anunciar "montando a
+  // primeira solução" antes de o trabalho começar, em vez de depois.
+  setTimeout(() => {
+    if (!motor) return;
+    try {
+      postMessage({ tipo: 'preparado', estado: JSON.parse(motor.preparar()) });
+    } catch (erro) {
+      postMessage({ tipo: 'erro', mensagem: String(erro?.message ?? erro) });
+    }
+  }, 0);
+}
+
+/**
+ * Libera a memória do motor.
+ *
+ * Cada motor carrega o vetor de cobertura inteiro, que em problemas grandes são
+ * centenas de megabytes. O coletor de lixo do JavaScript não enxerga a memória
+ * do WebAssembly, então sem esta chamada explícita começar buscas em sequência
+ * acumula heaps até o navegador derrubar a aba — e num celular isso acontece
+ * rápido.
+ */
+function descartarMotor() {
+  rodando = false;
+  if (motor) {
+    motor.free();
+    motor = null;
+  }
 }
 
 function lerEstado() {
@@ -146,8 +195,11 @@ function laco() {
   postMessage({ tipo: 'estado', estado });
 
   if (estado.encerrado) {
+    // "Ótimo" e "encerrado" são coisas diferentes: aqui a busca terminou
+    // porque não existe mais nada a procurar; `encerrar` é o usuário mandando
+    // parar. Nomes distintos evitam que a interface confunda os dois.
     rodando = false;
-    postMessage({ tipo: 'encerrado', estado });
+    postMessage({ tipo: 'otimo', estado });
     return;
   }
 
