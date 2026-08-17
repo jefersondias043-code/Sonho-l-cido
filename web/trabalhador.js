@@ -115,13 +115,25 @@ function tratar(mensagem) {
   }
 }
 
-function criar({ configuracao, fechamento, salvo }) {
+function criar({ configuracao, fechamento, doMundo, salvo }) {
   descartarMotor();
 
   motor = new MotorWeb(JSON.stringify(configuracao));
 
   if (salvo) {
     motor.retomar(salvo);
+  } else if (Array.isArray(doMundo) && doMundo.length > 0) {
+    // A cobertura do mundo, vinda da biblioteca guardada no aparelho, entra
+    // pelo mesmo caminho de qualquer fechamento: vira candidata a ponto de
+    // partida e concorre com a construção interna.
+    motor.semear_do_mundo(JSON.stringify(doMundo));
+
+    // E se o usuário também colou algo, oferece as duas. Semear de novo não
+    // descarta a primeira: do lado do Rust, a solução já escolhida entra como
+    // mais um candidato, todas são podadas, e vence a menor.
+    if (typeof fechamento === 'string' && fechamento.trim().length > 0) {
+      motor.semear_texto(fechamento);
+    }
   } else if (typeof fechamento === 'string' && fechamento.trim().length > 0) {
     // Texto cru, interpretado do lado do Rust. É o mesmo interpretador da linha
     // de comando, então o formato aceito é um só. O erro que ele devolve cita a

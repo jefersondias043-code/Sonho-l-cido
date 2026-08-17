@@ -19,6 +19,7 @@
  */
 
 import * as historico from './historico.js';
+import * as biblioteca from './biblioteca.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -482,6 +483,13 @@ function pintarPartida(estado) {
   let texto;
   if (trazidas === 0) {
     texto = `Partiu de: <b>${escapar(origem)}</b>`;
+  } else if (origem === 'cobertura do mundo') {
+    const podadas = trazidas - (estado.melhor_cartelas || trazidas);
+    texto =
+      `Partiu da <b>cobertura do mundo</b> guardada neste aparelho ` +
+      (podadas > 0
+        ? `<em>— ${trazidas} cartelas, das quais ${podadas} eram dispensáveis.</em>`
+        : `<em>— ${trazidas} cartelas prontas, sem reconstruir nada.</em>`);
   } else if (origem === 'fechamento importado') {
     const podadas = trazidas - (estado.melhor_cartelas || trazidas);
     texto =
@@ -636,8 +644,90 @@ $('iniciar').addEventListener('click', () => {
   // com o tempo, e a divergência apareceria como cartela aceita num lado e
   // recusada no outro.
   const fechamento = $('texto-fechamento').value.trim();
-  comecar({ configuracao, fechamento: fechamento || null });
+  iniciarBusca(configuracao, fechamento || null);
 });
+
+/**
+ * Dá a partida, consultando antes a biblioteca guardada no aparelho.
+ *
+ * Se existir uma cobertura do mundo para esta configuração, ela entra como
+ * ponto de partida. Não substitui o que o usuário colou nem manda no motor: as
+ * duas coisas viram candidatas, e `escolher_partida`, do lado do Rust, fica com
+ * a melhor depois de podar todas. O que a biblioteca faz é garantir que o
+ * melhor resultado já produzido no mundo esteja entre os candidatos, em vez de
+ * o motor ter de reconstruí-lo do zero.
+ */
+async function iniciarBusca(configuracao, fechamentoColado) {
+  let doMundo = null;
+  try {
+    // A biblioteca cataloga coberturas completas de t-uplas. Numa garantia
+    // parcial isso continua servindo: cobrir todas as t-uplas resolve a
+    // garantia com folga — é o mesmo argumento do teto mostrado na tela.
+    const blocos = await biblioteca.obter(
+      configuracao.pool.length,
+      configuracao.cartela,
+      configuracao.intersecao
+    );
+    if (blocos) {
+      // Os blocos vêm em 1..v; o pool pode ter rótulos quaisquer.
+      doMundo = blocos.map((bloco) => bloco.map((n) => configuracao.pool[n - 1]));
+    }
+  } catch {
+    /* sem biblioteca a busca começa igual, só sem o atalho */
+  }
+
+  comecar({ configuracao, fechamento: fechamentoColado, doMundo });
+}
+
+/* ─────────── a biblioteca de coberturas do mundo ─────────── */
+
+async function pintarBiblioteca() {
+  const { designs, blocos } = await biblioteca.resumo();
+  $('resumo-biblioteca').innerHTML = designs
+    ? `<b>${milhares(designs)}</b> coberturas guardadas neste aparelho ` +
+      `<em>— ${milhares(blocos)} cartelas prontas, disponíveis sem internet.</em>`
+    : 'nenhuma cobertura guardada ainda';
+  $('limpar-biblioteca').hidden = designs === 0;
+}
+
+$('importar-biblioteca').addEventListener('click', () => $('arquivo-biblioteca').click());
+
+$('arquivo-biblioteca').addEventListener('change', async (evento) => {
+  const arquivo = evento.target.files?.[0];
+  evento.target.value = '';
+  if (!arquivo) return;
+
+  const erro = $('erro-biblioteca');
+  erro.hidden = true;
+  $('biblioteca').open = true;
+
+  try {
+    $('resumo-biblioteca').textContent = 'lendo o arquivo…';
+    const texto = await arquivo.text();
+
+    // Guardar dezenas de megabytes leva segundos, e sem notícia disso a tela
+    // parece travada — o mesmo defeito que já apareceu na busca.
+    const guardados = await biblioteca.importar(texto, (feitos, total) => {
+      $('resumo-biblioteca').textContent = `guardando ${milhares(feitos)} de ${milhares(total)}…`;
+    });
+
+    await biblioteca.pedirPersistencia();
+    await pintarBiblioteca();
+    avisar(`${milhares(guardados)} coberturas do mundo guardadas no aparelho.`, true);
+  } catch (falha) {
+    erro.hidden = false;
+    erro.textContent = String(falha?.message ?? falha);
+    await pintarBiblioteca();
+  }
+});
+
+$('limpar-biblioteca').addEventListener('click', async () => {
+  await biblioteca.limpar();
+  await pintarBiblioteca();
+  avisar('Biblioteca apagada.', true);
+});
+
+pintarBiblioteca();
 
 /* ─────────── importar um fechamento pronto ─────────── */
 
@@ -728,7 +818,10 @@ function continuarSessao(id) {
  * quebrado. Trocando primeiro, o carregamento acontece com o relógio correndo
  * e o ponto pulsando à vista.
  */
-function comecar({ configuracao, salvo, fechamento = null, sessaoId = null }, cartelasIniciais = []) {
+function comecar(
+  { configuracao, salvo, fechamento = null, doMundo = null, sessaoId = null },
+  cartelasIniciais = []
+) {
   // Um motor antigo ainda vivo continuaria consumindo processador e memória.
   desmontarTrabalhador();
 
@@ -759,7 +852,7 @@ function comecar({ configuracao, salvo, fechamento = null, sessaoId = null }, ca
   mostrarPainel('buscar');
   definirFase('carregando');
 
-  garantirTrabalhador().postMessage({ tipo: 'criar', configuracao, salvo, fechamento });
+  garantirTrabalhador().postMessage({ tipo: 'criar', configuracao, salvo, fechamento, doMundo });
   segurarTelaLigada();
 }
 

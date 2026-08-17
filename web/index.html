@@ -127,6 +127,33 @@
     <p class="ajuda erro" id="erro-fechamento" hidden></p>
   </details>
 
+  <!-- A biblioteca de coberturas do mundo, guardada no aparelho. Depois de
+       importada, toda busca que tiver um design correspondente parte dele em
+       vez de construir do zero. -->
+  <details class="cartao" id="biblioteca">
+    <summary>Biblioteca de coberturas do mundo</summary>
+    <p class="ajuda">
+      As melhores coberturas já construídas no mundo — as cartelas, não só os
+      números. Uma vez importadas, ficam salvas neste aparelho e viram o ponto
+      de partida das suas buscas, sem internet.
+    </p>
+    <div class="referencia" id="resumo-biblioteca">nenhuma cobertura guardada ainda</div>
+    <div class="acoes-linha">
+      <button class="secundario" id="importar-biblioteca">Importar arquivo</button>
+      <button class="secundario perigo" id="limpar-biblioteca">Apagar</button>
+    </div>
+    <input type="file" id="arquivo-biblioteca" accept=".json,application/json" hidden>
+    <p class="ajuda erro" id="erro-biblioteca" hidden></p>
+    <p class="ajuda">
+      O arquivo é o <code>covers.json</code> da
+      <a href="https://dmgordon.org" target="_blank" rel="noopener">La Jolla
+      Covering Repository</a>. Ele tem 2,7 GB inteiro, mas quase tudo ali é
+      grande demais para um celular carregar — o recorte que você de fato usa
+      cabe em cerca de 29 MB. Veja
+      <code>ferramentas/preparar-biblioteca.py</code> no repositório do projeto.
+    </p>
+  </details>
+
   <div class="cartao" id="previsao">
     <h2>Antes de começar</h2>
     <div id="texto-previsao" class="ajuda">calculando…</div>

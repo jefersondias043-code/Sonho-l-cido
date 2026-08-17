@@ -94,6 +94,10 @@ jobs:
           # trabalho tem de atualizar o registro dele, não criar outro ao lado.
           node web/testar-historico.mjs
 
+          # E a biblioteca de coberturas do mundo: importar, guardar no
+          # aparelho, e partir dali em vez de reconstruir do zero.
+          node web/testar-biblioteca.mjs
+
       - name: Publicar na branch gh-pages
         run: |
           set -euo pipefail

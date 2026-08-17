@@ -244,9 +244,23 @@ impl MotorBusca {
     /// As cartelas fornecidas são o ponto de partida, não uma restrição: o
     /// motor pode remover, substituir e criar outras livremente (§32).
     pub fn semear(&mut self, cartelas: &[Cartela]) {
+        self.semear_como(cartelas, "fechamento importado");
+    }
+
+    /// Como [`Self::semear`], dizendo de onde as cartelas vieram.
+    ///
+    /// O rótulo aparece na tela, e a diferença importa: "partiu do seu
+    /// fechamento" e "partiu da cobertura do mundo guardada no aparelho" contam
+    /// histórias diferentes para quem está olhando.
+    pub fn semear_como(&mut self, cartelas: &[Cartela], origem: &str) {
+        // Semear de novo não descarta o que já foi escolhido: a solução atual
+        // entra como mais um candidato. É o que permite oferecer duas fontes em
+        // sequência — a cobertura do mundo guardada no aparelho e o fechamento
+        // que o usuário colou — sem que a segunda apague a primeira.
+        let ja_havia_partida = self.comecou;
         self.comecou = true;
-        self.cartelas_trazidas = cartelas.len();
-        self.escolher_partida(cartelas);
+        self.cartelas_trazidas += cartelas.len();
+        self.escolher_partida(cartelas, ja_havia_partida, origem);
         self.consolidar_inicio();
     }
 
@@ -256,6 +270,7 @@ impl MotorBusca {
     /// recorde: a busca continua de onde parou em vez de recomeçar.
     pub fn retomar_de(&mut self, melhor: &[Cartela], iteracoes_anteriores: u64) {
         self.semear(melhor);
+        self.cartelas_trazidas = 0;
         self.estatisticas.iteracoes = iteracoes_anteriores;
         // `semear` marca "fechamento importado", que é verdade para quem colou
         // cartelas de fora — mas não para quem só voltou ao próprio trabalho.
@@ -305,7 +320,7 @@ impl MotorBusca {
     ///
     /// Aproveitar o trabalho já feito é o objetivo; jogar fora um trabalho
     /// melhor que já estava disponível seria o contrário dele.
-    fn escolher_partida(&mut self, trazidas: &[Cartela]) {
+    fn escolher_partida(&mut self, trazidas: &[Cartela], manter_atual: bool, origem: &str) {
         let objetivo = self.problema.objetivo();
         let mut vencedor: Option<(Vec<Cartela>, ChaveCusto, String)> = None;
 
@@ -321,12 +336,17 @@ impl MotorBusca {
                 }
             };
 
+        if manter_atual && self.atual.quantidade() > 0 {
+            let origem = std::mem::take(&mut self.origem_do_inicio);
+            considerar(self, origem, &mut vencedor);
+        }
+
         if !trazidas.is_empty() {
             self.atual.reiniciar();
             for &cartela in trazidas {
                 self.atual.adicionar(&self.cobertura, cartela, &mut self.oficina.rascunho);
             }
-            considerar(self, "fechamento importado".to_string(), &mut vencedor);
+            considerar(self, origem.to_string(), &mut vencedor);
         }
 
         if let Some(semente) = semente_algebrica(&self.problema) {
@@ -360,7 +380,7 @@ impl MotorBusca {
             return;
         }
         self.comecou = true;
-        self.escolher_partida(&[]);
+        self.escolher_partida(&[], false, "");
         self.consolidar_inicio();
 
         observador.ao_evento(&Evento::Iniciado {
@@ -954,6 +974,43 @@ mod testes {
         );
         assert_eq!(motor.origem_do_inicio(), "fechamento importado");
         assert!(motor.melhor_solucao().cobertura_total());
+    }
+
+    /// Semear duas vezes não pode descartar a primeira semente.
+    ///
+    /// É o caso da biblioteca do mundo somada a um fechamento colado: a
+    /// cobertura guardada no aparelho entra primeiro, o texto do usuário em
+    /// seguida, e o motor tem de ficar com a melhor das duas — não com a última.
+    #[test]
+    fn semear_de_novo_nunca_perde_a_semente_anterior() {
+        use motor_core::planos::plano_projetivo;
+
+        let boa: Vec<Cartela> =
+            plano_projetivo(4).unwrap().iter().map(|r| Cartela::dos_indices(r)).collect();
+
+        // Um fechamento válido e pior: cada elemento com os quatro seguintes.
+        let ruim: Vec<Cartela> = (0..21)
+            .map(|i| Cartela::dos_indices(&[i, (i + 1) % 21, (i + 2) % 21, (i + 3) % 21, (i + 5) % 21]))
+            .collect();
+
+        // Boa primeiro, ruim depois: a ruim não pode apagar a boa.
+        let mut motor = MotorBusca::novo(problema(21, 5, 2), config_rapida(11)).unwrap();
+        motor.semear(&boa);
+        let depois_da_boa = motor.melhor_avaliacao().cartelas;
+        motor.semear(&ruim);
+        assert!(
+            motor.melhor_avaliacao().cartelas <= depois_da_boa,
+            "a segunda semeadura piorou o recorde: {depois_da_boa} → {}",
+            motor.melhor_avaliacao().cartelas
+        );
+        assert_eq!(motor.avaliacao_atual().cartelas, 21, "a atual devia seguir na melhor");
+
+        // E na ordem inversa, a boa precisa vencer.
+        let mut motor = MotorBusca::novo(problema(21, 5, 2), config_rapida(12)).unwrap();
+        motor.semear(&ruim);
+        motor.semear(&boa);
+        assert_eq!(motor.melhor_avaliacao().cartelas, 21);
+        assert_eq!(motor.cartelas_trazidas(), boa.len() + ruim.len());
     }
 
     #[test]

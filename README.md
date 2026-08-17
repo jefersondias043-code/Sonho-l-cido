@@ -112,10 +112,15 @@ digitação é apontado com o número da linha.
 
 ### O ponto de partida é escolhido, não obedecido
 
-Três candidatos concorrem a cada partida, e todos custam milissegundos: o
-fechamento trazido pelo usuário, a construção algébrica (quando existe) e o
-guloso com ruído. Todos são podados antes de serem julgados, e vence o de menor
-custo pela mesma régua que a busca usa.
+Quatro candidatos concorrem a cada partida, e todos custam milissegundos: a
+cobertura do mundo guardada no aparelho, o fechamento trazido pelo usuário, a
+construção algébrica (quando existe) e o guloso com ruído. Todos são podados
+antes de serem julgados, e vence o de menor custo pela mesma régua que a busca
+usa.
+
+Semear de novo não descarta a semente anterior: a solução já escolhida entra
+como mais um candidato. É o que permite oferecer duas fontes em sequência — a
+biblioteca e o que o usuário colou — sem que a segunda apague a primeira.
 
 Comparar não é preciosismo. A primeira versão obedecia — importar instalava o
 fechamento direto, sem podar e sem comparar — e isso produzia dois defeitos
