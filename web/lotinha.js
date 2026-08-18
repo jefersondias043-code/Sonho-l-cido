@@ -188,6 +188,123 @@ export function matriz() {
   return linhas;
 }
 
+/* ─────────── construir na hora, sem motor ─────────── */
+
+/**
+ * Acima disto não vale construir aqui: são jogos demais para caber na memória
+ * de um celular, e mais do que qualquer pessoa compraria.
+ *
+ * Os cinco casos que passam deste teto — 24 e 25 dezenas com jogos de 17 a 19 —
+ * têm construção de 134 mil a 1,08 **milhão** de jogos. Ali o motor parte do
+ * próprio guloso, que nasce muito menor.
+ */
+const TETO_PARA_CONSTRUIR = 25_000;
+
+/**
+ * O fechamento montado por fórmula, sem busca nenhuma.
+ *
+ * Esta é a resposta rápida, e na maior parte da modalidade ela é também a
+ * resposta certa: em 24 das 45 combinações a construção **é** o mínimo
+ * comprovado, e em várias outras ela bate o que o motor encontra depois de
+ * minutos. Medido em 25 dezenas com jogos de 22: a fórmula dá 95 jogos num
+ * piscar, e o guloso do motor gasta seis segundos para chegar a 139.
+ *
+ * ## Por que funciona
+ *
+ * Um jogo de `k` dezenas é o complemento de `a = P − k`; um sorteio de 15 é o
+ * complemento de `b = P − 15`. Então *o jogo contém o sorteio* ⟺ *as `a` que
+ * faltam ao jogo estão entre as `b` que faltam ao sorteio*.
+ *
+ * Partindo o pool em `g` grupos e tomando todos os `a`-subconjuntos dentro de
+ * cada grupo: qualquer sorteio deixa `b` dezenas de fora, e pela casa dos
+ * pombos algum grupo fica com pelo menos `⌈b/g⌉` delas. Escolhendo
+ * `g = ⌊(b−1)/(a−1)⌋` isso é ao menos `a`, e aquele grupo contém um dos
+ * subconjuntos escolhidos — logo o jogo correspondente contém o sorteio.
+ *
+ * A garantia vem do argumento, não de uma varredura. O validador independente
+ * do aplicativo confere assim mesmo, porque um argumento certo não protege
+ * contra um erro de digitação.
+ *
+ * Devolve `null` quando não há construção fechada para o pedido — garantia
+ * parcial, ou grande demais para montar aqui.
+ */
+export function construir(pool, jogo, dezenas, garantia = SORTEIO, premiadas = 1) {
+  if (garantia !== SORTEIO) return null;
+
+  const a = pool - jogo;
+  const b = pool - SORTEIO;
+
+  // Jogar todas as dezenas: uma aposta só. Repetida `r` vezes se for preciso
+  // garantir `r` cartelas premiadas — não há um segundo jogo distinto.
+  if (a === 0) return Array.from({ length: premiadas }, () => [...dezenas]);
+
+  // Falta uma dezena ao jogo: cada jogo é o pool menos uma das `15 + r`
+  // primeiras dezenas. Acima de `b` não há como, com jogos distintos.
+  if (a === 1) {
+    const quantos = SORTEIO + premiadas;
+    if (premiadas > b || quantos > pool) return null;
+    return dezenas.slice(0, quantos).map((fora) => dezenas.filter((d) => d !== fora));
+  }
+
+  // Daqui em diante a construção por grupos só vale para uma cartela premiada:
+  // o argumento da casa dos pombos garante **um** subconjunto no grupo, não `r`.
+  if (premiadas !== 1) return null;
+
+  const g = Math.max(Math.floor((b - 1) / (a - 1)), 1);
+  const grupos = Array.from({ length: g }, () => []);
+  dezenas.forEach((d, i) => grupos[i % g].push(d));
+
+  const quantos = grupos.reduce((total, grupo) => total + combinacoes(grupo.length, a), 0);
+  if (quantos > TETO_PARA_CONSTRUIR) return null;
+
+  const jogos = [];
+  for (const grupo of grupos) {
+    for (const fora of subconjuntos(grupo, a)) {
+      const excluir = new Set(fora);
+      jogos.push(dezenas.filter((d) => !excluir.has(d)));
+    }
+  }
+  return jogos;
+}
+
+/** Todos os subconjuntos de `k` elementos de `itens`, em ordem. */
+function* subconjuntos(itens, k) {
+  const escolha = [];
+  yield* (function* passo(inicio) {
+    if (escolha.length === k) {
+      yield [...escolha];
+      return;
+    }
+    for (let i = inicio; i <= itens.length - (k - escolha.length); i++) {
+      escolha.push(itens[i]);
+      yield* passo(i + 1);
+      escolha.pop();
+    }
+  })(0);
+}
+
+/**
+ * Quantos jogos a construção produziria, sem construí-la.
+ *
+ * Serve para a tela decidir antes de gastar memória, e para dizer ao usuário o
+ * tamanho do que ele está pedindo.
+ */
+export function tamanhoDaConstrucao(pool, jogo, garantia = SORTEIO, premiadas = 1) {
+  if (garantia !== SORTEIO) return null;
+  const a = pool - jogo;
+  const b = pool - SORTEIO;
+  if (a === 0) return premiadas;
+  if (a === 1) return premiadas <= b && SORTEIO + premiadas <= pool ? SORTEIO + premiadas : null;
+  if (premiadas !== 1) return null;
+
+  const g = Math.max(Math.floor((b - 1) / (a - 1)), 1);
+  let total = 0;
+  for (let i = 0; i < g; i++) {
+    total += combinacoes(Math.floor(pool / g) + (i < pool % g ? 1 : 0), a);
+  }
+  return total;
+}
+
 /* ─────────── o banco de fechamentos ─────────── */
 
 let banco = null;
@@ -248,12 +365,32 @@ export async function fechamentoPara(pool, jogo, dezenas) {
  * de investigar — e `minimoPremiadas` é o pior caso encontrado, que responde
  * "quantas cartelas este fechamento de fato garante".
  */
-export function conferirCobertura(dezenas, jogos, garantia = SORTEIO, premiadas = 1) {
+export function conferirCobertura(
+  dezenas,
+  jogos,
+  garantia = SORTEIO,
+  premiadas = 1,
+  { exaustivo = null } = {}
+) {
   const pool = dezenas.length;
   const posicao = new Map(dezenas.map((d, i) => [d, i]));
   const mascaras = jogos.map((jogo) =>
     jogo.reduce((m, d) => m | (1 << posicao.get(d)), 0)
   );
+
+  // Percorrer tudo custa `sorteios × jogos`, e isso passa de seis bilhões de
+  // operações num pool de 25 com dois mil jogos — sete segundos de tela parada
+  // num computador, muito mais num celular.
+  //
+  // Acima do orçamento, a conferência passa a sortear. O que **não** muda é o
+  // que ela afirma: uma amostra nunca é anunciada como 100%, e quem quiser a
+  // conferência inteira pede pelo botão.
+  const sorteiosPossiveis = combinacoes(pool, SORTEIO);
+  const varrerTudo = exaustivo ?? sorteiosPossiveis * jogos.length <= ORCAMENTO_DA_CONFERENCIA;
+
+  if (!varrerTudo) {
+    return conferirPorAmostra(dezenas, mascaras, garantia, premiadas, sorteiosPossiveis);
+  }
 
   const indices = Array.from({ length: SORTEIO }, (_, i) => i);
   let total = 0;
@@ -290,7 +427,68 @@ export function conferirCobertura(dezenas, jogos, garantia = SORTEIO, premiadas 
     for (let j = i; j < SORTEIO; j++) indices[j] = indices[j - 1] + 1;
   }
 
-  return { total, cobertos, falha, minimoPremiadas };
+  return { total, cobertos, falha, minimoPremiadas, exaustivo: true, possiveis: sorteiosPossiveis };
+}
+
+/** Quantas operações a conferência completa pode custar antes de virar amostra. */
+const ORCAMENTO_DA_CONFERENCIA = 1_000_000_000;
+
+/** Quantos sorteios a amostra examina. */
+const TAMANHO_DA_AMOSTRA = 200_000;
+
+/**
+ * A mesma conferência, sobre sorteios tirados ao acaso.
+ *
+ * Não prova a cobertura — nenhuma amostra prova — mas encontra um fechamento
+ * furado com folga: se um em mil sorteios estivesse descoberto, duzentos mil
+ * sorteios o encontrariam com probabilidade praticamente 1.
+ *
+ * O sorteio é feito com um gerador próprio e semente fixa, para que conferir
+ * duas vezes dê o mesmo resultado — uma conferência que muda de resposta a cada
+ * toque não serve para investigar nada.
+ */
+function conferirPorAmostra(dezenas, mascaras, garantia, premiadas, possiveis) {
+  const pool = dezenas.length;
+  let semente = 0x9e3779b9 ^ (pool * 2654435761 + mascaras.length);
+  const proximo = () => {
+    semente ^= semente << 13; semente ^= semente >>> 17; semente ^= semente << 5;
+    return (semente >>> 0) / 4294967296;
+  };
+
+  const urna = dezenas.map((_, i) => i);
+  let cobertos = 0;
+  let falha = null;
+  let minimoPremiadas = Infinity;
+
+  for (let n = 0; n < TAMANHO_DA_AMOSTRA; n++) {
+    // Fisher-Yates parcial: as 15 primeiras posições viram o sorteio.
+    for (let i = 0; i < SORTEIO; i++) {
+      const j = i + Math.floor(proximo() * (pool - i));
+      [urna[i], urna[j]] = [urna[j], urna[i]];
+    }
+    let mascara = 0;
+    for (let i = 0; i < SORTEIO; i++) mascara |= 1 << urna[i];
+
+    let atendem = 0;
+    for (const j of mascaras) {
+      if (bitsEm(j & mascara) >= garantia) {
+        atendem += 1;
+        if (atendem >= premiadas) break;
+      }
+    }
+    if (atendem < minimoPremiadas) minimoPremiadas = atendem;
+    if (atendem >= premiadas) cobertos += 1;
+    else if (!falha) falha = urna.slice(0, SORTEIO).map((i) => dezenas[i]).sort((a, b) => a - b);
+  }
+
+  return {
+    total: TAMANHO_DA_AMOSTRA,
+    cobertos,
+    falha,
+    minimoPremiadas,
+    exaustivo: false,
+    possiveis,
+  };
 }
 
 /** Quantos bits ligados há num inteiro de 32 bits. */

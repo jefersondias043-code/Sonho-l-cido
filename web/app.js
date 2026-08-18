@@ -648,6 +648,9 @@ let lotGarantia = lotinha.SORTEIO;
 let lotPremiadas = 1;
 let lotDezenas = new Set();
 let lotFechamento = null;
+/* A configuração da seleção atual, guardada para o botão que liga o motor
+   depois — nos casos pesados ele deixou de partir sozinho. */
+let lotConfiguracao = null;
 
 /**
  * Esquece o fechamento carregado, porque ele deixou de ser o desta seleção.
@@ -659,7 +662,9 @@ let lotFechamento = null;
  */
 function lotEsquecerFechamento() {
   lotFechamento = null;
+  lotConfiguracao = null;
   $('lot-conferir').hidden = true;
+  $('lot-otimizar').hidden = true;
   $('lot-conferencia').innerHTML =
     '<em>Ao carregar, cada sorteio possível dentro do seu pool é conferido um a ' +
     'um — sem consultar o motor que produziu o fechamento.</em>';
@@ -1117,17 +1122,34 @@ $('lot-iniciar').addEventListener('click', async () => {
   destino.textContent = 'carregando o fechamento…';
 
   try {
-    // O banco só guarda o caso padrão: garantir as 15 numa cartela. As outras
-    // exigências multiplicam o espaço muito além do que caberia num aplicativo
-    // — e nelas o motor parte do próprio guloso, que é o que ele faz de melhor.
+    // ── 1. o banco, que guarda o melhor já encontrado ──
+    //
+    // Só o caso padrão está lá: garantir as 15 numa cartela. As outras
+    // exigências multiplicam o espaço muito além do que caberia num arquivo.
     const doBanco =
       lotGarantia === lotinha.SORTEIO && lotPremiadas === 1
         ? await lotinha.fechamentoPara(lotPool, lotJogo, dezenas)
         : null;
 
-    lotFechamento = doBanco;
+    // ── 2. a fórmula, quando o banco não tem ──
+    //
+    // Este é o caminho rápido, e ele existia sem estar sendo usado. A
+    // construção por grupos sai por fórmula em milissegundos, e na maior parte
+    // da modalidade ela é tão boa quanto o que o motor acha depois de minutos —
+    // em 24 das 45 combinações ela **é** o mínimo comprovado.
+    //
+    // Medido em 25 dezenas com jogos de 22: a fórmula dá 95 jogos em menos de
+    // um milissegundo; o guloso do motor gastava seis segundos e uma alocação
+    // de 39 MB para chegar a 139, pior. Era processamento gasto para piorar a
+    // resposta.
+    const daFormula = doBanco
+      ? null
+      : lotinha.construir(lotPool, lotJogo, dezenas, lotGarantia, lotPremiadas);
 
-    if (doBanco) {
+    const pronto = doBanco ?? daFormula;
+    lotFechamento = pronto;
+
+    if (pronto) {
       destino.textContent = `conferindo ${milhares(
         lotinha.combinacoes(lotPool, lotinha.SORTEIO)
       )} sorteios, um a um…`;
@@ -1135,20 +1157,19 @@ $('lot-iniciar').addEventListener('click', async () => {
       // Cede um quadro à tela antes da conferência, que pode levar segundos
       // nos pools grandes — sem isto a mensagem acima nunca apareceria.
       await new Promise((r) => setTimeout(r, 0));
-      lotPintarConferencia(dezenas, doBanco);
+      lotPintarConferencia(dezenas, pronto, daFormula ? 'fórmula' : 'banco');
     } else {
       destino.innerHTML =
-        `<b>Sem fechamento pronto para esta combinação.</b> <em>O motor vai ` +
-        `construir um do zero. Quando houver solução na tela, o botão abaixo ` +
-        `confere sorteio a sorteio o que ele encontrou.</em>`;
+        `<b>Sem fechamento pronto para esta combinação.</b> <em>Nem o banco a ` +
+        `traz, nem há fórmula fechada que caiba aqui — o motor vai construir um ` +
+        `do zero, e isso leva alguns segundos. Quando houver solução na tela, o ` +
+        `botão abaixo confere sorteio a sorteio o que ele encontrou.</em>`;
     }
     $('lot-conferir').hidden = false;
 
     lotPintarEconomia();
 
-    // E agora o motor: para superar o que o banco entregou, ou para construir
-    // o que ele não tinha.
-    const configuracao = {
+    lotConfiguracao = {
       universo: lotinha.UNIVERSO,
       pool: dezenas,
       cartela: lotJogo,
@@ -1158,15 +1179,45 @@ $('lot-iniciar').addEventListener('click', async () => {
       orcamento: null,
       semente: Number($('semente').value) || 1,
     };
-    // Quando há fechamento do banco, ele vai duas vezes de propósito: como
-    // semente para o motor, e como cartelas já na tela. Sem o segundo
-    // argumento, `comecar` zera a lista exibida — e a aba Resultado ficaria
-    // vazia entre carregar e o motor devolver o primeiro estado, que é
-    // justamente quando o usuário vai olhar.
-    comecar({ configuracao, doBanco }, doBanco ?? []);
+
+    // ── 3. o motor, para tentar superar o que já está na mão ──
+    //
+    // Com fechamento pronto e problema pesado, ele deixa de partir sozinho.
+    // Num pool de 25 o motor aloca 39 MB e cada iteração varre 3,2 milhões de
+    // alvos — quase dois segundos por iteração. Ligar isso sem ser pedido, para
+    // melhorar um fechamento que já está correto na tela, é gastar a bateria de
+    // quem só queria os jogos.
+    if (pronto && lotinha.combinacoes(lotPool, lotinha.SORTEIO) > ALVOS_PESADOS) {
+      $('lot-otimizar').hidden = false;
+      $('lot-otimizar').textContent =
+        `Procurar um fechamento menor que ${milhares(pronto.length)}`;
+      return;
+    }
+
+    // O fechamento vai duas vezes de propósito: como semente para o motor, e
+    // como cartelas já na tela. Sem o segundo argumento, `comecar` zera a lista
+    // exibida — e a aba Resultado ficaria vazia entre carregar e o motor
+    // devolver o primeiro estado, que é justamente quando o usuário vai olhar.
+    comecar({ configuracao: lotConfiguracao, doBanco: pronto }, pronto ?? []);
   } catch (erro) {
     destino.innerHTML = `<b>Falhou:</b> ${escapar(String(erro?.message ?? erro))}`;
   }
+});
+
+/**
+ * Acima disto o motor não parte sozinho depois de entregar um fechamento.
+ *
+ * O número é a quantidade de sorteios a cobrir, que é o que decide tudo: a
+ * memória do motor (doze bytes por sorteio) e o custo de cada iteração. Um
+ * milhão deixa passar os pools de 17 a 23, onde a busca é leve e útil, e segura
+ * os de 24 e 25, onde ela custa 16 e 39 MB e segundos por iteração.
+ */
+const ALVOS_PESADOS = 1_000_000;
+
+$('lot-otimizar').addEventListener('click', () => {
+  if (!lotConfiguracao || !lotFechamento) return;
+  $('lot-otimizar').hidden = true;
+  comecar({ configuracao: lotConfiguracao, doBanco: lotFechamento }, lotFechamento);
 });
 
 /**
@@ -1177,36 +1228,53 @@ $('lot-iniciar').addEventListener('click', async () => {
  * prometa duas cartelas premiadas e entregue uma passaria batido numa
  * conferência que só perguntasse "alguém cobre?".
  */
-function lotPintarConferencia(dezenas, jogos) {
+function lotPintarConferencia(dezenas, jogos, origem = null, exaustivo = null) {
   const destino = $('lot-conferencia');
-  const { total, cobertos, falha, minimoPremiadas } = lotinha.conferirCobertura(
-    dezenas,
-    jogos,
-    lotGarantia,
-    lotPremiadas
-  );
+  const { total, cobertos, falha, minimoPremiadas, exaustivo: varreuTudo, possiveis } =
+    lotinha.conferirCobertura(dezenas, jogos, lotGarantia, lotPremiadas, { exaustivo });
 
   const oQue =
     `${lotPremiadas === 1 ? 'uma cartela' : `${lotPremiadas} cartelas`} com ` +
     `${lotGarantia} acerto${lotGarantia === 1 ? '' : 's'}`;
 
+  const veioDe =
+    origem === 'fórmula'
+      ? ' <em>Este fechamento saiu de fórmula, na hora: o pool é partido em ' +
+        'grupos e a casa dos pombos garante o resto. Nenhuma busca foi ' +
+        'necessária.</em>'
+      : '';
+
+  const aMais =
+    minimoPremiadas > lotPremiadas && Number.isFinite(minimoPremiadas)
+      ? ` <em>No pior caso são ${minimoPremiadas} cartelas, não ${lotPremiadas}.</em>`
+      : '';
+
   if (cobertos === total) {
-    destino.innerHTML =
-      `<b>Garantia comprovada: 100%</b> <em>— ${milhares(total)} sorteios ` +
-      `conferidos um a um, e em todos você fica com ${oQue}, usando ` +
-      `${milhares(jogos.length)} jogos. A conferência não consultou o motor que ` +
-      `produziu o fechamento.</em>` +
-      (minimoPremiadas > lotPremiadas
-        ? ` <em>No pior caso são ${minimoPremiadas} cartelas, não ${lotPremiadas}.</em>`
-        : '');
+    // Uma amostra não prova cobertura, e não pode ser anunciada como se
+    // provasse. A diferença entre as duas frases é a diferença entre uma
+    // garantia e uma boa evidência.
+    destino.innerHTML = varreuTudo
+      ? `<b>Garantia comprovada: 100%</b> <em>— ${milhares(total)} sorteios ` +
+        `conferidos um a um, e em todos você fica com ${oQue}, usando ` +
+        `${milhares(jogos.length)} jogos. A conferência não consultou o motor que ` +
+        `produziu o fechamento.</em>${veioDe}${aMais}`
+      : `<b>${milhares(total)} sorteios conferidos ao acaso: todos cobertos.</b> ` +
+        `<em>Em cada um deles você fica com ${oQue}, usando ` +
+        `${milhares(jogos.length)} jogos. São ${milhares(possiveis)} sorteios ` +
+        `possíveis — conferir todos aqui levaria minutos, e esta amostra é ` +
+        `evidência forte, não prova.</em>${veioDe}${aMais}`;
+    $('lot-conferir').textContent = varreuTudo
+      ? 'Conferir o que está na tela agora'
+      : 'Conferir os ' + milhares(possiveis) + ' sorteios, um a um';
     return;
   }
 
   destino.innerHTML =
     `<b>Garantia cumprida em ${porcento(cobertos / total)}</b> <em>— ${milhares(
       total - cobertos
-    )} sorteios ficam abaixo de ${oQue}. O primeiro deles: ${falha.join(' ')}. ` +
-    `Isto é o motor ainda trabalhando, não um fechamento pronto e furado.</em>`;
+    )} de ${milhares(total)} sorteios ficam abaixo de ${oQue}. Um deles: ` +
+    `${falha.join(' ')}. Isto é o motor ainda trabalhando, não um fechamento ` +
+    `pronto e furado.</em>`;
 }
 
 $('lot-conferir').addEventListener('click', async () => {
@@ -1224,7 +1292,9 @@ $('lot-conferir').addEventListener('click', async () => {
   )} sorteios, um a um…`;
   await new Promise((r) => setTimeout(r, 0));
   lotFechamento = jogos;
-  lotPintarConferencia(dezenas, jogos);
+  // Pelo botão a conferência é sempre completa: quem tocou aqui está pedindo a
+  // varredura inteira e aceitando esperar por ela.
+  lotPintarConferencia(dezenas, jogos, null, true);
   lotPintarEconomia();
 });
 

@@ -285,19 +285,26 @@ try {
     comDuas.replace(/\s+/g, ' ').slice(0, 76)
   );
 
-  await pagina.click('#lot-iniciar');
-
   // O banco embutido só guarda o caso padrão — garantir as 15 numa cartela.
-  // Aqui não há fechamento pronto, e a tela precisa dizer isso em vez de
-  // fingir que tem.
-  const semBanco = (await pagina.locator('#lot-conferencia').textContent()).trim();
+  // Para duas cartelas premiadas não há entrada lá, e mesmo assim o fechamento
+  // sai na hora: `15 + r` é fórmula fechada, e a tela não precisa do motor
+  // para entregá-la.
+  const antesDeCarregar = Date.now();
+  await pagina.click('#lot-iniciar');
+  await pagina.waitForFunction(
+    () => /Garantia|conferidos ao acaso/.test(
+      document.getElementById('lot-conferencia').textContent
+    ),
+    undefined,
+    { timeout: 60000 }
+  );
+  const demorou = Date.now() - antesDeCarregar;
   marcar(
-    /Sem fechamento pronto/.test(semBanco),
-    'sem fechamento pronto para esta exigência, a tela avisa em vez de fingir',
-    semBanco.replace(/\s+/g, ' ').slice(0, 76)
+    demorou < 5000,
+    'sem entrada no banco, a fórmula entrega o fechamento sem acionar o motor',
+    `${demorou} ms`
   );
 
-  // E o motor constrói do zero, chegando aos 17 que a matemática prevê.
   await pagina.waitForFunction(
     () => document.getElementById('melhor-cartelas').textContent.trim() === '17',
     undefined,
@@ -358,6 +365,49 @@ try {
     /25 de 25/.test(contagem25) && /1 em 1/.test(contagem25),
     'com as 25 dezenas, a chance de o sorteio cair no pool é 1 em 1',
     contagem25.replace(/\s+/g, ' ').slice(0, 76)
+  );
+
+  // ─── 11. a fórmula: caminho rápido, e correto ───
+  //
+  // Antes desta mudança, 25 dezenas com jogos de 22 ligavam um motor de 39 MB,
+  // rodavam um guloso de seis segundos e chegavam a 139 jogos. A construção por
+  // grupos dá 95 — melhor — e leva menos de um milissegundo. O motor deixou de
+  // partir sozinho nos pools pesados: ele passou a ser um segundo passo, para
+  // quem quiser tentar reduzir mais.
+  await pagina.click('#lot-pool .opcao[data-pool="25"]');
+  await pagina.click('#lot-jogo .opcao[data-jogo="22"]');
+  const antesDaFormula = Date.now();
+  await pagina.click('#lot-iniciar');
+  await pagina.waitForFunction(
+    () => /Garantia|conferidos ao acaso/.test(
+      document.getElementById('lot-conferencia').textContent
+    ),
+    undefined,
+    { timeout: 60000 }
+  );
+  const tempoDaFormula = Date.now() - antesDaFormula;
+  const daFormula = (await pagina.locator('#lot-conferencia').textContent()).trim();
+
+  marcar(
+    /usando 95 jogos/.test(daFormula),
+    '25 dezenas com jogos de 22 saem com 95 jogos, não com os 139 do guloso',
+    daFormula.replace(/\s+/g, ' ').slice(0, 76)
+  );
+  marcar(
+    tempoDaFormula < 4000,
+    'e saem por fórmula, sem os seis segundos que o motor levava',
+    `${tempoDaFormula} ms`
+  );
+  marcar(
+    await pagina.locator('#lot-otimizar').isVisible(),
+    'nos pools pesados o motor espera ser chamado, em vez de ligar sozinho'
+  );
+
+  // A amostra não pode se anunciar como prova.
+  marcar(
+    !/Garantia comprovada: 100%/.test(daFormula) || /conferidos um a um/.test(daFormula),
+    'uma conferência por amostra nunca é apresentada como 100% comprovada',
+    /ao acaso/.test(daFormula) ? 'diz "ao acaso"' : 'varreu tudo'
   );
 
   marcar(errosDeConsole.length === 0, 'nenhum erro no console', errosDeConsole.join(' | ').slice(0, 120));
