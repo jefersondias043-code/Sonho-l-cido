@@ -51,15 +51,45 @@
 //! ```bash
 //! cargo run --release --example gerar-lotinha -- 3600 24,17 24,18 25,17 25,18 25,19
 //! ```
+//!
+//! Duas variáveis de ambiente completam o arranjo, e existem para o mesmo fim:
+//! usar os quatro núcleos da máquina em vez de um.
+//!
+//! - `LOTINHA_SAIDA` desvia a escrita para outro arquivo;
+//! - `LOTINHA_SEMENTES` acrescenta outros bancos à leitura, e de cada
+//!   combinação fica o menor fechamento entre todos.
+//!
+//! Assim vários processos buscam casos diferentes ao mesmo tempo, cada um
+//! gravando o seu, e uma última passagem junta tudo — conferindo de novo, um
+//! sorteio de cada vez, antes de regravar:
+//!
+//! ```bash
+//! LOTINHA_SAIDA=/tmp/a.json gerar-lotinha 900 24,17 24,18 &
+//! LOTINHA_SAIDA=/tmp/b.json gerar-lotinha 900 25,18 22,18 &
+//! wait
+//! LOTINHA_SEMENTES=/tmp/a.json,/tmp/b.json gerar-lotinha 0 0,0
+//! ```
 
 use std::collections::{BTreeMap, HashMap};
 use std::time::Duration;
 
-use motor_busca::{CondicoesDeParada, Configuracao, Controle, MotorBusca, Silencioso};
-use motor_core::{Cartela, Objetivo, Problema, RegraCobertura};
+use motor_busca::construcao::construir_guloso_global;
+use motor_busca::{CondicoesDeParada, Configuracao, Controle, MotorBusca, Oficina, Silencioso};
+use motor_core::{Cartela, MotorCobertura, Objetivo, Problema, RegraCobertura, Solucao};
 
 const SORTEIO: usize = 15;
 const DESTINO: &str = "web/lotinha.json";
+
+/// Onde gravar. `LOTINHA_SAIDA` desvia a escrita sem mexer na leitura.
+///
+/// Serve para rodar vários processos ao mesmo tempo: a máquina tem quatro
+/// núcleos e o motor usa um só, então dividir os casos em aberto entre
+/// processos com saídas diferentes corta o relógio por quatro. Todos leem o
+/// mesmo banco publicado como partida, e depois os resultados se juntam
+/// ficando com o menor fechamento de cada combinação.
+fn destino() -> String {
+    std::env::var("LOTINHA_SAIDA").unwrap_or_else(|_| DESTINO.to_string())
+}
 
 fn main() {
     let segundos: u64 = std::env::args()
@@ -113,27 +143,45 @@ fn main() {
             // nasceu grande demais.
             let cabe_construir = tamanho_da_construcao(pool, a, b) <= TETO_DA_CONSTRUCAO;
 
+            // Fora da lista, o caso não é buscado: fica exatamente o que já
+            // estava publicado (ou a construção, se nada estava). Continua
+            // sendo conferido e continua passando pela travessa do piso — não
+            // se copia para o banco um fechamento que ninguém olhou.
+            let buscar = so.is_empty() || so.contains(&(pool, jogo));
+
             let (inicial, mut origem) = if cabe_construir {
                 construir(pool, jogo)
             } else {
                 (Vec::new(), "guloso")
             };
 
-            // O melhor entre a construção e o que já está publicado.
-            let de_partida = match anterior.get(&format!("{pool},{jogo}")) {
+            // O melhor entre a construção e o que já está publicado. Quando o
+            // publicado vence, a coluna passa a dizer isso — dizer "fórmula"
+            // ali escondia que o número não tinha saído dela.
+            let mut de_partida = match anterior.get(&format!("{pool},{jogo}")) {
                 Some(guardado) if inicial.is_empty() || guardado.len() < inicial.len() => {
+                    origem = "banco";
                     guardado.clone()
                 }
                 _ => inicial,
             };
+
+            // E o guloso global, que é um terceiro candidato de natureza
+            // diferente: não vem de fórmula nem de execução anterior, e é
+            // justamente onde a fórmula é grossa que ele ganha. Em 24 dezenas
+            // com jogos de 17 ele sai com 26.845 onde a fórmula dava 59.664 e o
+            // motor, depois de quatro minutos, 32.345.
+            if buscar {
+                if let Some(guloso) = guloso_global(pool, jogo, ORCAMENTO_DO_GULOSO) {
+                    if de_partida.is_empty() || guloso.len() < de_partida.len() {
+                        origem = "guloso*";
+                        de_partida = guloso;
+                    }
+                }
+            }
             // A coluna "partida" reporta de onde o motor de fato saiu.
             let partida = de_partida.len();
 
-            // Fora da lista, o caso não é buscado: fica exatamente o que já
-            // estava publicado (ou a construção, se nada estava). Continua
-            // sendo conferido e continua passando pela travessa do piso — não
-            // se copia para o banco um fechamento que ninguém olhou.
-            let buscar = so.is_empty() || so.contains(&(pool, jogo));
             if !buscar {
                 origem = "mantido";
             }
@@ -243,17 +291,41 @@ fn main() {
     }
     json.push_str("}}");
 
-    std::fs::write(DESTINO, &json).expect("gravar o banco");
-    println!("\nescrito {DESTINO} — {:.1} KiB", json.len() as f64 / 1024.0);
+    let saida = destino();
+    std::fs::write(&saida, &json).expect("gravar o banco");
+    println!("\nescrito {saida} — {:.1} KiB", json.len() as f64 / 1024.0);
 }
 
 /// Lê o banco já publicado, para que regerar nunca produza um retrocesso.
 ///
+/// `LOTINHA_SEMENTES` acrescenta outros arquivos, separados por vírgula, e de
+/// cada combinação fica o menor fechamento entre todos. É como os resultados de
+/// vários processos paralelos voltam a ser um banco só — e voltam conferidos,
+/// porque tudo que entra aqui ainda passa pela varredura sorteio a sorteio
+/// antes de ser regravado.
+fn carregar_banco_anterior() -> BTreeMap<String, Vec<Cartela>> {
+    let mut saida = BTreeMap::new();
+    let extras = std::env::var("LOTINHA_SEMENTES").unwrap_or_default();
+    for arquivo in std::iter::once(DESTINO).chain(extras.split(',').filter(|a| !a.is_empty())) {
+        for (chave, jogos) in ler_banco(arquivo) {
+            let melhor = saida
+                .get(&chave)
+                .map_or(true, |atual: &Vec<Cartela>| jogos.len() < atual.len());
+            if melhor {
+                saida.insert(chave, jogos);
+            }
+        }
+    }
+    saida
+}
+
+/// Um arquivo de banco, nos dois formatos que já existiram.
+///
 /// Formato: `{"pool,jogo": [[posições 1..P], ...]}`. A leitura é deliberadamente
 /// simples — se o arquivo não existir ou não for legível, devolve vazio e a
 /// geração segue como se fosse a primeira.
-fn carregar_banco_anterior() -> BTreeMap<String, Vec<Cartela>> {
-    let Ok(texto) = std::fs::read_to_string(DESTINO) else {
+fn ler_banco(arquivo: &str) -> BTreeMap<String, Vec<Cartela>> {
+    let Ok(texto) = std::fs::read_to_string(arquivo) else {
         return BTreeMap::new();
     };
 
@@ -583,6 +655,49 @@ fn combinacoes(itens: &[usize], k: usize) -> Vec<Vec<usize>> {
     }
     passo(itens, k, 0, &mut atual, &mut saida);
     saida
+}
+
+/// Quanto tempo dar ao guloso global por caso.
+///
+/// Ele é determinístico dada a semente, e mudar a semente muda o caminho
+/// inteiro — então o orçamento paga várias tentativas e fica com a melhor. Nos
+/// casos rápidos as cinco cabem em segundos; nos lentos o relógio corta.
+const ORCAMENTO_DO_GULOSO: Duration = Duration::from_secs(300);
+
+/// O melhor guloso global de algumas sementes.
+///
+/// Devolve `None` quando a configuração não cabe nele — aí a fórmula e o motor
+/// seguem sozinhos, como antes.
+fn guloso_global(pool: usize, jogo: usize, orcamento: Duration) -> Option<Vec<Cartela>> {
+    let problema = Problema::com_pool_inicial(
+        pool as u32,
+        pool,
+        jogo,
+        RegraCobertura::cobrir_subconjuntos(SORTEIO),
+        Objetivo::MinimizarCartelas,
+    )
+    .ok()?;
+    let motor = MotorCobertura::novo(&problema).ok()?;
+    let mut oficina = Oficina::nova();
+    let comeco = std::time::Instant::now();
+
+    let mut melhor: Option<Vec<Cartela>> = None;
+    for semente in 0..5u64 {
+        let sobra = orcamento.checked_sub(comeco.elapsed())?;
+        let mut solucao = Solucao::vazia(&motor);
+        if construir_guloso_global(&motor, &mut solucao, sobra, semente, &mut oficina, None) {
+            let achado = solucao.cartelas().to_vec();
+            if melhor.as_ref().map_or(true, |m: &Vec<Cartela>| achado.len() < m.len()) {
+                melhor = Some(achado);
+            }
+        } else if melhor.is_some() {
+            // O relógio cortou uma tentativa: as anteriores continuam valendo.
+            break;
+        } else {
+            return None;
+        }
+    }
+    melhor
 }
 
 /// Põe o motor persistente para trabalhar a partir da construção.

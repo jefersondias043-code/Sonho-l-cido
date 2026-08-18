@@ -80,6 +80,13 @@ const MAXIMO_ENTRE_LEITURAS_DO_RELOGIO: u64 = 1024;
 /// que interessa a um custo desprezível.
 const ACEITAS_ENTRE_ARQUIVAMENTOS: u64 = 64;
 
+/// Teto de trocas de ponto numa única iteração.
+///
+/// Sem ele, o orçamento de trabalho sozinho daria centenas de milhares de
+/// trocas numa iteração de configuração pequena, e a busca deixaria de ser
+/// interativa — o recorde só apareceria de minuto em minuto.
+const TETO_DE_TROCAS: u64 = 5_000;
+
 #[derive(Debug, Clone)]
 pub struct Configuracao {
     pub semente: u64,
@@ -101,6 +108,13 @@ pub struct Configuracao {
     pub segmento_adaptativo: u64,
     pub fator_reacao: f64,
     pub recompensas: Recompensas,
+    /// Teto de operações sobre alvos gasto na descida por troca de ponto.
+    ///
+    /// Cada troca mexe em duas cartelas, então custa `2 · C(k,t)` operações. O
+    /// teto vira um número de trocas em [`MotorBusca::novo`], e é o que impede
+    /// uma configuração de jogos grandes — onde uma cartela sozinha atende
+    /// 170.544 sorteios — de gastar minutos numa única iteração.
+    pub orcamento_de_troca: u64,
     /// Iterações entre dois eventos de progresso.
     pub intervalo_progresso: u64,
 }
@@ -113,6 +127,7 @@ impl Default for Configuracao {
             iteracoes_ate_diversificar: 50_000,
             ruido_reconstrucao: 0.25,
             orcamento_por_cartela: 30_000,
+            orcamento_de_troca: 4_000_000,
             capacidade_por_faixa: 12,
             maximo_de_faixas: 8,
             distancia_minima_elites: 0.30,
@@ -148,6 +163,8 @@ pub struct MotorBusca {
     /// Quantos candidatos avaliar por posição ao montar uma cartela. Derivado
     /// do orçamento e do custo real de avaliação desta configuração.
     max_candidatos: usize,
+    /// Quantas trocas de ponto cabem no orçamento desta configuração.
+    trocas_por_iteracao: u64,
 
     arquivo: ArquivoElites,
     seletor: SeletorAdaptativo,
@@ -213,6 +230,9 @@ impl MotorBusca {
         let rng = Pcg64Mcg::seed_from_u64(config.semente);
         let max_candidatos =
             crate::construcao::candidatos_por_posicao(&cobertura, config.orcamento_por_cartela);
+        let custo_de_uma_troca = 2 * cobertura.viabilidade().alvos_por_cartela.max(1);
+        let trocas_por_iteracao =
+            (config.orcamento_de_troca / custo_de_uma_troca).clamp(1, TETO_DE_TROCAS);
 
         let (tamanho_pool, tamanho_cartela) =
             (problema.tamanho_pool(), problema.tamanho_cartela());
@@ -231,6 +251,7 @@ impl MotorBusca {
             melhor_iteracao: 0,
             alvo_cartelas: usize::MAX,
             max_candidatos,
+            trocas_por_iteracao,
             arquivo,
             seletor,
             aceitacao,
@@ -552,6 +573,33 @@ impl MotorBusca {
             &mut self.rng,
             &mut self.oficina,
         );
+
+        // Chegou ao teto de cartelas e ainda falta cobrir: é aqui que a
+        // reconstrução por cartelas inteiras não tem mais o que fazer, porque
+        // qualquer cartela nova ultrapassaria a meta. O passo que resta é
+        // pequeno — mover uma dezena de uma cartela — e é o que a descida por
+        // troca faz.
+        //
+        // Sem isto, a iteração terminava sempre revertendo, e o recorde só caía
+        // por sorte da reconstrução. Medido a partir do banco publicado, dez
+        // minutos em `(24,17)` tiravam quinze cartelas de trinta e duas mil.
+        if !self.atual.cobertura_total() && self.atual.quantidade() >= self.alvo_cartelas {
+            // O orçamento acompanha o tamanho do buraco: fechar `d` sorteios
+            // descobertos precisa da ordem de `d` trocas certeiras, e gastar
+            // muito mais que isso é insistir onde não fecha. Sem essa
+            // proporção, um problema pequeno consumia milhares de trocas por
+            // iteração e a busca deixava de contar iterações — o teste de
+            // cobertura múltipla saiu de 2,7 s para mais de cinco minutos.
+            let buraco = self.atual.total_descobertos() as u64;
+            let orcamento = self.trocas_por_iteracao.min(buraco.saturating_mul(8).max(1));
+            crate::troca::descida_por_troca(
+                &self.cobertura,
+                &mut self.atual,
+                orcamento,
+                &mut self.rng,
+                &mut self.oficina,
+            );
+        }
 
         // Podar custa uma varredura de contribuição sobre todas as cartelas —
         // em configurações grandes, mais caro que o resto da iteração inteira.

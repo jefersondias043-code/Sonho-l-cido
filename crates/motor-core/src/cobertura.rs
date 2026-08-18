@@ -58,6 +58,14 @@ pub struct MotorCobertura {
     total_alvos: usize,
     viabilidade: Viabilidade,
     binom: Binomiais,
+    /// `pesos[i * (p+1) + e] = C(e, i+1)` — a parcela que o elemento `e` na
+    /// posição `i` acrescenta ao índice colex.
+    ///
+    /// É o caminho mais quente do sistema inteiro: cada alvo gerado soma `j`
+    /// dessas parcelas, e uma iteração da busca gera dezenas de milhares de
+    /// alvos. Ler de uma tabela plana troca três comparações, uma multiplicação
+    /// e um acesso com limite por um único acesso indexado.
+    pesos: Vec<u64>,
 }
 
 impl MotorCobertura {
@@ -77,15 +85,24 @@ impl MotorCobertura {
         let binom = Binomiais::novo(p, p);
         let viabilidade = checar_viabilidade(problema, &binom, limite_alvos)?;
 
+        let alvo = regra.alvo;
+        let mut pesos = vec![0u64; alvo * (p + 1)];
+        for i in 0..alvo {
+            for e in 0..=p {
+                pesos[i * (p + 1) + e] = binom.c(e, i + 1);
+            }
+        }
+
         Ok(Self {
             p,
             tamanho_cartela: problema.tamanho_cartela(),
-            alvo: regra.alvo,
+            alvo,
             intersecao: regra.intersecao,
             premiadas: regra.premiadas.max(1) as Contagem,
             total_alvos: viabilidade.total_alvos as usize,
             viabilidade,
             binom,
+            pesos,
         })
     }
 
@@ -152,6 +169,7 @@ impl MotorCobertura {
         let n_fora = rascunho.fora.len();
         rascunho.alvo_atual.resize(self.alvo, 0);
 
+        let largura = self.p + 1;
         let i_max = self.alvo.min(n_dentro);
         for i in self.intersecao..=i_max {
             let resto = self.alvo - i;
@@ -163,33 +181,39 @@ impl MotorCobertura {
             loop {
                 iniciar_combinacao(resto, &mut rascunho.comb_fora);
                 loop {
-                    // Intercala os dois lados em ordem crescente. Ambas as
-                    // origens já estão ordenadas, então uma passada basta.
+                    // Intercala os dois lados em ordem crescente **somando o
+                    // índice colex na mesma passada**. Ambas as origens já
+                    // estão ordenadas, então uma varredura basta — e como a
+                    // posição de escrita é a mesma que entra no peso, o alvo
+                    // nunca precisa ser materializado.
                     let (mut a, mut b, mut escrita) = (0usize, 0usize, 0usize);
+                    let mut indice = 0u64;
                     while a < i && b < resto {
                         let de_dentro = rascunho.dentro[rascunho.comb_dentro[a]];
                         let de_fora = rascunho.fora[rascunho.comb_fora[b]];
-                        if de_dentro < de_fora {
-                            rascunho.alvo_atual[escrita] = de_dentro;
+                        let escolhido = if de_dentro < de_fora {
                             a += 1;
+                            de_dentro
                         } else {
-                            rascunho.alvo_atual[escrita] = de_fora;
                             b += 1;
-                        }
+                            de_fora
+                        };
+                        indice += self.pesos[escrita * largura + escolhido];
                         escrita += 1;
                     }
                     while a < i {
-                        rascunho.alvo_atual[escrita] = rascunho.dentro[rascunho.comb_dentro[a]];
+                        let e = rascunho.dentro[rascunho.comb_dentro[a]];
+                        indice += self.pesos[escrita * largura + e];
                         a += 1;
                         escrita += 1;
                     }
                     while b < resto {
-                        rascunho.alvo_atual[escrita] = rascunho.fora[rascunho.comb_fora[b]];
+                        let e = rascunho.fora[rascunho.comb_fora[b]];
+                        indice += self.pesos[escrita * largura + e];
                         b += 1;
                         escrita += 1;
                     }
 
-                    let indice = indice_colex(&self.binom, &rascunho.alvo_atual);
                     debug_assert!((indice as usize) < self.total_alvos);
                     rascunho.alvos.push(indice as u32);
 

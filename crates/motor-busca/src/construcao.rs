@@ -10,9 +10,12 @@
 //! candidatos, não sobre o melhor absoluto: é a ideia do GRASP, e é o que faz
 //! duas execuções a partir do mesmo ponto seguirem caminhos diferentes.
 
+use std::collections::BinaryHeap;
+use std::time::{Duration, Instant};
+
 use motor_core::cartela::Cartela;
 use motor_core::cobertura::MotorCobertura;
-use motor_core::combinatoria::subconjunto_do_indice;
+use motor_core::combinatoria::{iniciar_combinacao, proxima_combinacao, subconjunto_do_indice};
 use motor_core::solucao::Solucao;
 use rand::Rng;
 
@@ -223,6 +226,161 @@ pub fn construir_do_zero(
     }
 }
 
+/// Constrói uma solução escolhendo, a cada passo, a melhor cartela **do mundo**.
+///
+/// ## O que muda em relação a [`construir_do_zero`]
+///
+/// A construção de sempre monta cada cartela dezena a dezena e, em cada
+/// posição, avalia uma **amostra** dos candidatos ([`candidatos_por_posicao`]).
+/// É gulosa dentro da cartela e cega fora dela: a cartela que está sendo
+/// montada nunca é comparada com as outras `C(p,k) − 1` que poderiam entrar no
+/// lugar dela.
+///
+/// Aqui a comparação é global: a cada passo entra a cartela que cobre mais
+/// alvos ainda descobertos, entre todas as que existem.
+///
+/// ## Por que isso é viável
+///
+/// A nota de um candidato só pode **cair** conforme a solução cresce — alvos
+/// não voltam a ficar descobertos. Isso permite uma fila de prioridade
+/// preguiçosa: tira-se o de maior nota antiga, recalcula-se a nota de verdade,
+/// e se ela ainda for a maior da fila, aquele candidato é comprovadamente o
+/// melhor que existe agora. Senão volta para a fila com a nota nova. Cada
+/// recálculo custa `C(k,t)`, e o número de recálculos fica em poucas vezes o
+/// número de cartelas escolhidas.
+///
+/// ## Onde ela ganha, e onde perde
+///
+/// Medido nas combinações em aberto da Lotinha, contra o melhor que havia:
+///
+/// | pool, jogo | antes  | guloso global | tempo |
+/// |------------|-------:|--------------:|------:|
+/// | 23, 17     | 11.381 |    **10.153** |    6s |
+/// | 23, 18     |  2.445 |     **2.190** |   15s |
+/// | 22, 17     |  3.702 |     **3.562** |    1s |
+/// | 22, 19     |    126 |           192 |    4s |
+/// | 21, 18     |    185 |           246 |    1s |
+///
+/// O padrão é claro: ganha onde faltam muitas dezenas ao jogo — que é onde a
+/// construção algébrica é grosseira e a solução tem milhares de cartelas — e
+/// perde onde a construção fechada já é quase ótima. Por isso ela **entra como
+/// mais um candidato a partida**, e não no lugar de ninguém: quem escolhe é a
+/// comparação.
+///
+/// Devolve `false` quando desiste — orçamento estourado, parada pedida, ou
+/// configuração grande demais para valer a tentativa.
+pub fn construir_guloso_global(
+    motor: &MotorCobertura,
+    solucao: &mut Solucao,
+    orcamento: Duration,
+    semente: u64,
+    oficina: &mut Oficina,
+    parar: Option<&Controle>,
+) -> bool {
+    let p = motor.tamanho_pool();
+    let k = motor.tamanho_cartela();
+    let por_cartela = motor.viabilidade().alvos_por_cartela.max(1);
+    let candidatos = motor.binomiais().c(p, k);
+
+    // Um passe completo de pontuação custa isto. O teto evita nascer uma fila
+    // de dezenas de milhões de entradas antes de o relógio ter chance de
+    // cortar; acima dele a construção de sempre é a única viável.
+    if candidatos == 0 || candidatos.saturating_mul(por_cartela) > TETO_DO_GULOSO_GLOBAL {
+        return false;
+    }
+
+    let comeco = Instant::now();
+    solucao.reiniciar();
+
+    // O desempate é sorteado, não posicional. Empates são a regra no começo —
+    // todas as cartelas cobrem `C(k,t)` alvos enquanto nada está coberto — e
+    // desempatar pela ordem das dezenas faria toda execução escolher as mesmas
+    // primeiras cartelas. Com `semente` diferente sai um guloso diferente, e o
+    // melhor de algumas tentativas vale mais que uma só.
+    //
+    // A ordem continua sendo pela nota: o desempate é o segundo campo, e a
+    // preguiça da fila depende só de o primeiro ser um teto válido.
+    let mut fila: BinaryHeap<(u32, u64, u128)> = BinaryHeap::with_capacity(candidatos as usize);
+    let mut indices: Vec<usize> = Vec::with_capacity(k);
+    iniciar_combinacao(k, &mut indices);
+    loop {
+        let mascara = Cartela::dos_indices(&indices).mascara();
+        fila.push((
+            por_cartela.min(u32::MAX as u64) as u32,
+            embaralhar_chave(mascara, semente),
+            mascara,
+        ));
+        if !proxima_combinacao(p, k, &mut indices) {
+            break;
+        }
+    }
+
+    let mut desde_a_ultima_olhada = 0u32;
+    while !solucao.cobertura_total() {
+        // Ler o relógio a cada passo custaria mais que o passo em configurações
+        // pequenas; a cada 64 é o bastante para responder a um toque.
+        desde_a_ultima_olhada += 1;
+        if desde_a_ultima_olhada >= 64 {
+            desde_a_ultima_olhada = 0;
+            if comeco.elapsed() >= orcamento || parar.is_some_and(|c| c.foi_solicitada_parada()) {
+                return false;
+            }
+        }
+
+        let Some((_, sorteio, mascara)) = fila.pop() else { return false };
+        let cartela = Cartela::da_mascara(mascara);
+        let nota = solucao.ganho_de(motor, cartela, &mut oficina.rascunho) as u32;
+
+        // Nota zero é candidato morto: a nota nunca sobe, então ele não voltará
+        // a servir. Sai da fila e pronto. Devolver aqui seria errado — a nota
+        // que estava na fila é só um teto, e um candidato com teto alto e nota
+        // real zero não diz nada sobre os outros.
+        if nota == 0 {
+            continue;
+        }
+
+        let topo = fila.peek().map_or(0, |&(n, _, _)| n);
+        if nota >= topo {
+            solucao.adicionar(motor, cartela, &mut oficina.rascunho);
+        } else {
+            fila.push((nota, sorteio, mascara));
+        }
+    }
+
+    podar(motor, solucao, oficina);
+    true
+}
+
+/// Acima disto nem vale montar a fila do guloso global.
+///
+/// É o custo de um passe completo de pontuação: `C(p,k)` candidatos vezes
+/// `C(k,t)` alvos cada. Quatro bilhões deixa passar tudo que a Lotinha usa e
+/// barra as configurações onde a fila sozinha não caberia na memória.
+const TETO_DO_GULOSO_GLOBAL: u64 = 4_000_000_000;
+
+/// Espalha máscara e semente num número sem estrutura, para desempatar sem viés.
+///
+/// É a mistura final do SplitMix64. Não precisa de qualidade criptográfica —
+/// precisa de duas coisas: ser determinística, para a mesma semente repetir a
+/// mesma busca, e não correlacionar com a ordem das dezenas, que é justamente o
+/// viés que se quer tirar.
+fn embaralhar_chave(mascara: u128, semente: u64) -> u64 {
+    // Semente zero é a ordem das dezenas, sem embaralhar. Ela não é uma escolha
+    // ruim: em covering design, soluções com estrutura costumam ser as boas, e
+    // medindo nas combinações da Lotinha ela ganha da ordem sorteada em metade
+    // dos casos. Por isso entra como uma das tentativas, e não é substituída.
+    if semente == 0 {
+        return mascara as u64;
+    }
+
+    let mut x = (mascara as u64) ^ (mascara >> 64) as u64 ^ semente.wrapping_mul(0x9E37_79B9_7F4A_7C15);
+    x ^= x >> 30;
+    x = x.wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    x ^= x >> 27;
+    x = x.wrapping_mul(0x94D0_49BB_1331_11EB);
+    x ^ (x >> 31)
+}
+
 /// Remove toda cartela cuja saída não descobre nenhum alvo.
 ///
 /// É o §9.1 do documento: a redução que sai de graça. Executada depois de cada
@@ -290,6 +448,94 @@ mod testes {
             );
             assert_eq!(solucao.conferir_invariantes(&motor), Ok(()));
         }
+    }
+
+    #[test]
+    fn o_guloso_global_cobre_tudo_e_nunca_perde_do_guloso_por_cartela() {
+        // Comparar as duas construções no mesmo problema é o único jeito de
+        // saber se a global vale o que custa. Ela não vence sempre — e não
+        // precisa: entra como candidata, e quem decide é a comparação.
+        let mut vitorias = 0;
+        let casos = [(9, 3, 2, 2), (12, 4, 3, 2), (13, 5, 4, 3), (10, 5, 5, 2)];
+
+        for (p, k, j, t) in casos {
+            let (motor, mut oficina, mut rng) = ambiente(p, k, j, t);
+
+            let mut global = Solucao::vazia(&motor);
+            let deu = construir_guloso_global(
+                &motor,
+                &mut global,
+                Duration::from_secs(30),
+                1,
+                &mut oficina,
+                None,
+            );
+            assert!(deu, "({p},{k},{j},{t}): o guloso global desistiu");
+            assert!(
+                global.cobertura_total(),
+                "({p},{k},{j},{t}): terminou com {} alvos descobertos",
+                global.total_descobertos()
+            );
+            assert_eq!(global.conferir_invariantes(&motor), Ok(()));
+
+            let mut por_cartela = Solucao::vazia(&motor);
+            construir_do_zero(
+                &motor,
+                &mut por_cartela,
+                0.0,
+                usize::MAX,
+                &mut rng,
+                &mut oficina,
+                None,
+            );
+            podar(&motor, &mut por_cartela, &mut oficina);
+
+            if global.quantidade() <= por_cartela.quantidade() {
+                vitorias += 1;
+            }
+        }
+
+        assert!(
+            vitorias >= casos.len() - 1,
+            "o guloso global ficou atrás em mais de um caso — se isso passar a \
+             ser a regra, ele deixou de valer o custo"
+        );
+    }
+
+    #[test]
+    fn o_guloso_global_recusa_o_que_nao_cabe() {
+        // Um pool de 25 com cartelas de 12 tem `C(25,12) = 5,2 milhões` de
+        // candidatos. Montar essa fila antes de olhar o relógio consumiria
+        // memória à toa; a recusa precisa vir antes.
+        let (motor, mut oficina, _) = ambiente(25, 12, 6, 6);
+        let mut solucao = Solucao::vazia(&motor);
+        let deu = construir_guloso_global(
+            &motor,
+            &mut solucao,
+            Duration::from_secs(60),
+            1,
+            &mut oficina,
+            None,
+        );
+        assert!(!deu, "deveria ter recusado antes de montar a fila");
+    }
+
+    #[test]
+    fn o_guloso_global_larga_o_trabalho_quando_pedem_parada() {
+        let (motor, mut oficina, _) = ambiente(16, 6, 5, 4);
+        let mut solucao = Solucao::vazia(&motor);
+        let controle = Controle::novo();
+        controle.parar();
+
+        let deu = construir_guloso_global(
+            &motor,
+            &mut solucao,
+            Duration::from_secs(60),
+            1,
+            &mut oficina,
+            Some(&controle),
+        );
+        assert!(!deu, "com parada pedida, não pode devolver sucesso");
     }
 
     #[test]

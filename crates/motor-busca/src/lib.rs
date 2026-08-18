@@ -42,6 +42,7 @@ pub mod controle;
 pub mod motor;
 pub mod oficina;
 pub mod operadores;
+pub mod troca;
 
 pub use adaptativo::{Recompensas, SeletorAdaptativo};
 pub use aceitacao::AceitacaoTardia;
@@ -52,4 +53,5 @@ pub use controle::{
 };
 pub use motor::{Configuracao, MotorBusca};
 pub use oficina::Oficina;
+pub use troca::descida_por_troca;
 pub use operadores::Operador;
