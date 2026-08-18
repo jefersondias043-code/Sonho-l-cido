@@ -1,9 +1,16 @@
 //! Gera o banco de fechamentos da Lotinha.
 //!
-//! A modalidade: escolhem-se de 17 a 23 dezenas entre 25, o resultado da
+//! A modalidade: escolhem-se de 17 a 25 dezenas entre 25, o resultado da
 //! Lotofácil é a referência, e ganha-se quando as 15 sorteadas caem **todas**
 //! dentro do conjunto escolhido. São 28 combinações de `(pool, tamanho do jogo)`
-//! com `17 ≤ jogo ≤ pool ≤ 23`.
+//! com `17 ≤ jogo ≤ pool ≤ 25`.
+//!
+//! Cinco delas não entram no banco, e é decisão consciente: a construção de
+//! partida para `(24,17)`, `(24,18)`, `(25,17)`, `(25,18)` e `(25,19)` tem de
+//! 134 mil a 1,08 **milhão** de jogos. Nenhuma cabe num aplicativo de celular,
+//! e nenhuma descreve uma compra que alguém faria. Ali o aplicativo parte do
+//! guloso do próprio motor e mostra o piso conhecido, em vez de carregar
+//! dezenas de megabytes que ninguém usaria.
 //!
 //! ## A transformação que resolve quase tudo
 //!
@@ -61,19 +68,44 @@ fn main() {
 
     let mut banco: BTreeMap<String, Vec<Vec<usize>>> = BTreeMap::new();
 
-    for pool in 17..=23usize {
+    for pool in 17..=25usize {
         for jogo in 17..=pool {
             let a = pool - jogo;
+            let b = pool - SORTEIO;
             let piso = piso_por_contagem(pool, jogo);
 
-            let (inicial, origem) = construir(pool, jogo);
+            // A construção por grupos é ótima como partida, mas cresce
+            // rápido: em `(25,17)` ela tem 1,08 milhão de jogos. Acima do teto
+            // o motor parte do próprio guloso — que nesses casos é melhor de
+            // qualquer forma — em vez de gastar minutos podando o que já
+            // nasceu grande demais.
+            let cabe_construir = tamanho_da_construcao(pool, a, b) <= TETO_DA_CONSTRUCAO;
+
+            let (inicial, origem) = if cabe_construir {
+                construir(pool, jogo)
+            } else {
+                (Vec::new(), "guloso")
+            };
             let partida = inicial.len();
 
-            let final_ = if a >= 3 {
+            let final_ = if a >= 3 || !cabe_construir {
                 melhorar(pool, jogo, &inicial, Duration::from_secs(segundos))
             } else {
                 inicial
             };
+
+            // O que decide a entrada no banco é o tamanho **final**, não o da
+            // partida. `(23,17)` nasce com 100.947 jogos e termina com 11.546:
+            // cortar pela partida jogaria fora justamente o caso em que o motor
+            // mais fez diferença.
+            if final_.len() > TETO_DO_BANCO {
+                println!(
+                    "{pool:>5} {jogo:>5} {piso:>7} {partida:>9} {:>10} {origem:>12} {:>9}",
+                    final_.len(),
+                    "—",
+                );
+                continue;
+            }
 
             // A conferência não é formalidade: é a única coisa que separa um
             // fechamento de uma lista de números com cara de fechamento.
@@ -135,6 +167,42 @@ fn main() {
 ///
 /// É um piso válido e frouxo. Serve como travessa de segurança — nada gerado
 /// aqui pode ficar abaixo dele — e como referência do quanto ainda há a ganhar.
+/// Acima disto o fechamento não entra no banco embutido.
+///
+/// O maior que entra hoje tem 11.546 jogos (pool 23, jogos de 17) e já ocupa a
+/// maior parte do arquivo. O teto existe para que acrescentar os pools 24 e 25
+/// não transforme um arquivo de 1 MB em um de dezenas — e é aplicado ao
+/// resultado final, depois de o motor ter feito o que podia.
+const TETO_DO_BANCO: usize = 20_000;
+
+/// Acima disto nem vale construir a partida por grupos.
+///
+/// Podar um milhão de cartelas custa minutos e quase sempre perde para o
+/// guloso do próprio motor, que já nasce enxuto. O teto é generoso de
+/// propósito: uma cartela é uma máscara de bits, então mesmo centenas de
+/// milhares delas cabem de sobra na memória.
+const TETO_DA_CONSTRUCAO: usize = 400_000;
+
+/// Quantos jogos a construção de partida produziria, sem construí-la.
+///
+/// Precisa ser calculado antes: materializar 1,08 milhão de cartelas só para
+/// medir e jogar fora consumiria memória à toa.
+fn tamanho_da_construcao(pool: usize, a: usize, b: usize) -> usize {
+    match a {
+        0 => 1,
+        1 => 16,
+        _ => {
+            let g = ((b - 1) / (a - 1)).max(1);
+            (0..g)
+                .map(|i| {
+                    let tam = pool / g + usize::from(i < pool % g);
+                    binomial(tam, a) as usize
+                })
+                .sum()
+        }
+    }
+}
+
 fn piso_por_contagem(pool: usize, jogo: usize) -> usize {
     binomial(pool, SORTEIO).div_ceil(binomial(jogo, SORTEIO)) as usize
 }

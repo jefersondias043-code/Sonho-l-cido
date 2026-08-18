@@ -170,10 +170,10 @@ try {
   // faltasse, os ouvintes não existiriam e a tela não reagiria a nada.
   let offlineUtilizavel = true;
   try {
-    // A matriz das 28 combinações é desenhada por `lotinha.js`, importado por
+    // A matriz das 45 combinações é desenhada por `lotinha.js`, importado por
     // `app.js` — se o módulo faltasse no cache, a tabela ficaria vazia.
     await pagina.waitForFunction(
-      () => document.querySelectorAll('#lot-matriz tbody tr').length === 28,
+      () => document.querySelectorAll('#lot-matriz tbody tr').length === 45,
       undefined,
       { timeout: 10000 }
     );

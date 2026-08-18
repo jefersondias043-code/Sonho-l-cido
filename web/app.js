@@ -637,6 +637,10 @@ function pintarCartelas() {
 
 let lotPool = 18;
 let lotJogo = 17;
+/* Quantos acertos garantir, e quantas cartelas precisam ganhar. Os padrões são
+   a Lotinha como ela é jogada: as 15, numa cartela. */
+let lotGarantia = lotinha.SORTEIO;
+let lotPremiadas = 1;
 let lotDezenas = new Set();
 let lotFechamento = null;
 
@@ -705,6 +709,60 @@ function lotMontar() {
 }
 
 /**
+ * Os botões de garantia e de cartelas premiadas.
+ *
+ * Refeitos a cada mudança de pool ou de tamanho de jogo porque o teto de
+ * cartelas premiadas depende dos dois: num pool de 18 com jogos de 17, só três
+ * jogos distintos podem conter um mesmo sorteio, e pedir a quarta obrigaria a
+ * comprar jogo repetido.
+ */
+function lotMontarExigencias() {
+  const alvoGarantia = $('lot-garantia');
+  alvoGarantia.innerHTML = '';
+  for (let g = lotinha.SORTEIO; g >= lotinha.MENOR_GARANTIA; g--) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'opcao';
+    b.textContent = String(g);
+    b.dataset.garantia = String(g);
+    b.addEventListener('click', () => {
+      lotGarantia = g;
+      lotMontarExigencias();
+      lotPintarExplicacao();
+      lotPintarEconomia();
+    });
+    alvoGarantia.appendChild(b);
+  }
+
+  const teto = Math.min(lotinha.maximoPremiadas(lotPool, lotJogo, lotGarantia), 6);
+  if (lotPremiadas > teto) lotPremiadas = teto;
+
+  const alvoPremiadas = $('lot-premiadas');
+  alvoPremiadas.innerHTML = '';
+  for (let r = 1; r <= Math.max(teto, 1); r++) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'opcao';
+    b.textContent = String(r);
+    b.dataset.premiadas = String(r);
+    b.addEventListener('click', () => {
+      lotPremiadas = r;
+      lotMontarExigencias();
+      lotPintarExplicacao();
+      lotPintarEconomia();
+    });
+    alvoPremiadas.appendChild(b);
+  }
+
+  document.querySelectorAll('#lot-garantia .opcao').forEach((b) => {
+    b.classList.toggle('ativa', Number(b.dataset.garantia) === lotGarantia);
+  });
+  document.querySelectorAll('#lot-premiadas .opcao').forEach((b) => {
+    b.classList.toggle('ativa', Number(b.dataset.premiadas) === lotPremiadas);
+  });
+}
+
+/**
  * O que se sabe sobre o mínimo desta configuração, quando o motor não sabe.
  *
  * Derivada da configuração, e não passada à mão, para que continuar um trabalho
@@ -716,16 +774,20 @@ function lotMontar() {
  */
 function referenciaDe(configuracao) {
   const pool = configuracao?.pool?.length ?? 0;
+  const garantia = configuracao?.intersecao ?? 0;
   const ehLotinha =
     configuracao?.universo === lotinha.UNIVERSO &&
     configuracao?.alvo === lotinha.SORTEIO &&
-    configuracao?.intersecao === lotinha.SORTEIO &&
+    garantia >= lotinha.MENOR_GARANTIA &&
+    garantia <= lotinha.SORTEIO &&
     pool >= lotinha.MENOR_POOL &&
     pool <= lotinha.MAIOR_POOL &&
     configuracao.cartela >= lotinha.MENOR_POOL &&
     configuracao.cartela <= pool;
 
-  return ehLotinha ? lotinha.minimo(pool, configuracao.cartela) : null;
+  return ehLotinha
+    ? lotinha.minimo(pool, configuracao.cartela, garantia, configuracao.premiadas ?? 1)
+    : null;
 }
 
 function lotAlternar(n) {
@@ -781,12 +843,14 @@ function lotMontarOpcoesDeJogo() {
     b.dataset.jogo = String(k);
     b.addEventListener('click', () => {
       lotJogo = k;
+      lotMontarExigencias();
       lotPintarExplicacao();
       lotPintarEconomia();
     });
     alvo.appendChild(b);
   }
   if (lotJogo > lotPool) lotJogo = lotPool;
+  lotMontarExigencias();
   lotPintarExplicacao();
   lotPintarEconomia();
 }
@@ -796,8 +860,22 @@ function lotPintarExplicacao() {
     b.classList.toggle('ativa', Number(b.dataset.jogo) === lotJogo);
   });
 
-  const { jogos, exato, piso } = lotinha.minimo(lotPool, lotJogo);
+  const { jogos, exato, piso } = lotinha.minimo(lotPool, lotJogo, lotGarantia, lotPremiadas);
   const destino = $('lot-explicacao');
+  const teto = lotinha.maximoPremiadas(lotPool, lotJogo, lotGarantia);
+
+  // O que se está pedindo, em uma frase — antes de dizer quanto custa.
+  const pedido =
+    `Cada resultado possível dentro das suas ${lotPool} dezenas vai cair em ` +
+    (lotPremiadas === 1 ? 'uma cartela' : `<b>${lotPremiadas}</b> cartelas`) +
+    ` com ao menos <b>${lotGarantia}</b> acerto${lotGarantia === 1 ? '' : 's'}.`;
+
+  // O aviso que o usuário não tem como deduzir sozinho.
+  const aviso =
+    lotGarantia === lotinha.SORTEIO && lotPremiadas >= teto && teto > 1
+      ? ` <em>Este é o máximo: só ${teto} jogos distintos podem conter um mesmo ` +
+        `sorteio, então pedir mais obrigaria a comprar jogo repetido.</em>`
+      : '';
 
   if (lotJogo === lotPool) {
     destino.innerHTML =
@@ -805,19 +883,20 @@ function lotPintarExplicacao() {
       `única: ou as 15 caem dentro, ou não. Não há fechamento a fazer — para ` +
       `fechar, o jogo precisa ser menor que o pool.</em>`;
   } else if (exato) {
+    const porque =
+      lotPool - lotJogo === 1
+        ? `São sempre ${lotinha.SORTEIO} + ${lotPremiadas} quando o jogo tem uma dezena a ` +
+          `menos que o pool, seja qual for o pool.`
+        : 'Vem do teorema de Turán.';
     destino.innerHTML =
-      `<b>${milhares(jogos)} jogos</b> fecham o seu pool. <em>Este número é o ` +
-      `mínimo comprovado — não existe fechamento menor. ` +
-      (lotPool - lotJogo === 1
-        ? 'Curiosamente são sempre 16 quando o jogo tem uma dezena a menos que o pool, seja qual for o pool.'
-        : 'Vem do teorema de Turán.') +
-      `</em>`;
+      `${pedido} <b>${milhares(jogos)} jogos</b> bastam. <em>Este número é o ` +
+      `mínimo comprovado — não existe fechamento menor. ${porque}</em>${aviso}`;
   } else {
     destino.innerHTML =
-      `<b>Mínimo desconhecido.</b> <em>Ninguém no mundo sabe quantos jogos bastam ` +
-      `aqui — é problema em aberto. O que se sabe é que não dá com menos de ` +
-      `<b>${milhares(piso)}</b>. O aplicativo traz o melhor fechamento que o ` +
-      `motor já encontrou, e você pode deixá-lo procurando um menor.</em>`;
+      `${pedido} <b>Mínimo desconhecido.</b> <em>Ninguém no mundo sabe quantos ` +
+      `jogos bastam aqui — é problema em aberto. O que se sabe é que não dá com ` +
+      `menos de <b>${milhares(piso)}</b>. O motor procura, e só para quando você ` +
+      `mandar.</em>${aviso}`;
   }
 }
 
@@ -832,7 +911,7 @@ function lotPintarExplicacao() {
 function lotPintarEconomia() {
   const destino = $('lot-economia');
   const cartao = $('lot-economia-cartao');
-  const { jogos, exato, piso } = lotinha.minimo(lotPool, lotJogo);
+  const { jogos, piso } = lotinha.minimo(lotPool, lotJogo, lotGarantia, lotPremiadas);
   const quantidade = lotFechamento?.length ?? jogos ?? piso;
 
   if (!quantidade) {
@@ -847,6 +926,8 @@ function lotPintarEconomia() {
     quantidade,
     cotacao: lotCotacao,
     valorDoJogo: valor,
+    garantia: lotGarantia,
+    premiadas: lotPremiadas,
   });
 
   cartao.hidden = false;
@@ -865,14 +946,38 @@ function lotPintarEconomia() {
     return;
   }
 
+  // Garantir menos de 15 não compra prêmio nenhum nesta modalidade: a Lotinha
+  // paga o jogo que contém as 15, e só ele. Prometer um piso de prêmio aqui
+  // seria a mentira mais cara que esta tela poderia contar.
+  if (!e.garantePremio) {
+    destino.innerHTML =
+      `<div class="linha-economia"><span>Custo do fechamento</span>` +
+      `<b>${dinheiro(e.custo)}</b> <em>${milhares(quantidade)} jogos</em></div>` +
+
+      `<div class="linha-economia perde"><span>Prêmio garantido nesta modalidade</span>` +
+      `<b>nenhum</b></div>` +
+
+      `<div class="linha-economia total"><span>Retorno esperado</span>` +
+      `<b>${dinheiro(e.retornoEsperado)}</b> <em>por real apostado</em></div>` +
+
+      `<p class="ajuda">Você escolheu garantir <b>${lotGarantia} acertos</b>, e a ` +
+      `Lotinha só paga quem acerta os <b>15</b>. Um fechamento para ${lotGarantia} ` +
+      `não garante prêmio nenhum aqui — ele faz sentido na Lotofácil, que premia ` +
+      `a partir de 11. O retorno esperado acima continua valendo, porque ele ` +
+      `depende de cada jogo conter as 15, não da garantia escolhida.</p>`;
+    return;
+  }
+
   const lucro = e.premioMinimo - e.custo;
+  const quantasGanham =
+    e.premiadas === 1 ? 'uma cartela premiada' : `<b>${e.premiadas}</b> cartelas premiadas`;
   destino.innerHTML =
     `<div class="linha-economia"><span>Custo do fechamento</span>` +
     `<b>${dinheiro(e.custo)}</b> <em>${milhares(quantidade)} jogos</em></div>` +
 
     `<div class="linha-economia ganha"><span>Se o sorteio cair no seu pool ` +
     `<em>(1 em ${milhares(1 / e.chanceDoPool)})</em></span>` +
-    `<b>${dinheiro(e.premioMinimo)}</b> no mínimo, ` +
+    `<b>${dinheiro(e.premioMinimo)}</b> no mínimo <em>(${quantasGanham})</em>, ` +
     `<em>${dinheiro(e.premioMedioQuandoGanha)} em média — saldo ` +
     `${lucro >= 0 ? '+' : ''}${dinheiro(lucro)}</em></div>` +
 
@@ -884,8 +989,9 @@ function lotPintarEconomia() {
     `<b>${dinheiro(e.retornoEsperado)}</b> <em>por real apostado</em></div>` +
 
     `<p class="ajuda">O retorno esperado é fixo por jogo e apenas soma: ` +
-    `<b>nenhum arranjo de fechamento o altera</b>. Fechar muda quando você ganha ` +
-    `— com que frequência e quanto de cada vez — nunca a média.</p>`;
+    `<b>nenhum arranjo de fechamento o altera</b> — nem exigir mais cartelas ` +
+    `premiadas. Fechar muda quando você ganha, com que frequência e quanto de ` +
+    `cada vez; nunca a média.</p>`;
 }
 
 function lotMontarMatriz() {
@@ -941,51 +1047,115 @@ $('lot-iniciar').addEventListener('click', async () => {
   destino.textContent = 'carregando o fechamento…';
 
   try {
-    lotFechamento = await lotinha.fechamentoPara(lotPool, lotJogo, dezenas);
-    if (!lotFechamento) {
-      destino.innerHTML = '<b>Combinação sem fechamento no banco.</b>';
-      return;
+    // O banco só guarda o caso padrão: garantir as 15 numa cartela. As outras
+    // exigências multiplicam o espaço muito além do que caberia num aplicativo
+    // — e nelas o motor parte do próprio guloso, que é o que ele faz de melhor.
+    const doBanco =
+      lotGarantia === lotinha.SORTEIO && lotPremiadas === 1
+        ? await lotinha.fechamentoPara(lotPool, lotJogo, dezenas)
+        : null;
+
+    lotFechamento = doBanco;
+
+    if (doBanco) {
+      destino.textContent = `conferindo ${milhares(
+        lotinha.combinacoes(lotPool, lotinha.SORTEIO)
+      )} sorteios, um a um…`;
+
+      // Cede um quadro à tela antes da conferência, que pode levar segundos
+      // nos pools grandes — sem isto a mensagem acima nunca apareceria.
+      await new Promise((r) => setTimeout(r, 0));
+      lotPintarConferencia(dezenas, doBanco);
+    } else {
+      destino.innerHTML =
+        `<b>Sem fechamento pronto para esta combinação.</b> <em>O motor vai ` +
+        `construir um do zero. Quando houver solução na tela, o botão abaixo ` +
+        `confere sorteio a sorteio o que ele encontrou.</em>`;
     }
-
-    destino.textContent = `conferindo ${milhares(
-      lotinha.combinacoes(lotPool, 15)
-    )} sorteios, um a um…`;
-
-    // Cede um quadro à tela antes da conferência, que pode levar segundos no
-    // pool 23 — sem isto a mensagem acima nunca chegaria a aparecer.
-    await new Promise((r) => setTimeout(r, 0));
-    const { total, cobertos, falha } = lotinha.conferirCobertura(dezenas, lotFechamento);
-
-    destino.innerHTML =
-      cobertos === total
-        ? `<b>Cobertura comprovada: 100%</b> <em>— ${milhares(total)} sorteios ` +
-          `conferidos um a um, e todos caem em algum dos ${milhares(lotFechamento.length)} ` +
-          `jogos. A conferência não consultou o motor que produziu o fechamento.</em>`
-        : `<b>Cobertura: ${porcento(cobertos / total)}</b> <em>— ${milhares(
-            total - cobertos
-          )} sorteios ficaram de fora. O primeiro deles: ${falha.join(' ')}.</em>`;
+    $('lot-conferir').hidden = false;
 
     lotPintarEconomia();
 
-    // E agora o motor, para tentar superar o que o banco entregou.
+    // E agora o motor: para superar o que o banco entregou, ou para construir
+    // o que ele não tinha.
     const configuracao = {
       universo: lotinha.UNIVERSO,
       pool: dezenas,
       cartela: lotJogo,
       alvo: lotinha.SORTEIO,
-      intersecao: lotinha.SORTEIO,
+      intersecao: lotGarantia,
+      premiadas: lotPremiadas,
       orcamento: null,
       semente: Number($('semente').value) || 1,
     };
-    // O fechamento vai duas vezes de propósito: como semente para o motor, e
-    // como cartelas já na tela. Sem o segundo argumento, `comecar` zera a lista
-    // exibida — e a aba Resultado ficaria vazia entre carregar o fechamento e o
-    // motor devolver o primeiro estado, que é justamente quando o usuário vai
-    // olhar.
-    comecar({ configuracao, doBanco: lotFechamento }, lotFechamento);
+    // Quando há fechamento do banco, ele vai duas vezes de propósito: como
+    // semente para o motor, e como cartelas já na tela. Sem o segundo
+    // argumento, `comecar` zera a lista exibida — e a aba Resultado ficaria
+    // vazia entre carregar e o motor devolver o primeiro estado, que é
+    // justamente quando o usuário vai olhar.
+    comecar({ configuracao, doBanco }, doBanco ?? []);
   } catch (erro) {
     destino.innerHTML = `<b>Falhou:</b> ${escapar(String(erro?.message ?? erro))}`;
   }
+});
+
+/**
+ * A conferência independente, escrita na tela.
+ *
+ * Confere as duas exigências e não só a cobertura: cada sorteio precisa cair em
+ * `lotPremiadas` jogos com ao menos `lotGarantia` acertos. Um fechamento que
+ * prometa duas cartelas premiadas e entregue uma passaria batido numa
+ * conferência que só perguntasse "alguém cobre?".
+ */
+function lotPintarConferencia(dezenas, jogos) {
+  const destino = $('lot-conferencia');
+  const { total, cobertos, falha, minimoPremiadas } = lotinha.conferirCobertura(
+    dezenas,
+    jogos,
+    lotGarantia,
+    lotPremiadas
+  );
+
+  const oQue =
+    `${lotPremiadas === 1 ? 'uma cartela' : `${lotPremiadas} cartelas`} com ` +
+    `${lotGarantia} acerto${lotGarantia === 1 ? '' : 's'}`;
+
+  if (cobertos === total) {
+    destino.innerHTML =
+      `<b>Garantia comprovada: 100%</b> <em>— ${milhares(total)} sorteios ` +
+      `conferidos um a um, e em todos você fica com ${oQue}, usando ` +
+      `${milhares(jogos.length)} jogos. A conferência não consultou o motor que ` +
+      `produziu o fechamento.</em>` +
+      (minimoPremiadas > lotPremiadas
+        ? ` <em>No pior caso são ${minimoPremiadas} cartelas, não ${lotPremiadas}.</em>`
+        : '');
+    return;
+  }
+
+  destino.innerHTML =
+    `<b>Garantia cumprida em ${porcento(cobertos / total)}</b> <em>— ${milhares(
+      total - cobertos
+    )} sorteios ficam abaixo de ${oQue}. O primeiro deles: ${falha.join(' ')}. ` +
+    `Isto é o motor ainda trabalhando, não um fechamento pronto e furado.</em>`;
+}
+
+$('lot-conferir').addEventListener('click', async () => {
+  if (lotDezenas.size !== lotPool) return;
+  const dezenas = [...lotDezenas].sort((a, b) => a - b);
+  const jogos = melhorCartelas;
+
+  if (!jogos.length) {
+    $('lot-conferencia').innerHTML = '<b>Ainda não há solução na tela para conferir.</b>';
+    return;
+  }
+
+  $('lot-conferencia').textContent = `conferindo ${milhares(
+    lotinha.combinacoes(lotPool, lotinha.SORTEIO)
+  )} sorteios, um a um…`;
+  await new Promise((r) => setTimeout(r, 0));
+  lotFechamento = jogos;
+  lotPintarConferencia(dezenas, jogos);
+  lotPintarEconomia();
 });
 
 $('lot-simular').addEventListener('click', () => {
@@ -1000,13 +1170,13 @@ $('lot-simular').addEventListener('click', () => {
     return;
   }
 
-  const { distribuicao, premiados } = lotinha.simular(lotFechamento, numeros);
+  const { distribuicao, comQuinze } = lotinha.simular(lotFechamento, numeros, lotGarantia);
   const faixas = [...distribuicao.entries()].sort((a, b) => b[0] - a[0]);
 
   destino.innerHTML =
-    (premiados.length
-      ? `<b>${premiados.length} jogo${premiados.length > 1 ? 's' : ''} com 15 acertos.</b> ` +
-        `<em>Jogo ${premiados.map((p) => p.indice).join(', ')}.</em>`
+    (comQuinze.length
+      ? `<b>${comQuinze.length} jogo${comQuinze.length > 1 ? 's' : ''} com 15 acertos.</b> ` +
+        `<em>Jogo ${comQuinze.map((p) => p.indice).join(', ')}.</em>`
       : `<b>Nenhum jogo com 15.</b> <em>Nesta modalidade só 15 paga — as faixas ` +
         `abaixo mostram o quão perto se chegou, não prêmio.</em>`) +
     '<div class="faixas">' +

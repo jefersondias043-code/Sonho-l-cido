@@ -236,7 +236,7 @@ try {
   marcar(atraso < 5000, 'carregar o fechamento leva menos de cinco segundos', `${atraso} ms`);
 
   marcar(
-    /Cobertura comprovada: 100%/.test(
+    /Garantia comprovada: 100%/.test(
       await pagina.locator('#lot-conferencia').textContent()
     ),
     'a cobertura foi conferida antes de a busca começar'

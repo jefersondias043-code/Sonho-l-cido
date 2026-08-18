@@ -3,7 +3,8 @@
  *
  * O que precisa ficar provado:
  *
- *   1. A escolha das dezenas é do usuário, e o pool aceita de 17 a 23.
+ *   1. A escolha das dezenas é do usuário, e o pool aceita de 17 a 25 — as 25
+ *      inclusive, quando o sorteio cai dentro com certeza.
  *   2. Os fechamentos vêm prontos do banco embutido — sem download, sem cálculo
  *      na hora de abrir.
  *   3. **A cobertura é real.** Todo sorteio possível dentro do pool cai em algum
@@ -113,8 +114,8 @@ try {
   // ─── 1. a estrutura da modalidade ───
   const tamanhos = await pagina.$$eval('#lot-pool .opcao', (b) => b.map((x) => x.textContent));
   marcar(
-    tamanhos.join(',') === '17,18,19,20,21,22,23',
-    'o pool vai de 17 a 23 dezenas, como a modalidade',
+    tamanhos.join(',') === '17,18,19,20,21,22,23,24,25',
+    'o pool vai de 17 a 25 dezenas — as bancas param em 23, a matemática não',
     tamanhos.join(' · ')
   );
 
@@ -122,10 +123,10 @@ try {
   marcar(quantosNumeros === 25, 'as 25 dezenas do universo estão na tela');
 
   const linhasMatriz = await pagina.locator('#lot-matriz tbody tr').count();
-  marcar(linhasMatriz === 28, 'a matriz cobre as 28 combinações da modalidade', `${linhasMatriz} linhas`);
+  marcar(linhasMatriz === 45, 'a matriz cobre as 45 combinações da modalidade', `${linhasMatriz} linhas`);
 
   const emAberto = await pagina.locator('#lot-matriz td.aberto').count();
-  marcar(emAberto === 10, 'e marca as 10 em que o mínimo é problema aberto', `${emAberto} marcadas`);
+  marcar(emAberto === 21, 'e marca as 21 em que o mínimo é problema aberto', `${emAberto} marcadas`);
 
   // ─── 2. a seleção é do usuário ───
   await pagina.click('#lot-pool .opcao[data-pool="18"]');
@@ -171,15 +172,15 @@ try {
   await pagina.click('#lot-jogo .opcao[data-jogo="17"]');
   await pagina.click('#lot-iniciar');
   await pagina.waitForFunction(
-    () => /Cobertura/.test(document.getElementById('lot-conferencia').textContent),
+    () => /Garantia/.test(document.getElementById('lot-conferencia').textContent),
     undefined,
     { timeout: 30000 }
   );
 
   const conferencia = (await pagina.locator('#lot-conferencia').textContent()).trim();
   marcar(
-    /Cobertura comprovada: 100%/.test(conferencia),
-    'o validador do aplicativo confirma 100% de cobertura',
+    /Garantia comprovada: 100%/.test(conferencia),
+    'o validador do aplicativo confirma 100% da garantia',
     conferencia.replace(/\s+/g, ' ').slice(0, 76)
   );
 
@@ -257,6 +258,90 @@ try {
     /Nenhum jogo com 15/.test(naoCai),
     'e não premia um sorteio que sai do pool',
     naoCai.replace(/\s+/g, ' ').slice(0, 66)
+  );
+
+  // ─── 8. garantir mais de uma cartela premiada ───
+  //
+  // A funcionalidade e a surpresa que ela guarda: num pool de 18 com jogos de
+  // 17, a segunda cartela premiada custa **um** jogo, não dezesseis. E há um
+  // teto — só 3 jogos distintos podem conter um mesmo sorteio, porque cada jogo
+  // é o pool menos uma dezena e o sorteio deixa 3 de fora.
+  await pagina.click('#lot-pool .opcao[data-pool="18"]');
+  await pagina.click('#lot-jogo .opcao[data-jogo="17"]');
+  const opcoesPremiadas = await pagina.$$eval('#lot-premiadas .opcao', (b) =>
+    b.map((x) => x.textContent)
+  );
+  marcar(
+    opcoesPremiadas.join(',') === '1,2,3',
+    'o teto de cartelas premiadas respeita quantos jogos podem premiar juntos',
+    opcoesPremiadas.join(' · ')
+  );
+
+  await pagina.click('#lot-premiadas .opcao[data-premiadas="2"]');
+  const comDuas = (await pagina.locator('#lot-explicacao').textContent()).trim();
+  marcar(
+    /17 jogos/.test(comDuas) && /mínimo comprovado/.test(comDuas),
+    'duas cartelas premiadas custam um jogo a mais, e isso é comprovado',
+    comDuas.replace(/\s+/g, ' ').slice(0, 76)
+  );
+
+  await pagina.click('#lot-iniciar');
+
+  // O banco embutido só guarda o caso padrão — garantir as 15 numa cartela.
+  // Aqui não há fechamento pronto, e a tela precisa dizer isso em vez de
+  // fingir que tem.
+  const semBanco = (await pagina.locator('#lot-conferencia').textContent()).trim();
+  marcar(
+    /Sem fechamento pronto/.test(semBanco),
+    'sem fechamento pronto para esta exigência, a tela avisa em vez de fingir',
+    semBanco.replace(/\s+/g, ' ').slice(0, 76)
+  );
+
+  // E o motor constrói do zero, chegando aos 17 que a matemática prevê.
+  await pagina.waitForFunction(
+    () => document.getElementById('melhor-cartelas').textContent.trim() === '17',
+    undefined,
+    { timeout: 120000 }
+  );
+  await pagina.click('.aba[data-painel="lotinha"]');
+  await pagina.click('#lot-conferir');
+  await pagina.waitForFunction(
+    () => /Garantia comprovada|Garantia cumprida/.test(
+      document.getElementById('lot-conferencia').textContent
+    ),
+    undefined,
+    { timeout: 60000 }
+  );
+  const duasPremiadas = (await pagina.locator('#lot-conferencia').textContent()).trim();
+  marcar(
+    /Garantia comprovada: 100%/.test(duasPremiadas) && /2 cartelas com 15/.test(duasPremiadas),
+    'e a conferência independente confirma as duas cartelas premiadas, sorteio a sorteio',
+    duasPremiadas.replace(/\s+/g, ' ').slice(0, 92)
+  );
+
+  // ─── 9. garantir menos de 15, e a honestidade que isso exige ───
+  await pagina.click('#lot-premiadas .opcao[data-premiadas="1"]');
+  await pagina.click('#lot-garantia .opcao[data-garantia="13"]');
+  const economiaParcial = (await pagina.locator('#lot-economia').textContent()).trim();
+  marcar(
+    /Prêmio garantido nesta modalidade/.test(economiaParcial) &&
+      /nenhum/.test(economiaParcial),
+    'garantir 13 não promete prêmio na Lotinha, e a tela diz isso',
+    economiaParcial.replace(/\s+/g, ' ').slice(0, 92)
+  );
+
+  // ─── 10. as 25 dezenas: o sorteio cai dentro com certeza ───
+  await pagina.click('#lot-garantia .opcao[data-garantia="15"]');
+  await pagina.click('#lot-pool .opcao[data-pool="25"]');
+  // Trocar de pool preserva o que já estava marcado; faltam as demais.
+  for (let n = 1; n <= 25; n++) {
+    if (!ESCOLHIDAS.includes(n)) await pagina.click(`#lot-grade .numero[data-n="${n}"]`);
+  }
+  const contagem25 = (await pagina.locator('#lot-contagem').textContent()).trim();
+  marcar(
+    /25 de 25/.test(contagem25) && /1 em 1/.test(contagem25),
+    'com as 25 dezenas, a chance de o sorteio cair no pool é 1 em 1',
+    contagem25.replace(/\s+/g, ' ').slice(0, 76)
   );
 
   marcar(errosDeConsole.length === 0, 'nenhum erro no console', errosDeConsole.join(' | ').slice(0, 120));

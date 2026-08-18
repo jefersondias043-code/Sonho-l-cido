@@ -66,6 +66,24 @@
       opções mudam conforme o pool: o jogo nunca pode ser maior que ele.
     </p>
     <div class="opcoes" id="lot-jogo"></div>
+  </div>
+
+  <!-- Os dois eixos que mudam o tamanho do fechamento por ordens de grandeza,
+       e que quase nenhuma ferramenta deixa mexer. -->
+  <div class="cartao">
+    <h2>3 · O que garantir</h2>
+    <p class="ajuda">
+      <b>Acertos</b> — na Lotinha só 15 paga, e é o padrão. Garantir menos custa
+      uma fração disso, e é o que a Lotofácil premia a partir de 11.
+    </p>
+    <div class="opcoes" id="lot-garantia"></div>
+
+    <p class="ajuda">
+      <b>Cartelas premiadas</b> — quantas cartelas suas precisam ganhar, e não
+      apenas uma. Custa mais, às vezes bem menos do que parece.
+    </p>
+    <div class="opcoes" id="lot-premiadas"></div>
+
     <div class="referencia" id="lot-explicacao"></div>
   </div>
 
@@ -92,17 +110,20 @@
   <button class="principal" id="lot-iniciar" disabled>Carregar fechamento</button>
 
   <div class="cartao" id="lot-resultado-cartao">
-    <div class="rotulo">3 · Conferência independente</div>
+    <div class="rotulo">4 · Conferência independente</div>
     <div class="referencia" id="lot-conferencia">
       <em>Ao carregar, cada sorteio possível dentro do seu pool é conferido um a
       um — sem consultar o motor que produziu o fechamento.</em>
     </div>
+    <button class="secundario" id="lot-conferir" hidden>
+      Conferir o que está na tela agora
+    </button>
   </div>
 
   <!-- O simulador: testar a estrutura contra qualquer resultado hipotético,
        sem esperar sorteio nenhum. -->
   <details class="cartao" id="lot-simulador-cartao">
-    <summary>4 · Simular um resultado</summary>
+    <summary>5 · Simular um resultado</summary>
     <p class="ajuda">
       Digite 15 dezenas e veja como o seu fechamento teria se saído.
     </p>
@@ -113,10 +134,11 @@
   </details>
 
   <details class="cartao" open>
-    <summary>As 28 combinações da modalidade</summary>
+    <summary>As 45 combinações da modalidade</summary>
     <p class="ajuda">
-      As 28 combinações da modalidade. Onde diz "em aberto", ninguém no mundo
-      sabe o mínimo — é onde o motor tem trabalho de verdade.
+      Todas as combinações de dezenas e tamanho de jogo, garantindo os 15
+      acertos numa cartela. Onde diz "em aberto", ninguém no mundo sabe o
+      mínimo — é onde o motor tem trabalho de verdade.
     </p>
     <div class="rolagem"><table class="matriz" id="lot-matriz"></table></div>
   </details>
