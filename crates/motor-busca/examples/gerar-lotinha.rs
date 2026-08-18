@@ -66,6 +66,17 @@ fn main() {
     );
     println!("{}", "─".repeat(64));
 
+    // O banco que já está publicado entra como candidato a partida.
+    //
+    // Sem isto, regerar é uma moeda ao ar: esta execução chegou a 11.567 jogos
+    // em `(23,17)` onde a anterior tinha chegado a 11.546, e gravar seria
+    // publicar um retrocesso. Oferecendo o anterior ao motor, `escolher_partida`
+    // compara e fica com o melhor — e regerar passa a só poder melhorar.
+    let anterior = carregar_banco_anterior();
+    if !anterior.is_empty() {
+        println!("banco anterior: {} fechamentos entram como candidatos\n", anterior.len());
+    }
+
     let mut banco: BTreeMap<String, Vec<Vec<usize>>> = BTreeMap::new();
 
     for pool in 17..=25usize {
@@ -86,12 +97,21 @@ fn main() {
             } else {
                 (Vec::new(), "guloso")
             };
-            let partida = inicial.len();
+
+            // O melhor entre a construção e o que já está publicado.
+            let de_partida = match anterior.get(&format!("{pool},{jogo}")) {
+                Some(guardado) if inicial.is_empty() || guardado.len() < inicial.len() => {
+                    guardado.clone()
+                }
+                _ => inicial,
+            };
+            // A coluna "partida" reporta de onde o motor de fato saiu.
+            let partida = de_partida.len();
 
             let final_ = if a >= 3 || !cabe_construir {
-                melhorar(pool, jogo, &inicial, Duration::from_secs(segundos))
+                melhorar(pool, jogo, &de_partida, Duration::from_secs(segundos))
             } else {
-                inicial
+                de_partida
             };
 
             // O que decide a entrada no banco é o tamanho **final**, não o da
@@ -110,6 +130,20 @@ fn main() {
             // A conferência não é formalidade: é a única coisa que separa um
             // fechamento de uma lista de números com cara de fechamento.
             let ok = cobre_tudo(pool, jogo, &final_);
+
+            // Quando a partida foi uma construção — que já é um fechamento
+            // completo — o motor nunca pode terminar pior que ela, e não cobrir
+            // seria defeito. Quando ele partiu do zero, não cobrir apenas quer
+            // dizer que o orçamento de tempo acabou antes: nesses casos o
+            // fechamento fica de fora do banco, sem virar promessa falsa.
+            if !ok && !cabe_construir {
+                println!(
+                    "{pool:>5} {jogo:>5} {piso:>7} {partida:>9} {:>10} {origem:>12} {:>9}",
+                    final_.len(),
+                    "incompleto",
+                );
+                continue;
+            }
             assert!(
                 ok,
                 "pool {pool}, jogo {jogo}: a solução não cobre todos os sorteios"
@@ -167,6 +201,50 @@ fn main() {
 ///
 /// É um piso válido e frouxo. Serve como travessa de segurança — nada gerado
 /// aqui pode ficar abaixo dele — e como referência do quanto ainda há a ganhar.
+/// Lê o banco já publicado, para que regerar nunca produza um retrocesso.
+///
+/// Formato: `{"pool,jogo": [[posições 1..P], ...]}`. A leitura é deliberadamente
+/// simples — se o arquivo não existir ou não for legível, devolve vazio e a
+/// geração segue como se fosse a primeira.
+fn carregar_banco_anterior() -> BTreeMap<String, Vec<Cartela>> {
+    let Ok(texto) = std::fs::read_to_string(DESTINO) else {
+        return BTreeMap::new();
+    };
+
+    let mut saida = BTreeMap::new();
+    // Cada entrada é `"P,k":[[..],[..]]`. Fatiar pelo padrão da chave evita
+    // trazer um interpretador de JSON para dentro de um exemplo.
+    for pedaco in texto.split("\"").skip(1).collect::<Vec<_>>().chunks(2) {
+        let [chave, resto] = pedaco else { continue };
+        if !chave.contains(',') {
+            continue;
+        }
+        let Some(inicio) = resto.find('[') else { continue };
+        let Some(fim) = resto.rfind(']') else { continue };
+        let corpo = &resto[inicio + 1..fim];
+
+        let jogos: Vec<Cartela> = corpo
+            .split('[')
+            .skip(1)
+            .filter_map(|linha| {
+                let numeros: Vec<usize> = linha
+                    .split(']')
+                    .next()?
+                    .split(',')
+                    .filter_map(|n| n.trim().parse::<usize>().ok())
+                    .map(|n| n - 1)
+                    .collect();
+                (!numeros.is_empty()).then(|| Cartela::dos_indices(&numeros))
+            })
+            .collect();
+
+        if !jogos.is_empty() {
+            saida.insert(chave.to_string(), jogos);
+        }
+    }
+    saida
+}
+
 /// Acima disto o fechamento não entra no banco embutido.
 ///
 /// O maior que entra hoje tem 11.546 jogos (pool 23, jogos de 17) e já ocupa a
@@ -317,6 +395,15 @@ fn melhorar(pool: usize, jogo: usize, inicial: &[Cartela], orcamento: Duration) 
     );
 
     let achado = motor.melhor_cartelas().to_vec();
+
+    // Sem semente, qualquer coisa que o motor tenha achado é melhor que nada —
+    // comparar com o tamanho de `inicial` daria zero, e devolver zero é
+    // devolver um fechamento vazio que reprovaria na conferência seguinte por
+    // um motivo enganoso.
+    if inicial.is_empty() {
+        return achado;
+    }
+
     if achado.is_empty() || achado.len() > inicial.len() {
         inicial.to_vec()
     } else {
