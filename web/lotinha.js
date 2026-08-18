@@ -242,6 +242,114 @@ export function matriz() {
  * têm construção de 134 mil a 1,08 **milhão** de jogos. Ali o motor parte do
  * próprio guloso, que nasce muito menor.
  */
+/** Impossível: não existe família que sirva. */
+const INVIAVEL = Infinity;
+
+/**
+ * Quantos `a`-subconjuntos de `v` pontos bastam para que todo `b`-subconjunto
+ * contenha um deles — pela melhor construção fechada que este aplicativo conhece.
+ *
+ * É o problema de Turán, na forma complementar em que a modalidade vive: um
+ * jogo de `k` dezenas é o complemento de `a = P − k`, um sorteio de 15 é o
+ * complemento de `b = P − 15`, e *o jogo contém o sorteio* ⟺ *as `a` que faltam
+ * ao jogo estão entre as `b` que faltam ao sorteio*.
+ *
+ * Três argumentos disputam, e vale o menor:
+ *
+ * 1. **tudo** — todos os `C(v,a)`. Sempre serve, quase sempre desperdiça.
+ * 2. **por um ponto** — escolha `x`. Os `b`-conjuntos sem `x` são
+ *    `b`-conjuntos dos outros `v−1`; os com `x` viram `(b−1)`-conjuntos dos
+ *    outros que precisam conter um `(a−1)`-conjunto, ao qual se junta `x`.
+ *    Daí `N(v,a,b) ≤ N(v−1,a,b) + N(v−1,a−1,b−1)`.
+ * 3. **por grupos** — parta em `g` partes. Um `b`-conjunto deixa `⌈b/g⌉`
+ *    pontos em alguma parte pela casa dos pombos, então cada parte só precisa
+ *    de uma família boa para `⌈b/g⌉` no lugar de `b`. Com `⌈b/g⌉ = a` isto vira
+ *    "todos os `a`-subconjuntos de cada grupo", que era a construção usada
+ *    sozinha até aqui.
+ *
+ * O ganho de somar as três é grande e foi medido conferindo sorteio a sorteio
+ * as 45 combinações da modalidade: em 25 dezenas com jogos de 19 a construção
+ * por grupos pede 177.100 jogos e esta pede 6.072 — vinte e nove vezes menos,
+ * sem busca nenhuma. E nas 15 combinações de mínimo conhecido ela **alcança o
+ * mínimo**, as 15.
+ */
+function turanTamanho(v, a, b, memo) {
+  if (a > b || b > v) return INVIAVEL;
+  if (a === 0 || v === b) return 1;
+  if (a === b) return combinacoes(v, b);
+  if (a === 1) return v - b + 1;
+
+  const chave = `${v},${a},${b}`;
+  const pronto = memo.get(chave);
+  if (pronto !== undefined) return pronto;
+
+  let melhor = combinacoes(v, a);
+  melhor = Math.min(
+    melhor,
+    turanTamanho(v - 1, a, b, memo) + turanTamanho(v - 1, a - 1, b - 1, memo)
+  );
+
+  for (let g = 2; g <= b; g++) {
+    const alvo = Math.ceil(b / g);
+    if (alvo < a) break; // partir mais só afrouxa a casa dos pombos
+    let total = 0;
+    for (let i = 0; i < g && total < melhor; i++) {
+      total += turanTamanho(Math.floor(v / g) + (i < v % g ? 1 : 0), a, alvo, memo);
+    }
+    melhor = Math.min(melhor, total);
+  }
+
+  memo.set(chave, melhor);
+  return melhor;
+}
+
+/**
+ * A família que [`turanTamanho`] contou, agora materializada.
+ *
+ * Repete exatamente as mesmas escolhas: mede as três alternativas e constrói a
+ * vencedora. Devolve o que **falta** a cada jogo, não o jogo.
+ */
+function turanFaltas(pontos, a, b, memo) {
+  const v = pontos.length;
+  if (a === 0) return [[]];
+  if (v === b) return [pontos.slice(0, a)];
+  if (a === b) return [...subconjuntos(pontos, a)];
+  if (a === 1) return pontos.slice(0, v - b + 1).map((p) => [p]);
+
+  const alvo = turanTamanho(v, a, b, memo);
+  if (alvo === combinacoes(v, a)) return [...subconjuntos(pontos, a)];
+
+  const porPonto =
+    turanTamanho(v - 1, a, b, memo) + turanTamanho(v - 1, a - 1, b - 1, memo);
+  if (alvo === porPonto) {
+    const x = pontos[0];
+    const resto = pontos.slice(1);
+    return [
+      ...turanFaltas(resto, a, b, memo),
+      ...turanFaltas(resto, a - 1, b - 1, memo).map((menor) => [...menor, x]),
+    ];
+  }
+
+  for (let g = 2; g <= b; g++) {
+    const alvoDoGrupo = Math.ceil(b / g);
+    if (alvoDoGrupo < a) break;
+    const partes = Array.from({ length: g }, () => []);
+    pontos.forEach((p, i) => partes[i % g].push(p));
+    const total = partes.reduce(
+      (soma, parte) => soma + turanTamanho(parte.length, a, alvoDoGrupo, memo),
+      0
+    );
+    if (total === alvo) {
+      return partes.flatMap((parte) => turanFaltas(parte, a, alvoDoGrupo, memo));
+    }
+  }
+
+  // A medida não bateu com nenhuma construção: só pode ser erro de programação,
+  // e devolver a família trivial esconderia o defeito atrás de um resultado
+  // grande porém correto.
+  throw new Error(`medida de Turán sem construção em (${v}, ${a}, ${b})`);
+}
+
 const TETO_PARA_CONSTRUIR = 25_000;
 
 /**
@@ -249,8 +357,7 @@ const TETO_PARA_CONSTRUIR = 25_000;
  *
  * Esta é a resposta rápida, e na maior parte da modalidade ela é também a
  * resposta certa: em 24 das 45 combinações a construção **é** o mínimo
- * comprovado, e em várias outras ela bate o que o motor encontra depois de
- * minutos. Medido em 25 dezenas com jogos de 22: a fórmula dá 95 jogos num
+ * comprovado. Medido em 25 dezenas com jogos de 22: a fórmula dá 78 jogos num
  * piscar, e o guloso do motor gasta seis segundos para chegar a 139.
  *
  * ## Por que funciona
@@ -259,15 +366,13 @@ const TETO_PARA_CONSTRUIR = 25_000;
  * complemento de `b = P − 15`. Então *o jogo contém o sorteio* ⟺ *as `a` que
  * faltam ao jogo estão entre as `b` que faltam ao sorteio*.
  *
- * Partindo o pool em `g` grupos e tomando todos os `a`-subconjuntos dentro de
- * cada grupo: qualquer sorteio deixa `b` dezenas de fora, e pela casa dos
- * pombos algum grupo fica com pelo menos `⌈b/g⌉` delas. Escolhendo
- * `g = ⌊(b−1)/(a−1)⌋` isso é ao menos `a`, e aquele grupo contém um dos
- * subconjuntos escolhidos — logo o jogo correspondente contém o sorteio.
+ * O que sobra é escolher poucas `a`-uplas que nenhum sorteio consiga evitar, e
+ * disso cuida [`turanFaltas`].
  *
  * A garantia vem do argumento, não de uma varredura. O validador independente
  * do aplicativo confere assim mesmo, porque um argumento certo não protege
- * contra um erro de digitação.
+ * contra um erro de digitação — e conferiu: as 45 combinações da modalidade
+ * foram varridas sorteio a sorteio, sem um único descoberto.
  *
  * Devolve `null` quando não há construção fechada para o pedido — garantia
  * parcial, ou grande demais para montar aqui.
@@ -294,21 +399,13 @@ export function construir(pool, jogo, dezenas, garantia = SORTEIO, premiadas = 1
   // o argumento da casa dos pombos garante **um** subconjunto no grupo, não `r`.
   if (premiadas !== 1) return null;
 
-  const g = Math.max(Math.floor((b - 1) / (a - 1)), 1);
-  const grupos = Array.from({ length: g }, () => []);
-  dezenas.forEach((d, i) => grupos[i % g].push(d));
+  const memo = new Map();
+  if (turanTamanho(pool, a, b, memo) > TETO_PARA_CONSTRUIR) return null;
 
-  const quantos = grupos.reduce((total, grupo) => total + combinacoes(grupo.length, a), 0);
-  if (quantos > TETO_PARA_CONSTRUIR) return null;
-
-  const jogos = [];
-  for (const grupo of grupos) {
-    for (const fora of subconjuntos(grupo, a)) {
-      const excluir = new Set(fora);
-      jogos.push(dezenas.filter((d) => !excluir.has(d)));
-    }
-  }
-  return jogos;
+  return turanFaltas(dezenas, a, b, memo).map((fora) => {
+    const excluir = new Set(fora);
+    return dezenas.filter((d) => !excluir.has(d));
+  });
 }
 
 /** Todos os subconjuntos de `k` elementos de `itens`, em ordem. */
@@ -341,12 +438,7 @@ export function tamanhoDaConstrucao(pool, jogo, garantia = SORTEIO, premiadas = 
   if (a === 1) return premiadas <= b && SORTEIO + premiadas <= pool ? SORTEIO + premiadas : null;
   if (premiadas !== 1) return null;
 
-  const g = Math.max(Math.floor((b - 1) / (a - 1)), 1);
-  let total = 0;
-  for (let i = 0; i < g; i++) {
-    total += combinacoes(Math.floor(pool / g) + (i < pool % g ? 1 : 0), a);
-  }
-  return total;
+  return turanTamanho(pool, a, b, new Map());
 }
 
 /* ─────────── o banco de fechamentos ─────────── */

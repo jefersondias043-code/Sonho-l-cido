@@ -302,6 +302,64 @@ try {
   await pagina.click('#lot-pool .opcao[data-pool="18"]');
   await pagina.click('#lot-jogo .opcao[data-jogo="17"]');
 
+  // ─── 3d. a fórmula alcança o mínimo onde o mínimo é conhecido ───
+  //
+  // A construção que o aplicativo usa quando não há resposta pronta deixou de
+  // ser "parta o pool em grupos e compre todos os subconjuntos". Essa perdia
+  // feio quando faltavam muitas dezenas ao jogo: em 25 dezenas com jogos de 19
+  // pedia 177.100 jogos contra um piso de 1.261.
+  //
+  // A nova soma três argumentos e fica com o menor deles — o terceiro é uma
+  // recursão por um ponto, que é onde está o ganho. O teste da qualidade dela é
+  // direto: nas 24 combinações em que o mínimo é comprovado, a fórmula tem de
+  // **acertar o mínimo**, sem folga. Uma construção que erre ali não merece
+  // confiança onde o mínimo é desconhecido.
+  const formula = await pagina.evaluate(() =>
+    import('./lotinha.js').then((lot) =>
+      lot.matriz().map((l) => ({
+        pool: l.pool,
+        jogo: l.jogo,
+        exato: l.exato,
+        jogos: l.jogos,
+        piso: l.piso,
+        construcao: lot.tamanhoDaConstrucao(l.pool, l.jogo),
+      }))
+    )
+  );
+
+  const comprovadas = formula.filter((l) => l.exato);
+  const naMosca = comprovadas.filter((l) => l.construcao === l.jogos);
+  marcar(
+    comprovadas.length === 24 && naMosca.length === 24,
+    'nas 24 combinações de mínimo comprovado, a fórmula acerta o mínimo',
+    `${naMosca.length} de ${comprovadas.length}`
+  );
+
+  // E acima do piso em todas — uma construção abaixo do piso seria defeito de
+  // cobertura disfarçado de recorde.
+  marcar(
+    formula.every((l) => l.construcao >= l.piso),
+    'e nenhuma construção fica abaixo do piso matemático',
+    `${formula.length} combinações conferidas`
+  );
+
+  // A prova de que ela cobre não é o argumento: é a varredura. 24 dezenas com
+  // jogos de 20 é o caso onde a fórmula nova bate até o motor — 400 contra os
+  // 499 que ele achou — e são 1.307.504 sorteios para conferir um a um.
+  const varredura = await pagina.evaluate(() =>
+    import('./lotinha.js').then((lot) => {
+      const dezenas = Array.from({ length: 24 }, (_, i) => i + 1);
+      const jogos = lot.construir(24, 20, dezenas);
+      const c = lot.conferirCobertura(dezenas, jogos, 15, 1, { exaustivo: true });
+      return { jogos: jogos.length, cobertos: c.cobertos, total: c.total };
+    })
+  );
+  marcar(
+    varredura.jogos === 400 && varredura.cobertos === varredura.total,
+    'e os 400 jogos que ela dá em 24/20 cobrem os sorteios, um a um',
+    `${varredura.cobertos} de ${varredura.total} sorteios`
+  );
+
   // ─── 4. o fechamento pronto, e a conferência ───
   await pagina.click('#lot-jogo .opcao[data-jogo="17"]');
   await pagina.click('#lot-iniciar');
@@ -558,16 +616,16 @@ try {
 
   // A fórmula continua viva e continua certa, mesmo tendo deixado de ser o
   // caminho de entrega: ela é o que sobra se o banco não puder ser lido, e é
-  // dela que o gerador parte. Chamada direto, dá os 95 de sempre — pior que os
-  // 73 que o motor achou, e ainda assim muito melhor que os 139 do guloso.
+  // dela que o gerador parte. Chamada direto, dá 78 — pior que os 73 que o
+  // motor achou, e ainda assim muito melhor que os 139 do guloso.
   const semBanco = await pagina.evaluate(() =>
     import('./lotinha.js').then((lot) =>
       lot.construir(25, 22, Array.from({ length: 25 }, (_, i) => i + 1)).length
     )
   );
   marcar(
-    semBanco === 95,
-    'e a fórmula, que é o que sobra sem o banco, continua dando os 95 dela',
+    semBanco === 78,
+    'e a fórmula, que é o que sobra sem o banco, chega perto sozinha',
     `${semBanco} jogos por fórmula`
   );
 

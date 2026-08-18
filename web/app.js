@@ -1193,12 +1193,12 @@ $('lot-iniciar').addEventListener('click', async () => {
 
     // ── 2. a fórmula, quando o banco não tem ──
     //
-    // Este é o caminho rápido, e ele existia sem estar sendo usado. A
-    // construção por grupos sai por fórmula em milissegundos, e na maior parte
-    // da modalidade ela é tão boa quanto o que o motor acha depois de minutos —
-    // em 24 das 45 combinações ela **é** o mínimo comprovado.
+    // Com o banco cobrindo 44 das 45 combinações, este ramo virou a rede de
+    // segurança: é o que responde se o banco não puder ser lido. Continua
+    // valendo a pena tê-lo — a construção sai em milissegundos e em 24 das 45
+    // combinações ela **é** o mínimo comprovado.
     //
-    // Medido em 25 dezenas com jogos de 22: a fórmula dá 95 jogos em menos de
+    // Medido em 25 dezenas com jogos de 22: a fórmula dá 78 jogos em menos de
     // um milissegundo; o guloso do motor gastava seis segundos e uma alocação
     // de 39 MB para chegar a 139, pior. Era processamento gasto para piorar a
     // resposta.

@@ -256,9 +256,9 @@ tenta, nesta ordem:
 3. **O motor** — busca de verdade, quando os dois primeiros não alcançam.
 
 A diferença é grande. Em 25 dezenas com jogos de 22, o motor gastava seis
-segundos e 39 MB para chegar a 139 jogos; a fórmula dá **95** em menos de um
+segundos e 39 MB para chegar a 139 jogos; a fórmula dá **78** em menos de um
 milissegundo. Em 24 das 45 combinações a construção **é** o mínimo comprovado —
-não há o que melhorar. O motor só ganha de verdade onde `a ≥ 5`.
+não há o que melhorar.
 
 Por isso, nos pools de 24 e 25 ele deixou de partir sozinho: o fechamento aparece
 pronto e um botão oferece a busca por um menor, para quem quiser gastar a bateria
