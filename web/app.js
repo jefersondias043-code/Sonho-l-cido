@@ -911,7 +911,7 @@ function lotPintarExplicacao() {
     b.setAttribute('aria-pressed', String(ativa));
   });
 
-  const { jogos, exato, piso } = lotinha.minimo(lotPool, lotJogo, lotGarantia, lotPremiadas);
+  const { jogos, exato } = lotinha.minimo(lotPool, lotJogo, lotGarantia, lotPremiadas);
   const destino = $('lot-explicacao');
   const teto = lotinha.maximoPremiadas(lotPool, lotJogo, lotGarantia);
 
@@ -944,11 +944,66 @@ function lotPintarExplicacao() {
       `mínimo comprovado — não existe fechamento menor. ${porque}</em>${aviso}`;
   } else {
     destino.innerHTML =
-      `${pedido} <b>Mínimo desconhecido.</b> <em>Ninguém no mundo sabe quantos ` +
-      `jogos bastam aqui — é problema em aberto. O que se sabe é que não dá com ` +
-      `menos de <b>${milhares(piso)}</b>. O motor procura, e só para quando você ` +
-      `mandar.</em>${aviso}`;
+      `${pedido} <b>Mínimo desconhecido.</b> <em>${textoDaDistancia()}</em>${aviso}`;
   }
+}
+
+/**
+ * Quanto o que você vai receber está acima do que a matemática prova.
+ *
+ * Dizer só "não dá com menos de 317" fazia o piso parecer uma promessa — o
+ * usuário recebia 2.079 jogos e ficava sem saber se o aplicativo estava
+ * falhando ou se o problema é que é assim. Nenhum dos dois: o mínimo verdadeiro
+ * está entre os dois números, e ninguém no mundo sabe onde.
+ *
+ * A origem muda o que fazer com a informação, e por isso ela é dita:
+ *
+ * - **banco** — já passou pelo motor rodando horas antes de virar aplicativo.
+ *   Deixar buscando de novo rende pouco.
+ * - **fórmula** — a construção por grupos, calculada no instante do toque. É
+ *   correta e é crua; aqui deixar o motor rodando é o que rende de verdade.
+ * - **motor** — não há pronto nem fórmula que caiba, e o tamanho só se sabe
+ *   depois de construir.
+ */
+function textoDaDistancia() {
+  const { quantidade, origem, piso } = lotinha.previsao(
+    lotPool,
+    lotJogo,
+    lotGarantia,
+    lotPremiadas
+  );
+
+  const abertura =
+    'Ninguém no mundo sabe quantos jogos bastam aqui — é problema em aberto. ';
+
+  if (quantidade === null) {
+    return (
+      `${abertura}O aplicativo não tem fechamento pronto nem fórmula que caiba ` +
+      `nesta combinação: o motor constrói do zero, e o tamanho só aparece ` +
+      `depois. O que se sabe é que não dá com menos de <b>${milhares(piso)}</b>.`
+    );
+  }
+
+  const razao = quantidade / piso;
+  const folga =
+    razao >= 1.15
+      ? `${razao.toFixed(1).replace('.', ',')}× o piso conhecido`
+      : 'quase encostado no piso';
+
+  const conselho =
+    origem === 'formula'
+      ? ` Este número sai de fórmula, no instante do toque: é correto e é ` +
+        `bruto. É aqui que deixar o motor rodando corta de verdade.`
+      : origem === 'banco'
+        ? ` Este já é o melhor que o motor achou, rodando horas antes de virar ` +
+          `aplicativo — buscar mais rende pouco.`
+        : '';
+
+  return (
+    `${abertura}O aplicativo entrega <b>${milhares(quantidade)}</b> jogos — ` +
+    `${folga}. O mais que a matemática prova é que não dá com menos de ` +
+    `<b>${milhares(piso)}</b>; o mínimo verdadeiro está entre os dois.${conselho}`
+  );
 }
 
 /**
@@ -977,14 +1032,15 @@ function textoDaQuantidade(quantidade, ehPiso) {
 function lotPintarEconomia() {
   const destino = $('lot-economia');
   const cartao = $('lot-economia-cartao');
-  const { jogos, piso } = lotinha.minimo(lotPool, lotJogo, lotGarantia, lotPremiadas);
-  const quantidade = lotFechamento?.length ?? jogos ?? piso;
+  const prevista = lotinha.previsao(lotPool, lotJogo, lotGarantia, lotPremiadas);
+  const quantidade = lotFechamento?.length ?? prevista.quantidade ?? prevista.piso;
 
   // De onde veio o número, porque a diferença muda o que a conta significa.
-  // Com o fechamento na mão ou com o mínimo comprovado, é o custo de verdade.
-  // Com o piso, é o **mínimo concebível** — o fechamento real costuma ser bem
-  // maior, e apresentar o piso como preço seria prometer barato.
-  const ehPiso = !lotFechamento && jogos === null;
+  // Com o fechamento na mão, com o mínimo comprovado ou com a previsão do que
+  // o aplicativo vai montar, é o custo de verdade. Só quando nem isso existe
+  // — os cinco casos em que o motor constrói do zero — sobra o piso, e aí ele
+  // é o **mínimo concebível**: precificá-lo sem rótulo seria prometer barato.
+  const ehPiso = !lotFechamento && prevista.quantidade === null;
 
   if (!quantidade) {
     cartao.hidden = true;
@@ -1015,7 +1071,7 @@ function lotPintarEconomia() {
   if (e.multiplicador === null) {
     destino.innerHTML =
       `<div class="linha-economia"><span>Custo do fechamento</span>` +
-      `<b>${dinheiro(e.custo)}</b></div>` +
+      `<b>${dinheiro(e.custo)}</b> <em>${textoDaQuantidade(quantidade, ehPiso)}</em></div>` +
       `<div class="linha-economia"><span>Chance de o sorteio cair no seu pool</span>` +
       `<b>1 em ${milhares(1 / e.chanceDoPool)}</b></div>` +
       `<p class="ajuda">Informe a cotação da sua banca acima para ver quanto ` +
@@ -1352,6 +1408,23 @@ $('lot-simular').addEventListener('click', () => {
 });
 
 lotMontar();
+
+// O banco embutido, buscado assim que a tela existe.
+//
+// Não é para a busca — essa carrega o dela na hora do toque. É para a tela
+// saber, antes de qualquer clique, que 22 dezenas com jogos de 17 saem com
+// 3.712 jogos e não com os 26.334 que a fórmula pediria. Sem isto a
+// explicação e o custo apareceriam com o número da fórmula e mudariam sozinhos
+// segundos depois, o que é pior do que demorar um instante para aparecer.
+//
+// Falhar aqui não quebra nada: `previsao` cai na fórmula, que é sempre válida.
+lotinha
+  .carregarBanco()
+  .then(() => {
+    lotPintarExplicacao();
+    lotPintarEconomia();
+  })
+  .catch(() => {});
 
 $('ir-para-historico').addEventListener('click', () => mostrarPainel('historico'));
 

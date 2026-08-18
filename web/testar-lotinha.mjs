@@ -242,6 +242,55 @@ try {
     `${pisos.length} combinações conferidas em BigInt`
   );
 
+  // ─── 3c. a tela diz a que distância do piso ela está ───
+  //
+  // "Não dá com menos de 317" é verdade e é inútil sozinho: o usuário recebe
+  // 2.079 jogos e não tem como saber se o aplicativo falhou ou se o problema é
+  // assim mesmo. A tela passa a dizer os dois números e de onde o maior vem —
+  // porque a origem é o que muda a decisão de deixar o motor rodando.
+  const distancia = async (pool, jogo) => {
+    await pagina.click(`#lot-pool .opcao[data-pool="${pool}"]`);
+    await pagina.click(`#lot-jogo .opcao[data-jogo="${jogo}"]`);
+    return {
+      explicacao: (await pagina.locator('#lot-explicacao').textContent()).replace(/\s+/g, ' '),
+      economia: (await pagina.locator('#lot-economia').textContent()).replace(/\s+/g, ' '),
+    };
+  };
+
+  const doBanco = await distancia(23, 17);
+  marcar(
+    /11\.546/.test(doBanco.explicacao) &&
+      /3\.996/.test(doBanco.explicacao) &&
+      /buscar mais rende pouco/.test(doBanco.explicacao),
+    'num caso já buscado, a tela mostra entrega, piso e que buscar mais rende pouco',
+    doBanco.explicacao.slice(-76).trim()
+  );
+
+  const construida = await distancia(25, 20);
+  marcar(
+    /2\.079/.test(construida.explicacao) &&
+      /317/.test(construida.explicacao) &&
+      /6,6× o piso/.test(construida.explicacao) &&
+      /deixar o motor rodando corta/.test(construida.explicacao),
+    'num caso que sai de fórmula, mostra a folga e diz que buscar compensa',
+    construida.explicacao.slice(-76).trim()
+  );
+
+  const semPronto = await distancia(24, 18);
+  marcar(
+    /só aparece depois/.test(semPronto.explicacao) && /2\.094/.test(semPronto.explicacao),
+    'e onde nada está pronto, não inventa um tamanho que ainda não existe',
+    semPronto.explicacao.slice(-76).trim()
+  );
+  marcar(
+    /o piso conhecido/.test(semPronto.economia),
+    'aí o custo vem rotulado como piso, em vez de prometer um preço',
+    semPronto.economia.slice(0, 70).trim()
+  );
+
+  await pagina.click('#lot-pool .opcao[data-pool="18"]');
+  await pagina.click('#lot-jogo .opcao[data-jogo="17"]');
+
   // ─── 4. o fechamento pronto, e a conferência ───
   await pagina.click('#lot-jogo .opcao[data-jogo="17"]');
   await pagina.click('#lot-iniciar');
@@ -466,6 +515,20 @@ try {
     /usando 95 jogos/.test(daFormula),
     '25 dezenas com jogos de 22 saem com 95 jogos, não com os 139 do guloso',
     daFormula.replace(/\s+/g, ' ').slice(0, 76)
+  );
+
+  // E o número que a tela anunciou **antes** do toque tem de ser este. Uma
+  // previsão que não bate com a entrega é pior do que previsão nenhuma: ela
+  // vira preço errado no painel financeiro.
+  const previsto = await pagina.evaluate(async () => {
+    const lot = await import('./lotinha.js');
+    await lot.carregarBanco();
+    return lot.previsao(25, 22).quantidade;
+  });
+  marcar(
+    previsto === 95,
+    'e o número anunciado antes do toque é o mesmo que sai depois dele',
+    `previsto ${previsto}, entregue 95`
   );
   marcar(
     tempoDaFormula < 4000,

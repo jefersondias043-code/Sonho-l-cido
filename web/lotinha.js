@@ -404,6 +404,41 @@ export async function fechamentoPara(pool, jogo, dezenas) {
   });
 }
 
+/**
+ * Quantos jogos esta configuração vai entregar — antes de entregar.
+ *
+ * Devolve `{ quantidade, origem, piso, exato }`. `origem` diz de onde o número
+ * sai, e é isso que muda o significado dele:
+ *
+ * - `'minimo'` — há teorema fechado, e a quantidade é o mínimo provado.
+ * - `'banco'` — veio de fábrica, achado pelo motor rodando por horas.
+ * - `'formula'` — a construção por grupos, calculada na hora. Correta e
+ *   instantânea, mas crua: em 25 dezenas com jogos de 19 ela pede 177.100
+ *   jogos contra um piso de 1.261.
+ * - `'motor'` — nem banco nem fórmula cabem; só se sabe depois de buscar.
+ *
+ * Precisa do banco já carregado para responder `'banco'`; sem ele, cai na
+ * fórmula, que é sempre maior. Quem chama deve ter chamado [`carregarBanco`]
+ * antes e repintado quando ele chegar.
+ */
+export function previsao(pool, jogo, garantia = SORTEIO, premiadas = 1) {
+  const { jogos, exato, piso } = minimo(pool, jogo, garantia, premiadas);
+  if (exato) return { quantidade: jogos, origem: 'minimo', piso, exato };
+
+  const doBanco =
+    garantia === SORTEIO && premiadas === 1
+      ? banco?.fechamentos?.[`${pool},${jogo}`]?.length ?? null
+      : null;
+  if (doBanco) return { quantidade: doBanco, origem: 'banco', piso, exato };
+
+  const daFormula = tamanhoDaConstrucao(pool, jogo, garantia, premiadas);
+  if (daFormula && daFormula <= TETO_PARA_CONSTRUIR) {
+    return { quantidade: daFormula, origem: 'formula', piso, exato };
+  }
+
+  return { quantidade: null, origem: 'motor', piso, exato };
+}
+
 /* ─────────── o validador independente ─────────── */
 
 /**
