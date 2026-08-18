@@ -206,7 +206,12 @@ document.querySelectorAll('.aba').forEach((aba) => {
 
 function mostrarPainel(nome) {
   document.querySelectorAll('.aba').forEach((a) => {
-    a.classList.toggle('ativa', a.dataset.painel === nome);
+    const ativa = a.dataset.painel === nome;
+    a.classList.toggle('ativa', ativa);
+    // A classe diz ao olho qual aba está aberta; `aria-selected` diz ao leitor
+    // de tela. Sem ela, quem navega por áudio ouve quatro botões iguais e não
+    // sabe em qual está.
+    a.setAttribute('aria-selected', String(ativa));
   });
   document.querySelectorAll('.painel').forEach((p) => {
     p.classList.toggle('ativo', p.id === nome);
@@ -778,10 +783,14 @@ function lotMontarExigencias() {
   }
 
   document.querySelectorAll('#lot-garantia .opcao').forEach((b) => {
-    b.classList.toggle('ativa', Number(b.dataset.garantia) === lotGarantia);
+    const ativa = Number(b.dataset.garantia) === lotGarantia;
+    b.classList.toggle('ativa', ativa);
+    b.setAttribute('aria-pressed', String(ativa));
   });
   document.querySelectorAll('#lot-premiadas .opcao').forEach((b) => {
-    b.classList.toggle('ativa', Number(b.dataset.premiadas) === lotPremiadas);
+    const ativa = Number(b.dataset.premiadas) === lotPremiadas;
+    b.classList.toggle('ativa', ativa);
+    b.setAttribute('aria-pressed', String(ativa));
   });
 }
 
@@ -826,10 +835,16 @@ function lotAlternar(n) {
 
 function lotPintarTudo() {
   document.querySelectorAll('#lot-pool .opcao').forEach((b) => {
-    b.classList.toggle('ativa', Number(b.dataset.pool) === lotPool);
+    const ativa = Number(b.dataset.pool) === lotPool;
+    b.classList.toggle('ativa', ativa);
+    b.setAttribute('aria-pressed', String(ativa));
   });
   document.querySelectorAll('#lot-grade .numero').forEach((b) => {
-    b.classList.toggle('escolhido', lotDezenas.has(Number(b.dataset.n)));
+    const escolhido = lotDezenas.has(Number(b.dataset.n));
+    b.classList.toggle('escolhido', escolhido);
+    // Estes botões são alternâncias, e a única pista de que estão marcados era
+    // a cor. `aria-pressed` diz o mesmo a quem não a enxerga.
+    b.setAttribute('aria-pressed', String(escolhido));
   });
 
   const faltam = lotPool - lotDezenas.size;
@@ -882,7 +897,9 @@ function lotMontarOpcoesDeJogo() {
 
 function lotPintarExplicacao() {
   document.querySelectorAll('#lot-jogo .opcao').forEach((b) => {
-    b.classList.toggle('ativa', Number(b.dataset.jogo) === lotJogo);
+    const ativa = Number(b.dataset.jogo) === lotJogo;
+    b.classList.toggle('ativa', ativa);
+    b.setAttribute('aria-pressed', String(ativa));
   });
 
   const { jogos, exato, piso } = lotinha.minimo(lotPool, lotJogo, lotGarantia, lotPremiadas);

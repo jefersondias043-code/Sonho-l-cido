@@ -74,7 +74,15 @@ impl ConfiguracaoEntrada {
             self.universo,
             self.pool.clone(),
             self.cartela,
-            RegraCobertura::garantia_multipla(self.alvo, self.intersecao, self.premiadas.max(1)),
+            // Sem `.max(1)` aqui, de propósito. Ele existia e escondia um
+            // defeito: `premiadas: 0` virava 1 em silêncio, e a recusa que
+            // `Problema::novo` faz para esse caso nunca chegava a rodar. Quem
+            // mandou zero pedia uma coisa impossível e recebia outra sem saber.
+            //
+            // O campo **ausente** continua valendo 1, pelo `serde(default)` —
+            // isso é compatibilidade com o que foi gravado antes da opção
+            // existir, e é diferente de um zero escrito à mão.
+            RegraCobertura::garantia_multipla(self.alvo, self.intersecao, self.premiadas),
             objetivo,
         )
         .map_err(|e| e.to_string())
@@ -607,6 +615,54 @@ mod testes {
         assert!(!recordes.is_empty(), "o primeiro lote sempre encontra melhorias");
         assert!(recordes[0]["operador"].as_str().is_some());
         assert!(recordes[0]["cobertura"].as_f64().unwrap() > 0.0);
+    }
+
+    #[test]
+    fn a_configuracao_recusa_exigencias_impossiveis() {
+        // A fronteira é JSON, e JSON aceita qualquer número. Estes três casos
+        // precisam virar erro legível em vez de pânico ou de uma busca que
+        // nunca faz sentido — um pânico dentro do WebAssembly derruba o worker
+        // inteiro, com uma mensagem que não ajuda ninguém.
+        let com = |premiadas: usize, intersecao: usize| {
+            serde_json::to_string(&ConfiguracaoEntrada {
+                universo: 25,
+                pool: (1..=18).collect(),
+                cartela: 17,
+                alvo: 15,
+                intersecao,
+                premiadas,
+                orcamento: None,
+                semente: 1,
+            })
+            .unwrap()
+        };
+
+        assert!(
+            MotorWeb::construir(&com(0, 15)).is_err(),
+            "exigir zero cartelas premiadas não descreve problema nenhum"
+        );
+        assert!(
+            MotorWeb::construir(&com(1, 16)).is_err(),
+            "garantir mais acertos do que o sorteio tem é impossível"
+        );
+
+        // E o caso válido continua válido, com a exigência chegando ao motor.
+        let motor = MotorWeb::construir(&com(3, 15)).expect("três premiadas é pedido legítimo");
+        let estado = estado_de(&motor.estado());
+        // Três cartelas por sorteio triplicam a cota de contagem: 816/136 = 6,
+        // e o piso passa a 18.
+        assert_eq!(estado["limite_inferior"].as_u64().unwrap(), 18);
+    }
+
+    #[test]
+    fn premiadas_ausente_no_json_vale_um() {
+        // Toda configuração gravada antes desta opção existir não tem o campo.
+        // Ler como zero recusaria o histórico inteiro de quem já usava.
+        let sem_campo = r#"{"universo":25,"pool":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18],
+                            "cartela":17,"alvo":15,"intersecao":15,"semente":1}"#;
+        let motor = MotorWeb::construir(sem_campo).expect("configuração antiga continua válida");
+        let estado = estado_de(&motor.estado());
+        assert_eq!(estado["limite_inferior"].as_u64().unwrap(), 16, "uma cartela por sorteio");
     }
 
     #[test]

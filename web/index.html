@@ -28,10 +28,10 @@
 </header>
 
 <nav class="abas" role="tablist">
-  <button class="aba ativa" role="tab" data-painel="lotinha">Lotinha</button>
-  <button class="aba" role="tab" data-painel="buscar">Buscar</button>
-  <button class="aba" role="tab" data-painel="resultado">Resultado</button>
-  <button class="aba" role="tab" data-painel="historico">Histórico</button>
+  <button class="aba ativa" role="tab" aria-selected="true" data-painel="lotinha">Lotinha</button>
+  <button class="aba" role="tab" aria-selected="false" data-painel="buscar">Buscar</button>
+  <button class="aba" role="tab" aria-selected="false" data-painel="resultado">Resultado</button>
+  <button class="aba" role="tab" aria-selected="false" data-painel="historico">Histórico</button>
 </nav>
 
 <main>
@@ -46,7 +46,7 @@
   pronto no aplicativo, conferido antes de ser gravado — o motor não recalcula
   nada ao abrir a tela; ele entra depois, para tentar superar o que já existe.
 -->
-<section id="lotinha" class="painel ativo">
+<section id="lotinha" class="painel ativo" role="tabpanel">
 
   <div class="cartao">
     <h2>1 · Quantas dezenas você vai jogar</h2>
@@ -182,7 +182,7 @@
 </section>
 
 <!-- ══════════════════ BUSCAR ══════════════════ -->
-<section id="buscar" class="painel">
+<section id="buscar" class="painel" role="tabpanel">
 
   <!-- Fica no topo e sempre visível: é aqui que o usuário confere, de relance,
        se o motor está trabalhando ou parado. -->
@@ -263,7 +263,7 @@
 </section>
 
 <!-- ══════════════════ RESULTADO ══════════════════ -->
-<section id="resultado" class="painel">
+<section id="resultado" class="painel" role="tabpanel">
   <div class="cartao destaque">
     <div class="rotulo">Fechamento encontrado</div>
     <div class="numerao"><span id="res-cartelas">—</span><small>cartelas</small></div>
@@ -296,7 +296,7 @@
 </section>
 
 <!-- ══════════════════ HISTÓRICO ══════════════════ -->
-<section id="historico" class="painel">
+<section id="historico" class="painel" role="tabpanel">
   <div class="cartao">
     <h2>Seus trabalhos</h2>
     <p class="ajuda">
