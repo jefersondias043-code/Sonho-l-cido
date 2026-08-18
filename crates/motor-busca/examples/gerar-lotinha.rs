@@ -41,7 +41,16 @@
 //! promessa falsa na tela do usuário.
 //!
 //! ```bash
-//! cargo run --release --example gerar-lotinha -- [segundos-por-caso]
+//! cargo run --release --example gerar-lotinha -- [segundos-por-caso] [pool,jogo ...]
+//! ```
+//!
+//! Sem casos nomeados, percorre a modalidade inteira. Com eles, busca só os
+//! nomeados e copia o resto do banco publicado sem tocar — o que permite dar
+//! horas aos cinco casos difíceis sem gastar as mesmas horas nos quarenta que
+//! já estão no melhor que se sabe alcançar:
+//!
+//! ```bash
+//! cargo run --release --example gerar-lotinha -- 3600 24,17 24,18 25,17 25,18 25,19
 //! ```
 
 use std::collections::BTreeMap;
@@ -59,7 +68,20 @@ fn main() {
         .and_then(|v| v.parse().ok())
         .unwrap_or(60);
 
+    // Casos nomeados na linha de comando. Vazio quer dizer "a modalidade toda".
+    let so: Vec<(usize, usize)> = std::env::args()
+        .skip(2)
+        .filter_map(|arg| {
+            let (p, j) = arg.split_once(',')?;
+            Some((p.trim().parse().ok()?, j.trim().parse().ok()?))
+        })
+        .collect();
+
     println!("Banco de fechamentos da Lotinha ({segundos}s por caso em aberto)\n");
+    if !so.is_empty() {
+        let lista: Vec<String> = so.iter().map(|(p, j)| format!("{p},{j}")).collect();
+        println!("buscando só: {}\n", lista.join(" · "));
+    }
     println!(
         "{:>5} {:>5} {:>7} {:>9} {:>10} {:>12} {:>9}",
         "pool", "jogo", "piso", "partida", "final", "origem", "confere"
@@ -92,7 +114,7 @@ fn main() {
             // nasceu grande demais.
             let cabe_construir = tamanho_da_construcao(pool, a, b) <= TETO_DA_CONSTRUCAO;
 
-            let (inicial, origem) = if cabe_construir {
+            let (inicial, mut origem) = if cabe_construir {
                 construir(pool, jogo)
             } else {
                 (Vec::new(), "guloso")
@@ -108,7 +130,16 @@ fn main() {
             // A coluna "partida" reporta de onde o motor de fato saiu.
             let partida = de_partida.len();
 
-            let final_ = if a >= 3 || !cabe_construir {
+            // Fora da lista, o caso não é buscado: fica exatamente o que já
+            // estava publicado (ou a construção, se nada estava). Continua
+            // sendo conferido e continua passando pela travessa do piso — não
+            // se copia para o banco um fechamento que ninguém olhou.
+            let buscar = so.is_empty() || so.contains(&(pool, jogo));
+            if !buscar {
+                origem = "mantido";
+            }
+
+            let final_ = if buscar && (a >= 3 || !cabe_construir) {
                 melhorar(pool, jogo, &de_partida, Duration::from_secs(segundos))
             } else {
                 de_partida
