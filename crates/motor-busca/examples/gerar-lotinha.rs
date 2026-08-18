@@ -441,7 +441,14 @@ const INVIAVEL: u64 = u64::MAX / 4;
 ///
 /// O ganho de somar as três não é pequeno. Em 25 dezenas com jogos de 19 a
 /// construção por grupos pede 177.100 jogos; esta pede 6.072 — vinte e nove
-/// vezes menos, e sem busca nenhuma.
+/// vezes menos, e sem busca nenhuma.///
+/// ## O que foi tentado e não rendeu
+///
+/// Partes de tamanhos desiguais, e grupos menores que `⌈b/g⌉` custando zero em
+/// vez de serem proibidos — um grupo pequeno demais nunca pode ser a testemunha
+/// da casa dos pombos, então dispensaria família. As duas são válidas, foram
+/// medidas nas 21 combinações em aberto, e não melhoraram nenhuma. A partição
+/// mais igual possível já é a melhor desta família.
 fn turan_tamanho(v: usize, a: usize, b: usize, memo: &mut HashMap<(usize, usize, usize), u64>) -> u64 {
     if a > b || b > v {
         return INVIAVEL;

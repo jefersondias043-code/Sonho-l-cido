@@ -272,6 +272,14 @@ const INVIAVEL = Infinity;
  * por grupos pede 177.100 jogos e esta pede 6.072 — vinte e nove vezes menos,
  * sem busca nenhuma. E nas 15 combinações de mínimo conhecido ela **alcança o
  * mínimo**, as 15.
+ *
+ * ## O que foi tentado e não rendeu
+ *
+ * Partes de tamanhos desiguais, e grupos menores que `⌈b/g⌉` custando zero em
+ * vez de serem proibidos — um grupo pequeno demais nunca pode ser a testemunha
+ * da casa dos pombos, então dispensaria família. As duas são válidas, foram
+ * medidas nas 21 combinações em aberto, e não melhoraram nenhuma. A partição
+ * mais igual possível já é a melhor desta família.
  */
 function turanTamanho(v, a, b, memo) {
   if (a > b || b > v) return INVIAVEL;
