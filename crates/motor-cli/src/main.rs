@@ -126,6 +126,10 @@ struct ArgsProblema {
     #[arg(long, short = 'g')]
     garantir: Option<String>,
 
+    /// Quantas cartelas precisam atender cada resultado, e não apenas uma
+    #[arg(long, default_value_t = 1)]
+    premiadas: usize,
+
     /// Teto de cartelas: em vez de minimizar a quantidade, maximiza a cobertura
     #[arg(long)]
     orcamento: Option<usize>,
@@ -235,7 +239,7 @@ fn montar_problema(args: &ArgsProblema, fechamento: Option<&[Vec<u32>]>) -> Resu
         },
     };
 
-    let regra = match (&args.cobrir, &args.garantir) {
+    let mut regra = match (&args.cobrir, &args.garantir) {
         (Some(t), None) => RegraCobertura::cobrir_subconjuntos(*t),
         (None, Some(texto)) => interpretar_garantia(texto)?,
         (None, None) => bail!(
@@ -244,6 +248,11 @@ fn montar_problema(args: &ArgsProblema, fechamento: Option<&[Vec<u32>]>) -> Resu
         ),
         (Some(_), Some(_)) => bail!("--cobrir e --garantir são mutuamente exclusivos"),
     };
+
+    if args.premiadas == 0 {
+        bail!("--premiadas precisa ser ao menos 1");
+    }
+    regra.premiadas = args.premiadas;
 
     let objetivo = match args.orcamento {
         Some(orcamento) => Objetivo::MaximizarCobertura { orcamento },
@@ -543,7 +552,7 @@ fn descrever_problema(problema: &Problema) {
         problema.tamanho_cartela()
     );
 
-    if regra.e_covering_design() {
+    if regra.alvo == regra.intersecao {
         println!(
             "  regra: cobrir todo subconjunto de {} elementos do pool",
             regra.alvo
@@ -553,6 +562,9 @@ fn descrever_problema(problema: &Problema) {
             "  regra: se saírem {} elementos do pool, garantir {} em alguma cartela",
             regra.alvo, regra.intersecao
         );
+    }
+    if regra.premiadas > 1 {
+        println!("  exigência: {} cartelas atendendo cada resultado, não apenas uma", regra.premiadas);
     }
 
     match problema.objetivo() {
@@ -565,10 +577,15 @@ fn descrever_problema(problema: &Problema) {
 
 fn resumo_do_problema(problema: &Problema) -> String {
     let regra = problema.regra();
-    let sufixo = if regra.e_covering_design() {
+    let sufixo = if regra.alvo == regra.intersecao {
         format!("cobrir {}", regra.alvo)
     } else {
         format!("garantir {} em {}", regra.intersecao, regra.alvo)
+    };
+    let sufixo = if regra.premiadas > 1 {
+        format!("{sufixo} ×{}", regra.premiadas)
+    } else {
+        sufixo
     };
     format!(
         "u{} p{} k{} — {sufixo}",
@@ -622,6 +639,7 @@ mod testes {
             elementos: None,
             cartela: None,
             cobrir: None,
+            premiadas: 1,
             garantir: None,
             orcamento: None,
             semente: 1,
@@ -635,6 +653,7 @@ mod testes {
             pool: Some(5),
             cartela: Some(3),
             cobrir: Some(2),
+            premiadas: 1,
             ..args_vazios()
         };
         let problema = montar_problema(&args, None).unwrap();
@@ -648,6 +667,7 @@ mod testes {
             elementos: Some("7, 13,42".to_string()),
             cartela: Some(2),
             cobrir: Some(2),
+            premiadas: 1,
             ..args_vazios()
         };
         let problema = montar_problema(&args, None).unwrap();
@@ -692,6 +712,7 @@ mod testes {
             pool: Some(10),
             cartela: Some(3),
             cobrir: Some(2),
+            premiadas: 1,
             orcamento: Some(8),
             ..args_vazios()
         };
@@ -706,6 +727,7 @@ mod testes {
             pool: Some(5),
             cartela: Some(9), // maior que o pool
             cobrir: Some(2),
+            premiadas: 1,
             ..args_vazios()
         };
         assert!(montar_problema(&args, None).is_err());

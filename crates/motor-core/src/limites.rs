@@ -44,14 +44,17 @@ pub struct LimiteInferior {
 }
 
 /// Cota de contagem: cada cartela atende no máximo `alvos_por_cartela` alvos,
-/// e existem `total_alvos` a atender.
+/// e existem `total_alvos` a atender, cada um `premiadas` vezes.
 ///
-/// Vale para qualquer regra de cobertura, inclusive garantias parciais.
-pub fn limite_por_contagem(total_alvos: u64, alvos_por_cartela: u64) -> u64 {
+/// Vale para qualquer regra de cobertura — garantias parciais e cobertura
+/// múltipla inclusive. Exigir `r` cartelas por alvo multiplica a demanda total
+/// por `r` sem mudar o que cada cartela oferece, então o piso multiplica por
+/// `r` exatamente.
+pub fn limite_por_contagem(total_alvos: u64, alvos_por_cartela: u64, premiadas: u64) -> u64 {
     if alvos_por_cartela == 0 {
         return 0;
     }
-    total_alvos.div_ceil(alvos_por_cartela)
+    total_alvos.saturating_mul(premiadas.max(1)).div_ceil(alvos_por_cartela)
 }
 
 /// Cota de Schönheim para o covering design `C(v, k, t)`.
@@ -102,16 +105,29 @@ pub fn schonheim(v: usize, k: usize, t: usize) -> u64 {
 /// continua verdadeira. O que **não** pode entrar aqui é o melhor resultado
 /// conhecido no mundo — esse é um limite superior, e usá-lo faria o motor
 /// declarar optimalidade em cima de um recorde que ainda pode cair.
+///
+/// Com mais de uma cartela premiada por alvo, a contagem entra multiplicada e
+/// as fontes do catálogo entram inteiras, sem multiplicar — ver o corpo.
 pub fn limite_inferior(motor: &MotorCobertura) -> LimiteInferior {
     let viabilidade = motor.viabilidade();
+    let premiadas = u64::from(motor.premiadas());
     let por_contagem =
-        limite_por_contagem(viabilidade.total_alvos, viabilidade.alvos_por_cartela);
+        limite_por_contagem(viabilidade.total_alvos, viabilidade.alvos_por_cartela, premiadas);
 
     let e_covering_design = motor.alvo() == motor.intersecao();
     if !e_covering_design {
         return LimiteInferior { valor: por_contagem, metodo: MetodoLimite::Contagem };
     }
 
+    // Schönheim e a tabela publicada falam de cobertura **simples**: cada alvo
+    // atendido uma vez. Não valem multiplicadas por `r` — não há teorema que
+    // autorize isso, e usá-las assim inventaria um piso.
+    //
+    // Mas valem **como estão**, e é fácil ver por quê: toda solução que atende
+    // cada alvo `r` vezes atende cada alvo ao menos uma vez, então ela também é
+    // uma cobertura simples e não pode ser menor que o mínimo de uma. O piso
+    // final é o mais forte entre os dois argumentos independentes — o do
+    // catálogo, sem multiplicar, e o de contagem, já multiplicado.
     let por_schonheim =
         schonheim(motor.tamanho_pool(), motor.tamanho_cartela(), motor.intersecao());
     let publicado = referencia::consultar(
@@ -208,11 +224,11 @@ mod testes {
     #[test]
     fn contagem_e_um_limite_valido_e_conservador() {
         // C(9,3,2): 36 pares, cada bloco cobre 3 → pelo menos 12.
-        assert_eq!(limite_por_contagem(36, 3), 12);
+        assert_eq!(limite_por_contagem(36, 3, 1), 12);
         // Divisão inexata sempre arredonda para cima.
-        assert_eq!(limite_por_contagem(37, 3), 13);
-        assert_eq!(limite_por_contagem(0, 3), 0);
-        assert_eq!(limite_por_contagem(10, 0), 0);
+        assert_eq!(limite_por_contagem(37, 3, 1), 13);
+        assert_eq!(limite_por_contagem(0, 3, 1), 0);
+        assert_eq!(limite_por_contagem(10, 0, 1), 0);
     }
 
     fn motor_de(p: usize, k: usize, j: usize, t: usize) -> MotorCobertura {
@@ -244,7 +260,7 @@ mod testes {
         assert_eq!(limite.metodo, MetodoLimite::Contagem);
 
         let v = motor.viabilidade();
-        assert_eq!(limite.valor, limite_por_contagem(v.total_alvos, v.alvos_por_cartela));
+        assert_eq!(limite.valor, limite_por_contagem(v.total_alvos, v.alvos_por_cartela, 1));
     }
 
     #[test]

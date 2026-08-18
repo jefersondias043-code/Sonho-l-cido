@@ -26,31 +26,65 @@ use crate::combinatoria::Binomiais;
 /// Quando `alvo == intersecao`, o problema é exatamente um *covering design*
 /// `C(p, k, t)` da literatura — que é o que permite validar o motor contra
 /// ótimos já provados.
+///
+/// ## Atender mais de uma vez
+///
+/// `premiadas` eleva a exigência de "alguma cartela" para "pelo menos `r`
+/// cartelas". Na leitura de quem joga: se as dezenas sorteadas caírem no pool,
+/// não basta uma cartela premiada — `r` delas precisam estar.
+///
+/// Custa caro, e o preço é quase proporcional: a cota de contagem multiplica
+/// por `r` exatamente. Mas nem sempre custa `r` vezes de fato — num pool de 18
+/// com jogos de 17, garantir uma cartela premiada exige 16 jogos e garantir
+/// duas exige 17, não 32. É essa diferença que faz valer a pena procurar em vez
+/// de simplesmente repetir o fechamento.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RegraCobertura {
     /// `j` — tamanho dos subconjuntos do pool que precisam ser atendidos.
     pub alvo: usize,
     /// `t` — interseção mínima exigida entre o alvo e alguma cartela.
     pub intersecao: usize,
+    /// `r` — quantas cartelas distintas precisam atender cada alvo.
+    ///
+    /// `#[serde(default)]` com 1: estados gravados antes desta opção existir
+    /// continuam sendo lidos, e leem como o que eram — uma cartela basta.
+    #[serde(default = "uma_cartela")]
+    pub premiadas: usize,
+}
+
+/// O padrão histórico da regra: uma cartela atendendo cada alvo basta.
+fn uma_cartela() -> usize {
+    1
 }
 
 impl RegraCobertura {
     /// Todo subconjunto de tamanho `t` do pool deve estar *contido* em alguma
     /// cartela. É o covering design clássico `C(p, k, t)`.
     pub fn cobrir_subconjuntos(t: usize) -> Self {
-        Self { alvo: t, intersecao: t }
+        Self { alvo: t, intersecao: t, premiadas: 1 }
     }
 
     /// Se `alvo` elementos do pool forem sorteados, ao menos uma cartela terá
     /// no mínimo `intersecao` deles.
     pub fn garantia(alvo: usize, intersecao: usize) -> Self {
-        Self { alvo, intersecao }
+        Self { alvo, intersecao, premiadas: 1 }
     }
 
-    /// Verdadeiro quando a regra é um covering design puro (`j == t`), caso em
-    /// que limites inferiores mais fortes ficam disponíveis.
+    /// Como [`Self::garantia`], exigindo `premiadas` cartelas por alvo em vez
+    /// de uma.
+    pub fn garantia_multipla(alvo: usize, intersecao: usize, premiadas: usize) -> Self {
+        Self { alvo, intersecao, premiadas }
+    }
+
+    /// Verdadeiro quando a regra é um covering design puro (`j == t`, uma
+    /// cartela por alvo), caso em que limites inferiores mais fortes ficam
+    /// disponíveis.
+    ///
+    /// Exigir mais de uma cartela sai do catálogo: a cota de Schönheim e a
+    /// tabela publicada falam de cobertura simples, e aplicá-las a uma
+    /// cobertura múltipla daria um piso baixo demais.
     pub fn e_covering_design(&self) -> bool {
-        self.alvo == self.intersecao
+        self.alvo == self.intersecao && self.premiadas == 1
     }
 }
 
@@ -86,6 +120,7 @@ pub enum ErroProblema {
     CartelaMaiorQuePool { tamanho_cartela: usize, pool: usize },
     AlvoInvalido { alvo: usize, pool: usize },
     IntersecaoInvalida { intersecao: usize, alvo: usize, tamanho_cartela: usize },
+    PremiadasZero,
     OrcamentoZero,
 }
 
@@ -120,6 +155,9 @@ impl std::fmt::Display for ErroProblema {
                 f,
                 "a interseção exigida ({intersecao}) precisa estar entre 1 e min(alvo={alvo}, cartela={tamanho_cartela})"
             ),
+            ErroProblema::PremiadasZero => {
+                write!(f, "é preciso exigir ao menos 1 cartela premiada por resultado")
+            }
             ErroProblema::OrcamentoZero => write!(f, "o orçamento de cartelas precisa ser maior que zero"),
         }
     }
@@ -194,6 +232,9 @@ impl Problema {
                 tamanho_cartela,
             });
         }
+        if regra.premiadas == 0 {
+            return Err(ErroProblema::PremiadasZero);
+        }
         if matches!(objetivo, Objetivo::MaximizarCobertura { orcamento: 0 }) {
             return Err(ErroProblema::OrcamentoZero);
         }
@@ -233,6 +274,11 @@ impl Problema {
 
     pub fn regra(&self) -> RegraCobertura {
         self.regra
+    }
+
+    /// `r` — quantas cartelas precisam atender cada alvo.
+    pub fn premiadas(&self) -> usize {
+        self.regra.premiadas
     }
 
     pub fn objetivo(&self) -> Objetivo {

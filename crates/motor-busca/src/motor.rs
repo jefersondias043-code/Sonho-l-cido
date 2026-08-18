@@ -880,6 +880,97 @@ mod testes {
         }
     }
 
+    /// Como [`problema`], exigindo `r` cartelas premiadas por alvo.
+    fn problema_multiplo(p: u32, k: usize, alvo: usize, t: usize, r: usize) -> Problema {
+        Problema::com_pool_inicial(
+            p,
+            p as usize,
+            k,
+            RegraCobertura::garantia_multipla(alvo, t, r),
+            Objetivo::MinimizarCartelas,
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn a_busca_entrega_uma_cobertura_multipla_valida() {
+        // O que precisa ficar provado: a solução final não apenas cobre tudo,
+        // mas cobre tudo **r vezes** — e isso é conferido pelo oráculo de força
+        // bruta, que não compartilha caminho de código com o incremental.
+        for r in 2..=3 {
+            let mut motor =
+                MotorBusca::novo(problema_multiplo(9, 4, 3, 3, r), config_rapida(7)).unwrap();
+            motor.executar(
+                &Controle::novo(),
+                &CondicoesDeParada {
+                    max_iteracoes: Some(20_000),
+                    max_duracao: None,
+                    parar_em_optimalidade: false,
+                },
+                &mut Silencioso,
+            );
+
+            let solucao = motor.melhor_solucao();
+            assert!(solucao.cobertura_total(), "r={r}: a melhor solução não fechou");
+            assert_eq!(solucao.conferir_invariantes(motor.cobertura()), Ok(()));
+
+            let contagens = motor.cobertura().contagens_por_forca_bruta(solucao.cartelas());
+            let minimo = contagens.iter().copied().min().unwrap_or(0);
+            assert!(
+                minimo >= r as u32,
+                "r={r}: algum alvo ficou com {minimo} cartelas, e devia ter ao menos {r}"
+            );
+        }
+    }
+
+    #[test]
+    fn exigir_mais_premiadas_nunca_sai_mais_barato() {
+        // Monotonicidade: o mínimo para `r+1` não pode ser menor que para `r`,
+        // porque toda solução de `r+1` também serve para `r`. Se a busca
+        // devolvesse algo menor, haveria erro no limiar — e seria um erro que
+        // entrega ao usuário um fechamento que não cumpre o que promete.
+        let mut anterior = 0;
+        for r in 1..=3 {
+            let mut motor =
+                MotorBusca::novo(problema_multiplo(9, 4, 3, 3, r), config_rapida(11)).unwrap();
+            motor.executar(
+                &Controle::novo(),
+                &CondicoesDeParada {
+                    max_iteracoes: Some(20_000),
+                    max_duracao: None,
+                    parar_em_optimalidade: false,
+                },
+                &mut Silencioso,
+            );
+            let quantas = motor.melhor_avaliacao().cartelas;
+            assert!(
+                quantas >= anterior,
+                "exigir {r} premiadas saiu com {quantas} cartelas, menos que as {anterior} de {}",
+                r - 1
+            );
+            anterior = quantas;
+        }
+    }
+
+    #[test]
+    fn o_piso_cresce_com_as_premiadas_sem_inventar_teorema() {
+        // Duas fontes independentes, e nenhuma delas é "multiplicar o piso de
+        // r=1 por r" — isso não tem teorema que sustente.
+        //
+        // Em C(9,4,3) a cota de contagem dá 21 e a de Schönheim dá 25, então o
+        // piso simples é 25. Com r=3 a contagem vira 63, e é ela que manda; o
+        // piso do catálogo continua valendo inteiro, mas fica para trás.
+        let simples = MotorBusca::novo(problema_multiplo(9, 4, 3, 3, 1), config_rapida(1)).unwrap();
+        let triplo = MotorBusca::novo(problema_multiplo(9, 4, 3, 3, 3), config_rapida(1)).unwrap();
+
+        assert_eq!(simples.limite_inferior().valor, 25, "Schönheim manda em C(9,4,3)");
+        assert_eq!(triplo.limite_inferior().valor, 63, "com r=3 a contagem passa à frente");
+
+        // E o piso nunca pode cair abaixo do de uma cobertura simples: toda
+        // solução que atende cada alvo três vezes atende cada um ao menos uma.
+        assert!(triplo.limite_inferior().valor >= simples.limite_inferior().valor);
+    }
+
     /// Importar um fechamento redundante não pode carregar a redundância adiante.
     #[test]
     fn um_fechamento_importado_e_podado_de_graca() {

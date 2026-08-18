@@ -130,18 +130,25 @@ impl Solucao {
     }
 
     /// Acrescenta uma cartela, atualizando a cobertura incrementalmente.
+    ///
+    /// O limiar é `motor.premiadas()`, não 1: um alvo só sai da lista de
+    /// descobertos quando `r` cartelas o atendem, e só o que passa disso conta
+    /// como redundância. Com `r = 1` — o caso de sempre — isto é exatamente o
+    /// comportamento anterior.
     pub fn adicionar(&mut self, motor: &MotorCobertura, cartela: Cartela, rascunho: &mut Rascunho) {
         motor.alvos_da_cartela(cartela, rascunho);
+        let exigido = motor.premiadas();
 
         for &alvo in rascunho.alvos() {
             let contador = &mut self.contagem[alvo as usize];
-            if *contador == 0 {
-                self.descobertos.remover(alvo);
-            } else {
-                // Já estava coberto: esta cartela adiciona redundância.
-                self.redundancia += 1;
-            }
             *contador += 1;
+            match (*contador).cmp(&exigido) {
+                std::cmp::Ordering::Equal => self.descobertos.remover(alvo),
+                // Já havia cartelas bastantes: esta é esforço duplicado.
+                std::cmp::Ordering::Greater => self.redundancia += 1,
+                // Ainda falta gente para este alvo; segue descoberto.
+                std::cmp::Ordering::Less => {}
+            }
         }
 
         self.cartelas.push(cartela);
@@ -161,14 +168,17 @@ impl Solucao {
         let cartela = self.cartelas.swap_remove(indice);
         motor.alvos_da_cartela(cartela, rascunho);
 
+        let exigido = motor.premiadas();
+
         for &alvo in rascunho.alvos() {
             let contador = &mut self.contagem[alvo as usize];
             debug_assert!(*contador > 0, "contagem do alvo {alvo} não pode ficar negativa");
             *contador -= 1;
-            if *contador == 0 {
-                self.descobertos.inserir(alvo);
-            } else {
-                self.redundancia -= 1;
+            match (*contador + 1).cmp(&exigido) {
+                // Estava exatamente no limiar e acabou de cair abaixo dele.
+                std::cmp::Ordering::Equal => self.descobertos.inserir(alvo),
+                std::cmp::Ordering::Greater => self.redundancia -= 1,
+                std::cmp::Ordering::Less => {}
             }
         }
 
@@ -179,6 +189,10 @@ impl Solucao {
     ///
     /// Zero significa que a cartela é totalmente redundante: pode sair de graça.
     /// É a base do operador de remoção do §9.1.
+    ///
+    /// Descoberto aqui é relativo ao limiar: um alvo atendido exatamente `r`
+    /// vezes depende de cada uma dessas `r` cartelas, e perder qualquer uma
+    /// delas o descobre.
     pub fn contribuicao_unica(
         &self,
         motor: &MotorCobertura,
@@ -186,10 +200,11 @@ impl Solucao {
         rascunho: &mut Rascunho,
     ) -> usize {
         motor.alvos_da_cartela(self.cartelas[indice], rascunho);
+        let exigido = motor.premiadas();
         rascunho
             .alvos()
             .iter()
-            .filter(|&&alvo| self.contagem[alvo as usize] == 1)
+            .filter(|&&alvo| self.contagem[alvo as usize] == exigido)
             .count()
     }
 
@@ -203,10 +218,11 @@ impl Solucao {
         rascunho: &mut Rascunho,
     ) -> usize {
         motor.alvos_da_cartela(cartela, rascunho);
+        let exigido = motor.premiadas();
         rascunho
             .alvos()
             .iter()
-            .filter(|&&alvo| self.contagem[alvo as usize] == 0)
+            .filter(|&&alvo| self.contagem[alvo as usize] < exigido)
             .count()
     }
 
@@ -327,7 +343,12 @@ impl Solucao {
             }
         }
 
-        let descobertos_esperados = esperado.iter().filter(|&&c| c == 0).count();
+        // "Descoberto" e "redundante" são relativos ao limiar da regra, não ao
+        // 1 implícito. O oráculo de força bruta devolve contagens cruas; quem
+        // aplica o limiar é esta conferência, exatamente como a `Solucao` faz.
+        let exigido = motor.premiadas();
+
+        let descobertos_esperados = esperado.iter().filter(|&&c| c < exigido).count();
         if self.descobertos.len() != descobertos_esperados {
             return Err(format!(
                 "descobertos: {} incremental vs {descobertos_esperados} força bruta",
@@ -335,16 +356,17 @@ impl Solucao {
             ));
         }
         for (alvo, &c) in esperado.iter().enumerate() {
-            if (c == 0) != self.descobertos.contem(alvo as u32) {
+            if (c < exigido) != self.descobertos.contem(alvo as u32) {
                 return Err(format!(
-                    "alvo {alvo}: contagem {c} mas pertinência ao conjunto de descobertos é {}",
+                    "alvo {alvo}: contagem {c} contra exigência {exigido}, mas pertinência ao \
+                     conjunto de descobertos é {}",
                     self.descobertos.contem(alvo as u32)
                 ));
             }
         }
 
         let redundancia_esperada: u64 =
-            esperado.iter().map(|&c| (c as u64).saturating_sub(1)).sum();
+            esperado.iter().map(|&c| (c as u64).saturating_sub(exigido as u64)).sum();
         if self.redundancia != redundancia_esperada {
             return Err(format!(
                 "redundância: {} incremental vs {redundancia_esperada} força bruta",
@@ -388,6 +410,125 @@ mod testes {
             c.inserir(sorteio.proximo(p));
         }
         c
+    }
+
+    /// Como [`ambiente`], exigindo `r` cartelas por alvo.
+    fn ambiente_multiplo(
+        p: usize,
+        k: usize,
+        j: usize,
+        t: usize,
+        r: usize,
+    ) -> (MotorCobertura, Rascunho) {
+        let problema = Problema::com_pool_inicial(
+            p as u32,
+            p,
+            k,
+            RegraCobertura::garantia_multipla(j, t, r),
+            Objetivo::MinimizarCartelas,
+        )
+        .unwrap();
+        (MotorCobertura::novo(&problema).unwrap(), Rascunho::novo())
+    }
+
+    #[test]
+    fn cobrir_uma_vez_nao_e_cobrir_duas() {
+        // O caso mínimo que separa cobertura simples de múltipla: pool de 5,
+        // cartelas de 4, cobrindo pares. Estas três cartelas cobrem os dez
+        // pares — cada uma delas ao menos uma vez.
+        let tres = [
+            Cartela::dos_indices(&[0, 1, 2, 3]),
+            Cartela::dos_indices(&[0, 1, 2, 4]),
+            Cartela::dos_indices(&[0, 1, 3, 4]),
+        ];
+
+        let (simples, mut rascunho) = ambiente_multiplo(5, 4, 2, 2, 1);
+        let mut s = Solucao::vazia(&simples);
+        for c in tres {
+            s.adicionar(&simples, c, &mut rascunho);
+        }
+        assert!(s.cobertura_total(), "as três cartelas cobrem todo par uma vez");
+        assert_eq!(s.conferir_invariantes(&simples), Ok(()));
+
+        // As mesmas três, exigindo duas cartelas por par: os pares {2,3},
+        // {2,4} e {3,4} aparecem numa cartela só, e passam a estar descobertos.
+        let (dobrado, mut rascunho) = ambiente_multiplo(5, 4, 2, 2, 2);
+        let mut s = Solucao::vazia(&dobrado);
+        for c in tres {
+            s.adicionar(&dobrado, c, &mut rascunho);
+        }
+        assert!(!s.cobertura_total(), "com r=2, um par atendido uma vez segue descoberto");
+        assert_eq!(s.total_descobertos(), 3, "são os pares 23, 24 e 34");
+        assert_eq!(s.conferir_invariantes(&dobrado), Ok(()));
+
+        // Repetir um fechamento simples sempre resolve o dobro — é o teto
+        // grosseiro que o motor precisa saber bater, não igualar.
+        for c in tres {
+            s.adicionar(&dobrado, c, &mut rascunho);
+        }
+        assert!(s.cobertura_total(), "o fechamento repetido cobre tudo duas vezes");
+        assert_eq!(s.conferir_invariantes(&dobrado), Ok(()));
+    }
+
+    #[test]
+    fn o_invariante_vale_para_qualquer_exigencia() {
+        // O mesmo teste que protege o motor inteiro, agora percorrendo r=1..4.
+        // Um erro no limiar — inserir ou remover do conjunto de descobertos na
+        // hora errada — aparece aqui como divergência da força bruta, que não
+        // compartilha caminho de código com a atualização incremental.
+        for r in 1..=4 {
+            let (motor, mut rascunho) = ambiente_multiplo(9, 4, 3, 2, r);
+            let mut s = Solucao::vazia(&motor);
+            let mut sorteio = Sorteio(0x5eed ^ r as u64);
+
+            for passo in 0..60 {
+                if s.quantidade() > 0 && sorteio.proximo(3) == 0 {
+                    let indice = sorteio.proximo(s.quantidade());
+                    s.remover(&motor, indice, &mut rascunho);
+                } else {
+                    s.adicionar(&motor, cartela_aleatoria(9, 4, &mut sorteio), &mut rascunho);
+                }
+                assert_eq!(
+                    s.conferir_invariantes(&motor),
+                    Ok(()),
+                    "divergiu com r={r} no passo {passo}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn remover_devolve_o_alvo_aos_descobertos_no_limiar_certo() {
+        // A armadilha da implementação: com r=3, tirar uma cartela de um alvo
+        // atendido 3 vezes tem de descobri-lo; tirar de um atendido 4 vezes
+        // apenas reduz a redundância. Errar isso deixa o motor cego para
+        // alvos que ele mesmo acabou de descobrir.
+        let (motor, mut rascunho) = ambiente_multiplo(5, 4, 2, 2, 3);
+        let mut s = Solucao::vazia(&motor);
+        let cartela = Cartela::dos_indices(&[0, 1, 2, 3]);
+
+        for _ in 0..4 {
+            s.adicionar(&motor, cartela, &mut rascunho);
+        }
+        let par_interno = 0; // algum alvo dentro da cartela
+        assert_eq!(s.contagem_do_alvo(par_interno), 4);
+        let descobertos_com_quatro = s.total_descobertos();
+
+        s.remover(&motor, 0, &mut rascunho);
+        assert_eq!(s.contagem_do_alvo(par_interno), 3);
+        assert_eq!(
+            s.total_descobertos(),
+            descobertos_com_quatro,
+            "cair de 4 para 3 com r=3 não descobre nada"
+        );
+
+        s.remover(&motor, 0, &mut rascunho);
+        assert_eq!(s.contagem_do_alvo(par_interno), 2);
+        assert!(
+            s.total_descobertos() > descobertos_com_quatro,
+            "cair de 3 para 2 com r=3 tem de descobrir os alvos da cartela"
+        );
+        assert_eq!(s.conferir_invariantes(&motor), Ok(()));
     }
 
     #[test]

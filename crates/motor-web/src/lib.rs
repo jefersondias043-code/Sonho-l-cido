@@ -43,6 +43,12 @@ pub struct ConfiguracaoEntrada {
     pub alvo: usize,
     /// `t` da regra de cobertura.
     pub intersecao: usize,
+    /// `r` — quantas cartelas precisam atender cada resultado possível.
+    ///
+    /// Ausente vale 1, que é o que toda configuração gravada antes desta opção
+    /// existir queria dizer.
+    #[serde(default = "uma_premiada")]
+    pub premiadas: usize,
     /// Quando presente, troca o objetivo para cobertura máxima sob orçamento.
     #[serde(default)]
     pub orcamento: Option<usize>,
@@ -52,6 +58,10 @@ pub struct ConfiguracaoEntrada {
 
 fn semente_padrao() -> u64 {
     0x5150_1A55
+}
+
+fn uma_premiada() -> usize {
+    1
 }
 
 impl ConfiguracaoEntrada {
@@ -64,7 +74,7 @@ impl ConfiguracaoEntrada {
             self.universo,
             self.pool.clone(),
             self.cartela,
-            RegraCobertura::garantia(self.alvo, self.intersecao),
+            RegraCobertura::garantia_multipla(self.alvo, self.intersecao, self.premiadas.max(1)),
             objetivo,
         )
         .map_err(|e| e.to_string())
@@ -461,6 +471,7 @@ mod testes {
             cartela,
             alvo: t,
             intersecao: t,
+            premiadas: 1,
             orcamento: None,
             semente: 42,
         })
@@ -625,6 +636,7 @@ mod testes {
             cartela: 3,
             alvo: 2,
             intersecao: 2,
+            premiadas: 1,
             orcamento: None,
             semente: 1,
         })
@@ -673,6 +685,7 @@ mod testes {
             cartela: 6,
             alvo: 6,
             intersecao: 4,
+            premiadas: 1,
             orcamento: None,
             semente: 42,
         })
@@ -835,6 +848,7 @@ mod testes {
             cartela: 6,
             alvo: 6,
             intersecao: 4,
+            premiadas: 1,
             orcamento: None,
             semente: 3,
         })

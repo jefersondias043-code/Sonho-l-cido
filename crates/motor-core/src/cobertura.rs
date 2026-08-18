@@ -9,6 +9,7 @@
 //! É a diferença entre milhares e milhões de iterações por segundo.
 
 use crate::cartela::Cartela;
+use crate::Contagem;
 use crate::combinatoria::{iniciar_combinacao, indice_colex, proxima_combinacao, Binomiais};
 use crate::problema::{
     checar_viabilidade, ErroViabilidade, Problema, Viabilidade, LIMITE_ALVOS_PADRAO,
@@ -53,6 +54,7 @@ pub struct MotorCobertura {
     tamanho_cartela: usize,
     alvo: usize,
     intersecao: usize,
+    premiadas: Contagem,
     total_alvos: usize,
     viabilidade: Viabilidade,
     binom: Binomiais,
@@ -80,6 +82,7 @@ impl MotorCobertura {
             tamanho_cartela: problema.tamanho_cartela(),
             alvo: regra.alvo,
             intersecao: regra.intersecao,
+            premiadas: regra.premiadas.max(1) as Contagem,
             total_alvos: viabilidade.total_alvos as usize,
             viabilidade,
             binom,
@@ -110,6 +113,17 @@ impl MotorCobertura {
     #[inline]
     pub fn intersecao(&self) -> usize {
         self.intersecao
+    }
+
+    /// `r` — quantas cartelas precisam atender cada alvo para ele contar como
+    /// coberto.
+    ///
+    /// É o limiar que [`crate::Solucao`] usa no lugar do 1 implícito: um alvo
+    /// com contagem abaixo disto continua descoberto, por mais cartelas que a
+    /// solução tenha.
+    #[inline]
+    pub fn premiadas(&self) -> Contagem {
+        self.premiadas
     }
 
     pub fn viabilidade(&self) -> Viabilidade {

@@ -178,6 +178,7 @@ impl Banco {
                 tamanho_cartela   INTEGER NOT NULL,
                 regra_alvo        INTEGER NOT NULL,
                 regra_intersecao  INTEGER NOT NULL,
+                regra_premiadas   INTEGER NOT NULL DEFAULT 1,
                 objetivo          TEXT    NOT NULL,
                 semente           TEXT    NOT NULL,
                 iteracoes         INTEGER NOT NULL DEFAULT 0,
@@ -214,7 +215,29 @@ impl Banco {
             "#,
         )?;
 
+        // `CREATE TABLE IF NOT EXISTS` não mexe numa tabela que já existe, e um
+        // banco criado antes desta coluna continuaria sem ela — o SELECT
+        // falharia em cima do histórico de quem já usava a ferramenta. O ALTER
+        // resolve, e o erro de coluna repetida é o caso normal a partir da
+        // segunda abertura.
+        Self::alterar_para_premiadas(&conexao)?;
+
         Ok(Self { conexao })
+    }
+
+    /// Acrescenta `regra_premiadas` a um banco gravado por uma versão anterior.
+    fn alterar_para_premiadas(conexao: &Connection) -> Resultado<()> {
+        let ja_existe: bool = conexao
+            .prepare("SELECT 1 FROM pragma_table_info('execucoes') WHERE name = 'regra_premiadas'")?
+            .exists([])?;
+
+        if !ja_existe {
+            conexao.execute(
+                "ALTER TABLE execucoes ADD COLUMN regra_premiadas INTEGER NOT NULL DEFAULT 1",
+                [],
+            )?;
+        }
+        Ok(())
     }
 
     /// Cria uma execução para este problema, ou devolve a existente.
@@ -250,8 +273,8 @@ impl Banco {
         self.conexao.execute(
             "INSERT INTO execucoes
                 (impressao, universo, pool, tamanho_cartela, regra_alvo, regra_intersecao,
-                 objetivo, semente, limite_inferior, metodo_limite)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+                 regra_premiadas, objetivo, semente, limite_inferior, metodo_limite)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
             params![
                 impressao,
                 problema.universo(),
@@ -259,6 +282,7 @@ impl Banco {
                 problema.tamanho_cartela() as i64,
                 regra.alvo as i64,
                 regra.intersecao as i64,
+                regra.premiadas as i64,
                 objetivo,
                 semente.to_string(),
                 limite.valor as i64,
@@ -370,7 +394,7 @@ impl Banco {
         let mut consulta = self.conexao.prepare(
             "SELECT id, universo, pool, tamanho_cartela, regra_alvo, regra_intersecao,
                     objetivo, semente, iteracoes, segundos, limite_inferior, metodo_limite,
-                    criada_em, atualizada_em
+                    criada_em, atualizada_em, regra_premiadas
                FROM execucoes
               ORDER BY atualizada_em DESC",
         )?;
@@ -392,7 +416,7 @@ impl Banco {
         let mut consulta = self.conexao.prepare(
             "SELECT id, universo, pool, tamanho_cartela, regra_alvo, regra_intersecao,
                     objetivo, semente, iteracoes, segundos, limite_inferior, metodo_limite,
-                    criada_em, atualizada_em
+                    criada_em, atualizada_em, regra_premiadas
                FROM execucoes
               WHERE impressao = ?1
               ORDER BY id DESC
@@ -409,7 +433,7 @@ impl Banco {
         let mut consulta = self.conexao.prepare(
             "SELECT id, universo, pool, tamanho_cartela, regra_alvo, regra_intersecao,
                     objetivo, semente, iteracoes, segundos, limite_inferior, metodo_limite,
-                    criada_em, atualizada_em
+                    criada_em, atualizada_em, regra_premiadas
                FROM execucoes
               WHERE id = ?1",
         )?;
@@ -441,14 +465,22 @@ pub fn impressao_do_problema(problema: &Problema) -> String {
     };
     let pool: Vec<String> = problema.pool().iter().map(|r| r.to_string()).collect();
 
+    // O sufixo só aparece quando há mais de uma cartela premiada. Assim toda
+    // execução gravada antes desta opção existir mantém a impressão que tinha,
+    // e continua sendo reencontrada — enquanto duas execuções que diferem só na
+    // exigência deixam de se confundir, o que faria CONTINUAR retomar de uma
+    // solução que não satisfaz a regra pedida.
+    let exigencia = if regra.premiadas > 1 { format!("|r{}", regra.premiadas) } else { String::new() };
+
     format!(
-        "u{}|p{}|k{}|a{}|i{}|{}",
+        "u{}|p{}|k{}|a{}|i{}|{}{}",
         problema.universo(),
         pool.join(","),
         problema.tamanho_cartela(),
         regra.alvo,
         regra.intersecao,
-        objetivo
+        objetivo,
+        exigencia
     )
 }
 
@@ -517,6 +549,10 @@ fn montar_execucao(linha: &rusqlite::Row<'_>) -> rusqlite::Result<Resultado<Regi
         RegraCobertura {
             alvo: linha.get::<_, i64>(4)? as usize,
             intersecao: linha.get::<_, i64>(5)? as usize,
+            // Índice 14 porque a coluna foi acrescentada ao fim da consulta:
+            // renumerar as anteriores seria mexer em todas as leituras por
+            // causa de um campo novo.
+            premiadas: linha.get::<_, i64>(14)? as usize,
         },
         objetivo.into(),
     );
