@@ -734,7 +734,11 @@ function lotMontarExigencias() {
     alvoGarantia.appendChild(b);
   }
 
-  const teto = Math.min(lotinha.maximoPremiadas(lotPool, lotJogo, lotGarantia), 6);
+  // O limite dos botões é de tela, não de matemática: uma fileira de 252
+  // botões não serve a ninguém. Dez cobre qualquer uso realista, e o teto
+  // verdadeiro — quantos jogos distintos podem premiar juntos — aparece na
+  // explicação quando ele é menor que isto.
+  const teto = Math.min(lotinha.maximoPremiadas(lotPool, lotJogo, lotGarantia), 10);
   if (lotPremiadas > teto) lotPremiadas = teto;
 
   const alvoPremiadas = $('lot-premiadas');
