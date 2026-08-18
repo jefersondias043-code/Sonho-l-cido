@@ -319,6 +319,22 @@ try {
     duasPremiadas.replace(/\s+/g, ' ').slice(0, 92)
   );
 
+  // ─── 8b. trocar a exigência invalida o que estava carregado ───
+  //
+  // O defeito que isto cobre: a economia continuava calculando em cima do
+  // fechamento antigo enquanto a explicação já falava do novo. Cada um estava
+  // certo sobre uma pergunta diferente, e juntos mentiam.
+  await pagina.click('#lot-premiadas .opcao[data-premiadas="1"]');
+  const economiaUma = (await pagina.locator('#lot-economia').textContent()).match(/(\d+) jogos/);
+  await pagina.click('#lot-premiadas .opcao[data-premiadas="2"]');
+  const economiaDuas = (await pagina.locator('#lot-economia').textContent()).match(/(\d+) jogos/);
+  const explicaDuas = (await pagina.locator('#lot-explicacao').textContent()).match(/(\d+) jogos bastam/);
+  marcar(
+    economiaUma?.[1] === '16' && economiaDuas?.[1] === '17' && explicaDuas?.[1] === '17',
+    'trocar a exigência atualiza a economia junto com a explicação',
+    `${economiaUma?.[1]} → ${economiaDuas?.[1]}, explicação diz ${explicaDuas?.[1]}`
+  );
+
   // ─── 9. garantir menos de 15, e a honestidade que isso exige ───
   await pagina.click('#lot-premiadas .opcao[data-premiadas="1"]');
   await pagina.click('#lot-garantia .opcao[data-garantia="13"]');

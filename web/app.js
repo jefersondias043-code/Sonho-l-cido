@@ -644,6 +644,22 @@ let lotPremiadas = 1;
 let lotDezenas = new Set();
 let lotFechamento = null;
 
+/**
+ * Esquece o fechamento carregado, porque ele deixou de ser o desta seleção.
+ *
+ * Sem isto, trocar a exigência depois de carregar mostrava números de duas
+ * seleções diferentes ao mesmo tempo: a explicação dizia "17 jogos bastam" e a
+ * economia continuava calculando em cima dos 16 que estavam na memória. Cada um
+ * dos dois estava certo sobre uma pergunta diferente, e juntos mentiam.
+ */
+function lotEsquecerFechamento() {
+  lotFechamento = null;
+  $('lot-conferir').hidden = true;
+  $('lot-conferencia').innerHTML =
+    '<em>Ao carregar, cada sorteio possível dentro do seu pool é conferido um a ' +
+    'um — sem consultar o motor que produziu o fechamento.</em>';
+}
+
 const lotCotacao = {};
 
 function lotMontar() {
@@ -661,6 +677,7 @@ function lotMontar() {
       // A seleção que sobra vira inválida se o pool encolheu.
       if (lotDezenas.size > p) lotDezenas = new Set([...lotDezenas].slice(0, p));
       if (lotJogo > p) lotJogo = p;
+      lotEsquecerFechamento();
       lotPintarTudo();
     });
     alvoPool.appendChild(b);
@@ -727,6 +744,7 @@ function lotMontarExigencias() {
     b.dataset.garantia = String(g);
     b.addEventListener('click', () => {
       lotGarantia = g;
+      lotEsquecerFechamento();
       lotMontarExigencias();
       lotPintarExplicacao();
       lotPintarEconomia();
@@ -751,6 +769,7 @@ function lotMontarExigencias() {
     b.dataset.premiadas = String(r);
     b.addEventListener('click', () => {
       lotPremiadas = r;
+      lotEsquecerFechamento();
       lotMontarExigencias();
       lotPintarExplicacao();
       lotPintarEconomia();
@@ -795,6 +814,7 @@ function referenciaDe(configuracao) {
 }
 
 function lotAlternar(n) {
+  lotEsquecerFechamento();
   if (lotDezenas.has(n)) lotDezenas.delete(n);
   else if (lotDezenas.size < lotPool) lotDezenas.add(n);
   else {
@@ -847,6 +867,7 @@ function lotMontarOpcoesDeJogo() {
     b.dataset.jogo = String(k);
     b.addEventListener('click', () => {
       lotJogo = k;
+      lotEsquecerFechamento();
       lotMontarExigencias();
       lotPintarExplicacao();
       lotPintarEconomia();
@@ -905,6 +926,21 @@ function lotPintarExplicacao() {
 }
 
 /**
+ * Como descrever a quantidade de jogos, dizendo de onde ela veio.
+ *
+ * Chamar o piso de "custo" seria prometer um preço que não existe: em 25
+ * dezenas com jogos de 20, o piso conhecido é 211 e o melhor fechamento que o
+ * motor encontra passa de mil. O número continua útil — é o que a matemática
+ * garante que ninguém vai bater — mas precisa vir rotulado.
+ */
+function textoDaQuantidade(quantidade, ehPiso) {
+  const plural = quantidade === 1 ? 'jogo' : 'jogos';
+  return ehPiso
+    ? `no mínimo ${milhares(quantidade)} ${plural} — o piso conhecido`
+    : `${milhares(quantidade)} ${plural}`;
+}
+
+/**
  * A economia do fechamento — com os dois ramos sempre juntos.
  *
  * O ramo vencedor é sedutor: dezesseis jogos de 17 dezenas custam R$16 e pagam
@@ -917,6 +953,12 @@ function lotPintarEconomia() {
   const cartao = $('lot-economia-cartao');
   const { jogos, piso } = lotinha.minimo(lotPool, lotJogo, lotGarantia, lotPremiadas);
   const quantidade = lotFechamento?.length ?? jogos ?? piso;
+
+  // De onde veio o número, porque a diferença muda o que a conta significa.
+  // Com o fechamento na mão ou com o mínimo comprovado, é o custo de verdade.
+  // Com o piso, é o **mínimo concebível** — o fechamento real costuma ser bem
+  // maior, e apresentar o piso como preço seria prometer barato.
+  const ehPiso = !lotFechamento && jogos === null;
 
   if (!quantidade) {
     cartao.hidden = true;
@@ -956,7 +998,7 @@ function lotPintarEconomia() {
   if (!e.garantePremio) {
     destino.innerHTML =
       `<div class="linha-economia"><span>Custo do fechamento</span>` +
-      `<b>${dinheiro(e.custo)}</b> <em>${milhares(quantidade)} jogos</em></div>` +
+      `<b>${dinheiro(e.custo)}</b> <em>${textoDaQuantidade(quantidade, ehPiso)}</em></div>` +
 
       `<div class="linha-economia perde"><span>Prêmio garantido nesta modalidade</span>` +
       `<b>nenhum</b></div>` +
@@ -977,7 +1019,7 @@ function lotPintarEconomia() {
     e.premiadas === 1 ? 'uma cartela premiada' : `<b>${e.premiadas}</b> cartelas premiadas`;
   destino.innerHTML =
     `<div class="linha-economia"><span>Custo do fechamento</span>` +
-    `<b>${dinheiro(e.custo)}</b> <em>${milhares(quantidade)} jogos</em></div>` +
+    `<b>${dinheiro(e.custo)}</b> <em>${textoDaQuantidade(quantidade, ehPiso)}</em></div>` +
 
     `<div class="linha-economia ganha"><span>Se o sorteio cair no seu pool ` +
     `<em>(1 em ${milhares(1 / e.chanceDoPool)})</em></span>` +
@@ -1019,6 +1061,7 @@ function lotMontarMatriz() {
 
 $('lot-limpar').addEventListener('click', () => {
   lotDezenas.clear();
+  lotEsquecerFechamento();
   lotPintarTudo();
 });
 
@@ -1029,6 +1072,7 @@ $('lot-sortear').addEventListener('click', () => {
     [todas[i], todas[j]] = [todas[j], todas[i]];
   }
   lotDezenas = new Set(todas.slice(0, lotPool).sort((a, b) => a - b));
+  lotEsquecerFechamento();
   lotPintarTudo();
 });
 
