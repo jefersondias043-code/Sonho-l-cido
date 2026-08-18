@@ -161,16 +161,36 @@ fn main() {
                 if ok { "sim" } else { "NÃO" },
             );
 
+            // Guarda o **complemento**: as posições que faltam ao jogo, e não as
+            // que ele tem.
+            //
+            // É a mesma troca de ponto de vista que dá os valores exatos da
+            // modalidade, agora aplicada ao armazenamento. Um jogo de 17 dezenas
+            // num pool de 23 é o complemento de 6 — guardar 6 números em vez de
+            // 17 corta o arquivo em 65%, e no banco inteiro em 69%.
+            //
+            // Com isso cabe muito mais coisa pré-calculada no mesmo espaço, que
+            // é o ponto: quanto mais estiver pronto, menos o celular precisa
+            // fazer.
             banco.insert(
                 format!("{pool},{jogo}"),
-                final_.iter().map(|c| c.indices().iter().map(|i| i + 1).collect()).collect(),
+                final_
+                    .iter()
+                    .map(|c| {
+                        let dentro: Vec<usize> = c.indices();
+                        (0..pool).filter(|i| !dentro.contains(i)).map(|i| i + 1).collect()
+                    })
+                    .collect(),
             );
         }
     }
 
     // JSON escrito à mão: é um objeto de listas de listas, e acrescentar uma
     // dependência de serialização a um exemplo custaria mais que as dez linhas.
-    let mut json = String::from("{");
+    //
+    // O campo `formato` existe para o aplicativo saber o que está lendo. A
+    // versão 1 guardava os jogos; a 2 guarda o que falta a eles.
+    let mut json = String::from("{\"formato\":2,\"fechamentos\":{");
     for (i, (chave, jogos)) in banco.iter().enumerate() {
         if i > 0 {
             json.push(',');
@@ -191,7 +211,7 @@ fn main() {
         }
         json.push(']');
     }
-    json.push('}');
+    json.push_str("}}");
 
     std::fs::write(DESTINO, &json).expect("gravar o banco");
     println!("\nescrito {DESTINO} — {:.1} KiB", json.len() as f64 / 1024.0);
@@ -211,6 +231,10 @@ fn carregar_banco_anterior() -> BTreeMap<String, Vec<Cartela>> {
         return BTreeMap::new();
     };
 
+    // O formato 2 guarda complementos; o 1 guardava os jogos. Ler os dois
+    // permite regerar em cima de um banco antigo sem perder o que ele tem.
+    let complementos = texto.contains("\"formato\":2");
+
     let mut saida = BTreeMap::new();
     // Cada entrada é `"P,k":[[..],[..]]`. Fatiar pelo padrão da chave evita
     // trazer um interpretador de JSON para dentro de um exemplo.
@@ -219,6 +243,8 @@ fn carregar_banco_anterior() -> BTreeMap<String, Vec<Cartela>> {
         if !chave.contains(',') {
             continue;
         }
+        let Some((pool_txt, _)) = chave.split_once(',') else { continue };
+        let Ok(pool): Result<usize, _> = pool_txt.parse() else { continue };
         let Some(inicio) = resto.find('[') else { continue };
         let Some(fim) = resto.rfind(']') else { continue };
         let corpo = &resto[inicio + 1..fim];
@@ -234,7 +260,13 @@ fn carregar_banco_anterior() -> BTreeMap<String, Vec<Cartela>> {
                     .filter_map(|n| n.trim().parse::<usize>().ok())
                     .map(|n| n - 1)
                     .collect();
-                (!numeros.is_empty()).then(|| Cartela::dos_indices(&numeros))
+                if complementos {
+                    let dentro: Vec<usize> =
+                        (0..pool).filter(|i| !numeros.contains(i)).collect();
+                    Some(Cartela::dos_indices(&dentro))
+                } else {
+                    (!numeros.is_empty()).then(|| Cartela::dos_indices(&numeros))
+                }
             })
             .collect();
 
@@ -247,11 +279,18 @@ fn carregar_banco_anterior() -> BTreeMap<String, Vec<Cartela>> {
 
 /// Acima disto o fechamento não entra no banco embutido.
 ///
-/// O maior que entra hoje tem 11.546 jogos (pool 23, jogos de 17) e já ocupa a
-/// maior parte do arquivo. O teto existe para que acrescentar os pools 24 e 25
-/// não transforme um arquivo de 1 MB em um de dezenas — e é aplicado ao
-/// resultado final, depois de o motor ter feito o que podia.
-const TETO_DO_BANCO: usize = 20_000;
+/// Guardando complementos, quarenta mil jogos cabem em cerca de 134 KiB
+/// comprimidos — mais cobertura que o banco antigo tinha guardando os jogos
+/// inteiros, e ainda assim uma fração do WebAssembly. Com este teto, 37 das 38
+/// combinações construíveis ficam prontas de fábrica.
+///
+/// A que sobra é `(25,17)`, com 81.556 jogos. Ela ficaria em quase 2 MiB, e
+/// descreve uma compra de oitenta e um mil reais — não é fechamento que alguém
+/// vá levar. Ali a fórmula e o motor continuam disponíveis sob demanda.
+///
+/// O teto é aplicado ao resultado **final**, depois de o motor ter feito o que
+/// podia: `(24,18)` nasce com 134.596 jogos da construção e termina com 7.400.
+const TETO_DO_BANCO: usize = 40_000;
 
 /// Acima disto nem vale construir a partida por grupos.
 ///

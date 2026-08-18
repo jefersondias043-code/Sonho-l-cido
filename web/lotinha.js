@@ -322,7 +322,9 @@ export async function carregarBanco() {
   if (banco) return banco;
   const resposta = await fetch('./lotinha.json');
   if (!resposta.ok) throw new Error('não consegui carregar o banco de fechamentos');
-  banco = await resposta.json();
+  const cru = await resposta.json();
+  // O formato 2 guarda complementos e vem embrulhado; o 1 era o mapa direto.
+  banco = cru?.formato === 2 ? cru : { formato: 1, fechamentos: cru };
   return banco;
 }
 
@@ -331,12 +333,31 @@ export async function carregarBanco() {
  *
  * `dezenas` é a seleção do usuário, em ordem crescente; a posição `i` do banco
  * vira `dezenas[i-1]`.
+ *
+ * ## Por que o banco guarda o que falta
+ *
+ * No formato 2 cada linha lista as posições **ausentes** do jogo, não as
+ * presentes. É a mesma troca de ponto de vista que dá os valores exatos da
+ * modalidade — um jogo de 17 num pool de 23 é o complemento de 6 — aplicada ao
+ * armazenamento: guardar 6 números em vez de 17 corta o arquivo em 65%.
+ *
+ * O ganho não é o arquivo em si, e sim o que ele permite: com o mesmo espaço
+ * cabem 37 das 38 combinações construíveis prontas de fábrica, contra as 28 de
+ * antes. Quanto mais vem pronto, menos o celular precisa calcular.
  */
 export async function fechamentoPara(pool, jogo, dezenas) {
-  const b = await carregarBanco();
-  const bruto = b[`${pool},${jogo}`];
+  const { formato, fechamentos } = await carregarBanco();
+  const bruto = fechamentos[`${pool},${jogo}`];
   if (!bruto) return null;
-  return bruto.map((linha) => linha.map((posicao) => dezenas[posicao - 1]));
+
+  if (formato === 1) {
+    return bruto.map((linha) => linha.map((posicao) => dezenas[posicao - 1]));
+  }
+
+  return bruto.map((falta) => {
+    const fora = new Set(falta.map((posicao) => dezenas[posicao - 1]));
+    return dezenas.filter((d) => !fora.has(d));
+  });
 }
 
 /* ─────────── o validador independente ─────────── */

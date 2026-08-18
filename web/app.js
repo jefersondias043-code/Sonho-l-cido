@@ -1454,11 +1454,24 @@ $('encerrar').addEventListener('click', () => {
 
 $('copiar').addEventListener('click', async () => {
   if (!melhorCartelas.length) return avisar('Nenhuma solução para copiar ainda.');
+
+  // Um fechamento grande demora a copiar: 11.546 jogos são 589 mil caracteres,
+  // e a área de transferência leva quase três segundos para aceitá-los. Sem
+  // aviso, o botão parece não ter funcionado — e a reação natural é tocar de
+  // novo, o que só enfileira outra cópia.
+  const botao = $('copiar');
+  const rotulo = botao.textContent;
+  botao.disabled = true;
+  botao.textContent = `Copiando ${milhares(melhorCartelas.length)} jogos…`;
+
   try {
     await navigator.clipboard.writeText(textoDoFechamento());
-    avisar('Cartelas copiadas.', true);
+    avisar(`${milhares(melhorCartelas.length)} jogos copiados.`, true);
   } catch {
     avisar('O navegador não deixou copiar. Segure o dedo sobre as cartelas para selecionar.');
+  } finally {
+    botao.disabled = false;
+    botao.textContent = rotulo;
   }
 });
 

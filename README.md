@@ -246,10 +246,42 @@ jogos atendem cada sorteio e compara com a exigência pedida. Um fechamento que
 prometesse duas cartelas premiadas e entregasse uma passaria batido pela pergunta
 antiga. No pool de 25 são 3.268.760 sorteios conferidos um a um.
 
-O banco embutido guarda o caso padrão — garantir as 15 numa cartela. Com três
-eixos o espaço não caberia num arquivo, e nem deveria: nas demais exigências o
-motor constrói do zero, e a tela diz em qual dos dois casos você está em vez de
-fingir que sempre tem resposta pronta.
+#### Três caminhos, do mais barato ao mais caro
+
+O aplicativo não manda o motor buscar o que já se sabe. Para cada pedido ele
+tenta, nesta ordem:
+
+1. **O banco embutido** — o melhor fechamento já encontrado, pronto de fábrica.
+2. **A fórmula** — a construção por grupos, que sai em milissegundos.
+3. **O motor** — busca de verdade, quando os dois primeiros não alcançam.
+
+A diferença é grande. Em 25 dezenas com jogos de 22, o motor gastava seis
+segundos e 39 MB para chegar a 139 jogos; a fórmula dá **95** em menos de um
+milissegundo. Em 24 das 45 combinações a construção **é** o mínimo comprovado —
+não há o que melhorar. O motor só ganha de verdade onde `a ≥ 5`.
+
+Por isso, nos pools de 24 e 25 ele deixou de partir sozinho: o fechamento aparece
+pronto e um botão oferece a busca por um menor, para quem quiser gastar a bateria
+nisso.
+
+#### O banco guarda o que falta, não o que está
+
+Cada linha do banco lista as posições **ausentes** do jogo. Um jogo de 17 dezenas
+num pool de 23 é o complemento de 6 — guardar 6 números em vez de 17 corta o
+arquivo em 65%, e o banco inteiro em 69%.
+
+É a mesma troca de ponto de vista que dá os valores exatos da modalidade, agora
+aplicada ao armazenamento. E o ganho não é o arquivo: é o que ele permite. No
+mesmo espaço cabem **37 das 38 combinações construíveis** prontas de fábrica,
+contra as 28 de antes. Quanto mais vem pronto, menos o celular precisa calcular.
+
+A que fica de fora é `(25,17)`, com 81.556 jogos — quase 2 MiB, para descrever
+uma compra de oitenta e um mil reais. Ali a fórmula e o motor continuam
+disponíveis sob demanda.
+
+O banco cobre o caso padrão: garantir as 15 numa cartela. Nas demais exigências a
+fórmula ainda atende boa parte, e o motor cobre o resto — a tela diz em qual dos
+casos você está em vez de fingir que sempre tem resposta pronta.
 
 #### O motor financeiro, separado do combinatório
 
