@@ -168,7 +168,7 @@ try {
   //
   // Usa um fechamento cujo mínimo é problema em aberto, para que continuar
   // tenha mesmo o que melhorar. Vinte dezenas com jogos de 17: 240 jogos, piso
-  // conhecido 114, e ninguém no mundo sabe o mínimo — o motor não vai provar
+  // conhecido 160, e ninguém no mundo sabe o mínimo — o motor não vai provar
   // nada ali e segue rodando enquanto deixarem.
   await buscar({ pool: 20, jogo: 17 });
   await pagina.waitForTimeout(2500);

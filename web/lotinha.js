@@ -114,6 +114,34 @@ export function maximoPremiadas(pool, jogo, garantia = SORTEIO) {
 }
 
 /**
+ * Cota de Schönheim para cobrir todo subconjunto de `t` dentro de `v`, com `k`.
+ *
+ *     L(v, k, 1) = ⌈v / k⌉
+ *     L(v, k, t) = ⌈ (v / k) · L(v−1, k−1, t−1) ⌉
+ *
+ * O argumento: fixe uma dezena. Os jogos que a contêm precisam cobrir todos os
+ * `(t−1)`-subconjuntos das outras `v−1`, e cada jogo contribui com `k−1` delas.
+ *
+ * ## Por que ela importa tanto aqui
+ *
+ * Nas 15 combinações da Lotinha em que o mínimo verdadeiro é **conhecido**, esta
+ * cota acerta as 15 — exatamente, sem folga. A cota de contagem, que é a que
+ * esta tela mostrava, erra por 76% a 433% nas mesmas 15.
+ *
+ * O efeito não era só cosmético: a tela da Lotinha dizia "não dá com menos de
+ * 114" enquanto a tela de Buscar, que consulta o motor, dizia 160 para o mesmo
+ * problema. Duas telas discordando, e a que estava certa era a outra.
+ */
+function schonheim(v, k, t) {
+  if (t < 1 || k < 1 || t > k || k > v) return 0;
+  let valor = Math.ceil((v - t + 1) / (k - t + 1));
+  for (let i = 2; i <= t; i++) {
+    valor = Math.ceil(((v - t + i) * valor) / (k - t + i));
+  }
+  return valor;
+}
+
+/**
  * Quantos jogos de `k` dezenas fecham um pool de `P`, e quanto se sabe disso.
  *
  * Devolve `{ jogos, exato, piso }`:
@@ -122,16 +150,32 @@ export function maximoPremiadas(pool, jogo, garantia = SORTEIO) {
  * - `exato: false` — o mínimo verdadeiro é problema em aberto; `piso` é o menor
  *   valor que a matemática ainda não descartou, e `jogos` é `null`.
  *
- * O `piso` é a cota de contagem: são `C(P,15)` sorteios a atender, cada um
- * `premiadas` vezes, e cada jogo comprado atende [`sorteiosPorJogo`] deles.
+ * O `piso` é o mais forte entre dois argumentos independentes:
+ *
+ * - **contagem** — são `C(P,15)` sorteios a atender, cada um `premiadas` vezes,
+ *   e cada jogo comprado atende [`sorteiosPorJogo`] deles;
+ * - **[`schonheim`]** — vale só na garantia cheia, e é a que manda em toda a
+ *   modalidade: nas 15 combinações de mínimo conhecido ela acerta as 15, e a de
+ *   contagem erra por 76% a 433%.
  */
 export function minimo(pool, jogo, garantia = SORTEIO, premiadas = 1) {
   const a = pool - jogo;
   const b = pool - SORTEIO;
   const oferta = sorteiosPorJogo(pool, jogo, garantia);
-  const piso = oferta > 0
+  const porContagem = oferta > 0
     ? Math.ceil((premiadas * combinacoes(pool, SORTEIO)) / oferta)
     : Infinity;
+
+  // O piso é o mais forte entre dois argumentos independentes, exatamente como
+  // o motor faz — sem isto as duas telas do aplicativo diziam números
+  // diferentes para o mesmo problema.
+  //
+  // Schönheim só vale para cobertura completa: ela conta jogos que **contêm**
+  // o sorteio, e uma garantia parcial não exige isso. E não se multiplica por
+  // `premiadas`: nenhum teorema autoriza. Mas continua valendo inteira, porque
+  // atender cada sorteio `r` vezes implica atendê-lo ao menos uma.
+  const porSchonheim = garantia === SORTEIO ? schonheim(pool, jogo, SORTEIO) : 0;
+  const piso = Math.max(porContagem, porSchonheim);
 
   // Jogo do tamanho do pool: uma aposta só, e ela ou ganha ou perde inteira.
   // Não há um segundo jogo distinto para premiar junto.

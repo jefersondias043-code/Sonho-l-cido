@@ -51,11 +51,15 @@ let configuracaoDaBusca = null;
  *
  * O motor conhece a tabela mundial de coberturas, que vai até grupos de 8
  * números. A Lotinha trabalha com grupos de 15, muito fora dela — então ali o
- * motor não tem referência nenhuma, e o limite inferior que ele calcula é
- * fraco: a cota de contagem dá 6 onde o mínimo real, pelo teorema de Turán, é
- * 16. Sem isto a tela dizia "sem referência publicada" e deixava o usuário sem
- * saber se ainda havia o que procurar — a pergunta mais importante agora que a
- * busca não termina sozinha.
+ * motor não tem referência publicada nenhuma. Sem isto a tela dizia "sem
+ * referência publicada" e deixava o usuário sem saber se ainda havia o que
+ * procurar — a pergunta mais importante agora que a busca não termina sozinha.
+ *
+ * O que o motor tem é a cota de Schönheim, e ela é boa: nas 15 combinações
+ * desta modalidade em que o mínimo verdadeiro é conhecido, acerta as 15 na
+ * mosca. `lotinha.minimo()` usa a mesma cota, pelo mesmo motivo — antes disso
+ * as duas telas do aplicativo mostravam pisos diferentes para o mesmo
+ * problema, e a desta aqui era a mais fraca.
  *
  * Vem de `lotinha.minimo()`: `{ jogos, exato, piso }`.
  */
@@ -951,8 +955,8 @@ function lotPintarExplicacao() {
  * Como descrever a quantidade de jogos, dizendo de onde ela veio.
  *
  * Chamar o piso de "custo" seria prometer um preço que não existe: em 25
- * dezenas com jogos de 20, o piso conhecido é 211 e o melhor fechamento que o
- * motor encontra passa de mil. O número continua útil — é o que a matemática
+ * dezenas com jogos de 20, o piso conhecido é 317 e o melhor fechamento que o
+ * aplicativo entrega tem 2.079. O número continua útil — é o que a matemática
  * garante que ninguém vai bater — mas precisa vir rotulado.
  */
 function textoDaQuantidade(quantidade, ehPiso) {

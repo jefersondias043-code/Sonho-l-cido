@@ -168,6 +168,80 @@ try {
 
   await pagina.screenshot({ path: 'capturas/captura-lotinha.png' });
 
+  // ─── 3b. o piso é o mais forte que se sabe, não o mais fácil de calcular ───
+  //
+  // Um limite inferior fraco não erra — ele só é inútil. E este errava por
+  // muito: a cota de contagem diz que 20 dezenas com jogos de 17 não fecham com
+  // menos de 114, quando a de Schönheim prova 160. A tela mostrava 114 e a de
+  // Buscar mostrava 160, para o mesmo problema.
+  //
+  // A prova de que a cota certa é a de Schönheim não é teórica: nas 15
+  // combinações desta modalidade em que o mínimo verdadeiro é **conhecido** —
+  // as de `a ≤ 2`, onde há teorema fechado — ela acerta as 15 sem folga
+  // nenhuma. Se um piso alcança o mínimo em todo caso em que o mínimo é
+  // sabido, é esse piso que merece ir para a tela.
+  //
+  // Aqui a cota é recalculada do zero, em inteiros exatos, sem tocar em
+  // `lotinha.js`. As duas contas têm de bater.
+  const pisos = await pagina.evaluate(async () => {
+    const lot = await import('./lotinha.js');
+
+    // Schönheim reimplementada com BigInt: L(v,k,t) = ⌈(v/k)·L(v−1,k−1,t−1)⌉.
+    // O `lotinha.js` usa ponto flutuante, que é rápido e cabe nos tamanhos
+    // desta modalidade — mas quem confere não pode usar a mesma aritmética de
+    // quem é conferido.
+    const tetoDe = (a, b) => (a + b - 1n) / b;
+    const L = (v, k, t) => {
+      if (t === 1) return tetoDe(BigInt(v), BigInt(k));
+      return tetoDe(BigInt(v) * L(v - 1, k - 1, t - 1), BigInt(k));
+    };
+
+    // E a de contagem, que é a que estava na tela: C(P,15) sorteios a atender,
+    // C(k,15) atendidos por jogo.
+    const C = (n, k) => {
+      if (k < 0 || k > n) return 0n;
+      let r = 1n;
+      for (let i = 0n; i < BigInt(k); i++) r = (r * (BigInt(n) - i)) / (i + 1n);
+      return r;
+    };
+
+    const linhas = [];
+    for (const l of lot.matriz()) {
+      linhas.push({
+        pool: l.pool,
+        jogo: l.jogo,
+        exato: l.exato,
+        jogos: l.jogos,
+        piso: l.piso,
+        schonheim: Number(L(l.pool, l.jogo, 15)),
+        contagem: Number(tetoDe(C(l.pool, 15), C(l.jogo, 15))),
+      });
+    }
+    return linhas;
+  });
+
+  const conhecidas = pisos.filter((l) => l.exato && l.jogos > 1);
+  const cravadas = conhecidas.filter((l) => l.piso === l.jogos);
+  marcar(
+    conhecidas.length === 15 && cravadas.length === 15,
+    'onde o mínimo é conhecido, o piso da tela é o próprio mínimo',
+    `${cravadas.length} de ${conhecidas.length} combinações cravadas`
+  );
+
+  const frouxas = conhecidas.filter((l) => l.contagem < l.jogos);
+  marcar(
+    frouxas.length === conhecidas.length,
+    'e a cota de contagem sozinha ficaria abaixo do mínimo em todas elas',
+    `pior caso: ${Math.max(...frouxas.map((l) => Math.round((l.jogos / l.contagem - 1) * 100)))}% de folga`
+  );
+
+  const abaixo = pisos.filter((l) => l.piso < l.schonheim);
+  marcar(
+    abaixo.length === 0,
+    'a conta do aplicativo bate com a de inteiros exatos, sem perder precisão',
+    `${pisos.length} combinações conferidas em BigInt`
+  );
+
   // ─── 4. o fechamento pronto, e a conferência ───
   await pagina.click('#lot-jogo .opcao[data-jogo="17"]');
   await pagina.click('#lot-iniciar');

@@ -17,7 +17,7 @@
  *
  * - **18 dezenas, jogos de 17** — 16 jogos, e 16 é o mínimo comprovado. Serve
  *   para provar que o motor **não para** nem quando não há mais o que achar.
- * - **20 dezenas, jogos de 17** — 240 jogos, mínimo desconhecido, piso 114.
+ * - **20 dezenas, jogos de 17** — 240 jogos, mínimo desconhecido, piso 160.
  *   Serve para o relógio, a pausa, o encerramento e a conferência de cobertura.
  *
  *   ./construir-web.sh && node web/testar.mjs
@@ -363,7 +363,7 @@ try {
 
   const emAberto = await texto('#referencia-busca');
   marcar(
-    /problema em aberto/.test(emAberto) && /114/.test(emAberto),
+    /problema em aberto/.test(emAberto) && /160/.test(emAberto),
     'no caso em aberto a tela mostra o piso conhecido, não um mínimo inventado',
     emAberto.replace(/\s+/g, ' ').slice(0, 78)
   );
