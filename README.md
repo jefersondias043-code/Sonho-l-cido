@@ -74,6 +74,9 @@ O binário sai em `target/release/sonho-lucido`.
 sonho-lucido criar --universo 60 --pool 16 --cartela 4 --cobrir 2 --tempo 5s
 ```
 
+`--garantir ALVO:INTERSECAO` troca a cobertura completa por uma garantia parcial,
+e `--premiadas R` exige que `R` cartelas atendam cada resultado em vez de uma.
+
 ```
   universo 60 | pool 16 | cartela 4
   regra: cobrir todo subconjunto de 2 elementos do pool
@@ -142,9 +145,24 @@ fora um trabalho melhor que já estava disponível seria o contrário dele.
 
 ### A ferramenta Lotinha
 
-Uma aba dedicada à modalidade paralela: escolhem-se de **17 a 23 dezenas** entre
-25, o resultado da Lotofácil é a referência, e ganha-se quando as 15 sorteadas
-caem **todas** dentro do conjunto escolhido.
+O aplicativo inteiro. Escolhem-se de **17 a 25 dezenas** entre 25, o resultado
+da Lotofácil é a referência, e ganha-se quando as 15 sorteadas caem **todas**
+dentro do conjunto escolhido.
+
+As bancas param em 23, e faz sentido para elas: acima disso o multiplicador cai
+tanto que a aposta perde a graça. A ferramenta vai até 25 porque a matemática
+vai — escolher as 25 é escolher o universo inteiro, e aí o sorteio cai dentro do
+pool com **certeza**. O fechamento deixa de ser aposta condicional e vira
+garantia.
+
+São três eixos, e não um:
+
+| eixo | o que muda |
+|---|---|
+| **quantas dezenas** (17 a 25) | a chance de o sorteio cair no seu conjunto |
+| **tamanho do jogo** (17 ao pool) | quanto paga, e quantos jogos fecham |
+| **quantos acertos garantir** (15 a 11) | 15 é o que a Lotinha paga; menos é Lotofácil |
+| **quantas cartelas premiadas** (1 ao teto) | quantas das suas cartelas precisam ganhar |
 
 #### A conta que quase todo mundo erra
 
@@ -169,13 +187,49 @@ verdade é 6, a divisão diz 3.
 
 #### O que é sabido e o que está em aberto
 
-Das 28 combinações da modalidade: **7 são triviais** (jogo = pool, aposta única),
-**11 têm mínimo exato** — `a = 1` dá sempre 16 jogos, qualquer que seja o pool, e
-`a = 2` sai do teorema de Turán — e **10 são problema em aberto na matemática**.
+Das 45 combinações de dezenas e tamanho de jogo: **9 são triviais** (jogo = pool,
+aposta única), **15 têm mínimo exato** — `a = 1` dá sempre 16 jogos, qualquer que
+seja o pool, e `a = 2` sai do teorema de Turán — e **21 são problema em aberto na
+matemática**.
 
-Nessas 10 é que o motor persistente trabalha de verdade. O banco embutido traz o
+Nessas 21 é que o motor persistente trabalha de verdade. O banco embutido traz o
 melhor fechamento encontrado até agora, com o piso conhecido ao lado, e o usuário
 pode deixar o motor procurando um menor.
+
+#### Garantir mais de uma cartela premiada
+
+Exigir que **duas ou três** cartelas ganhem, e não apenas uma. Custa mais — e às
+vezes muito menos do que parece:
+
+| cartelas premiadas | jogos, em 18 dezenas com jogos de 17 |
+|---|---|
+| 1 | **16** |
+| 2 | **17** |
+| 3 | **18** |
+
+A segunda cartela premiada custa **um** jogo, não dezesseis. A fórmula fechada é
+`15 + r` sempre que o jogo tem uma dezena a menos que o pool, e os três valores
+são mínimos comprovados.
+
+Há um teto: só `C(P−15, P−k)` jogos distintos podem conter um mesmo sorteio.
+Naquele caso são 3, porque cada jogo é o pool menos uma dezena e o sorteio deixa
+3 de fora — pedir a quarta obrigaria a comprar jogo repetido, e a tela avisa
+antes de deixar.
+
+No núcleo isso é a regra de cobertura contando até `r` em vez de até 1. O piso
+não pode simplesmente multiplicar por `r`: Schönheim e a tabela publicada falam
+de cobertura simples e não têm generalização automática. Mas continuam valendo
+**inteiras**, porque toda solução que atende cada alvo `r` vezes o atende ao
+menos uma. O piso final é o mais forte entre esse argumento e a cota de contagem,
+essa sim multiplicada.
+
+#### Garantir menos de 15 acertos
+
+O motor sempre soube resolver garantia parcial; a tela passou a deixar pedir, de
+15 a 11. E o painel financeiro precisou ficar honesto sobre uma coisa: **fechar
+para menos de 15 não garante prêmio nenhum na Lotinha**, que paga o jogo com as
+15 e só ele. A escolha faz sentido para a Lotofácil, que premia a partir de 11, e
+a tela diz exatamente isso em vez de calcular um prêmio garantido inexistente.
 
 #### Três opiniões independentes sobre a cobertura
 
@@ -186,6 +240,16 @@ poderia ter. Contra isso há três verificações que não compartilham código:
 2. o aplicativo reconfere na tela, sem consultar o motor que a produziu;
 3. `web/testar-lotinha.mjs` confere de novo, com um algoritmo ingênuo escrito de
    propósito para não repetir a ideia dos outros dois.
+
+A conferência do aplicativo não pergunta "alguém cobre?" — ela conta quantos
+jogos atendem cada sorteio e compara com a exigência pedida. Um fechamento que
+prometesse duas cartelas premiadas e entregasse uma passaria batido pela pergunta
+antiga. No pool de 25 são 3.268.760 sorteios conferidos um a um.
+
+O banco embutido guarda o caso padrão — garantir as 15 numa cartela. Com três
+eixos o espaço não caberia num arquivo, e nem deveria: nas demais exigências o
+motor constrói do zero, e a tela diz em qual dos dois casos você está em vez de
+fingir que sempre tem resposta pronta.
 
 #### O motor financeiro, separado do combinatório
 
@@ -498,7 +562,7 @@ devolver o terminal; `--sem-parar-no-otimo` inverte.
 ## Desenvolvimento
 
 ```bash
-cargo test --workspace                          # 193 testes
+cargo test --workspace                          # 199 testes
 cargo clippy --workspace --all-targets -- -D warnings
 cargo run --release --example aferir            # aferição contra a tabela mundial
 
