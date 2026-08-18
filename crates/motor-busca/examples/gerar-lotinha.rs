@@ -83,7 +83,7 @@ fn main() {
         for jogo in 17..=pool {
             let a = pool - jogo;
             let b = pool - SORTEIO;
-            let piso = piso_por_contagem(pool, jogo);
+            let piso = melhor_piso(pool, jogo);
 
             // A construção por grupos é ótima como partida, mas cresce
             // rápido: em `(25,17)` ela tem 1,08 milhão de jogos. Acima do teto
@@ -217,10 +217,6 @@ fn main() {
     println!("\nescrito {DESTINO} — {:.1} KiB", json.len() as f64 / 1024.0);
 }
 
-/// Piso por contagem: cada jogo cobre `C(k,15)` dos `C(P,15)` sorteios.
-///
-/// É um piso válido e frouxo. Serve como travessa de segurança — nada gerado
-/// aqui pode ficar abaixo dele — e como referência do quanto ainda há a ganhar.
 /// Lê o banco já publicado, para que regerar nunca produza um retrocesso.
 ///
 /// Formato: `{"pool,jogo": [[posições 1..P], ...]}`. A leitura é deliberadamente
@@ -320,8 +316,27 @@ fn tamanho_da_construcao(pool: usize, a: usize, b: usize) -> usize {
     }
 }
 
-fn piso_por_contagem(pool: usize, jogo: usize) -> usize {
-    binomial(pool, SORTEIO).div_ceil(binomial(jogo, SORTEIO)) as usize
+/// O melhor piso conhecido para `(pool, jogo)` nesta modalidade.
+///
+/// Serve para duas coisas: como travessa de segurança — nada gerado aqui pode
+/// ficar abaixo dele, e um fechamento que fique é erro, não recorde — e como
+/// referência do quanto ainda há a ganhar.
+///
+/// São dois argumentos independentes, e vale o mais forte:
+///
+/// - **contagem** — cada jogo cobre `C(k,15)` dos `C(P,15)` sorteios;
+/// - **Schönheim** — `L(v,k,t) = ⌈(v/k)·L(v−1,k−1,t−1)⌉`, a mesma que o motor
+///   usa.
+///
+/// Usar só a contagem, como antes, deixava a travessa baixa demais para servir
+/// de travessa: nas 15 combinações desta modalidade em que o mínimo verdadeiro
+/// é conhecido, Schönheim acerta as 15 e a contagem fica de 76% a 433% abaixo.
+/// Em `(23,17)` são 3.996 contra 3.606 — quase quatrocentos jogos de folga em
+/// que um defeito de cobertura passaria sem ser notado.
+fn melhor_piso(pool: usize, jogo: usize) -> usize {
+    let por_contagem = binomial(pool, SORTEIO).div_ceil(binomial(jogo, SORTEIO)) as usize;
+    let por_schonheim = motor_core::limites::schonheim(pool, jogo, SORTEIO) as usize;
+    por_contagem.max(por_schonheim)
 }
 
 fn binomial(n: usize, k: usize) -> u64 {
