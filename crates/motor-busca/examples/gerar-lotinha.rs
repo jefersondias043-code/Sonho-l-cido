@@ -2,15 +2,14 @@
 //!
 //! A modalidade: escolhem-se de 17 a 25 dezenas entre 25, o resultado da
 //! Lotofácil é a referência, e ganha-se quando as 15 sorteadas caem **todas**
-//! dentro do conjunto escolhido. São 28 combinações de `(pool, tamanho do jogo)`
+//! dentro do conjunto escolhido. São 45 combinações de `(pool, tamanho do jogo)`
 //! com `17 ≤ jogo ≤ pool ≤ 25`.
 //!
-//! Cinco delas não entram no banco, e é decisão consciente: a construção de
-//! partida para `(24,17)`, `(24,18)`, `(25,17)`, `(25,18)` e `(25,19)` tem de
-//! 134 mil a 1,08 **milhão** de jogos. Nenhuma cabe num aplicativo de celular,
-//! e nenhuma descreve uma compra que alguém faria. Ali o aplicativo parte do
-//! guloso do próprio motor e mostra o piso conhecido, em vez de carregar
-//! dezenas de megabytes que ninguém usaria.
+//! Uma delas não entra no banco, e é decisão consciente: `(25,17)` termina com
+//! 81.556 jogos, que ficariam em quase 2 MiB e descreveriam uma compra de
+//! oitenta e um mil reais. Não é fechamento que alguém vá levar. Ali o
+//! aplicativo mostra o piso conhecido e deixa o motor construir sob demanda,
+//! em vez de carregar megabytes que ninguém usaria.
 //!
 //! ## A transformação que resolve quase tudo
 //!
@@ -306,10 +305,10 @@ fn carregar_banco_anterior() -> BTreeMap<String, Vec<Cartela>> {
 
 /// Acima disto o fechamento não entra no banco embutido.
 ///
-/// Guardando complementos, quarenta mil jogos cabem em cerca de 134 KiB
-/// comprimidos — mais cobertura que o banco antigo tinha guardando os jogos
-/// inteiros, e ainda assim uma fração do WebAssembly. Com este teto, 37 das 38
-/// combinações construíveis ficam prontas de fábrica.
+/// Guardando complementos, o banco inteiro dá 1,6 MiB de JSON que viajam em
+/// 316 KiB comprimidos — menos que o WebAssembly do motor, e o navegador só
+/// baixa uma vez. Com este teto, 44 das 45 combinações da modalidade ficam
+/// prontas de fábrica.
 ///
 /// A que sobra é `(25,17)`, com 81.556 jogos. Ela ficaria em quase 2 MiB, e
 /// descreve uma compra de oitenta e um mil reais — não é fechamento que alguém

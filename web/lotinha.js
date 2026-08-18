@@ -386,7 +386,7 @@ export async function carregarBanco() {
  * armazenamento: guardar 6 números em vez de 17 corta o arquivo em 65%.
  *
  * O ganho não é o arquivo em si, e sim o que ele permite: com o mesmo espaço
- * cabem 37 das 38 combinações construíveis prontas de fábrica, contra as 28 de
+ * cabem 44 das 45 combinações da modalidade prontas de fábrica, contra as 28 de
  * antes. Quanto mais vem pronto, menos o celular precisa calcular.
  */
 export async function fechamentoPara(pool, jogo, dezenas) {

@@ -272,8 +272,8 @@ arquivo em 65%, e o banco inteiro em 69%.
 
 É a mesma troca de ponto de vista que dá os valores exatos da modalidade, agora
 aplicada ao armazenamento. E o ganho não é o arquivo: é o que ele permite. No
-mesmo espaço cabem **37 das 38 combinações construíveis** prontas de fábrica,
-contra as 28 de antes. Quanto mais vem pronto, menos o celular precisa calcular.
+mesmo espaço cabem **44 das 45 combinações** prontas de fábrica, contra as 28 de
+antes. Quanto mais vem pronto, menos o celular precisa calcular.
 
 A que fica de fora é `(25,17)`, com 81.556 jogos — quase 2 MiB, para descrever
 uma compra de oitenta e um mil reais. Ali a fórmula e o motor continuam

@@ -635,7 +635,7 @@ function pintarCartelas() {
  * A modalidade inteira, numa tela só.
  *
  * Escolhem-se de 17 a 23 dezenas entre 25; ganha-se quando as 15 sorteadas caem
- * todas dentro do conjunto escolhido. São 28 combinações de (pool, tamanho do
+ * todas dentro do conjunto escolhido. São 45 combinações de (pool, tamanho do
  * jogo), e o fechamento de cada uma já vem pronto no aplicativo — conferido
  * sorteio a sorteio antes de ser gravado.
  *

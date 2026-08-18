@@ -244,8 +244,8 @@ try {
 
   // ─── 3c. a tela diz a que distância do piso ela está ───
   //
-  // "Não dá com menos de 317" é verdade e é inútil sozinho: o usuário recebe
-  // 2.079 jogos e não tem como saber se o aplicativo falhou ou se o problema é
+  // "Não dá com menos de 11.967" é verdade e é inútil sozinho: o usuário recebe
+  // 32.345 jogos e não tem como saber se o aplicativo falhou ou se o problema é
   // assim mesmo. A tela passa a dizer os dois números e de onde o maior vem —
   // porque a origem é o que muda a decisão de deixar o motor rodando.
   const distancia = async (pool, jogo) => {
@@ -259,26 +259,20 @@ try {
 
   const doBanco = await distancia(23, 17);
   marcar(
-    /11\.546/.test(doBanco.explicacao) &&
+    /11\.381/.test(doBanco.explicacao) &&
       /3\.996/.test(doBanco.explicacao) &&
       /buscar mais rende pouco/.test(doBanco.explicacao),
     'num caso já buscado, a tela mostra entrega, piso e que buscar mais rende pouco',
     doBanco.explicacao.slice(-76).trim()
   );
 
-  const construida = await distancia(25, 20);
+  // A única combinação da modalidade sem resposta pronta: 25 dezenas com jogos
+  // de 17. A construção por grupos tem 1,08 milhão de jogos e o motor chegou a
+  // 81 mil — grande demais para viajar dentro do aplicativo. Aqui a tela não
+  // pode inventar um tamanho, e não inventa.
+  const semPronto = await distancia(25, 17);
   marcar(
-    /2\.079/.test(construida.explicacao) &&
-      /317/.test(construida.explicacao) &&
-      /6,6× o piso/.test(construida.explicacao) &&
-      /deixar o motor rodando corta/.test(construida.explicacao),
-    'num caso que sai de fórmula, mostra a folga e diz que buscar compensa',
-    construida.explicacao.slice(-76).trim()
-  );
-
-  const semPronto = await distancia(24, 18);
-  marcar(
-    /só aparece depois/.test(semPronto.explicacao) && /2\.094/.test(semPronto.explicacao),
+    /só aparece depois/.test(semPronto.explicacao) && /27\.124/.test(semPronto.explicacao),
     'e onde nada está pronto, não inventa um tamanho que ainda não existe',
     semPronto.explicacao.slice(-76).trim()
   );
@@ -286,6 +280,23 @@ try {
     /o piso conhecido/.test(semPronto.economia),
     'aí o custo vem rotulado como piso, em vez de prometer um preço',
     semPronto.economia.slice(0, 70).trim()
+  );
+
+  // E o placar geral: quantas das 45 combinações já saem prontas do aplicativo,
+  // sem o motor precisar ser acionado. É o que o pré-processamento comprou.
+  const prontidao = await pagina.evaluate(async () => {
+    const lot = await import('./lotinha.js');
+    await lot.carregarBanco();
+    let prontas = 0;
+    for (const l of lot.matriz()) {
+      if (lot.previsao(l.pool, l.jogo).quantidade !== null) prontas++;
+    }
+    return prontas;
+  });
+  marcar(
+    prontidao === 44,
+    '44 das 45 combinações têm o tamanho conhecido antes do toque',
+    `${prontidao} de 45`
   );
 
   await pagina.click('#lot-pool .opcao[data-pool="18"]');
@@ -490,13 +501,41 @@ try {
     contagem25.replace(/\s+/g, ' ').slice(0, 76)
   );
 
+  // ─── 10b. o banco vem no formato enxuto ───
+  //
+  // O banco guarda o **complemento** de cada jogo: as dezenas que faltam, não
+  // as que estão. Num pool de 23 com jogos de 17 são 6 números em vez de 17.
+  // Não é economia de arquivo por economia: é o que permite ter 44 das 45
+  // combinações prontas de fábrica em vez de 28.
+  const banco = await pagina.evaluate(async () => {
+    const r = await fetch('./lotinha.json');
+    const b = await r.json();
+    const chaves = Object.keys(b.fechamentos ?? {});
+    const exemplo = chaves.find((c) => c.startsWith('23,17')) ?? chaves.at(-1);
+    return {
+      formato: b.formato,
+      entradas: chaves.length,
+      exemplo,
+      tamanhoDaLinha: exemplo ? b.fechamentos[exemplo][0].length : null,
+    };
+  });
+  marcar(
+    banco.formato === 2,
+    'o banco declara o formato de complementos',
+    `formato ${banco.formato}, ${banco.entradas} combinações prontas`
+  );
+  marcar(
+    banco.exemplo !== '23,17' || banco.tamanhoDaLinha === 6,
+    'e guarda o que falta ao jogo, não o jogo',
+    `${banco.exemplo}: ${banco.tamanhoDaLinha} números por linha`
+  );
+
   // ─── 11. a fórmula: caminho rápido, e correto ───
   //
   // Antes desta mudança, 25 dezenas com jogos de 22 ligavam um motor de 39 MB,
-  // rodavam um guloso de seis segundos e chegavam a 139 jogos. A construção por
-  // grupos dá 95 — melhor — e leva menos de um milissegundo. O motor deixou de
-  // partir sozinho nos pools pesados: ele passou a ser um segundo passo, para
-  // quem quiser tentar reduzir mais.
+  // rodavam um guloso de seis segundos e chegavam a 139 jogos. Hoje saem 73 do
+  // banco, na hora. O motor deixou de partir sozinho nos pools pesados: ele
+  // passou a ser um segundo passo, para quem quiser tentar reduzir mais.
   await pagina.click('#lot-pool .opcao[data-pool="25"]');
   await pagina.click('#lot-jogo .opcao[data-jogo="22"]');
   const antesDaFormula = Date.now();
@@ -512,9 +551,24 @@ try {
   const daFormula = (await pagina.locator('#lot-conferencia').textContent()).trim();
 
   marcar(
-    /usando 95 jogos/.test(daFormula),
-    '25 dezenas com jogos de 22 saem com 95 jogos, não com os 139 do guloso',
+    /usando 73 jogos/.test(daFormula),
+    '25 dezenas com jogos de 22 saem com 73 jogos, não com os 139 do guloso',
     daFormula.replace(/\s+/g, ' ').slice(0, 76)
+  );
+
+  // A fórmula continua viva e continua certa, mesmo tendo deixado de ser o
+  // caminho de entrega: ela é o que sobra se o banco não puder ser lido, e é
+  // dela que o gerador parte. Chamada direto, dá os 95 de sempre — pior que os
+  // 73 que o motor achou, e ainda assim muito melhor que os 139 do guloso.
+  const semBanco = await pagina.evaluate(() =>
+    import('./lotinha.js').then((lot) =>
+      lot.construir(25, 22, Array.from({ length: 25 }, (_, i) => i + 1)).length
+    )
+  );
+  marcar(
+    semBanco === 95,
+    'e a fórmula, que é o que sobra sem o banco, continua dando os 95 dela',
+    `${semBanco} jogos por fórmula`
   );
 
   // E o número que a tela anunciou **antes** do toque tem de ser este. Uma
@@ -526,9 +580,9 @@ try {
     return lot.previsao(25, 22).quantidade;
   });
   marcar(
-    previsto === 95,
+    previsto === 73,
     'e o número anunciado antes do toque é o mesmo que sai depois dele',
-    `previsto ${previsto}, entregue 95`
+    `previsto ${previsto}, entregue 73`
   );
   marcar(
     tempoDaFormula < 4000,
