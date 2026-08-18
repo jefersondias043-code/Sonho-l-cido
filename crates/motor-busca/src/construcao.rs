@@ -16,6 +16,7 @@ use motor_core::combinatoria::subconjunto_do_indice;
 use motor_core::solucao::Solucao;
 use rand::Rng;
 
+use crate::controle::Controle;
 use crate::oficina::Oficina;
 
 /// Quantos candidatos avaliar em cada posição da cartela.
@@ -185,6 +186,20 @@ pub fn reparar(
 /// partida da busca, não a resposta — normalmente fica bem acima do ótimo, e
 /// costuma conter cartelas que ficaram supérfluas por causa das que vieram
 /// depois. Uma [`podar`] em seguida recolhe essas sobras.
+///
+/// ## Por que aceita um controle de parada
+///
+/// Esta é a única construção sem teto, e nos problemas maiores ela demora: um
+/// pool de 25 com jogos de 20 leva onze segundos em código nativo, o dobro em
+/// WebAssembly. Medido: durante esse tempo o worker está dentro de uma única
+/// chamada síncrona e não lê mensagem nenhuma — quem tocasse em Pausar ou
+/// Encerrar não veria efeito até ela terminar.
+///
+/// Checar o controle a cada cartela custa uma leitura atômica relaxada, e
+/// devolve à pessoa o botão que a tela diz que ela tem. Cancelar aqui deixa a
+/// solução incompleta, o que é um estado legítimo: `consolidar_inicio` só grava
+/// recorde do que for viável, então uma construção interrompida não vira
+/// resultado.
 pub fn construir_do_zero(
     motor: &MotorCobertura,
     solucao: &mut Solucao,
@@ -192,9 +207,20 @@ pub fn construir_do_zero(
     max_candidatos: usize,
     rng: &mut impl Rng,
     oficina: &mut Oficina,
+    parar: Option<&Controle>,
 ) {
     solucao.reiniciar();
-    reparar(motor, solucao, usize::MAX, ruido, max_candidatos, rng, oficina);
+    while !solucao.cobertura_total() {
+        if parar.is_some_and(|c| c.foi_solicitada_parada()) {
+            return;
+        }
+        let Some(cartela) =
+            cartela_para_alvo_descoberto(motor, solucao, ruido, max_candidatos, rng, oficina)
+        else {
+            return;
+        };
+        solucao.adicionar(motor, cartela, &mut oficina.rascunho);
+    }
 }
 
 /// Remove toda cartela cuja saída não descobre nenhum alvo.
@@ -255,7 +281,7 @@ mod testes {
             let (motor, mut oficina, mut rng) = ambiente(p, k, j, t);
             let mut solucao = Solucao::vazia(&motor);
 
-            construir_do_zero(&motor, &mut solucao, 0.3, usize::MAX, &mut rng, &mut oficina);
+            construir_do_zero(&motor, &mut solucao, 0.3, usize::MAX, &mut rng, &mut oficina, None);
 
             assert!(
                 solucao.cobertura_total(),
@@ -307,7 +333,7 @@ mod testes {
         // produzir soluções competitivas, não degeneradas.
         let (motor, mut oficina, mut rng) = ambiente(13, 4, 2, 2);
         let mut guloso = Solucao::vazia(&motor);
-        construir_do_zero(&motor, &mut guloso, 0.0, usize::MAX, &mut rng, &mut oficina);
+        construir_do_zero(&motor, &mut guloso, 0.0, usize::MAX, &mut rng, &mut oficina, None);
 
         assert!(guloso.cobertura_total());
         // C(13,4,2) = 13; um guloso razoável não deveria passar do dobro disso.
@@ -322,7 +348,7 @@ mod testes {
     fn podar_remove_duplicatas_sem_descobrir_nada() {
         let (motor, mut oficina, mut rng) = ambiente(9, 3, 2, 2);
         let mut solucao = Solucao::vazia(&motor);
-        construir_do_zero(&motor, &mut solucao, 0.2, usize::MAX, &mut rng, &mut oficina);
+        construir_do_zero(&motor, &mut solucao, 0.2, usize::MAX, &mut rng, &mut oficina, None);
 
         let quantidade_original = solucao.quantidade();
         // Duplica tudo: metade passa a ser pura redundância.
@@ -359,7 +385,7 @@ mod testes {
             let (motor, mut oficina, _) = ambiente(16, 4, 2, 2);
             let mut rng = Pcg64Mcg::seed_from_u64(semente);
             let mut solucao = Solucao::vazia(&motor);
-            construir_do_zero(&motor, &mut solucao, 0.3, usize::MAX, &mut rng, &mut oficina);
+            construir_do_zero(&motor, &mut solucao, 0.3, usize::MAX, &mut rng, &mut oficina, None);
 
             if podar(&motor, &mut solucao, &mut oficina) > 0 {
                 encontrou_sobra = true;
@@ -398,7 +424,7 @@ mod testes {
             let mut oficina = Oficina::nova();
             let mut rng = Pcg64Mcg::seed_from_u64(semente);
             let mut solucao = Solucao::vazia(&motor);
-            construir_do_zero(&motor, &mut solucao, 0.4, usize::MAX, &mut rng, &mut oficina);
+            construir_do_zero(&motor, &mut solucao, 0.4, usize::MAX, &mut rng, &mut oficina, None);
             assinaturas.insert(solucao.assinatura());
         }
 

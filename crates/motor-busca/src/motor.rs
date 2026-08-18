@@ -58,15 +58,20 @@ use crate::operadores::{destruir, Operador};
 
 /// A cada quantas iterações o relógio é consultado.
 ///
-/// Precisa ser pequeno. O custo de uma iteração varia por ordens de grandeza
-/// entre configurações — um covering design pequeno faz centenas de milhares
-/// por segundo, uma garantia parcial faz algumas centenas. Com um passo grande,
-/// a mesma constante que é imperceptível no primeiro caso faz o segundo estourar
-/// o limite de tempo em muitos segundos.
+/// Quantas iterações no máximo entre duas leituras do relógio.
 ///
-/// Ler `Instant::now` custa dezenas de nanossegundos; a cada 16 iterações isso
-/// é ruído mesmo no caso mais rápido, e mantém a parada pontual no mais lento.
-const ITERACOES_ENTRE_LEITURAS_DO_RELOGIO: u64 = 16;
+/// O passo é **adaptado ao custo medido**, e este é apenas o teto. O motivo
+/// está numa medição: um pool de 25 com jogos de 20 faz meia iteração por
+/// segundo — cada uma varre 3,2 milhões de alvos. Com um passo fixo de 16, o
+/// relógio só era consultado a cada 32 segundos, e um lote pedido para durar
+/// 220 ms durava minutos. No navegador isso aparecia como aplicativo travado:
+/// tela parada em zero iterações, Pausar e Encerrar sem efeito.
+///
+/// Ler `Instant::now` custa dezenas de nanossegundos. Adaptando o passo à
+/// velocidade observada, a leitura fica rara onde as iterações são baratas e
+/// vira uma por iteração onde são caras — que é exatamente onde ela precisa
+/// acontecer.
+const MAXIMO_ENTRE_LEITURAS_DO_RELOGIO: u64 = 1024;
 
 /// A cada quantas iterações aceitas uma solução é oferecida ao arquivo.
 ///
@@ -170,6 +175,14 @@ pub struct MotorBusca {
     /// desapareceria sem explicação.
     cartelas_trazidas: usize,
 
+    /// O sinal de parada da execução em curso, quando há uma.
+    ///
+    /// Existe porque as construções sem teto — a partida e a diversificação —
+    /// podem levar dezenas de segundos num pool grande, e durante elas o
+    /// `executar` não chega a reavaliar nada. Sem esta alça, quem tocasse em
+    /// Pausar ou Encerrar esperaria a construção inteira terminar.
+    parada_em_curso: Option<Controle>,
+
     estatisticas: Estatisticas,
     duracao_acumulada: Duration,
     iteracoes_sem_recorde: u64,
@@ -232,6 +245,7 @@ impl MotorBusca {
             ),
             origem_do_inicio: String::new(),
             cartelas_trazidas: 0,
+            parada_em_curso: None,
             estatisticas: Estatisticas::default(),
             duracao_acumulada: Duration::ZERO,
             iteracoes_sem_recorde: 0,
@@ -357,6 +371,7 @@ impl MotorBusca {
             considerar(self, semente.origem, &mut vencedor);
         }
 
+        let parada = self.parada_em_curso.clone();
         construir_do_zero(
             &self.cobertura,
             &mut self.atual,
@@ -364,6 +379,7 @@ impl MotorBusca {
             self.max_candidatos,
             &mut self.rng,
             &mut self.oficina,
+            parada.as_ref(),
         );
         considerar(self, "construção gulosa".to_string(), &mut vencedor);
 
@@ -412,7 +428,21 @@ impl MotorBusca {
         observador: &mut dyn Observador,
     ) -> MotivoEncerramento {
         let inicio = Instant::now();
+        // A alça fica guardada durante toda a execução: é ela que permite às
+        // construções sem teto — a partida logo abaixo e a diversificação —
+        // largarem o trabalho quando alguém pede parada.
+        self.parada_em_curso = Some(controle.clone());
         self.garantir_inicio(observador);
+
+        let iteracoes_no_inicio = self.estatisticas.iteracoes;
+        // Primeira leitura já na primeira volta: sem uma medição, não há como
+        // saber se as iterações desta configuração custam microssegundos ou
+        // segundos.
+        let mut proxima_leitura = iteracoes_no_inicio;
+        let mut passo: u64 = 1;
+        let mut ultima_leitura_em_it = iteracoes_no_inicio;
+        let mut ultima_leitura_em_tempo = Duration::ZERO;
+        let mut pior_iteracao = Duration::ZERO;
 
         let motivo = loop {
             if controle.foi_solicitada_parada() {
@@ -427,16 +457,55 @@ impl MotorBusca {
                 }
             }
             if let Some(limite) = condicoes.max_duracao {
-                if self.estatisticas.iteracoes % ITERACOES_ENTRE_LEITURAS_DO_RELOGIO == 0
-                    && inicio.elapsed() >= limite
-                {
-                    break MotivoEncerramento::LimiteDeTempo;
+                if self.estatisticas.iteracoes >= proxima_leitura {
+                    let decorrido = inicio.elapsed();
+                    if decorrido >= limite {
+                        break MotivoEncerramento::LimiteDeTempo;
+                    }
+
+                    // Quantas iterações cabem no tempo que resta, na velocidade
+                    // observada — **e nunca mais que o dobro do passo anterior**.
+                    //
+                    // O teto de crescimento não é zelo: sem ele esta conta erra
+                    // feio, e foi medido. Num pool de 25 com jogos de 20 a
+                    // primeira iteração levou 1,3 ms e a segunda levou 1,44
+                    // **segundos** — mil vezes mais, porque só a segunda pagou a
+                    // poda sobre 1.450 cartelas. Extrapolando da primeira, o
+                    // laço concluiu que cabiam 162 iterações no tempo restante e
+                    // ficou 22 segundos sem olhar o relógio.
+                    //
+                    // Dobrando a cada acerto, o passo chega ao teto em dez
+                    // leituras onde as iterações são baratas, e uma iteração
+                    // lenta é notada na volta seguinte.
+                    // A estimativa usa a iteração mais **cara** já vista nesta
+                    // execução, e não a média: com custos que variam mil vezes,
+                    // a média promete uma velocidade que a próxima iteração não
+                    // vai cumprir.
+                    let feitas = self.estatisticas.iteracoes.saturating_sub(ultima_leitura_em_it);
+                    if feitas > 0 {
+                        let janela = decorrido.saturating_sub(ultima_leitura_em_tempo);
+                        pior_iteracao = pior_iteracao.max(janela / feitas as u32);
+                    }
+                    ultima_leitura_em_it = self.estatisticas.iteracoes;
+                    ultima_leitura_em_tempo = decorrido;
+
+                    let extrapolado = if pior_iteracao.is_zero() {
+                        MAXIMO_ENTRE_LEITURAS_DO_RELOGIO
+                    } else {
+                        let restante = limite.saturating_sub(decorrido);
+                        (restante.as_nanos() / pior_iteracao.as_nanos().max(1)) as u64
+                    };
+                    passo = extrapolado
+                        .min(passo.saturating_mul(2))
+                        .clamp(1, MAXIMO_ENTRE_LEITURAS_DO_RELOGIO);
+                    proxima_leitura = self.estatisticas.iteracoes.saturating_add(passo);
                 }
             }
 
             self.uma_iteracao(inicio, observador);
         };
 
+        self.parada_em_curso = None;
         self.duracao_acumulada += inicio.elapsed();
         observador.ao_evento(&Evento::Encerrado {
             motivo,
@@ -694,6 +763,7 @@ impl MotorBusca {
             );
             "reinício a partir de elite do arquivo"
         } else {
+            let parada = self.parada_em_curso.clone();
             construir_do_zero(
                 &self.cobertura,
                 &mut self.atual,
@@ -702,6 +772,7 @@ impl MotorBusca {
                 self.max_candidatos,
                 &mut self.rng,
                 &mut self.oficina,
+                parada.as_ref(),
             );
             "reconstrução completa do zero"
         };
@@ -1216,6 +1287,43 @@ mod testes {
     }
 
     #[test]
+    fn a_construcao_inicial_larga_o_trabalho_quando_pedem_parada() {
+        // O defeito medido: num pool de 25 com jogos de 20 a construção inicial
+        // leva onze segundos em código nativo e o dobro em WebAssembly. Durante
+        // ela o worker está dentro de uma chamada síncrona e não lê mensagem
+        // nenhuma — quem tocasse em Pausar ou Encerrar não via efeito até o fim.
+        //
+        // Aqui a parada é pedida ANTES de executar, então a construção precisa
+        // desistir na primeira cartela e devolver o controle de imediato.
+        let controle = Controle::novo();
+        controle.parar();
+
+        let mut motor =
+            MotorBusca::novo(problema_para_buscar(), config_rapida(3)).unwrap();
+
+        let inicio = std::time::Instant::now();
+        let motivo = motor.executar(
+            &controle,
+            &CondicoesDeParada::indefinida(),
+            &mut Silencioso,
+        );
+        let decorrido = inicio.elapsed();
+
+        assert_eq!(motivo, MotivoEncerramento::Solicitado);
+        assert!(
+            decorrido < std::time::Duration::from_secs(2),
+            "a construção ignorou o pedido de parada e levou {decorrido:?}"
+        );
+
+        // E o que ficou pela metade não vira resultado: uma solução incompleta
+        // não é viável, então não é gravada como recorde.
+        assert!(
+            motor.melhor_cartelas().is_empty() || motor.melhor_avaliacao().cobertura_total(),
+            "uma construção interrompida não pode virar recorde"
+        );
+    }
+
+    #[test]
     fn respeita_o_pedido_de_parada() {
         let mut motor = MotorBusca::novo(problema(20, 5, 3), config_rapida(2)).unwrap();
         let controle = Controle::novo();
@@ -1266,7 +1374,7 @@ mod testes {
         let mut inicial = Solucao::vazia(&cobertura);
         let mut oficina = Oficina::nova();
         let mut rng = Pcg64Mcg::seed_from_u64(4);
-        construir_do_zero(&cobertura, &mut inicial, 0.5, usize::MAX, &mut rng, &mut oficina);
+        construir_do_zero(&cobertura, &mut inicial, 0.5, usize::MAX, &mut rng, &mut oficina, None);
         let mut cartelas = inicial.cartelas().to_vec();
         cartelas.extend_from_slice(&cartelas.clone());
         let quantidade_inicial = cartelas.len();

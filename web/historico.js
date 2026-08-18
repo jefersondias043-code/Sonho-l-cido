@@ -50,12 +50,32 @@ function ler() {
   }
 }
 
+/**
+ * Se esta sessão pode ser usada — e não apenas se tem a forma de uma.
+ *
+ * A versão anterior conferia que `melhor` era uma lista, e parava aí. Uma lista
+ * de números em vez de lista de cartelas passava, e só quebrava lá adiante: ao
+ * pintar as cartelas (`cartela.map` num número), ao exportar, e sobretudo ao
+ * retomar — onde ia parar dentro do motor em WebAssembly, que rejeita com uma
+ * mensagem sobre JSON e não sobre o histórico.
+ *
+ * Conferir aqui é conferir uma vez, no único ponto por onde tudo entra.
+ * A configuração também é conferida: sem `pool` e `cartela` não há problema a
+ * montar, e uma sessão assim é ruído que só atrapalha quem procura um trabalho.
+ */
 function ehSessaoValida(sessao) {
-  return (
-    sessao &&
-    typeof sessao.id === 'string' &&
-    sessao.configuracao &&
-    Array.isArray(sessao.melhor)
+  if (!sessao || typeof sessao.id !== 'string' || !sessao.id) return false;
+
+  const c = sessao.configuracao;
+  if (!c || !Array.isArray(c.pool) || c.pool.length === 0) return false;
+  if (!Number.isFinite(c.cartela) || c.cartela <= 0) return false;
+
+  if (!Array.isArray(sessao.melhor)) return false;
+  return sessao.melhor.every(
+    (cartela) =>
+      Array.isArray(cartela) &&
+      cartela.length > 0 &&
+      cartela.every((n) => Number.isInteger(n) && n > 0)
   );
 }
 

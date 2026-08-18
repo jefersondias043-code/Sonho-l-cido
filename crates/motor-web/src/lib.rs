@@ -319,7 +319,7 @@ impl MotorWeb {
     /// "Cannot convert to a BigInt" — a busca simplesmente não sairia do lugar.
     /// Quatro bilhões de iterações por lote é folga de sobra, já que um lote
     /// mira duzentos milissegundos.
-    pub fn avancar(&mut self, iteracoes: u32) -> String {
+    pub fn avancar(&mut self, iteracoes: u32, max_ms: u32) -> String {
         let mut coletor = ColetorDeRecordes::default();
 
         let teto = self
@@ -329,7 +329,19 @@ impl MotorWeb {
             .saturating_add(u64::from(iteracoes.max(1)));
         let condicoes = CondicoesDeParada {
             max_iteracoes: Some(teto),
-            max_duracao: None,
+            // O lote é limitado pelos dois: contagem e tempo.
+            //
+            // A contagem sozinha não basta, e a medição mostra por quê: num
+            // pool de 25 com jogos de 20, uma iteração varre 3,2 milhões de
+            // alvos e leva quase dois segundos. O lote de abertura de 250
+            // iterações levaria um quarto de hora dentro de uma única chamada —
+            // e como o worker só lê mensagens entre chamadas, Pausar e Encerrar
+            // ficavam sem efeito todo esse tempo, com a tela parada em zero.
+            //
+            // O teto de tempo devolve o controle ao worker mesmo quando uma
+            // única iteração é cara. A calibragem por contagem continua, para o
+            // caso barato, onde ela evita atravessar a fronteira à toa.
+            max_duracao: Some(std::time::Duration::from_millis(u64::from(max_ms.max(1)))),
             // Nunca encerrar sozinho. Quem decide quando parar é o usuário.
             //
             // A versão anterior parava ao provar optimalidade, e a intenção era
@@ -549,7 +561,7 @@ mod testes {
         let mut motor = MotorWeb::construir(&configuracao_para_buscar()).unwrap();
         let inicial = estado_de(&motor.preparar())["melhor_cartelas"].as_u64().unwrap();
 
-        let depois = estado_de(&motor.avancar(20_000));
+        let depois = estado_de(&motor.avancar(20_000, 600_000));
         assert!(
             depois["melhor_cartelas"].as_u64().unwrap() <= inicial,
             "a busca só pode melhorar o que a construção entregou"
@@ -561,12 +573,12 @@ mod testes {
     fn avancar_progride_e_devolve_estado_completo() {
         let mut motor = MotorWeb::construir(&configuracao_para_buscar()).unwrap();
 
-        let primeiro = estado_de(&motor.avancar(500));
+        let primeiro = estado_de(&motor.avancar(500, 600_000));
         assert!(primeiro["iteracoes"].as_u64().unwrap() > 0);
         assert!(primeiro["melhor_cartelas"].as_u64().unwrap() > 0);
         assert_eq!(primeiro["limite_inferior"].as_u64().unwrap(), 27);
 
-        let segundo = estado_de(&motor.avancar(500));
+        let segundo = estado_de(&motor.avancar(500, 600_000));
         assert!(
             segundo["iteracoes"].as_u64().unwrap() > primeiro["iteracoes"].as_u64().unwrap(),
             "o segundo lote deveria continuar de onde o primeiro parou"
@@ -579,7 +591,7 @@ mod testes {
         let mut anterior = usize::MAX;
 
         for _ in 0..20 {
-            let estado = estado_de(&motor.avancar(2_000));
+            let estado = estado_de(&motor.avancar(2_000, 600_000));
             let atual = estado["melhor_cartelas"].as_u64().unwrap() as usize;
             assert!(atual <= anterior, "o recorde subiu de {anterior} para {atual}");
             anterior = atual;
@@ -589,12 +601,45 @@ mod testes {
     #[test]
     fn os_recordes_do_lote_sao_reportados() {
         let mut motor = MotorWeb::construir(&configuracao_para_buscar()).unwrap();
-        let estado = estado_de(&motor.avancar(5_000));
+        let estado = estado_de(&motor.avancar(5_000, 600_000));
 
         let recordes = estado["novos_recordes"].as_array().unwrap();
         assert!(!recordes.is_empty(), "o primeiro lote sempre encontra melhorias");
         assert!(recordes[0]["operador"].as_str().is_some());
         assert!(recordes[0]["cobertura"].as_f64().unwrap() > 0.0);
+    }
+
+    #[test]
+    fn quem_manda_no_lote_e_o_relogio_e_nao_a_contagem() {
+        // O defeito medido, e o mais grave desta auditoria: num pool de 25 com
+        // jogos de 20, uma iteração varre 3,2 milhões de alvos e leva quase dois
+        // segundos. O lote pedia 250 iterações e não tinha teto de tempo, então
+        // uma única chamada a `avancar` levava um quarto de hora. Como o worker
+        // só lê mensagens entre chamadas, a tela ficava parada em zero e os
+        // botões Pausar e Encerrar não tinham efeito nenhum.
+        //
+        // A configuração aqui é pequena de propósito — este teste roda em build
+        // de depuração, onde a de 25 dezenas levaria minutos por iteração. O que
+        // se prova é o mecanismo: pedindo um milhão de iterações com teto de
+        // 150 ms, quem tem de mandar é o relógio.
+        let mut motor = MotorWeb::construir(&configuracao(12, 5, 3)).unwrap();
+        motor.preparar();
+        let antes = estado_de(&motor.estado())["iteracoes"].as_u64().unwrap();
+
+        let inicio = std::time::Instant::now();
+        let estado = estado_de(&motor.avancar(1_000_000, 150));
+        let decorrido = inicio.elapsed();
+
+        let feitas = estado["iteracoes"].as_u64().unwrap() - antes;
+        assert!(
+            decorrido < std::time::Duration::from_secs(5),
+            "o lote ignorou o teto de 150 ms e levou {decorrido:?}"
+        );
+        assert!(
+            feitas < 1_000_000,
+            "o lote correu o milhão de iterações pedido em vez de parar no tempo"
+        );
+        assert!(feitas > 0, "o lote não fez iteração nenhuma");
     }
 
     #[test]
@@ -611,13 +656,13 @@ mod testes {
         // seria desistir justamente onde ainda há o que achar.
         let mut motor = MotorWeb::construir(&configuracao(9, 3, 2)).unwrap();
 
-        let estado = estado_de(&motor.avancar(200_000));
+        let estado = estado_de(&motor.avancar(200_000, 600_000));
         assert!(estado["optimalidade_provada"].as_bool().unwrap());
         assert_eq!(estado["melhor_cartelas"].as_u64().unwrap(), 12); // C(9,3,2) = 12
 
         // E o lote seguinte trabalha, em vez de devolver na hora.
         let iteracoes = estado["iteracoes"].as_u64().unwrap();
-        let depois = estado_de(&motor.avancar(50_000));
+        let depois = estado_de(&motor.avancar(50_000, 600_000));
         assert!(
             depois["iteracoes"].as_u64().unwrap() > iteracoes,
             "o motor parou sozinho: as iterações ficaram em {iteracoes}"
@@ -643,7 +688,7 @@ mod testes {
         .unwrap();
 
         let mut motor = MotorWeb::construir(&configuracao).unwrap();
-        motor.avancar(3_000);
+        motor.avancar(3_000, 600_000);
 
         let melhor: Vec<Vec<u32>> = serde_json::from_str(&motor.melhor()).unwrap();
         assert!(!melhor.is_empty());
@@ -792,7 +837,7 @@ mod testes {
     fn exportar_e_retomar_preservam_o_recorde() {
         // É o ciclo que faz a busca sobreviver a fechar a aba do navegador.
         let mut original = MotorWeb::construir(&configuracao_para_buscar()).unwrap();
-        original.avancar(3_000);
+        original.avancar(3_000, 600_000);
 
         let recorde = estado_de(&original.estado())["melhor_cartelas"].as_u64().unwrap();
         let salvo = original.exportar();
@@ -833,7 +878,7 @@ mod testes {
     #[test]
     fn os_pesos_dos_operadores_sao_expostos() {
         let mut motor = MotorWeb::construir(&configuracao(16, 4, 2)).unwrap();
-        motor.avancar(5_000);
+        motor.avancar(5_000, 600_000);
 
         let pesos: Vec<(String, f64)> = serde_json::from_str(&motor.pesos()).unwrap();
         assert_eq!(pesos.len(), 8, "são oito operadores");
@@ -855,7 +900,7 @@ mod testes {
         .unwrap();
 
         let mut motor = MotorWeb::construir(&configuracao).unwrap();
-        let estado = estado_de(&motor.avancar(300));
+        let estado = estado_de(&motor.avancar(300, 600_000));
         assert!(estado["melhor_cartelas"].as_u64().unwrap() > 0);
         assert!(estado["metodo_limite"].as_str().unwrap().contains("contagem"));
     }

@@ -965,7 +965,12 @@ function lotPintarEconomia() {
     return;
   }
 
-  const valor = Number($('lot-valor').value) || 1;
+  // `min="0.01"` no HTML não impede um valor negativo digitado, e um negativo
+  // produzia "Custo do fechamento −R$ 16,00" — um preço negativo, que não
+  // significa nada. Zero e vazio caem no mesmo lugar: um jogo custa alguma
+  // coisa, e a conta só faz sentido acima de zero.
+  const valorDigitado = Number($('lot-valor').value);
+  const valor = Number.isFinite(valorDigitado) && valorDigitado > 0 ? valorDigitado : 1;
   const e = lotinha.economia({
     pool: lotPool,
     jogo: lotJogo,
@@ -1218,6 +1223,27 @@ $('lot-simular').addEventListener('click', () => {
     return;
   }
 
+  // Um sorteio da Lotofácil são 15 dezenas **distintas** entre 1 e 25. Sem
+  // estas duas checagens, digitar "1 1 1 …" simulava um sorteio de uma dezena
+  // só, e digitar 99 simulava uma dezena que não existe — nos dois casos com
+  // uma resposta de aparência normal, que é o pior jeito de errar.
+  const foraDoUniverso = numeros.filter((n) => n < 1 || n > lotinha.UNIVERSO);
+  if (foraDoUniverso.length) {
+    destino.innerHTML =
+      `<b>Dezena fora do intervalo.</b> <em>A Lotofácil vai de 1 a ${lotinha.UNIVERSO}, ` +
+      `e você digitou ${foraDoUniverso.join(', ')}.</em>`;
+    return;
+  }
+
+  const distintas = new Set(numeros);
+  if (distintas.size !== numeros.length) {
+    const repetidas = [...new Set(numeros.filter((n, i) => numeros.indexOf(n) !== i))];
+    destino.innerHTML =
+      `<b>Dezena repetida.</b> <em>Um sorteio não repete dezena, e ` +
+      `${repetidas.join(', ')} apareceu mais de uma vez.</em>`;
+    return;
+  }
+
   const { distribuicao, comQuinze } = lotinha.simular(lotFechamento, numeros, lotGarantia);
   const faixas = [...distribuicao.entries()].sort((a, b) => b[0] - a[0]);
 
@@ -1421,33 +1447,47 @@ function cartaoDaSessao(sessao) {
   const avaliacao = sessao.avaliacao ?? {};
   const emAndamento = sessao.id === sessaoAtual;
 
+  // Tudo daqui vem do armazenamento do aparelho, e nada garante o formato:
+  // o usuário pode editar, outra aba pode gravar meia sessão, uma versão futura
+  // pode mudar o formato. Números entram como números — se não forem, viram
+  // travessão em vez de marcação. E `sessao.id` é escapado porque vai dentro de
+  // um atributo: um id com aspas fecharia o atributo e o resto viraria HTML.
+  const inteiro = (v, alternativa = '—') =>
+    Number.isFinite(Number(v)) ? milhares(Number(v)) : alternativa;
+
+  const quantas = Number.isFinite(Number(avaliacao.cartelas))
+    ? milhares(Number(avaliacao.cartelas))
+    : inteiro(sessao.melhor.length);
+
   const marca = avaliacao.otimo
     ? '<span class="sessao-marca otima">★ ótimo provado</span>'
     : emAndamento
       ? '<span class="sessao-marca viva">em andamento</span>'
-      : avaliacao.limiteInferior
-        ? `<span class="sessao-marca">mínimo ${avaliacao.limiteInferior}</span>`
+      : Number.isFinite(Number(avaliacao.limiteInferior)) && Number(avaliacao.limiteInferior) > 0
+        ? `<span class="sessao-marca">mínimo ${inteiro(avaliacao.limiteInferior)}</span>`
         : '';
 
   const cobertura =
     typeof avaliacao.cobertura === 'number' ? ` · cobertura ${porcento(avaliacao.cobertura)}` : '';
 
+  const id = escapar(sessao.id);
+
   return `
     <div class="sessao${emAndamento ? ' em-andamento' : ''}">
       <div class="sessao-topo">
-        <span class="sessao-quantia">${avaliacao.cartelas ?? sessao.melhor.length}</span>
+        <span class="sessao-quantia">${quantas}</span>
         <span class="sessao-unidade">cartelas</span>
         ${marca}
       </div>
       <div class="sessao-config">
         ${escapar(historico.descrever(sessao.configuracao))}<br>
-        ${historico.quando(sessao.atualizadaEm)} ·
-        ${milhares(sessao.iteracoes ?? 0)} iterações${cobertura}
+        ${escapar(historico.quando(sessao.atualizadaEm))} ·
+        ${milhares(Number(sessao.iteracoes) || 0)} iterações${cobertura}
       </div>
       <div class="sessao-acoes">
-        <button class="continuar" data-acao="continuar" data-id="${sessao.id}">Continuar</button>
-        <button data-acao="ver" data-id="${sessao.id}">Ver cartelas</button>
-        <button class="excluir" data-acao="excluir" data-id="${sessao.id}"
+        <button class="continuar" data-acao="continuar" data-id="${id}">Continuar</button>
+        <button data-acao="ver" data-id="${id}">Ver cartelas</button>
+        <button class="excluir" data-acao="excluir" data-id="${id}"
                 aria-label="Excluir este trabalho">✕</button>
       </div>
     </div>`;

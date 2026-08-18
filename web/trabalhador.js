@@ -25,15 +25,18 @@ const LOTE_MAXIMO = 2_000_000;
  * Tamanho do primeiro lote, antes de haver qualquer medição.
  *
  * Deliberadamente pequeno. A calibragem só age a partir do segundo lote, então
- * o primeiro é um chute — e um chute grande custa caro: numa configuração
- * pesada, onde o motor faz algumas centenas de iterações por segundo, duas mil
- * iterações são mais de dez segundos de tela parada, sem número nenhum
- * mudando. Do lado do usuário isso é indistinguível de um travamento.
+ * o primeiro é um chute — e um chute grande custa caro.
  *
- * Começar pequeno atrasa em milissegundos o caso rápido e evita o silêncio
- * longo no caso lento.
+ * Vinte e cinco, e não duzentos e cinquenta, por uma medição: num pool de 25
+ * dezenas com jogos de 20, **uma** iteração leva quase dois segundos, porque
+ * varre 3,2 milhões de alvos. O lote de abertura antigo daria um quarto de hora
+ * dentro de uma única chamada ao WebAssembly, com a tela parada em zero e os
+ * botões sem efeito — o worker só lê mensagens entre chamadas.
+ *
+ * O teto de tempo passado a `avancar` é a defesa de verdade contra isso; este
+ * número menor é a segunda camada, e custa poucos milissegundos no caso rápido.
  */
-const LOTE_INICIAL = 250;
+const LOTE_INICIAL = 25;
 
 let motor = null;
 let rodando = false;
@@ -216,7 +219,7 @@ function laco() {
   let decorrido;
   try {
     const antes = performance.now();
-    estado = JSON.parse(motor.avancar(lote));
+    estado = JSON.parse(motor.avancar(lote, ALVO_MS_POR_LOTE));
     decorrido = performance.now() - antes;
   } catch (erro) {
     rodando = false;

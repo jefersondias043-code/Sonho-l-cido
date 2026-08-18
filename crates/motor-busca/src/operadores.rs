@@ -316,7 +316,7 @@ mod testes {
         let mut oficina = Oficina::nova();
         let mut rng = Pcg64Mcg::seed_from_u64(11);
         let mut solucao = Solucao::vazia(&motor);
-        construir_do_zero(&motor, &mut solucao, 0.3, usize::MAX, &mut rng, &mut oficina);
+        construir_do_zero(&motor, &mut solucao, 0.3, usize::MAX, &mut rng, &mut oficina, None);
         (motor, solucao, oficina, rng)
     }
 
