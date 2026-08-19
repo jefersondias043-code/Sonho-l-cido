@@ -952,7 +952,7 @@ function lotPintarExplicacao() {
  * Quanto o que você vai receber está acima do que a matemática prova.
  *
  * Dizer só "não dá com menos de 317" fazia o piso parecer uma promessa — o
- * usuário recebia 2.079 jogos e ficava sem saber se o aplicativo estava
+ * usuário recebia 1.358 jogos e ficava sem saber se o aplicativo estava
  * falhando ou se o problema é que é assim. Nenhum dos dois: o mínimo verdadeiro
  * está entre os dois números, e ninguém no mundo sabe onde.
  *
@@ -1011,7 +1011,7 @@ function textoDaDistancia() {
  *
  * Chamar o piso de "custo" seria prometer um preço que não existe: em 25
  * dezenas com jogos de 20, o piso conhecido é 317 e o melhor fechamento que o
- * aplicativo entrega tem 2.079. O número continua útil — é o que a matemática
+ * aplicativo entrega tem 1.358. O número continua útil — é o que a matemática
  * garante que ninguém vai bater — mas precisa vir rotulado.
  */
 function textoDaQuantidade(quantidade, ehPiso) {

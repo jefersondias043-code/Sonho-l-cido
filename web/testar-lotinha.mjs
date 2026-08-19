@@ -245,7 +245,7 @@ try {
   // ─── 3c. a tela diz a que distância do piso ela está ───
   //
   // "Não dá com menos de 11.967" é verdade e é inútil sozinho: o usuário recebe
-  // 32.345 jogos e não tem como saber se o aplicativo falhou ou se o problema é
+  // 26.844 jogos e não tem como saber se o aplicativo falhou ou se o problema é
   // assim mesmo. A tela passa a dizer os dois números e de onde o maior vem —
   // porque a origem é o que muda a decisão de deixar o motor rodando.
   const distancia = async (pool, jogo) => {
@@ -259,7 +259,7 @@ try {
 
   const doBanco = await distancia(23, 17);
   marcar(
-    /11\.381/.test(doBanco.explicacao) &&
+    /10\.122/.test(doBanco.explicacao) &&
       /3\.996/.test(doBanco.explicacao) &&
       /buscar mais rende pouco/.test(doBanco.explicacao),
     'num caso já buscado, a tela mostra entrega, piso e que buscar mais rende pouco',
@@ -591,7 +591,7 @@ try {
   // ─── 11. a fórmula: caminho rápido, e correto ───
   //
   // Antes desta mudança, 25 dezenas com jogos de 22 ligavam um motor de 39 MB,
-  // rodavam um guloso de seis segundos e chegavam a 139 jogos. Hoje saem 73 do
+  // rodavam um guloso de seis segundos e chegavam a 139 jogos. Hoje saem 72 do
   // banco, na hora. O motor deixou de partir sozinho nos pools pesados: ele
   // passou a ser um segundo passo, para quem quiser tentar reduzir mais.
   await pagina.click('#lot-pool .opcao[data-pool="25"]');
@@ -609,14 +609,14 @@ try {
   const daFormula = (await pagina.locator('#lot-conferencia').textContent()).trim();
 
   marcar(
-    /usando 73 jogos/.test(daFormula),
-    '25 dezenas com jogos de 22 saem com 73 jogos, não com os 139 do guloso',
+    /usando 72 jogos/.test(daFormula),
+    '25 dezenas com jogos de 22 saem com 72 jogos, não com os 139 do guloso',
     daFormula.replace(/\s+/g, ' ').slice(0, 76)
   );
 
   // A fórmula continua viva e continua certa, mesmo tendo deixado de ser o
   // caminho de entrega: ela é o que sobra se o banco não puder ser lido, e é
-  // dela que o gerador parte. Chamada direto, dá 78 — pior que os 73 que o
+  // dela que o gerador parte. Chamada direto, dá 78 — pior que os 72 que o
   // motor achou, e ainda assim muito melhor que os 139 do guloso.
   const semBanco = await pagina.evaluate(() =>
     import('./lotinha.js').then((lot) =>
@@ -638,9 +638,9 @@ try {
     return lot.previsao(25, 22).quantidade;
   });
   marcar(
-    previsto === 73,
+    previsto === 72,
     'e o número anunciado antes do toque é o mesmo que sai depois dele',
-    `previsto ${previsto}, entregue 73`
+    `previsto ${previsto}, entregue 72`
   );
   marcar(
     tempoDaFormula < 4000,
