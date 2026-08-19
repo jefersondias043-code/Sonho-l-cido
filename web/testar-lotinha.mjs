@@ -1412,6 +1412,113 @@ try {
     `25/18: ${coluna.c.texto} · 22/20: ${coluna.d.texto}`
   );
 
+  // ─── 14. conquistando o impossível ───
+  //
+  // 25 dezenas com jogos de 23 é o caso em que o sorteio cai dentro do pool com
+  // **certeza**, e por isso o único em que "lucrar sempre" e "lucrar em média"
+  // são a mesma pergunta. A aba ataca isso de frente: roda a busca inteira,
+  // mostra o melhor que existe, e mostra por que não existe mais.
+  await pagina.click('.aba[data-painel="impossivel"]');
+  await pagina.waitForSelector('#impossivel.ativo');
+  await pagina.click('#imp-atacar');
+  await pagina.waitForFunction(
+    () => !document.getElementById('imp-achado-cartao').hidden,
+    undefined,
+    { timeout: 30000 }
+  );
+
+  const impossivel = await pagina.evaluate(() => ({
+    busca: document.getElementById('imp-busca').textContent.replace(/\s+/g, ' '),
+    achado: document.getElementById('imp-achado').textContent.replace(/\s+/g, ' '),
+    certificado: document.getElementById('imp-certificado').textContent.replace(/\s+/g, ' '),
+    alavanca: document.getElementById('imp-alavanca').textContent.replace(/\s+/g, ' '),
+    linhas: document.querySelectorAll('#imp-distribuicao tbody tr').length,
+  }));
+
+  marcar(
+    /estruturas varridas/.test(impossivel.busca) && impossivel.linhas >= 5,
+    'a busca varre as estruturas de verdade e mostra o ranking',
+    impossivel.busca.slice(0, 70)
+  );
+
+  // O resultado que a aba existe para mostrar: lucrar sempre é impossível, mas
+  // lucrar mais vezes não é. O fechamento mínimo lucra em 4,8% dos concursos, e
+  // uma estrutura desequilibrada leva isso a 14,4% — três vezes mais.
+  marcar(
+    /14,4\d*% dos concursos/.test(impossivel.achado) && /4,8\d*% deles/.test(impossivel.achado),
+    'e encontra a estrutura que triplica a fatia de concursos com lucro — 4,8% para 14,4%',
+    impossivel.achado.slice(0, 90)
+  );
+
+  // A parede, com a conta conferível. É o que impede a aba de virar promessa.
+  marcar(
+    /maior peso é 0,6000/.test(impossivel.certificado) &&
+      /apostando valores diferentes em cada uma/.test(impossivel.certificado),
+    'e prova por que nenhuma busca passa disso — inclusive com apostas diferentes por cartela',
+    impossivel.certificado.slice(0, 80)
+  );
+
+  const provaPura = await pagina.evaluate(() =>
+    import('./lotinha.js').then((lot) => {
+      const p = lot.porQueNaoLucra(25);
+      return {
+        maiorPeso: p.maior.peso,
+        limiar: p.limiar,
+        possivel: p.possivel,
+        todosAbaixoDeUm: p.pesos.every((l) => l.peso < 1),
+        viraAcimaDoLimiar: lot.porQueNaoLucra(25, { 23: 7 }).possivel,
+      };
+    })
+  );
+  marcar(
+    Math.abs(provaPura.maiorPeso - 0.6) < 1e-9 &&
+      Math.abs(provaPura.limiar - 20 / 3) < 1e-9 &&
+      !provaPura.possivel &&
+      provaPura.todosAbaixoDeUm,
+    'no pool 25 os sete tamanhos de cartela têm peso abaixo de 1, e a fronteira é 6,67×',
+    `maior peso ${provaPura.maiorPeso}, fronteira ${provaPura.limiar.toFixed(2)}`
+  );
+  marcar(
+    provaPura.viraAcimaDoLimiar,
+    'e a conta vira de sinal se a banca pagasse 7× — é o preço, não a otimização',
+    'porQueNaoLucra(25, {23: 7}).possivel === true'
+  );
+  marcar(
+    /continua impossível/.test(impossivel.alavanca) && /6,67×/.test(impossivel.alavanca),
+    'a alavanca diz quanto a banca paga do justo, e que 4× não chega lá',
+    impossivel.alavanca.slice(0, 70)
+  );
+
+  // O fechamento que a busca achou tem de cobrir de verdade. Terceira opinião:
+  // nem quem procurou, nem quem construiu.
+  const conferido = await pagina.evaluate(() =>
+    import('./lotinha.js').then((lot) => {
+      const { melhor } = lot.maiorFatiaDeLucro(25, 23);
+      const total = melhor.distribuicao.reduce((soma, [, quantos]) => soma + quantos, 0);
+      const premiadasNoTotal = melhor.distribuicao.reduce(
+        (soma, [premiadas, quantos]) => soma + premiadas * quantos,
+        0
+      );
+      return {
+        cartelas: melhor.cartelas,
+        total,
+        sorteios: lot.combinacoes(25, 15),
+        garantia: melhor.garantia,
+        // Cada cartela premia C(23,15) sorteios: a soma das premiações tem de
+        // bater exatamente com isso, senão a contagem por convolução mentiu.
+        esperado: melhor.cartelas * lot.combinacoes(23, 15),
+        obtido: premiadasNoTotal,
+      };
+    })
+  );
+  marcar(
+    conferido.total === conferido.sorteios &&
+      conferido.obtido === conferido.esperado &&
+      conferido.garantia >= 1,
+    'e a contagem por convolução fecha com a conta direta, sorteio a sorteio',
+    `${conferido.total.toLocaleString('pt-BR')} sorteios, ${conferido.obtido.toLocaleString('pt-BR')} premiações contra ${conferido.esperado.toLocaleString('pt-BR')}`
+  );
+
   marcar(errosDeConsole.length === 0, 'nenhum erro no console', errosDeConsole.join(' | ').slice(0, 120));
 } finally {
   await navegador.close();

@@ -1298,3 +1298,165 @@ export function melhorParaGarantia(
   opcoes.sort((x, y) => y.retorno - x.retorno || x.quantidade - y.quantidade);
   return { melhor: opcoes[0] ?? null, opcoes, teto };
 }
+
+/* ─────────── conquistando o impossível ─────────── */
+
+/**
+ * O teto de retorno de uma dupla é `mult · C(jogo,15)/C(pool,15)`, e num pool de
+ * 25 ele é o próprio retorno esperado — de R$ 0,29 a R$ 0,60. Nenhum fechamento
+ * de 25 dezenas lucra sempre, e a prova cabe numa linha.
+ *
+ * **Ela vale inclusive apostando valores diferentes em cada cartela**, que é o
+ * grau de liberdade que a intuição não considera. Suponha uma carteira qualquer:
+ * cartelas de tamanhos quaisquer, apostas `sᵢ > 0` quaisquer, e a exigência de
+ * que **todo** sorteio devolva mais do que custou. Some as `C(25,15)`
+ * desigualdades. Cada cartela de `k` dezenas aparece do lado que recebe em
+ * exatamente `C(k,15)` sorteios, então a soma vira
+ *
+ *     Σᵢ mult(kᵢ)·C(kᵢ,15)·sᵢ  >  C(25,15) · Σᵢ sᵢ
+ *
+ * Dividindo por `C(25,15)`, o lado esquerdo é `Σᵢ ρ(kᵢ)·sᵢ` com
+ * `ρ(k) = mult(k)·C(k,15)/C(25,15) ≤ 0,60`. Uma soma de termos que precisariam
+ * ser todos positivos é no máximo `−0,40·Σsᵢ`. Contradição, sem supor nada sobre
+ * a estrutura do fechamento.
+ *
+ * Devolve o certificado numérico dessa conta, para quem quiser conferir em vez
+ * de acreditar.
+ */
+export function porQueNaoLucra(pool, cotacao = COTACAO_PADRAO) {
+  const pesos = [];
+  for (let jogo = MENOR_POOL; jogo <= Math.min(pool, MAIOR_POOL); jogo++) {
+    const multiplicador = cotacao?.[jogo] ?? null;
+    if (!multiplicador) continue;
+    pesos.push({
+      jogo,
+      multiplicador,
+      sorteiosDaCartela: combinacoes(jogo, SORTEIO),
+      peso: (multiplicador * combinacoes(jogo, SORTEIO)) / combinacoes(pool, SORTEIO),
+    });
+  }
+  const maior = pesos.reduce((a, b) => (b.peso > a.peso ? b : a), pesos[0] ?? null);
+  return {
+    sorteios: combinacoes(pool, SORTEIO),
+    pesos,
+    maior,
+    // Quanto a banca precisaria pagar, na melhor cartela, para o sinal virar.
+    limiar: maior ? maior.multiplicador / maior.peso : null,
+    possivel: maior ? maior.peso > 1 : false,
+  };
+}
+
+/**
+ * Já que lucrar **sempre** é impossível, qual fechamento lucra **mais vezes**?
+ *
+ * ## A pergunta que sobra, e que ninguém faz
+ *
+ * O fechamento mínimo de 25 dezenas com jogos de 23 são 23 cartelas, e ele lucra
+ * em 4,83% dos concursos — nos sorteios que caem em seis ou mais cartelas ao
+ * mesmo tempo. Não é o único fechamento possível, e nada obriga a fatia a ser
+ * essa. Trocando a estrutura dá para triplicá-la.
+ *
+ * ## Como a busca funciona
+ *
+ * No complemento, uma cartela de `k` dezenas é o pool menos `a = P − k`, e um
+ * sorteio é o pool menos `b = P − 15`. A cartela premia o sorteio quando as `a`
+ * que lhe faltam estão entre as `b` que o sorteio deixou de fora.
+ *
+ * Partindo o pool em grupos e tomando todos os `a`-subconjuntos de cada um, o
+ * número de cartelas premiadas por um sorteio é `Σ C(xᵢ, a)`, onde `xᵢ` é quanto
+ * daquele grupo ficou de fora — e a distribuição disso sobre **todos** os
+ * sorteios sai por contagem exata, sem varrer os três milhões.
+ *
+ * A busca percorre todas as partições do pool, exaustivamente. Em 25 dezenas com
+ * jogos de 23 são 1.291 estruturas, e a campeã é desequilibrada de um jeito que
+ * nenhuma intuição sugere: um grupo de 13 e o resto picado. Uma subida de encosta
+ * por 1.334 passos, partindo dela e sem a restrição de partição, não achou nada
+ * melhor.
+ *
+ * ## O que ela não é
+ *
+ * Não é um jeito de ganhar. O resultado médio continua negativo — tem de
+ * continuar, pelo argumento de [`porQueNaoLucra`]. O que muda é o formato do
+ * risco: mais concursos com lucro, e os que perdem perdendo mais.
+ */
+export function maiorFatiaDeLucro(pool, jogo, { cotacao = COTACAO_PADRAO, limite = 12 } = {}) {
+  const multiplicador = cotacao?.[jogo] ?? null;
+  const a = pool - jogo;
+  const b = pool - SORTEIO;
+  if (!multiplicador || a < 1 || a > b) return { ranking: [], melhor: null, estruturas: 0 };
+
+  const sorteios = combinacoes(pool, SORTEIO);
+  const ranking = [];
+  let estruturas = 0;
+
+  for (const partes of particoesDe(pool, pool, b)) {
+    const cartelas = partes.reduce((soma, m) => soma + combinacoes(m, a), 0);
+    if (cartelas < 1) continue;
+    estruturas += 1;
+
+    const distribuicao = premiadasPorSorteio(partes, a, b);
+    const garantia = Math.min(...distribuicao.keys());
+    if (garantia < 1) continue; // não cobre: há sorteio sem cartela premiada
+
+    let lucram = 0;
+    let melhorCaso = 0;
+    for (const [premiadas, quantos] of distribuicao) {
+      if (premiadas > melhorCaso) melhorCaso = premiadas;
+      if (premiadas * multiplicador > cartelas) lucram += quantos;
+    }
+    ranking.push({
+      partes,
+      cartelas,
+      garantia,
+      melhorCaso,
+      lucram,
+      fatia: lucram / sorteios,
+      distribuicao: [...distribuicao].sort((x, y) => x[0] - y[0]),
+    });
+  }
+
+  ranking.sort((x, y) => y.fatia - x.fatia || x.cartelas - y.cartelas);
+  return { ranking: ranking.slice(0, limite), melhor: ranking[0] ?? null, estruturas, sorteios };
+}
+
+/** Todas as partições de `n`, com partes não crescentes e no máximo `quantas`. */
+function* particoesDe(n, maior, quantas) {
+  if (n === 0) {
+    yield [];
+    return;
+  }
+  if (quantas === 0) return;
+  for (let parte = Math.min(n, maior); parte >= 1; parte--) {
+    for (const resto of particoesDe(n - parte, parte, quantas - 1)) {
+      yield [parte, ...resto];
+    }
+  }
+}
+
+/**
+ * Quantos sorteios premiam exatamente `c` cartelas, para cada `c`.
+ *
+ * Por contagem, e não por varredura: percorrer os 3.268.760 sorteios de um pool
+ * de 25 para cada uma das 1.291 estruturas seriam quatro bilhões de testes. A
+ * conta exata é uma convolução sobre os grupos — quantos dos `b` que o sorteio
+ * deixa de fora caem em cada um —, e sai em microssegundos.
+ */
+function premiadasPorSorteio(partes, a, b) {
+  let dp = new Map([[0, new Map([[0, 1]])]]);
+  for (const m of partes) {
+    const novo = new Map();
+    for (const [fora, porContagem] of dp) {
+      for (let x = 0; x <= Math.min(m, b - fora); x++) {
+        const maneiras = combinacoes(m, x);
+        const premia = combinacoes(x, a);
+        const destino = novo.get(fora + x) ?? new Map();
+        for (const [c, quantos] of porContagem) {
+          destino.set(c + premia, (destino.get(c + premia) ?? 0) + quantos * maneiras);
+        }
+        novo.set(fora + x, destino);
+      }
+    }
+    dp = novo;
+  }
+  return dp.get(b) ?? new Map();
+}

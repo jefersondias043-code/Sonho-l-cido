@@ -2798,6 +2798,190 @@ function chkAtualizarFontes() {
   chkPintarSeletor(pedida);
 }
 
+/* ─────────── conquistando o impossível ─────────── */
+
+/*
+ * O pool do desafio é fixo em 25 dezenas com jogos de 23 de propósito: é o caso
+ * em que o sorteio cai dentro com **certeza**, e por isso o único em que "lucrar
+ * sempre" e "lucrar em média" são a mesma pergunta. Nos outros pools existe o
+ * ramo que perde, e a conversa é outra.
+ */
+const IMP_POOL = 25;
+const IMP_JOGO = 23;
+let impAchado = null;
+
+function impDinheiro(v) {
+  return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
+/*
+ * As fatias aqui variam quatro ordens de grandeza — de 0,017% de um sorteio raro
+ * a 60% da fração do justo que a banca paga. Casa decimal fixa estragaria uma
+ * ponta ou a outra: três casas em "60,000%" é ruído, e uma casa em "0,0%" apaga
+ * o número.
+ */
+const impPorcento = (f) => {
+  const v = f * 100;
+  return `${v.toFixed(v < 1 ? 3 : v < 10 ? 2 : 1).replace('.', ',')}%`;
+};
+
+/**
+ * Roda a busca e pinta as três respostas: o que ela achou, onde ela para, e o
+ * que faria a parede se mover.
+ */
+function impAtacar() {
+  const relatorio = $('imp-busca');
+  relatorio.innerHTML = '<em>Varrendo as estruturas…</em>';
+
+  // Um quadro de vídeo antes de calcular, senão o "Varrendo…" nunca aparece: a
+  // busca leva pouco mais de cem milissegundos e o navegador pintaria só o fim.
+  requestAnimationFrame(() => {
+    const comeco = performance.now();
+    const { ranking, melhor, estruturas, sorteios } = lotinha.maiorFatiaDeLucro(IMP_POOL, IMP_JOGO, {
+      cotacao: lotCotacao,
+    });
+    const tempo = Math.round(performance.now() - comeco);
+
+    if (!melhor) {
+      relatorio.innerHTML = '<em>Nenhuma estrutura cobre todos os sorteios aqui.</em>';
+      return;
+    }
+    impAchado = melhor;
+
+    relatorio.innerHTML =
+      `<b>${milhares(estruturas)} estruturas varridas em ${milhares(tempo)} ms.</b> ` +
+      `<em>Cada uma medida contra os ${milhares(sorteios)} sorteios possíveis, por ` +
+      'contagem exata — não por amostragem.</em>';
+
+    const linhas = ranking
+      .slice(0, 8)
+      .map(
+        (l, i) =>
+          `<tr${i === 0 ? ' class="destaque"' : ''}>` +
+          `<td>${milhares(l.cartelas)}</td>` +
+          `<td class="${l.fatia > 0 ? 'paga' : ''}">${impPorcento(l.fatia)}</td>` +
+          `<td>${milhares(l.garantia)}</td>` +
+          `<td>${milhares(l.melhorCaso)}</td>` +
+          `<td>${l.partes.join('·')}</td></tr>`
+      )
+      .join('');
+
+    $('imp-achado').innerHTML =
+      `<b>${milhares(melhor.cartelas)} cartelas que lucram em ${impPorcento(melhor.fatia)} dos ` +
+      `concursos.</b> <em>O fechamento mínimo desta combinação são ${milhares(
+        lotinha.minimo(IMP_POOL, IMP_JOGO).jogos
+      )} cartelas e lucra em ` +
+      `${impPorcento(fatiaDoMinimo())} deles — a estrutura encontrada triplica a fatia. Ela ` +
+      `garante ${milhares(melhor.garantia)} cartela premiada em todo sorteio, e no melhor caso ` +
+      `premia ${milhares(melhor.melhorCaso)}. Os grupos são desequilibrados de um jeito que ` +
+      'nenhuma intuição sugere: um de 13 dezenas e o resto picado.</em>';
+
+    $('imp-distribuicao').innerHTML =
+      '<div class="rolagem"><table class="matriz"><thead><tr><th>Cartelas</th>' +
+      '<th>Lucra em</th><th>Garante</th><th>Melhor caso</th><th>Grupos</th></tr></thead>' +
+      `<tbody>${linhas}</tbody></table></div>` +
+      '<div class="referencia"><em>“Lucra em” é a fração dos concursos em que o prêmio ' +
+      'supera o custo do fechamento inteiro. “Garante” é o pior caso, e é o que a ' +
+      'aba Lotinha chama de cartelas premiadas.</em></div>';
+
+    $('imp-achado-cartao').hidden = false;
+    $('imp-usar').hidden = false;
+
+    impPintarParede();
+    $('imp-cotacao').value = String(lotCotacao[IMP_JOGO] ?? 4);
+    impPintarAlavanca();
+  });
+}
+
+/** A fatia de lucro do fechamento mínimo, para comparar com o que a busca achou. */
+function fatiaDoMinimo() {
+  const minimo = lotinha.minimo(IMP_POOL, IMP_JOGO).jogos;
+  const { ranking } = lotinha.maiorFatiaDeLucro(IMP_POOL, IMP_JOGO, {
+    cotacao: lotCotacao,
+    limite: Infinity,
+  });
+  return ranking.find((l) => l.cartelas === minimo)?.fatia ?? 0;
+}
+
+/**
+ * A parede, com a conta na tela.
+ *
+ * O peso de cada tamanho de cartela é `mult · C(k,15) / C(25,15)`, e ele é a
+ * fração do que a cartela devolve por real apostado. Somando as desigualdades
+ * que exigiriam lucro em todo sorteio, o maior peso é quem decide — e ele é
+ * 0,60. Vale para qualquer estrutura e para apostas diferentes por cartela.
+ */
+function impPintarParede() {
+  const prova = lotinha.porQueNaoLucra(IMP_POOL, lotCotacao);
+  $('imp-pesos').innerHTML =
+    '<div class="rolagem"><table class="matriz"><thead><tr><th>Cartela</th><th>Paga</th>' +
+    '<th>Sorteios que ela contém</th><th>Peso</th></tr></thead><tbody>' +
+    prova.pesos
+      .map(
+        (l) =>
+          `<tr${l.jogo === prova.maior.jogo ? ' class="destaque"' : ''}>` +
+          `<td>${l.jogo} dezenas</td><td>${milhares(l.multiplicador)}×</td>` +
+          `<td>${milhares(l.sorteiosDaCartela)}</td>` +
+          `<td class="${l.peso > 1 ? 'paga' : 'nao-paga'}">${l.peso
+            .toFixed(4)
+            .replace('.', ',')}</td></tr>`
+      )
+      .join('') +
+    '</tbody></table></div>';
+
+  $('imp-certificado').innerHTML =
+    `<b>O maior peso é ${prova.maior.peso.toFixed(4).replace('.', ',')}, na cartela de ` +
+    `${prova.maior.jogo} dezenas.</b> <em>Somando as ${milhares(prova.sorteios)} desigualdades, ` +
+    `o que sobra é no máximo (${prova.maior.peso.toFixed(2).replace('.', ',')} − 1) = ` +
+    `−${(1 - prova.maior.peso).toFixed(2).replace('.', ',')} vezes o total apostado. Uma soma de ` +
+    'parcelas que precisariam ser todas positivas dá negativo — logo alguma delas não é. A ' +
+    'conta não supõe nada sobre o fechamento: vale para qualquer estrutura, qualquer número ' +
+    'de cartelas, e mesmo apostando valores diferentes em cada uma.</em>';
+  $('imp-parede-cartao').hidden = false;
+  $('imp-alavanca-cartao').hidden = false;
+}
+
+/** O termo negociável da conta: quanto a banca paga. */
+function impPintarAlavanca() {
+  const pedido = Number($('imp-cotacao').value);
+  const prova = lotinha.porQueNaoLucra(IMP_POOL, lotCotacao);
+  const limiar = prova.limiar;
+  const alvo = $('imp-alavanca');
+
+  if (!Number.isFinite(pedido) || pedido <= 0) {
+    alvo.innerHTML = '<em>Informe um multiplicador maior que zero.</em>';
+    return;
+  }
+
+  const hipotese = lotinha.porQueNaoLucra(IMP_POOL, { ...lotCotacao, [IMP_JOGO]: pedido });
+  const virou = hipotese.maior.peso > 1;
+  const oferecido = lotCotacao[IMP_JOGO] ?? 4;
+
+  alvo.innerHTML =
+    `<b class="${virou ? 'paga' : 'nao-paga'}">` +
+    (virou
+      ? `A ${pedido.toLocaleString('pt-BR')}× o sinal vira: existe fechamento que lucra sempre.`
+      : `A ${pedido.toLocaleString('pt-BR')}× continua impossível.`) +
+    `</b> <em>A fronteira está em <b>${limiar.toFixed(2).replace('.', ',')}×</b> — é o que uma ` +
+    `cartela de ${IMP_JOGO} dezenas valeria se a banca não tivesse vantagem, porque ela contém ` +
+    `1 em cada ${limiar.toFixed(2).replace('.', ',')} sorteios possíveis. A sua banca paga ` +
+    `${milhares(oferecido)}×, que é ${impPorcento(oferecido / limiar)} disso. Não é um problema ` +
+    'de otimização; é o preço.</em>';
+}
+
+ligar('imp-atacar', 'click', impAtacar);
+ligar('imp-cotacao', 'input', impPintarAlavanca);
+ligar('imp-usar', 'click', () => {
+  if (!impAchado) return;
+  lotPool = IMP_POOL;
+  lotJogo = IMP_JOGO;
+  lotPremiadas = impAchado.garantia;
+  lotGarantia = lotinha.SORTEIO;
+  lotEsquecerFechamento();
+  mostrarPainel('lotinha');
+  lotPintarTudo();
+  $('lot-grade').scrollIntoView({ behavior: 'smooth', block: 'center' });
+});
+
 aoIniciar('a tela de Checar', () => {
   chkPintarQuantos();
   chkAtualizarFontes();
