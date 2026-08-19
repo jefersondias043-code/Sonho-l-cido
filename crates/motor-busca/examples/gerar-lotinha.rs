@@ -112,10 +112,10 @@ fn main() {
         println!("buscando só: {}\n", lista.join(" · "));
     }
     println!(
-        "{:>5} {:>5} {:>7} {:>9} {:>10} {:>12} {:>9}",
-        "pool", "jogo", "piso", "partida", "final", "origem", "confere"
+        "{:>5} {:>5} {:>7} {:>9} {:>10} {:>12} {:>9} {:>12}",
+        "pool", "jogo", "piso", "partida", "final", "origem", "confere", "paga?"
     );
-    println!("{}", "─".repeat(64));
+    println!("{}", "─".repeat(77));
 
     // O banco que já está publicado entra como candidato a partida.
     //
@@ -198,9 +198,10 @@ fn main() {
             // mais fez diferença.
             if final_.len() > TETO_DO_BANCO {
                 println!(
-                    "{pool:>5} {jogo:>5} {piso:>7} {partida:>9} {:>10} {origem:>12} {:>9}",
+                    "{pool:>5} {jogo:>5} {piso:>7} {partida:>9} {:>10} {origem:>12} {:>9} {:>12}",
                     final_.len(),
                     "—",
+                    paga(jogo, Some(final_.len()), piso),
                 );
                 continue;
             }
@@ -216,9 +217,10 @@ fn main() {
             // fechamento fica de fora do banco, sem virar promessa falsa.
             if !ok && !cabe_construir {
                 println!(
-                    "{pool:>5} {jogo:>5} {piso:>7} {partida:>9} {:>10} {origem:>12} {:>9}",
+                    "{pool:>5} {jogo:>5} {piso:>7} {partida:>9} {:>10} {origem:>12} {:>9} {:>12}",
                     final_.len(),
                     "incompleto",
+                    paga(jogo, Some(final_.len()), piso),
                 );
                 continue;
             }
@@ -234,9 +236,10 @@ fn main() {
             );
 
             println!(
-                "{pool:>5} {jogo:>5} {piso:>7} {partida:>9} {:>10} {origem:>12} {:>9}",
+                "{pool:>5} {jogo:>5} {piso:>7} {partida:>9} {:>10} {origem:>12} {:>9} {:>12}",
                 final_.len(),
                 if ok { "sim" } else { "NÃO" },
+                paga(jogo, Some(final_.len()), piso),
             );
 
             // Guarda o **complemento**: as posições que faltam ao jogo, e não as
@@ -407,6 +410,41 @@ fn tamanho_da_construcao(pool: usize, a: usize, b: usize) -> usize {
         0 => 1,
         1 => 16,
         _ => turan_tamanho(pool, a, b, &mut HashMap::new()).min(usize::MAX as u64) as usize,
+    }
+}
+
+/// Quanto uma banca paga por real apostado, por tamanho da cartela.
+///
+/// Origem: `web/lotinha.js`, `COTACAO_PADRAO` — a tela é quem manda, e onde a
+/// pessoa pode trocar pela cotação da banca dela. Aqui a tabela existe só para
+/// o relatório dizer o que interessa a quem vai comprar o fechamento.
+///
+/// Não há 24 nem 25: banca nenhuma aceita cartela desse tamanho.
+const COTACAO: [(usize, u64); 7] =
+    [(17, 7000), (18, 1300), (19, 300), (20, 100), (21, 30), (22, 10), (23, 4)];
+
+/// Este fechamento paga, quando o sorteio cai dentro do pool?
+///
+/// O fechamento garante ao menos uma cartela com as 15, que paga `mult` vezes a
+/// aposta. O custo foram `n` cartelas. Então `n < mult` separa lucrar ao
+/// acertar de perder mesmo acertando — e o piso separa "ainda não" de "nunca",
+/// porque se nem o mínimo matemático cabe no prêmio, buscar mais é perder
+/// tempo.
+///
+/// Isto **não** diz que a aposta compensa: no longo prazo nenhuma combinação
+/// devolve o que custa, e o número de cartelas nem entra nessa conta. Diz
+/// apenas onde o trabalho do motor tem consequência financeira.
+fn paga(jogo: usize, quantidade: Option<usize>, piso: usize) -> String {
+    let Some(&(_, mult)) = COTACAO.iter().find(|(k, _)| *k == jogo) else {
+        return "—".to_string();
+    };
+    let mult = mult as usize;
+
+    match quantidade {
+        Some(n) if n < mult => "paga".to_string(),
+        _ if piso >= mult => "não paga".to_string(),
+        Some(n) => format!("faltam {}", n - mult + 1),
+        None => "?".to_string(),
     }
 }
 
