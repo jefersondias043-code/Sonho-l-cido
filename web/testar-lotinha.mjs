@@ -245,7 +245,7 @@ try {
   // ─── 3c. a tela diz a que distância do piso ela está ───
   //
   // "Não dá com menos de 11.967" é verdade e é inútil sozinho: o usuário recebe
-  // 26.844 jogos e não tem como saber se o aplicativo falhou ou se o problema é
+  // 26.837 jogos e não tem como saber se o aplicativo falhou ou se o problema é
   // assim mesmo. A tela passa a dizer os dois números e de onde o maior vem —
   // porque a origem é o que muda a decisão de deixar o motor rodando.
   const distancia = async (pool, jogo) => {

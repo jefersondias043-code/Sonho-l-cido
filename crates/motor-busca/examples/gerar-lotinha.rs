@@ -172,7 +172,7 @@ fn main() {
             // com jogos de 17 ele sai com 26.845 onde a fórmula dava 59.664 e o
             // motor, depois de quatro minutos, 32.345.
             if buscar {
-                if let Some(guloso) = guloso_global(pool, jogo, ORCAMENTO_DO_GULOSO) {
+                if let Some(guloso) = guloso_global(pool, jogo, orcamento_do_guloso()) {
                     if de_partida.is_empty() || guloso.len() < de_partida.len() {
                         origem = "guloso*";
                         de_partida = guloso;
@@ -663,6 +663,20 @@ fn combinacoes(itens: &[usize], k: usize) -> Vec<Vec<usize>> {
 /// inteiro — então o orçamento paga várias tentativas e fica com a melhor. Nos
 /// casos rápidos as cinco cabem em segundos; nos lentos o relógio corta.
 const ORCAMENTO_DO_GULOSO: Duration = Duration::from_secs(300);
+
+/// `LOTINHA_GULOSO_SEGUNDOS` alonga o orçamento do guloso.
+///
+/// Nas combinações de pool 25 com jogos de 18 a 20 um passe de pontuação
+/// sozinho custa centenas de milhões de operações, e cinco minutos não dão nem
+/// uma tentativa. Poder alongar num punhado de casos vale mais do que subir o
+/// padrão e gastar horas nos quarenta que já fecham em segundos.
+fn orcamento_do_guloso() -> Duration {
+    std::env::var("LOTINHA_GULOSO_SEGUNDOS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .map(Duration::from_secs)
+        .unwrap_or(ORCAMENTO_DO_GULOSO)
+}
 
 /// O melhor guloso global de algumas sementes.
 ///

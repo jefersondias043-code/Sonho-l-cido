@@ -393,6 +393,7 @@ impl MotorBusca {
         }
 
         let parada = self.parada_em_curso.clone();
+
         construir_do_zero(
             &self.cobertura,
             &mut self.atual,

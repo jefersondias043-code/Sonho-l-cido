@@ -435,17 +435,24 @@ busca. Antes das construções algébricas eram 9 de 11, com `C(21,5,2)` parando
 Casos escolhidos a dedo favorecem quem os escolheu. Por isso a aferição também
 varre a faixa inteira sem perguntar nada — 223 configurações, 1 segundo cada:
 
-| Distância do melhor do mundo | com 1s por caso | com 10s por caso |
-|------------------------------|-----------------|------------------|
-| empatou ou superou           | 93 (41,7%)      | 122 (54,7%)      |
-| até 5% acima                 | 16 (7,2%)       | 13 (5,8%)        |
-| de 5% a 20% acima            | 45 (20,2%)      | 40 (17,9%)       |
-| mais de 20% acima            | 69 (30,9%)      | 48 (21,5%)       |
+| Distância do melhor do mundo | antes da descida | com a descida |
+|------------------------------|------------------|---------------|
+| empatou ou superou           | 93 (41,7%)       | **130 (58,3%)** |
+| até 5% acima                 | 16 (7,2%)        | 16 (7,2%)     |
+| de 5% a 20% acima            | 45 (20,2%)       | 42 (18,8%)    |
+| mais de 20% acima            | 69 (30,9%)       | **35 (15,7%)** |
 
-A segunda coluna sai de `SEGUNDOS_POR_CASO=10`, e existe para separar o que é
-limitação do motor do que é só falta de tempo. Dez vezes mais tempo leva os
-empates de 41,7% a 54,7% — ganho real, e ainda assim modesto para dez vezes o
-orçamento.
+As duas colunas são o mesmo segundo por caso. O que mudou entre elas foi a
+descida por troca de ponto, a construção de Turán e o ranqueamento colex fundido
+na intercalação: os empates com o melhor do mundo saíram de 41,7% para 58,3%, e
+os casos a mais de 20% de distância caíram pela metade.
+
+Uma medida que **não** entrou: pôr o guloso global também como candidato a
+partida dentro do motor. Parecia óbvio — é onde não há construção fechada que o
+motor mais fica atrás — e a aferição desmentiu. Ela troca cinco empates por três
+casos ruins a menos, e cobra cinco segundos por caso; `C(30,7,3)` piora de 236
+para 288 cartelas. O guloso global fica só no gerador, onde há tempo para ele
+rodar até o fim e onde a comparação escolhe entre as três construções.
 
 O que ele **não** move são os casos difíceis. `C(26,6,3)` sai de 246 para 233
 cartelas contra as 130 do mundo: continua 79% acima. As piores estão todas em
@@ -525,6 +532,39 @@ Isso transforma um problema de otimização difuso em uma sequência de problema
 de viabilidade bem definidos, cada um com um gradiente claro para seguir. O
 mesmo mecanismo atende cobertura máxima sob orçamento: a meta simplesmente para
 de descer.
+
+#### O passo grande e o passo pequeno
+
+Por muito tempo o laço só sabia dar passos grandes: destruía cartelas inteiras e
+montava cartelas inteiras. Montar uma cartela custa avaliar `C(k,t)` alvos **por
+candidato testado**, então quando a solução já está na meta e faltam poucos
+alvos, o passo é grande demais — a reconstrução descobre outros alvos enquanto
+cobre os que faltavam, e a iteração termina revertendo. Medido a partir do banco
+publicado: sessenta segundos em 24 dezenas com jogos de 17 tiravam **quinze**
+cartelas de trinta e duas mil.
+
+O passo pequeno é trocar **uma dezena de uma cartela** — o método de Nurmela e
+Östergård para covering designs. Mantém a cardinalidade, mexe em pouca coisa, e
+é guiado por um alvo ainda descoberto. Entra exatamente onde o laço antigo
+desistia, e o orçamento de trocas acompanha o tamanho do buraco.
+
+#### Guloso global: comparar todas as cartelas, não uma amostra
+
+A construção padrão monta cada cartela dezena a dezena e, em cada posição,
+avalia uma **amostra** dos candidatos. É gulosa dentro da cartela e cega fora
+dela. O guloso global compara todas as `C(p,k)` cartelas a cada passo, e é
+viável porque a nota de um candidato só pode cair conforme a solução cresce —
+o que permite uma fila de prioridade preguiçosa.
+
+Ele não ganha sempre, e por isso entra como **mais um candidato a ponto de
+partida**, não no lugar de ninguém: ganha onde faltam muitas dezenas ao jogo,
+onde a construção fechada é grosseira e a solução tem milhares de cartelas; e
+perde onde a fórmula já é quase ótima. Quem decide é a comparação — a coluna
+`origem` do gerador diz de qual das três o número saiu.
+
+`cargo run --release --example bancada -- 90 23,19 24,18` roda as estratégias
+lado a lado, a partir do mesmo fechamento e pelo mesmo tempo. É de lá que saem
+os números acima; sem isso, "o motor melhorou" seria opinião.
 
 ### As duas defesas que sustentam a confiança
 
