@@ -42,12 +42,22 @@
  * O problema deixa de ser "cobrir" e vira "caber" — um sistema de Turán. Daí
  * saem os valores exatos de [`MINIMOS`], conferidos por força bruta.
  *
- * ## O que este módulo não faz
+ * ## A cotação, e o que ela decide
  *
- * Não guarda multiplicador nenhum. As cotações variam por banca, não são
- * auditadas, e quem as conhece é o usuário — elas entram pela tela, não pelo
- * código. A matemática combinatória daqui não depende delas, e é justamente
- * essa separação que permite trocar a tabela sem tocar no fechamento.
+ * [`COTACAO_PADRAO`] traz a tabela de uma banca real, como ponto de partida
+ * editável. Ela não entra em conta combinatória nenhuma — a separação continua
+ * inteira, e trocar a tabela não mexe num único fechamento.
+ *
+ * O que ela permite é [`veredito`]: dizer se aquele fechamento **paga**. São
+ * duas perguntas diferentes, e confundi-las é o erro que custa dinheiro:
+ *
+ * - **no longo prazo**, o retorno por real depende só do tamanho do jogo, e é
+ *   negativo em todas as combinações. O número de cartelas cancela na conta, e
+ *   otimizar não muda isso em nada. [`economia`] calcula esse número.
+ * - **no ramo em que se ganha** — quando as 15 caem dentro do pool — o
+ *   fechamento garante ao menos uma cartela premiada, que paga `mult`. O custo
+ *   foi `N` cartelas. Aí sim o tamanho do fechamento decide, e `N < mult` é a
+ *   fronteira entre lucrar ao acertar e perder mesmo acertando.
  */
 
 export const UNIVERSO = 25;
@@ -57,6 +67,32 @@ export const MAIOR_POOL = 25;
 
 /** Menor garantia de acertos oferecida — é a faixa mais baixa que a Lotofácil paga. */
 export const MENOR_GARANTIA = 11;
+
+/**
+ * Quanto uma banca paga, por tamanho da cartela apostada.
+ *
+ * A banca enxerga o bilhete, não o seu fechamento: uma cartela de 17 dezenas
+ * paga 7000× a aposta se as 15 sorteadas caírem dentro dela, venha ela de um
+ * pool de 18 ou de 23. E cada bilhete premiado é pago por inteiro — duas
+ * cartelas com as 15 são dois prêmios.
+ *
+ * Vem preenchida por conveniência, e não por autoridade: cotações mudam de
+ * banca para banca e ao longo do tempo, e a tela deixa cada uma editável. Quem
+ * conhece a sua é o usuário.
+ *
+ * Não há 24 nem 25 aqui, e não é omissão: banca nenhuma aceita uma cartela
+ * desse tamanho. Nesses casos [`economia`] devolve `multiplicador: null` e a
+ * tela mostra a estrutura sem inventar um preço.
+ */
+export const COTACAO_PADRAO = Object.freeze({
+  17: 7000,
+  18: 1300,
+  19: 300,
+  20: 100,
+  21: 30,
+  22: 10,
+  23: 4,
+});
 
 /** `C(n, k)` exato para os tamanhos desta modalidade. */
 export function combinacoes(n, k) {
@@ -788,5 +824,81 @@ export function economia({
     retornoEsperado: (quantidade * chanceDeUmJogo * premioDeUm) / custo,
     perdaQuandoPerde: custo,
     chanceDePerder: 1 - chanceDoPool,
+  };
+}
+
+/**
+ * Este fechamento paga? — e, quando não paga, por que não.
+ *
+ * ## A pergunta que isto responde, e a que não responde
+ *
+ * **Não** responde "vale a pena apostar". No longo prazo nenhuma combinação
+ * devolve o que custa: o retorno por real é `mult · C(k,15) / C(25,15)`, vai de
+ * R$ 0,29 a R$ 0,60, e o número de cartelas **cancela** nessa conta. Otimizar o
+ * fechamento não muda uma vírgula disso, e [`economia`] continua sendo quem diz
+ * esse número.
+ *
+ * Responde outra coisa, que depende inteiramente do fechamento: quando as 15
+ * caírem dentro do pool, o que se recebe cobre o que se gastou? O fechamento
+ * garante `r` cartelas com as 15, que pagam `r · mult`; o custo foi `N`
+ * cartelas. Então:
+ *
+ *     N < r · mult   →  lucra sempre que o sorteio cair no pool
+ *     N ≥ r · mult   →  perde mesmo acertando o pool
+ *
+ * ## Por que o piso entra
+ *
+ * Porque separa "ainda não conseguimos" de "ninguém vai conseguir". Se o
+ * **mínimo matemático** já custa mais que o prêmio, nenhum otimizador salva
+ * aquela combinação — e dizer isso é mais útil que deixar o usuário esperando
+ * uma melhora que não existe. É o caso de 25 dezenas com jogos de 20: o piso é
+ * 317 cartelas para um prêmio de 100×.
+ *
+ * Devolve `{ classe, multiplicador, folga, faltamCortar, custoDoPiso }`, onde
+ * `classe` é uma de:
+ *
+ * - `'sem-premio'` — garantia menor que 15, que nesta modalidade não compra
+ *   prêmio nenhum;
+ * - `'sem-cotacao'` — jogos de 24 ou 25 dezenas, que banca nenhuma aceita;
+ * - `'lucra'` — `folga` é quanto sobra, em múltiplos da aposta;
+ * - `'possivel'` — `faltamCortar` é quantas cartelas precisam sair para cruzar
+ *   a linha;
+ * - `'impossivel'` — `custoDoPiso` é quantas vezes o prêmio custa o mínimo
+ *   matemático.
+ */
+export function veredito({
+  jogo,
+  quantidade,
+  piso,
+  garantia = SORTEIO,
+  premiadas = 1,
+  cotacao = COTACAO_PADRAO,
+}) {
+  if (garantia !== SORTEIO) return { classe: 'sem-premio', multiplicador: null };
+
+  const multiplicador = cotacao?.[jogo] ?? null;
+  if (!multiplicador) return { classe: 'sem-cotacao', multiplicador: null };
+
+  // Com `r` cartelas premiadas garantidas, o piso do prêmio multiplica por `r`:
+  // são `r` bilhetes contendo as 15, cada um pago por inteiro.
+  const premio = premiadas * multiplicador;
+
+  if (Number.isFinite(quantidade) && quantidade < premio) {
+    return { classe: 'lucra', multiplicador, premio, folga: premio - quantidade };
+  }
+
+  // O piso é conferido depois de `lucra` de propósito: se o fechamento já cabe
+  // no prêmio, não há o que discutir sobre o mínimo.
+  if (Number.isFinite(piso) && piso >= premio) {
+    return { classe: 'impossivel', multiplicador, premio, piso, custoDoPiso: piso / premio };
+  }
+
+  return {
+    classe: 'possivel',
+    multiplicador,
+    premio,
+    piso,
+    // Cruzar a linha é ficar **abaixo** do prêmio, não empatar com ele.
+    faltamCortar: Number.isFinite(quantidade) ? quantidade - premio + 1 : null,
   };
 }

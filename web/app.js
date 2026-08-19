@@ -681,7 +681,9 @@ function lotEsquecerFechamento() {
     'um — sem consultar o motor que produziu o fechamento.</em>';
 }
 
-const lotCotacao = {};
+/* A cotação em uso. Nasce com a tabela padrão e é editável campo a campo —
+   quem joga em outra banca troca o número e a tela recalcula na hora. */
+const lotCotacao = { ...lotinha.COTACAO_PADRAO };
 
 function lotMontar() {
   // Tamanho do pool.
@@ -717,7 +719,12 @@ function lotMontar() {
     grade.appendChild(b);
   }
 
-  // Cotação: um campo por tamanho de jogo, vazio de propósito.
+  // Cotação: um campo por tamanho de jogo, com a tabela de uma banca já posta.
+  //
+  // Vinha vazio antes, por escrúpulo — cotações variam e não são auditadas. O
+  // escrúpulo continua certo e a consequência estava errada: sem número nenhum
+  // a tela não dizia se o fechamento paga, que é a pergunta que decide a
+  // compra. Preenchido e editável resolve as duas coisas.
   const cot = $('lot-cotacao');
   cot.innerHTML = '';
   for (let k = lotinha.MENOR_POOL; k <= lotinha.MAIOR_POOL; k++) {
@@ -732,6 +739,7 @@ function lotMontar() {
     campo.step = '0.01';
     campo.inputMode = 'decimal';
     campo.placeholder = 'quanto paga';
+    if (lotCotacao[k]) campo.value = String(lotCotacao[k]);
     campo.addEventListener('input', () => {
       const v = Number(campo.value);
       if (v > 0) lotCotacao[k] = v;
@@ -1014,6 +1022,59 @@ function textoDaDistancia() {
 }
 
 /**
+ * O selo que diz se o fechamento paga — e é sobre **o ramo em que se ganha**.
+ *
+ * Precisa dessa qualificação em toda frase, porque a outra pergunta já tem
+ * resposta e ela é sempre a mesma: no longo prazo nenhuma combinação devolve o
+ * que custa. O selo não contradiz isso e não pode parecer contradizer; ele
+ * responde algo diferente e verificável — quando as 15 caírem dentro do seu
+ * pool, o que você recebe cobre o que gastou?
+ *
+ * A distinção entre "ainda não" e "nunca" vem do piso: se o mínimo matemático
+ * já custa mais que o prêmio, nenhum otimizador salva aquela combinação, e
+ * dizer isso poupa o usuário de esperar uma melhora que não existe.
+ */
+function selaDoVeredito(v) {
+  const vezes = (n) => `${milhares(n)}×`;
+
+  if (v.classe === 'lucra') {
+    return (
+      `<div class="veredito paga"><b>Paga quando acerta o pool.</b> ` +
+      `<em>O prêmio garantido é ${vezes(v.premio)} a aposta e o fechamento ` +
+      `custa ${vezes(quantidadeDoVeredito(v))} — sobram ${vezes(v.folga)}.</em></div>`
+    );
+  }
+
+  if (v.classe === 'possivel') {
+    return (
+      `<div class="veredito quase"><b>Ainda não paga.</b> ` +
+      `<em>São ${vezes(quantidadeDoVeredito(v))} de custo para um prêmio ` +
+      `garantido de ${vezes(v.premio)}. Faltam cortar ` +
+      `<b>${milhares(v.faltamCortar)}</b> cartela${v.faltamCortar === 1 ? '' : 's'} — ` +
+      `o mínimo matemático é ${milhares(v.piso)}, então dá.</em></div>`
+    );
+  }
+
+  if (v.classe === 'impossivel') {
+    return (
+      `<div class="veredito nao-paga"><b>Nenhum fechamento paga aqui.</b> ` +
+      `<em>Nem o mínimo matemático: ${milhares(v.piso)} cartelas custam ` +
+      `${v.custoDoPiso.toFixed(1).replace('.', ',')}× o prêmio de ` +
+      `${vezes(v.premio)}. Não é falta de otimização — é a conta.</em></div>`
+    );
+  }
+
+  return '';
+}
+
+/* O custo em múltiplos da aposta, que é a unidade em que o prêmio é cotado. */
+function quantidadeDoVeredito(v) {
+  if (v.classe === 'lucra') return v.premio - v.folga;
+  if (v.classe === 'possivel') return v.premio + v.faltamCortar - 1;
+  return v.piso;
+}
+
+/**
  * Como descrever a quantidade de jogos, dizendo de onde ela veio.
  *
  * Chamar o piso de "custo" seria prometer um preço que não existe: em 25
@@ -1108,12 +1169,23 @@ function lotPintarEconomia() {
     return;
   }
 
+  const v = lotinha.veredito({
+    jogo: lotJogo,
+    quantidade,
+    piso: prevista.piso,
+    garantia: lotGarantia,
+    premiadas: lotPremiadas,
+    cotacao: lotCotacao,
+  });
+
   const lucro = e.premioMinimo - e.custo;
   const quantasGanham =
     e.premiadas === 1 ? 'uma cartela premiada' : `<b>${e.premiadas}</b> cartelas premiadas`;
   destino.innerHTML =
     `<div class="linha-economia"><span>Custo do fechamento</span>` +
     `<b>${dinheiro(e.custo)}</b> <em>${textoDaQuantidade(quantidade, ehPiso)}</em></div>` +
+
+    selaDoVeredito(v) +
 
     `<div class="linha-economia ganha"><span>Se o sorteio cair no seu pool ` +
     `<em>(1 em ${milhares(1 / e.chanceDoPool)})</em></span>` +
@@ -1134,23 +1206,55 @@ function lotPintarEconomia() {
     `cada vez; nunca a média.</p>`;
 }
 
+/*
+ * A matriz das 45 combinações — agora com a coluna que decide a compra.
+ *
+ * Escolher aqui é escolher com quanto se vai gastar e o que se pode receber, e
+ * até agora a tabela só falava do lado combinatório. A coluna "paga?" põe o
+ * outro lado ao alcance do olho: em catorze das quarenta e cinco, o mínimo
+ * matemático já custa mais que o prêmio — e essas ficam apagadas, porque
+ * nenhuma quantidade de busca as salva.
+ *
+ * A quantidade mostrada passa a ser a que o aplicativo **entrega**, e não mais
+ * o piso: era o piso que aparecia nas combinações em aberto, e comparar um piso
+ * com um prêmio daria um veredito que a compra não cumpre.
+ */
 function lotMontarMatriz() {
   const linhas = lotinha
     .matriz()
     .map((l) => {
-      const quantos = l.exato ? milhares(l.jogos) : `≥ ${milhares(l.piso)}`;
+      const previsao = lotinha.previsao(l.pool, l.jogo);
+      const entrega = previsao.quantidade;
+      const quantos = entrega === null ? `≥ ${milhares(l.piso)}` : milhares(entrega);
       const situacao = l.jogo === l.pool ? 'aposta única' : l.exato ? 'exato' : 'em aberto';
+
+      const v = lotinha.veredito({
+        jogo: l.jogo,
+        quantidade: entrega,
+        piso: l.piso,
+        cotacao: lotCotacao,
+      });
+      const paga =
+        v.classe === 'lucra'
+          ? '<td class="paga">paga</td>'
+          : v.classe === 'possivel'
+            ? `<td class="quase">faltam ${milhares(v.faltamCortar ?? 0)}</td>`
+            : v.classe === 'impossivel'
+              ? '<td class="nao-paga">não paga</td>'
+              : '<td class="sem-cotacao">—</td>';
+
       return (
-        `<tr><td>${l.pool}</td><td>${l.jogo}</td><td>${quantos}</td>` +
+        `<tr class="${v.classe === 'impossivel' ? 'linha-apagada' : ''}">` +
+        `<td>${l.pool}</td><td>${l.jogo}</td><td>${quantos}</td>` +
         `<td class="${l.exato ? '' : 'aberto'}">${situacao}</td>` +
-        `<td>1 em ${milhares(1 / lotinha.chanceDe(l.jogo))}</td></tr>`
+        `<td>1 em ${milhares(1 / lotinha.chanceDe(l.jogo))}</td>${paga}</tr>`
       );
     })
     .join('');
 
   $('lot-matriz').innerHTML =
     '<thead><tr><th>pool</th><th>jogo</th><th>jogos</th><th>mínimo</th>' +
-    '<th>chance de 1 jogo</th></tr></thead><tbody>' + linhas + '</tbody>';
+    '<th>chance de 1 jogo</th><th>paga?</th></tr></thead><tbody>' + linhas + '</tbody>';
 }
 
 $('lot-limpar').addEventListener('click', () => {
@@ -1431,6 +1535,9 @@ lotinha
   .then(() => {
     lotPintarExplicacao();
     lotPintarEconomia();
+    // A matriz mostra a quantidade entregue, que só se conhece com o banco na
+    // mão: sem esta repintura ela ficaria com os números da fórmula.
+    lotMontarMatriz();
   })
   .catch(() => {});
 

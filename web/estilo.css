@@ -1019,3 +1019,48 @@ main { padding: 8px 16px 0; }
 
 #chk-faixa-botoes { margin-bottom: 4px; }
 #chk-mais { margin-top: 10px; }
+
+/* O selo do veredito financeiro, dentro do cartão de economia.
+   Três estados, e nenhum deles pode se parecer com promessa de lucro: o
+   parágrafo do retorno esperado continua logo abaixo, dizendo que no longo
+   prazo a conta é negativa em todas as combinações. */
+.veredito {
+  margin: 10px 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--borda);
+  background: var(--fundo-campo);
+  font-size: 14px;
+}
+
+.veredito b { display: block; }
+
+.veredito em {
+  display: block;
+  font-style: normal;
+  color: var(--texto-fraco);
+  font-size: 13px;
+  margin-top: 3px;
+}
+
+.veredito.paga { border-color: var(--verde); }
+.veredito.paga b { color: var(--verde); }
+.veredito.paga b::before { content: '✓ '; }
+
+.veredito.quase { border-color: var(--ouro); }
+.veredito.quase b { color: var(--ouro); }
+.veredito.quase b::before { content: '⌛ '; }
+
+.veredito.nao-paga { border-color: var(--vermelho); }
+.veredito.nao-paga b { color: var(--vermelho); }
+.veredito.nao-paga b::before { content: '✕ '; }
+
+/* A coluna "paga?" da matriz das 45. */
+.matriz .paga { color: var(--verde); }
+.matriz .quase { color: var(--ouro); }
+.matriz .nao-paga { color: var(--vermelho); }
+.matriz .sem-cotacao { color: var(--texto-fraco); }
+
+/* Combinações em que nem o mínimo matemático paga: continuam disponíveis — a
+   decisão é do usuário — mas não competem visualmente com as que pagam. */
+.matriz .linha-apagada td { opacity: 0.55; }

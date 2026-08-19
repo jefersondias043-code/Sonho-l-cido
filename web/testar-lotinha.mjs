@@ -408,8 +408,20 @@ try {
   // ─── 6. o painel financeiro, com os dois ramos ───
   await pagina.click('.aba[data-painel="lotinha"]');
   await pagina.locator('#lot-cotacao-cartao summary').click();
-  const campo17 = pagina.locator('#lot-cotacao .campo input').first();
-  await campo17.fill('7000');
+
+  // A tabela vem preenchida. Antes eram sete campos vazios, e sem número
+  // nenhum a tela não podia dizer se o fechamento paga — que é a pergunta que
+  // decide a compra.
+  const cotacoes = await pagina.$$eval('#lot-cotacao input', (i) => i.map((x) => x.value));
+  marcar(
+    cotacoes.slice(0, 7).join(',') === '7000,1300,300,100,30,10,4',
+    'a cotação vem preenchida, de 17 a 23 dezenas',
+    cotacoes.slice(0, 7).join(' · ')
+  );
+  marcar(
+    cotacoes.slice(7).every((v) => v === ''),
+    'e 24 e 25 ficam vazios — banca nenhuma aceita cartela desse tamanho'
+  );
 
   const economia = (await pagina.locator('#lot-economia').textContent()).trim();
   marcar(/R\$\s?16,00/.test(economia), 'mostra o custo do fechamento', 'R$ 16,00');
@@ -428,6 +440,149 @@ try {
     'o retorno esperado bate com a matemática da modalidade',
     retorno ? `R$ ${retorno[1]} por real` : 'não encontrado'
   );
+
+  // ─── 6b. o veredito: este fechamento paga? ───
+  //
+  // Duas perguntas diferentes, e confundi-las é o que custa dinheiro:
+  //
+  //   - **no longo prazo** nenhuma combinação devolve o que custa, e o número
+  //     de cartelas cancela na conta. Otimizar não muda isso.
+  //   - **no ramo em que se ganha**, o fechamento garante `r` cartelas com as
+  //     15, que pagam `r · mult`, contra um custo de `N` cartelas. Aí sim o
+  //     tamanho decide.
+  //
+  // O veredito responde só a segunda, e a asserção final desta seção é o que
+  // impede alguém de, um dia, transformá-lo numa promessa de lucro.
+  const vereditos = await pagina.evaluate(async () => {
+    const lot = await import('./lotinha.js');
+    await lot.carregarBanco();
+
+    const classificar = (pool, jogo) => {
+      const m = lot.minimo(pool, jogo);
+      const v = lot.veredito({
+        jogo,
+        quantidade: lot.previsao(pool, jogo).quantidade,
+        piso: m.piso,
+      });
+      return { ...v, pool, jogo };
+    };
+
+    // E o retorno esperado de toda combinação que a banca cota.
+    const retornos = [];
+    for (const l of lot.matriz()) {
+      if (!lot.COTACAO_PADRAO[l.jogo]) continue;
+      const e = lot.economia({
+        pool: l.pool,
+        jogo: l.jogo,
+        quantidade: lot.previsao(l.pool, l.jogo).quantidade ?? l.piso,
+        cotacao: lot.COTACAO_PADRAO,
+      });
+      retornos.push({ pool: l.pool, jogo: l.jogo, retorno: e.retornoEsperado });
+    }
+
+    const todos = lot.matriz().map((l) => classificar(l.pool, l.jogo));
+    const conta = {};
+    for (const v of todos) conta[v.classe] = (conta[v.classe] ?? 0) + 1;
+
+    return {
+      lucra: classificar(22, 20),
+      possivel: classificar(23, 20),
+      impossivel: classificar(25, 20),
+      semCotacao: classificar(24, 24),
+      conta,
+      retornos,
+    };
+  });
+
+  marcar(
+    vereditos.lucra.classe === 'lucra' && vereditos.lucra.folga === 70,
+    '22 dezenas com jogos de 20: 30 cartelas para um prêmio de 100× — paga',
+    `sobram ${vereditos.lucra.folga}× a aposta`
+  );
+  marcar(
+    vereditos.possivel.classe === 'possivel' && vereditos.possivel.faltamCortar === 3,
+    '23 com jogos de 20 está a três cartelas de pagar, e o piso permite',
+    `102 hoje, prêmio 100×, piso ${vereditos.possivel.piso}`
+  );
+  marcar(
+    vereditos.impossivel.classe === 'impossivel' &&
+      Math.abs(vereditos.impossivel.custoDoPiso - 3.17) < 0.02,
+    '25 com jogos de 20 não paga nem no mínimo matemático',
+    `piso ${vereditos.impossivel.piso} custa ${vereditos.impossivel.custoDoPiso.toFixed(2)}× o prêmio`
+  );
+  marcar(
+    vereditos.semCotacao.classe === 'sem-cotacao',
+    'e uma cartela de 24 dezenas não recebe veredito, porque não tem cotação'
+  );
+  marcar(
+    vereditos.conta.lucra === 23 &&
+      vereditos.conta.possivel === 4 &&
+      vereditos.conta.impossivel === 15 &&
+      vereditos.conta['sem-cotacao'] === 3,
+    'as 45 combinações se repartem em 23 que pagam, 4 possíveis e 15 que não',
+    JSON.stringify(vereditos.conta)
+  );
+
+  // A trava. Se um dia alguém fizer o veredito parecer promessa de lucro, é
+  // aqui que o teste quebra: no longo prazo **nenhuma** combinação devolve o
+  // que custa, e é por isso que a tela mostra os dois ramos sempre juntos.
+  const positivos = vereditos.retornos.filter((r) => r.retorno >= 1);
+  const melhor = vereditos.retornos.reduce((a, b) => (b.retorno > a.retorno ? b : a));
+  marcar(
+    positivos.length === 0,
+    'e nenhuma das 41 combinações cotadas devolve o que custa, no longo prazo',
+    `a menos ruim é ${melhor.pool}/${melhor.jogo}, com R$ ${melhor.retorno
+      .toFixed(2)
+      .replace('.', ',')} por real`
+  );
+
+  // ─── 6c. o selo na tela, nas três formas ───
+  const selos = {};
+  for (const [pool, jogo] of [[22, 20], [23, 20], [25, 20]]) {
+    await pagina.click(`#lot-pool .opcao[data-pool="${pool}"]`);
+    await pagina.click(`#lot-jogo .opcao[data-jogo="${jogo}"]`);
+    const selo = pagina.locator('#lot-economia .veredito');
+    selos[`${pool}/${jogo}`] = {
+      classe: (await selo.count()) ? await selo.getAttribute('class') : '',
+      texto: (await selo.count()) ? (await selo.textContent()).replace(/\s+/g, ' ') : '',
+    };
+  }
+  marcar(
+    /paga/.test(selos['22/20'].classe) &&
+      /quase/.test(selos['23/20'].classe) &&
+      /nao-paga/.test(selos['25/20'].classe),
+    'a tela mostra o veredito com as três aparências distintas',
+    Object.entries(selos)
+      .map(([k, v]) => `${k}: ${v.classe.replace('veredito ', '')}`)
+      .join(' · ')
+  );
+  marcar(
+    /Faltam cortar 3 cartelas/.test(selos['23/20'].texto),
+    'e diz quantas cartelas faltam cortar para a combinação passar a pagar',
+    selos['23/20'].texto.slice(0, 76)
+  );
+  marcar(
+    /Não é falta de otimização/.test(selos['25/20'].texto),
+    'e separa "ainda não conseguimos" de "ninguém vai conseguir"',
+    selos['25/20'].texto.slice(-70)
+  );
+
+  // Volta ao fechamento de 18 dezenas **carregado** para as seções seguintes:
+  // trocar de pool esquece o fechamento, e o simulador precisa dele na mão.
+  await pagina.click('#lot-pool .opcao[data-pool="18"]');
+  await pagina.click('#lot-jogo .opcao[data-jogo="17"]');
+  await pagina.click('#lot-iniciar');
+  await pagina.waitForFunction(
+    () => /Garantia|conferidos ao acaso/.test(
+      document.getElementById('lot-conferencia').textContent
+    ),
+    undefined,
+    { timeout: 60000 }
+  );
+  // Carregar um fechamento leve liga o motor e leva a tela para o painel de
+  // busca; as seções seguintes são todas da Lotinha.
+  await pagina.click('.aba[data-painel="lotinha"]');
+  await pagina.waitForSelector('#lotinha.ativo');
 
   // ─── 7. o simulador ───
   await pagina.locator('#lot-simulador-cartao summary').click();
