@@ -829,3 +829,193 @@ main { padding: 8px 16px 0; }
   padding: 32px 16px;
   font-size: 14px;
 }
+
+/* ═════════════ Checar fechamento ═════════════ */
+
+/*
+ * A tela de conferência reusa tudo que já existe — `.cartao`, `.opcoes`,
+ * `.matriz`, `.cartelas` — e acrescenta só o que é próprio dela: a ficha do
+ * fechamento, as dezenas sorteadas, o destaque da premiação e a marcação das
+ * dezenas acertadas dentro da cartela.
+ */
+
+#chk-fechamento {
+  width: 100%;
+  min-height: 48px;
+  margin-top: 10px;
+  padding: 10px 14px;
+  /* 17px evita o zoom automático do Safari no iOS ao focar o campo. */
+  font-size: 17px;
+  font-family: inherit;
+  color: var(--texto);
+  background: var(--fundo-campo);
+  border: 1px solid var(--borda);
+  border-radius: 10px;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+#chk-fechamento:focus {
+  outline: none;
+  border-color: var(--acento);
+}
+
+#chk-resultado {
+  width: 100%;
+  margin-top: 10px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid var(--borda);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--texto);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 16px;
+  line-height: 1.6;
+  letter-spacing: 1px;
+  resize: vertical;
+}
+
+#chk-resultado:focus {
+  outline: none;
+  border-color: var(--acento);
+}
+
+.ficha {
+  display: grid;
+  gap: 6px 16px;
+  margin-top: 4px;
+}
+
+@media (min-width: 480px) {
+  .ficha { grid-template-columns: 1fr 1fr; }
+}
+
+.ficha > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--borda);
+  font-size: 14px;
+}
+
+.ficha span { color: var(--texto-fraco); }
+.ficha b { font-weight: 600; text-align: right; }
+
+/* As 15 dezenas sorteadas, do jeito que uma pessoa lê um resultado. */
+.dezenas-sorteadas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 10px 0 14px;
+}
+
+.dezenas-sorteadas span {
+  min-width: 34px;
+  padding: 6px 4px;
+  text-align: center;
+  background: var(--acento);
+  color: #0b1020;
+  border-radius: 8px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  font-size: 15px;
+}
+
+/* A premiação, separada de tudo: só 15 paga, e a tela não pode sugerir outra
+   coisa nem por acidente de diagramação. */
+.premio {
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--borda);
+  background: var(--fundo-campo);
+  margin-bottom: 12px;
+}
+
+.premio b { display: block; font-size: 16px; }
+.premio em { display: block; font-style: normal; color: var(--texto-fraco); font-size: 13px; margin-top: 4px; }
+
+.premio.ganhou {
+  border-color: var(--ouro);
+  background: rgba(255, 199, 90, 0.12);
+}
+
+.premio.ganhou b { color: var(--ouro); }
+
+#chk-faixas td:last-child,
+#chk-estatistica td:not(:first-child) {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+#chk-faixas .faixa-premio td { color: var(--ouro); font-weight: 600; }
+#chk-faixas .faixa-vazia td { color: var(--texto-fraco); }
+#chk-faixas .faixa-resto td { color: var(--texto-fraco); font-size: 13px; }
+#chk-estatistica .faixa-premio td { color: var(--ouro); font-weight: 600; }
+#chk-estatistica caption {
+  caption-side: top;
+  text-align: left;
+  color: var(--texto-fraco);
+  font-size: 13px;
+  padding-bottom: 6px;
+}
+
+/* Uma cartela conferida: as dezenas acertadas marcadas, as outras apagadas. */
+.cartelas .cartela.conferida {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  position: relative;
+}
+
+.cartela.conferida .dezenas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  letter-spacing: 0;
+}
+
+.cartela.conferida .dezenas span {
+  min-width: 26px;
+  padding: 3px 2px;
+  text-align: center;
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--texto-fraco);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.cartela.conferida .dezenas span.acertou {
+  background: var(--acento);
+  color: #0b1020;
+  font-weight: 600;
+}
+
+.cartela.conferida .acertos {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  font-size: 12px;
+  color: var(--texto-fraco);
+}
+
+.cartela.conferida .acertos::after { content: ' acertos'; }
+
+/* Andamento de uma simulação longa: sem isto a tela fica parada por dezenas de
+   segundos e parece travada. */
+.barra-progresso {
+  height: 6px;
+  margin-top: 8px;
+  border-radius: 999px;
+  background: var(--fundo-campo);
+  overflow: hidden;
+}
+
+.barra-progresso > div {
+  height: 100%;
+  background: var(--acento);
+  transition: width 0.2s linear;
+}
+
+#chk-faixa-botoes { margin-bottom: 4px; }
+#chk-mais { margin-top: 10px; }

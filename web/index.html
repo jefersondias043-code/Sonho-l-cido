@@ -31,6 +31,7 @@
   <button class="aba ativa" role="tab" aria-selected="true" data-painel="lotinha">Lotinha</button>
   <button class="aba" role="tab" aria-selected="false" data-painel="buscar">Buscar</button>
   <button class="aba" role="tab" aria-selected="false" data-painel="resultado">Resultado</button>
+  <button class="aba" role="tab" aria-selected="false" data-painel="checar">Checar</button>
   <button class="aba" role="tab" aria-selected="false" data-painel="historico">Histórico</button>
 </nav>
 
@@ -123,6 +124,9 @@
          segundos por iteração. Quem quiser, pede. -->
     <button class="principal" id="lot-otimizar" hidden>
       Procurar um fechamento menor
+    </button>
+    <button class="secundario" id="lot-checar" hidden>
+      Checar este fechamento
     </button>
   </div>
 
@@ -293,12 +297,83 @@
     <button class="secundario" id="copiar">Copiar</button>
   </div>
 
+  <button class="secundario" id="res-checar">Checar este fechamento</button>
+
   <div class="cartao">
     <div class="rotulo">As cartelas</div>
     <div class="cartelas" id="lista-cartelas">
       <p class="ajuda">Nenhuma solução ainda. Inicie uma busca.</p>
     </div>
   </div>
+</section>
+
+<!-- ══════════════════ CHECAR ══════════════════ -->
+<!--
+  Conferir um fechamento contra um resultado — real ou sorteado — e ver como
+  ele se comportou. Não recalcula fechamento nenhum: confere exatamente as
+  cartelas que foram geradas, sejam as da tela ou as guardadas no histórico.
+-->
+<section id="checar" class="painel" role="tabpanel">
+  <div class="cartao">
+    <h2>1 · Qual fechamento</h2>
+    <p class="ajuda">
+      As cartelas conferidas são as que foram geradas de verdade — nada é
+      montado de novo aqui.
+    </p>
+    <select id="chk-fechamento" aria-label="Fechamento a conferir"></select>
+    <div class="referencia" id="chk-ficha"></div>
+  </div>
+
+  <div class="cartao" id="chk-entrada-cartao">
+    <h2>2 · O resultado</h2>
+    <p class="ajuda">
+      Digite as 15 dezenas sorteadas, ou peça um sorteio simulado. Separadas
+      por espaço, vírgula ou linha — tanto faz.
+    </p>
+    <textarea id="chk-resultado" rows="2" spellcheck="false" inputmode="numeric"
+      placeholder="01 03 04 05 07 08 10 11 13 14 16 18 20 22 24"></textarea>
+    <div class="controles">
+      <button class="principal" id="chk-conferir">Conferir fechamento</button>
+      <button class="secundario" id="chk-sortear">Simular sorteio</button>
+    </div>
+    <div class="referencia" id="chk-erro" hidden></div>
+  </div>
+
+  <div class="cartao destaque" id="chk-resumo-cartao" hidden>
+    <div class="rotulo">Resultado conferido</div>
+    <div class="dezenas-sorteadas" id="chk-sorteio"></div>
+    <div id="chk-premiacao"></div>
+    <div class="rolagem"><table class="matriz" id="chk-faixas"></table></div>
+    <p class="ajuda" id="chk-nota-premio"></p>
+  </div>
+
+  <div class="cartao" id="chk-cartelas-cartao" hidden>
+    <div class="rotulo">Cartelas por faixa</div>
+    <div class="opcoes" id="chk-faixa-botoes"></div>
+    <div class="cartelas" id="chk-cartelas"></div>
+    <button class="secundario" id="chk-mais" hidden>Mostrar mais cartelas</button>
+  </div>
+
+  <details class="cartao" id="chk-multi-cartao">
+    <summary>Simular vários sorteios</summary>
+    <p class="ajuda">
+      Cada sorteio é gerado do zero, com a mesma chance para toda combinação.
+      <b>Isto é simulação, não previsão:</b> descreve como o fechamento se
+      comporta, não o que vai sair no próximo concurso.
+    </p>
+    <div class="opcoes" id="chk-quantos"></div>
+    <button class="principal" id="chk-simular">Simular</button>
+    <div class="referencia" id="chk-andamento" hidden></div>
+    <div class="rolagem" hidden id="chk-estatistica-rolagem">
+      <table class="matriz" id="chk-estatistica"></table>
+    </div>
+  </details>
+
+  <p class="rodape-nota">
+    Um fechamento garante cobertura, não sorte. Nenhuma simulação prevê
+    resultado futuro, e a frequência observada aqui não muda a chance do
+    próximo sorteio.
+  </p>
 </section>
 
 <!-- ══════════════════ HISTÓRICO ══════════════════ -->

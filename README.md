@@ -231,6 +231,40 @@ para menos de 15 não garante prêmio nenhum na Lotinha**, que paga o jogo com a
 15 e só ele. A escolha faz sentido para a Lotofácil, que premia a partir de 11, e
 a tela diz exatamente isso em vez de calcular um prêmio garantido inexistente.
 
+### Checar um fechamento
+
+Aba própria, e também um botão em cada fechamento carregado, em cada resultado
+de busca e em cada trabalho do histórico. Escolhe-se o fechamento, informa-se o
+resultado — digitado ou sorteado — e a ferramenta conta quantas cartelas fizeram
+11, 12, 13, 14 e 15 acertos.
+
+**Ela nunca regenera as cartelas.** Confere exatamente as que foram produzidas,
+inclusive as que ficaram gravadas no histórico meses atrás. Regerar daria outro
+fechamento do mesmo tamanho, igualmente válido e diferente, e a conferência
+deixaria de descrever o que a pessoa tem na mão.
+
+A separação que a tela faz questão de manter: **só 15 acertos é prêmio** nesta
+modalidade. As faixas de 11 a 14 aparecem porque medem o quanto o fechamento
+chegou perto — são cobertura, não premiação, e a tela diz isso com todas as
+letras.
+
+Também simula muitos sorteios de uma vez — 10, 100, 1.000 ou 10.000 — e resume
+em quantos deles apareceu ao menos uma cartela de cada faixa, com média, mínimo
+e máximo. Medido num fechamento de 24 dezenas com jogos de 17, que tem 26.837
+cartelas: a conferência de um resultado leva 0,4 s, e mil sorteios levam 1,1 s
+num worker separado, com a tela respondendo o tempo inteiro. A partir de dois
+milhões de comparações o trabalho vai para o worker; abaixo disso não vale a
+viagem.
+
+Um número que a simulação confirma e que serve de aferição: nesse fechamento,
+387 de 1.000 sorteios tiveram alguma cartela com 15 acertos. O esperado é
+`C(24,15)/C(25,15) = 40%`, porque é a chance de as 15 sorteadas caírem todas
+dentro das 24 escolhidas.
+
+E o que a ferramenta repete sempre que mostra uma simulação: **simulação não é
+previsão**. Um fechamento garante cobertura, não sorte, e frequência observada
+não muda a chance do próximo sorteio.
+
 #### Três opiniões independentes sobre a cobertura
 
 Um fechamento que afirme cobrir e não cubra é o pior defeito que esta ferramenta

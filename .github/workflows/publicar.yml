@@ -99,6 +99,11 @@ jobs:
           # compartilha código nem com o motor nem com o validador do app.
           node web/testar-lotinha.mjs
 
+          # E a checagem: a contagem de acertos é aritmética, e aritmética
+          # errada numa ferramenta de conferência é pior do que ferramenta
+          # nenhuma. Aqui cada faixa de 11 a 15 é montada à mão e cobrada.
+          node web/testar-checagem.mjs
+
       - name: Publicar na branch gh-pages
         run: |
           set -euo pipefail

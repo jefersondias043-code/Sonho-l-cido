@@ -201,8 +201,8 @@ try {
 
   const abas = await pagina.$$eval('.aba', (b) => b.map((x) => x.textContent.trim()));
   marcar(
-    abas.join(',') === 'Lotinha,Buscar,Resultado,Histórico',
-    'as abas são as quatro da Lotinha, sem a tela de configuração',
+    abas.join(',') === 'Lotinha,Buscar,Resultado,Checar,Histórico',
+    'as abas são as cinco da Lotinha, sem a tela de configuração',
     abas.join(' · ')
   );
   marcar(

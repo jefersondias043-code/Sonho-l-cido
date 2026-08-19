@@ -22,6 +22,7 @@
 
 import * as historico from './historico.js';
 import * as lotinha from './lotinha.js';
+import * as checagem from './checagem.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -220,6 +221,11 @@ function mostrarPainel(nome) {
   document.querySelectorAll('.painel').forEach((p) => {
     p.classList.toggle('ativo', p.id === nome);
   });
+  // A lista de fechamentos disponíveis muda enquanto o usuário usa o
+  // aplicativo — carregar um fechamento novo, terminar uma busca, salvar no
+  // histórico. Atualizar ao abrir a aba é o único momento em que isso importa,
+  // e evita espalhar chamadas por toda parte.
+  if (nome === 'checar') chkAtualizarFontes();
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
@@ -669,6 +675,7 @@ function lotEsquecerFechamento() {
   lotConfiguracao = null;
   $('lot-conferir').hidden = true;
   $('lot-otimizar').hidden = true;
+  $('lot-checar').hidden = true;
   $('lot-conferencia').innerHTML =
     '<em>Ao carregar, cada sorteio possível dentro do seu pool é conferido um a ' +
     'um — sem consultar o motor que produziu o fechamento.</em>';
@@ -1226,6 +1233,7 @@ $('lot-iniciar').addEventListener('click', async () => {
         `botão abaixo confere sorteio a sorteio o que ele encontrou.</em>`;
     }
     $('lot-conferir').hidden = false;
+    $('lot-checar').hidden = !pronto;
 
     lotPintarEconomia();
 
@@ -1615,6 +1623,7 @@ function pintarHistorico() {
       const { acao, id } = botao.dataset;
       if (acao === 'continuar') continuarSessao(id);
       else if (acao === 'ver') verSessao(id);
+      else if (acao === 'checar') abrirChecagem(`historico:${id}`);
       else if (acao === 'excluir') excluirSessao(id);
     });
   });
@@ -1664,6 +1673,7 @@ function cartaoDaSessao(sessao) {
       <div class="sessao-acoes">
         <button class="continuar" data-acao="continuar" data-id="${id}">Continuar</button>
         <button data-acao="ver" data-id="${id}">Ver cartelas</button>
+        <button data-acao="checar" data-id="${id}">Checar</button>
         <button class="excluir" data-acao="excluir" data-id="${id}"
                 aria-label="Excluir este trabalho">✕</button>
       </div>
@@ -1722,6 +1732,518 @@ $('limpar-historico').addEventListener('click', () => {
 function atualizarAtalhoDoHistorico(total = historico.quantidade()) {
   $('ir-para-historico').hidden = total === 0;
 }
+
+/* ═════════════════ Checar fechamento ═════════════════ */
+
+/*
+ * Conferir um fechamento contra um resultado, real ou sorteado.
+ *
+ * ## A regra que não pode ser quebrada
+ *
+ * A ferramenta **não regenera cartelas**. Ela confere exatamente as que foram
+ * produzidas — as que estão na tela agora, ou as que ficaram gravadas no
+ * histórico. Regerar daria outro fechamento do mesmo tamanho, igualmente
+ * válido e diferente, e a conferência deixaria de descrever o que a pessoa
+ * tem na mão.
+ *
+ * ## Onde as contas moram
+ *
+ * Em `checagem.js`, sem DOM: é o que permite testá-las fora do navegador e
+ * reusá-las dentro do worker das simulações longas. Aqui só há tela.
+ */
+
+/** Quantas cartelas mostrar de uma vez ao abrir uma faixa. */
+const CARTELAS_POR_LEVA = 60;
+
+/** A partir de quantas cartelas-sorteio a simulação vai para o worker. */
+const TRABALHO_PARA_O_WORKER = 2_000_000;
+
+let chkFonte = null;
+let chkMascaras = null;
+let chkUltima = null;
+let chkFaixaAberta = null;
+let chkMostradas = 0;
+let chkQuantosSorteios = 100;
+/* Qual fechamento a próxima abertura da aba deve escolher. */
+let chkPreferida = null;
+/* As chaves da última lista pintada, para não repintar sem necessidade.
+   Começa em `null` — e não em string vazia — porque a lista vazia é um estado
+   legítimo que precisa ser pintado uma vez. */
+let chkChavesPintadas = null;
+let chkTrabalhador = null;
+let chkSimulando = false;
+
+/**
+ * Tudo que pode ser conferido, na ordem em que interessa.
+ *
+ * O fechamento carregado agora vem primeiro porque é o que a pessoa estava
+ * olhando; depois o resultado da busca em curso; depois o histórico, do mais
+ * recente para o mais antigo.
+ */
+function chkFontes() {
+  const fontes = [];
+
+  if (lotFechamento?.length) {
+    fontes.push({
+      chave: 'lotinha',
+      rotulo: `Fechamento carregado · ${lotPool} dezenas · jogos de ${lotJogo}`,
+      cartelas: lotFechamento,
+      criadaEm: null,
+      descricao: `${lotPool} dezenas · jogos de ${lotJogo}`,
+    });
+  }
+
+  if (melhorCartelas?.length) {
+    fontes.push({
+      chave: 'busca',
+      rotulo: `Resultado da busca · ${milhares(melhorCartelas.length)} cartelas`,
+      cartelas: melhorCartelas,
+      criadaEm: null,
+      descricao: configuracaoDaBusca
+        ? historico.descrever(configuracaoDaBusca)
+        : 'resultado em tela',
+    });
+  }
+
+  for (const sessao of historico.listar()) {
+    if (!sessao.melhor?.length) continue;
+    fontes.push({
+      chave: `historico:${sessao.id}`,
+      rotulo: `${historico.descrever(sessao.configuracao)} · ${milhares(
+        sessao.melhor.length
+      )} cartelas · ${historico.quando(sessao.criadaEm)}`,
+      cartelas: sessao.melhor,
+      criadaEm: sessao.criadaEm,
+      descricao: historico.descrever(sessao.configuracao),
+    });
+  }
+
+  return fontes;
+}
+
+function chkPintarSeletor(preferida = null) {
+  const seletor = $('chk-fechamento');
+  const fontes = chkFontes();
+
+  if (!fontes.length) {
+    seletor.innerHTML = '<option value="">nenhum fechamento disponível</option>';
+    seletor.disabled = true;
+    chkSelecionar(null);
+    return;
+  }
+
+  seletor.disabled = false;
+  const escolhida =
+    fontes.find((f) => f.chave === preferida)?.chave ??
+    fontes.find((f) => f.chave === chkFonte?.chave)?.chave ??
+    fontes[0].chave;
+
+  seletor.innerHTML = fontes
+    .map(
+      (f) =>
+        `<option value="${escapar(f.chave)}"${f.chave === escolhida ? ' selected' : ''}>${escapar(
+          f.rotulo
+        )}</option>`
+    )
+    .join('');
+
+  chkSelecionar(escolhida);
+}
+
+/** Carrega um fechamento para análise, e esquece a conferência anterior. */
+function chkSelecionar(chave) {
+  chkFonte = chave ? chkFontes().find((f) => f.chave === chave) ?? null : null;
+  chkMascaras = chkFonte ? checagem.mascarasDo(chkFonte.cartelas) : null;
+  chkUltima = null;
+  chkFaixaAberta = null;
+  chkMostradas = 0;
+
+  $('chk-resumo-cartao').hidden = true;
+  $('chk-cartelas-cartao').hidden = true;
+  $('chk-erro').hidden = true;
+  $('chk-estatistica-rolagem').hidden = true;
+  $('chk-andamento').hidden = true;
+  $('chk-conferir').disabled = !chkFonte;
+  $('chk-sortear').disabled = !chkFonte;
+  $('chk-sortear').textContent = 'Simular sorteio';
+  $('chk-simular').disabled = !chkFonte;
+
+  chkPintarFicha();
+}
+
+function chkPintarFicha() {
+  const destino = $('chk-ficha');
+  if (!chkFonte) {
+    destino.innerHTML =
+      '<b>Nenhum fechamento para conferir.</b> <em>Carregue um na tela da ' +
+      'Lotinha, ou abra um trabalho do histórico.</em>';
+    return;
+  }
+
+  const cartelas = chkFonte.cartelas;
+  // O pool sai das próprias cartelas: é o que garante que a ficha descreva o
+  // fechamento que está sendo conferido, e não a configuração que alguém
+  // achou que ele tinha.
+  const dezenas = new Set();
+  let menorJogo = Infinity;
+  let maiorJogo = 0;
+  for (const c of cartelas) {
+    for (const d of c) dezenas.add(d);
+    if (c.length < menorJogo) menorJogo = c.length;
+    if (c.length > maiorJogo) maiorJogo = c.length;
+  }
+  const tamanho =
+    menorJogo === maiorJogo ? `${menorJogo}` : `${menorJogo} a ${maiorJogo}`;
+
+  const quando = chkFonte.criadaEm
+    ? `<div><span>Criado em</span><b>${escapar(historico.quando(chkFonte.criadaEm))}</b></div>`
+    : '';
+
+  destino.innerHTML =
+    `<div class="ficha">` +
+    `<div><span>Fechamento</span><b>${escapar(chkFonte.descricao)}</b></div>` +
+    quando +
+    `<div><span>Modalidade</span><b>Lotinha · 15 dezenas sorteadas</b></div>` +
+    `<div><span>Dezenas usadas</span><b>${dezenas.size}</b></div>` +
+    `<div><span>Cartelas</span><b>${milhares(cartelas.length)}</b></div>` +
+    `<div><span>Dezenas por cartela</span><b>${tamanho}</b></div>` +
+    `</div>`;
+}
+
+function chkMostrarErro(mensagem) {
+  const destino = $('chk-erro');
+  destino.hidden = false;
+  destino.innerHTML = `<b>${escapar(mensagem)}</b>`;
+}
+
+/** Confere e pinta. `dezenas` já vem validada. */
+function chkConferir(dezenas) {
+  if (!chkFonte) return;
+
+  $('chk-erro').hidden = true;
+  chkUltima = checagem.conferir(chkFonte.cartelas, dezenas, chkMascaras);
+  chkFaixaAberta = null;
+  chkMostradas = 0;
+
+  chkPintarResumo();
+  chkPintarBotoesDeFaixa();
+  $('chk-cartelas').innerHTML = '';
+  $('chk-mais').hidden = true;
+  $('chk-cartelas-cartao').hidden = chkUltima.melhor < 11;
+}
+
+function chkPintarResumo() {
+  const r = chkUltima;
+  $('chk-resumo-cartao').hidden = false;
+
+  $('chk-sorteio').innerHTML = r.resultado
+    .map((d) => `<span>${String(d).padStart(2, '0')}</span>`)
+    .join('');
+
+  // A premiação primeiro, e sozinha: é a única faixa que paga, e misturá-la
+  // com as outras é o erro que esta tela existe para não cometer.
+  $('chk-premiacao').innerHTML = r.premiadas
+    ? `<div class="premio ganhou">🎯 <b>${milhares(r.premiadas)} cartela${
+        r.premiadas > 1 ? 's' : ''
+      } com 15 acertos</b><em>É a única faixa premiada nesta modalidade.</em></div>`
+    : `<div class="premio"><b>Nenhuma cartela com 15 acertos</b>` +
+      `<em>Melhor resultado: ${
+        r.melhor >= 0 ? `${r.melhor} acerto${r.melhor === 1 ? '' : 's'}` : '—'
+      }${
+        r.melhor >= 0 && r.melhor <= 14
+          ? ` em ${milhares(r.porFaixa[r.melhor])} cartela${
+              r.porFaixa[r.melhor] > 1 ? 's' : ''
+            }`
+          : ''
+      }.</em></div>`;
+
+  const linhas = [];
+  for (let a = 15; a >= 11; a--) {
+    const quantas = r.porFaixa[a];
+    linhas.push(
+      `<tr class="${a === 15 ? 'faixa-premio' : ''}${
+        quantas === 0 ? ' faixa-vazia' : ''
+      }"><td>${a} acertos</td><td>${milhares(quantas)}</td></tr>`
+    );
+  }
+  const abaixo = r.porFaixa.slice(0, 11).reduce((s, n) => s + n, 0);
+  linhas.push(
+    `<tr class="faixa-resto"><td>10 ou menos</td><td>${milhares(abaixo)}</td></tr>`
+  );
+
+  $('chk-faixas').innerHTML =
+    '<thead><tr><th>Acertos</th><th>Cartelas</th></tr></thead><tbody>' +
+    linhas.join('') +
+    '</tbody>';
+
+  $('chk-nota-premio').innerHTML =
+    'Na Lotinha só <b>15 acertos</b> paga. As faixas de 11 a 14 estão aqui ' +
+    'porque dizem o quanto o fechamento chegou perto — são medida de ' +
+    'cobertura, não prêmio.';
+}
+
+function chkPintarBotoesDeFaixa() {
+  const destino = $('chk-faixa-botoes');
+  const r = chkUltima;
+  const faixas = [];
+  for (let a = 15; a >= 11; a--) {
+    if (r.porFaixa[a] > 0) faixas.push(a);
+  }
+
+  destino.innerHTML = faixas
+    .map(
+      (a) =>
+        `<button class="opcao" data-faixa="${a}">${a} acertos · ${milhares(
+          r.porFaixa[a]
+        )}</button>`
+    )
+    .join('');
+
+  destino.querySelectorAll('[data-faixa]').forEach((botao) => {
+    botao.addEventListener('click', () => chkAbrirFaixa(Number(botao.dataset.faixa)));
+  });
+}
+
+function chkAbrirFaixa(faixa) {
+  chkFaixaAberta = faixa;
+  chkMostradas = 0;
+  document.querySelectorAll('#chk-faixa-botoes .opcao').forEach((b) => {
+    const ativa = Number(b.dataset.faixa) === faixa;
+    b.classList.toggle('ativa', ativa);
+    b.setAttribute('aria-pressed', String(ativa));
+  });
+  $('chk-cartelas').innerHTML = '';
+  chkMostrarMaisCartelas();
+}
+
+/**
+ * Mostra a próxima leva de cartelas da faixa aberta.
+ *
+ * De leva em leva porque uma faixa de 11 acertos pode ter dezenas de milhares
+ * de cartelas: pintá-las todas de uma vez trava a tela por segundos e ninguém
+ * as leria.
+ */
+function chkMostrarMaisCartelas() {
+  if (chkFaixaAberta === null || !chkUltima) return;
+
+  const indices = chkUltima.indices.get(chkFaixaAberta) ?? [];
+  const sorteadas = new Set(chkUltima.resultado);
+  const ate = Math.min(indices.length, chkMostradas + CARTELAS_POR_LEVA);
+
+  const pedaco = [];
+  for (let i = chkMostradas; i < ate; i++) {
+    const posicao = indices[i];
+    const cartela = chkFonte.cartelas[posicao];
+    const dezenas = cartela
+      .map(
+        (d) =>
+          `<span class="${sorteadas.has(d) ? 'acertou' : ''}">${String(d).padStart(
+            2,
+            '0'
+          )}</span>`
+      )
+      .join('');
+    pedaco.push(
+      `<div class="cartela conferida">
+         <span class="indice">#${milhares(posicao + 1)}</span>
+         <span class="dezenas">${dezenas}</span>
+         <span class="acertos">${chkFaixaAberta}</span>
+       </div>`
+    );
+  }
+
+  $('chk-cartelas').insertAdjacentHTML('beforeend', pedaco.join(''));
+  chkMostradas = ate;
+
+  const faltam = indices.length - chkMostradas;
+  const botao = $('chk-mais');
+  botao.hidden = faltam <= 0;
+  if (faltam > 0) botao.textContent = `Mostrar mais ${milhares(Math.min(faltam, CARTELAS_POR_LEVA))}`;
+}
+
+/* ─────────── simulação de muitos sorteios ─────────── */
+
+function chkPintarQuantos() {
+  const destino = $('chk-quantos');
+  destino.innerHTML = [10, 100, 1000, 10000]
+    .map(
+      (n) =>
+        `<button class="opcao${n === chkQuantosSorteios ? ' ativa' : ''}" data-quantos="${n}"
+                 aria-pressed="${n === chkQuantosSorteios}">${milhares(n)}</button>`
+    )
+    .join('');
+
+  destino.querySelectorAll('[data-quantos]').forEach((botao) => {
+    botao.addEventListener('click', () => {
+      chkQuantosSorteios = Number(botao.dataset.quantos);
+      chkPintarQuantos();
+    });
+  });
+}
+
+function chkGarantirTrabalhador() {
+  if (chkTrabalhador) return chkTrabalhador;
+  chkTrabalhador = new Worker('./checador.js', { type: 'module' });
+  return chkTrabalhador;
+}
+
+function chkPintarAndamento(feitos, total) {
+  const destino = $('chk-andamento');
+  destino.hidden = false;
+  const pct = total > 0 ? Math.round((feitos / total) * 100) : 0;
+  destino.innerHTML =
+    `<b>Simulando…</b> <em>${milhares(feitos)} de ${milhares(total)} sorteios.</em>` +
+    `<div class="barra-progresso"><div style="width:${pct}%"></div></div>`;
+}
+
+function chkPintarEstatistica(resumo) {
+  $('chk-andamento').hidden = true;
+  $('chk-estatistica-rolagem').hidden = false;
+
+  const linhas = resumo.faixas
+    .slice()
+    .reverse()
+    .map((f) => {
+      const pct = (f.proporcao * 100).toFixed(f.proporcao < 0.01 ? 2 : 1);
+      return `<tr class="${f.acertos === 15 ? 'faixa-premio' : ''}">
+        <td>${f.acertos}</td>
+        <td>${milhares(f.sorteiosComAlguma)}</td>
+        <td>${pct}%</td>
+        <td>${f.media.toFixed(2)}</td>
+        <td>${milhares(f.minimo)}</td>
+        <td>${milhares(f.maximo)}</td>
+      </tr>`;
+    })
+    .join('');
+
+  const quinze = resumo.faixas.find((f) => f.acertos === 15);
+  const destaque = quinze
+    ? `<p class="ajuda"><b>${milhares(quinze.sorteiosComAlguma)} dos ${milhares(
+        resumo.sorteios
+      )} sorteios</b> simulados tiveram ao menos uma cartela com 15 acertos — ` +
+      `${(quinze.proporcao * 100).toFixed(2)}%. É a única faixa que paga, e ` +
+      `esta é uma frequência observada numa simulação, não uma chance prometida.</p>`
+    : '';
+
+  $('chk-estatistica').innerHTML =
+    `<caption>${milhares(resumo.sorteios)} sorteios sobre ${milhares(
+      resumo.cartelas
+    )} cartelas</caption>` +
+    '<thead><tr><th>Acertos</th><th>Sorteios com alguma</th><th>%</th>' +
+    '<th>Média</th><th>Mín</th><th>Máx</th></tr></thead>' +
+    `<tbody>${linhas}</tbody>`;
+
+  $('chk-estatistica-rolagem').insertAdjacentHTML('afterend', '');
+  const nota = $('chk-multi-cartao').querySelector('.ajuda.simulacao');
+  if (nota) nota.remove();
+  if (destaque) {
+    $('chk-estatistica-rolagem').insertAdjacentHTML(
+      'afterend',
+      destaque.replace('class="ajuda"', 'class="ajuda simulacao"')
+    );
+  }
+}
+
+async function chkSimularVarios() {
+  if (!chkFonte || chkSimulando) return;
+
+  const quantos = chkQuantosSorteios;
+  const trabalho = quantos * chkFonte.cartelas.length;
+
+  chkSimulando = true;
+  $('chk-simular').disabled = true;
+  chkPintarAndamento(0, quantos);
+
+  try {
+    if (trabalho < TRABALHO_PARA_O_WORKER) {
+      // Pequeno o bastante para não valer a viagem até o worker. Cede um quadro
+      // antes para a barra de andamento chegar a aparecer.
+      await new Promise((r) => setTimeout(r, 0));
+      const resumo = checagem.simularVarios(chkFonte.cartelas, quantos, {
+        mascaras: chkMascaras,
+      });
+      chkPintarEstatistica(resumo);
+    } else {
+      const resumo = await new Promise((resolver, rejeitar) => {
+        const w = chkGarantirTrabalhador();
+        w.onmessage = ({ data }) => {
+          if (data.tipo === 'andamento') chkPintarAndamento(data.feitos, data.total);
+          else if (data.tipo === 'pronto') resolver(data.resumo);
+          else if (data.tipo === 'erro') rejeitar(new Error(data.mensagem));
+        };
+        w.onerror = (e) => rejeitar(new Error(e.message || 'falha na simulação'));
+        // Uma cópia das máscaras: transferir o original deixaria a tela sem
+        // elas para a próxima conferência.
+        w.postMessage({ tipo: 'simular', mascaras: chkMascaras.slice(), quantos });
+      });
+      chkPintarEstatistica(resumo);
+    }
+  } catch (erro) {
+    $('chk-andamento').hidden = false;
+    $('chk-andamento').innerHTML = `<b>A simulação falhou.</b> <em>${escapar(
+      erro.message
+    )}</em>`;
+  } finally {
+    chkSimulando = false;
+    $('chk-simular').disabled = false;
+  }
+}
+
+/* ─────────── ligações da tela ─────────── */
+
+$('chk-fechamento').addEventListener('change', (e) => chkSelecionar(e.target.value));
+
+$('chk-conferir').addEventListener('click', () => {
+  const lido = checagem.interpretarResultado($('chk-resultado').value);
+  if (lido.erro) {
+    chkMostrarErro(lido.erro);
+    return;
+  }
+  chkConferir(lido.dezenas);
+});
+
+$('chk-sortear').addEventListener('click', () => {
+  const dezenas = checagem.sortearResultado();
+  $('chk-resultado').value = dezenas.map((d) => String(d).padStart(2, '0')).join(' ');
+  chkConferir(dezenas);
+  // Depois do primeiro, o botão passa a se chamar pelo que ele de fato faz
+  // agora: sortear outro. "Simular sorteio" com um sorteio já na tela sugere
+  // que ele faria outra coisa.
+  $('chk-sortear').textContent = 'Novo sorteio';
+});
+
+$('chk-mais').addEventListener('click', chkMostrarMaisCartelas);
+$('chk-simular').addEventListener('click', chkSimularVarios);
+
+$('res-checar').addEventListener('click', () => abrirChecagem('busca'));
+$('lot-checar').addEventListener('click', () => abrirChecagem('lotinha'));
+
+/** Abre a ferramenta já com um fechamento escolhido. */
+function abrirChecagem(chave) {
+  chkPreferida = chave;
+  mostrarPainel('checar');
+}
+
+/**
+ * Repinta a lista de fechamentos, se ela mudou.
+ *
+ * Repintar sem necessidade apagaria a conferência que a pessoa acabou de fazer
+ * — sair para o Resultado e voltar não pode custar o trabalho.
+ */
+function chkAtualizarFontes() {
+  const chaves = chkFontes()
+    .map((f) => `${f.chave}#${f.cartelas.length}`)
+    .join('|');
+  const pedida = chkPreferida;
+  chkPreferida = null;
+
+  if (chaves === chkChavesPintadas && !pedida) return;
+  chkChavesPintadas = chaves;
+  chkPintarSeletor(pedida);
+}
+
+chkPintarQuantos();
+chkAtualizarFontes();
 
 /* ─────────── manter a tela ligada ─────────── */
 
