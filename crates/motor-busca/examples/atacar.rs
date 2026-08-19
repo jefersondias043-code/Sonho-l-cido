@@ -1,7 +1,7 @@
 //! Ataque dedicado a **uma** combinação, com a incidência pré-calculada.
 //!
 //! ```bash
-//! cargo run --release --example atacar -- <pool> <jogo> <alvo> <segundos> [semente]
+//! cargo run --release --example atacar -- <pool> <jogo> <alvo> <segundos> [semente] [premiadas]
 //! ```
 //!
 //! ## Por que existe, se já há um motor
@@ -31,6 +31,11 @@
 //! tardia. Fechar em `alvo` significa que aquele tamanho basta — e aí tenta
 //! `alvo − 1`. É o método de Nurmela e Östergård, com o laço quente escrito
 //! para esta instância.
+//!
+//! `premiadas` exige que **`r` cartelas** contenham cada sorteio, e não apenas
+//! uma. Muda uma linha do laço — descoberto passa a ser `contagem < r` — e nada
+//! mais: a incidência é a mesma, e a contagem em `u8` continua bastando porque
+//! o teto por alvo não depende de `r`.
 
 use std::time::{Duration, Instant};
 
@@ -152,15 +157,18 @@ struct Estado {
     esta_dentro: Vec<bool>,
     contagem: Vec<u8>,
     descobertos: ConjuntoEsparso,
+    /// Quantas cartelas cada sorteio precisa ter para contar como atendido.
+    exigido: u8,
 }
 
 impl Estado {
-    fn vazio(t: &Terreno) -> Self {
+    fn vazio(t: &Terreno, exigido: u8) -> Self {
         Self {
             selecionadas: Vec::new(),
             esta_dentro: vec![false; t.candidatos()],
             contagem: vec![0; t.total_alvos],
             descobertos: ConjuntoEsparso::completo(t.total_alvos),
+            exigido,
         }
     }
 
@@ -168,7 +176,7 @@ impl Estado {
         for &alvo in t.alvos_de(cartela) {
             let c = &mut self.contagem[alvo as usize];
             *c += 1;
-            if *c == 1 {
+            if *c == self.exigido {
                 self.descobertos.remover(alvo);
             }
         }
@@ -181,7 +189,7 @@ impl Estado {
         for &alvo in t.alvos_de(cartela) {
             let c = &mut self.contagem[alvo as usize];
             *c -= 1;
-            if *c == 0 {
+            if *c + 1 == self.exigido {
                 self.descobertos.inserir(alvo);
             }
         }
@@ -201,10 +209,11 @@ fn atacar(
     alvo: usize,
     orcamento: Duration,
     rng: &mut impl Rng,
+    exigido: u8,
 ) -> Option<Vec<usize>> {
     const HISTORIA: usize = 4096;
 
-    let mut e = Estado::vazio(t);
+    let mut e = Estado::vazio(t, exigido);
     for &c in inicial.iter().take(alvo) {
         e.por(t, c);
     }
@@ -304,6 +313,97 @@ fn do_banco(t: &Terreno) -> Option<Vec<usize>> {
     (!saida.is_empty()).then_some(saida)
 }
 
+/// Completa o fechamento pelo guloso global, com fila preguiçosa.
+///
+/// A cada passo entra a cartela que atende mais alvos ainda em falta. As notas
+/// só caem — nenhuma cartela fica melhor porque outra entrou —, então uma nota
+/// vencida sempre **superestima**: recalcular ao desempilhar e devolver à fila
+/// quando a nota cai acha o verdadeiro melhor sem revarrer as cem mil
+/// candidatas a cada passo.
+///
+/// Diferente do guloso que sorteia um alvo em falta e escolhe entre as poucas
+/// cartelas que o atendem, este olha o tabuleiro inteiro. Em 23/17 com duas
+/// cartelas premiadas isso é a diferença entre juntar cartelas que se repetem e
+/// juntar cartelas que se completam.
+fn preencher_guloso(t: &Terreno, e: &mut Estado) {
+    let exigido = e.exigido;
+    let nota = |e: &Estado, c: usize| {
+        t.alvos_de(c).iter().filter(|&&a| e.contagem[a as usize] < exigido).count()
+    };
+    let mut fila: std::collections::BinaryHeap<(usize, usize)> = (0..t.candidatos())
+        .filter(|&c| !e.esta_dentro[c])
+        .map(|c| (nota(e, c), c))
+        .collect();
+
+    while !e.descobertos.is_empty() {
+        let (chave, c) = fila.pop().expect("alvo em falta sem cartela que o atenda");
+        if e.esta_dentro[c] {
+            continue;
+        }
+        let agora = nota(e, c);
+        // Nota zerada é definitiva, porque as notas nunca sobem: a candidata
+        // morreu e sai da fila. Devolvê-la em vez de descartar já fez esta
+        // busca girar sem sair do lugar.
+        if agora == 0 {
+            continue;
+        }
+        if agora < chave {
+            fila.push((agora, c));
+            continue;
+        }
+        e.por(t, c);
+    }
+}
+
+/// Tira as cartelas que não fazem falta, e devolve quantas saíram.
+///
+/// O guloso acrescenta uma cartela para tapar um buraco e, passos adiante,
+/// outra cobre o mesmo alvo por tabela. A primeira vira peso morto. Uma cartela
+/// sai quando **todos** os seus alvos sobram — contagem estritamente acima do
+/// exigido —, e aí a garantia fica exatamente onde estava.
+fn podar(t: &Terreno, e: &mut Estado) -> usize {
+    let mut tirou = 0;
+    loop {
+        let antes = tirou;
+        let mut i = 0;
+        while i < e.selecionadas.len() {
+            let c = e.selecionadas[i];
+            if t.alvos_de(c).iter().all(|&a| e.contagem[a as usize] > e.exigido) {
+                // `tira` troca a última para esta posição: não avançar `i`.
+                e.tira(t, i);
+                tirou += 1;
+            } else {
+                i += 1;
+            }
+        }
+        if tirou == antes {
+            return tirou;
+        }
+    }
+}
+
+/// Um fechamento guardado sozinho num arquivo, como `[[1,2,...],[...]]`, em
+/// base 1 e com o jogo inteiro (não o complemento). Cartelas de outro tamanho
+/// são ignoradas, o que faz um arquivo de outra combinação passar sem quebrar.
+fn de_arquivo(t: &Terreno, caminho: &str) -> Option<Vec<usize>> {
+    let texto = std::fs::read_to_string(caminho).ok()?;
+    let mut saida = Vec::new();
+    for linha in texto.split('[').skip(2) {
+        let numeros: Vec<usize> = linha
+            .split(']')
+            .next()?
+            .split(',')
+            .filter_map(|n| n.trim().parse::<usize>().ok())
+            .map(|n| n - 1)
+            .collect();
+        if numeros.len() == t.jogo {
+            saida.push(t.indice_da_cartela(&numeros));
+        }
+    }
+    eprintln!("semente de {caminho}: {} cartelas", saida.len());
+    (!saida.is_empty()).then_some(saida)
+}
+
 fn main() {
     let arg = |i: usize, padrao: usize| -> usize {
         std::env::args().nth(i).and_then(|v| v.parse().ok()).unwrap_or(padrao)
@@ -313,39 +413,53 @@ fn main() {
     let partir_de = arg(3, 102);
     let segundos = arg(4, 600) as u64;
     let semente = arg(5, 1) as u64;
+    // Quantas cartelas premiadas o fechamento garante. `1` é a cobertura de
+    // sempre; `2` pede que **duas** cartelas contenham cada sorteio.
+    let premiadas = arg(6, 1).max(1) as u8;
 
     let t = Terreno::novo(pool, jogo);
+    eprintln!("garantia: {premiadas} cartela(s) premiada(s) por sorteio");
     let mut rng = Pcg64Mcg::seed_from_u64(semente);
 
     // A partida sai do banco publicado, quando ele traz esta combinação: é o
     // melhor que se conhece, e partir de qualquer outra coisa seria jogar fora
-    // o trabalho de todas as execuções anteriores. Sem banco, um guloso serve.
-    let mut melhor = do_banco(&t).unwrap_or_else(|| {
-        let mut e = Estado::vazio(&t);
-        let mut candidatas = Vec::new();
-        while !e.descobertos.is_empty() {
-            let d = e.descobertos.em(rng.gen_range(0..e.descobertos.len())).unwrap();
-            t.cartelas_do_alvo(d, &mut candidatas);
-            let escolhida = *candidatas
-                .iter()
-                .filter(|&&c| !e.esta_dentro[c])
-                .max_by_key(|&&c| {
-                    t.alvos_de(c).iter().filter(|&&a| e.contagem[a as usize] == 0).count()
-                })
-                .expect("todo alvo descoberto tem cartela que o atende");
-            e.por(&t, escolhida);
+    // o trabalho de todas as execuções anteriores.
+    //
+    // Com `premiadas > 1` o banco **não** é solução — ele cobre cada sorteio
+    // uma vez só. Serve mesmo assim como semente: o guloso entra depois e
+    // completa até a garantia pedida. Quando `premiadas == 1` e o banco já
+    // fecha, o guloso não acrescenta nada e a partida é o próprio banco.
+    let mut e = Estado::vazio(&t, premiadas);
+    // `ATACAR_SEMENTE` aponta para um arquivo de fechamento e tem precedência
+    // sobre o banco: é por onde entra uma construção feita à mão — um
+    // agrupamento, por exemplo — que já começa melhor do que o guloso chegaria.
+    let semeadura = std::env::var("ATACAR_SEMENTE")
+        .ok()
+        .and_then(|caminho| de_arquivo(&t, &caminho))
+        .or_else(|| do_banco(&t));
+    if let Some(banco) = semeadura {
+        for c in banco {
+            if !e.esta_dentro[c] {
+                e.por(&t, c);
+            }
         }
-        e.selecionadas.clone()
-    });
-    eprintln!("partida: {} cartelas", melhor.len());
+        eprintln!("semente: {} cartelas aproveitadas", e.selecionadas.len());
+    }
+    preencher_guloso(&t, &mut e);
+    let podadas = podar(&t, &mut e);
+    let mut melhor = e.selecionadas.clone();
+    drop(e);
+    eprintln!("partida: {} cartelas ({podadas} podadas)", melhor.len());
 
     let comeco = Instant::now();
     let total = Duration::from_secs(segundos);
-    let mut alvo = melhor.len().min(partir_de + 1).saturating_sub(1).max(1);
+    // `partir_de = 0` significa "comece de onde a partida chegou".
+    let teto = if partir_de == 0 { melhor.len() } else { melhor.len().min(partir_de + 1) };
+    let mut alvo = teto.saturating_sub(1).max(1);
 
     while comeco.elapsed() < total && alvo > 1 {
         let sobra = total.saturating_sub(comeco.elapsed());
-        match atacar(&t, &melhor, alvo, sobra, &mut rng) {
+        match atacar(&t, &melhor, alvo, sobra, &mut rng, premiadas) {
             Some(nova) => {
                 melhor = nova;
                 println!("RECORDE {pool}/{jogo}: {alvo} cartelas");
@@ -365,19 +479,25 @@ fn main() {
         })
         .collect();
     std::fs::write(
-        format!("/tmp/atacar-{pool}-{jogo}-{semente}.json"),
+        format!("/tmp/atacar-{pool}-{jogo}-r{premiadas}-{semente}.json"),
         format!("{elementos:?}").replace(' ', ""),
     )
     .ok();
 
-    // A prova: nenhum sorteio pode ficar de fora.
+    // A prova: todo sorteio precisa de `premiadas` cartelas, e a contagem é
+    // refeita do zero, sem reaproveitar nada do que a busca manteve.
     let mut confere = vec![0u8; t.total_alvos];
     for &c in &melhor {
         for &a in t.alvos_de(c) {
-            confere[a as usize] = 1;
+            confere[a as usize] = confere[a as usize].saturating_add(1);
         }
     }
-    let descobertos = confere.iter().filter(|&&v| v == 0).count();
-    println!("conferência independente: {descobertos} sorteios descobertos de {}", t.total_alvos);
-    assert_eq!(descobertos, 0, "a solução não cobre tudo");
+    let faltando = confere.iter().filter(|&&v| v < premiadas).count();
+    let minimo = confere.iter().copied().min().unwrap_or(0);
+    println!(
+        "conferência independente: {faltando} sorteios com menos de {premiadas} cartelas \
+         (o pior tem {minimo}) de {}",
+        t.total_alvos
+    );
+    assert_eq!(faltando, 0, "a solução não entrega a garantia pedida");
 }
