@@ -1064,3 +1064,22 @@ main { padding: 8px 16px 0; }
 /* Combinações em que nem o mínimo matemático paga: continuam disponíveis — a
    decisão é do usuário — mas não competem visualmente com as que pagam. */
 .matriz .linha-apagada td { opacity: 0.55; }
+
+/* A régua da cotação: quanto seria neutro, e quanto a banca paga disso.
+   É a única informação da tela que muda o retorno — as outras mudam o formato
+   do risco — e por isso ela fica colada no campo, e não num rodapé. */
+.regua-cotacao {
+  display: block;
+  margin-top: 5px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--texto-fraco);
+}
+
+.regua-cotacao b { font-variant-numeric: tabular-nums; }
+
+.regua-cotacao .ruim b { color: var(--vermelho); }
+.regua-cotacao .media b { color: var(--ouro); }
+.regua-cotacao .boa b { color: var(--verde); }
+.regua-cotacao .acima { color: var(--verde); }
+.regua-cotacao .acima b { color: var(--verde); }

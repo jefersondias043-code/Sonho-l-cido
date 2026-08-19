@@ -178,6 +178,32 @@ function schonheim(v, k, t) {
 }
 
 /**
+ * A cotação neutra: quanto uma banca precisaria pagar para o jogo não ter
+ * vantagem para lado nenhum.
+ *
+ * É o inverso da chance: uma cartela de `k` dezenas contém as 15 uma vez em
+ * `C(25,15)/C(k,15)` sorteios, então pagar exatamente isso devolve, no longo
+ * prazo, o que foi apostado.
+ *
+ * ## A identidade que isto torna visível
+ *
+ *     retorno por real = multiplicador / cotação justa
+ *
+ * O retorno esperado que [`economia`] calcula **é** a fração do justo que a
+ * banca paga. R$ 0,29 por real e "paga 29% do justo" são o mesmo número dito
+ * de dois jeitos — e o segundo jeito é o que permite avaliar uma tabela de
+ * cotações sem fazer conta nenhuma.
+ *
+ * É também a única alavanca que muda o retorno. Nem o tamanho do fechamento,
+ * nem o pool, nem a garantia escolhida entram aqui: quem decide quanto volta é
+ * quanto a banca paga, e por isso vale saber medir uma oferta.
+ */
+export function cotacaoJusta(jogo) {
+  const chance = chanceDe(jogo);
+  return chance > 0 ? 1 / chance : Infinity;
+}
+
+/**
  * Quantos jogos de `k` dezenas fecham um pool de `P`, e quanto se sabe disso.
  *
  * Devolve `{ jogos, exato, piso }`:

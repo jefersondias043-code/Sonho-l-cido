@@ -441,6 +441,65 @@ try {
     retorno ? `R$ ${retorno[1]} por real` : 'não encontrado'
   );
 
+  // ─── 6a. a régua da cotação ───
+  //
+  // É a única informação da tela capaz de mudar o retorno — nem fechamento,
+  // nem pool, nem garantia entram nessa conta — e é a que a tabela da banca
+  // esconde. 7.000× numa cartela de 17 parece generoso e paga 29% do neutro;
+  // 4× numa de 23 parece miséria e paga 60%. Sem a régua, a intuição escolhe
+  // justamente a aposta em que a banca cobra mais caro.
+  const reguas = await pagina.$$eval('.regua-cotacao', (r) =>
+    r.map((x) => x.textContent.replace(/\s+/g, ' ').trim())
+  );
+  marcar(
+    /neutro seria 24\.035×/.test(reguas[0]) && /29,1%/.test(reguas[0]),
+    'cada cotação vem com a régua: quanto seria neutro e quanto a oferta paga',
+    reguas[0].slice(0, 76)
+  );
+  marcar(
+    /neutro seria 6,7×/.test(reguas[6]),
+    'e o neutro sai com decimal onde ele decide — 6,7× e não 7× nas de 23',
+    reguas[6].slice(0, 60)
+  );
+
+  // A conferência independente: a régua tem de bater com o retorno esperado,
+  // porque são o mesmo número dito de dois jeitos.
+  const doisCaminhos = await pagina.evaluate(async () => {
+    const lot = await import('./lotinha.js');
+    return [17, 20, 23].map((k) => {
+      const justo = lot.cotacaoJusta(k);
+      const e = lot.economia({
+        pool: 25,
+        jogo: k,
+        quantidade: 1,
+        cotacao: lot.COTACAO_PADRAO,
+      });
+      return {
+        jogo: k,
+        fracao: lot.COTACAO_PADRAO[k] / justo,
+        retorno: e.retornoEsperado,
+      };
+    });
+  });
+  marcar(
+    doisCaminhos.every((c) => Math.abs(c.fracao - c.retorno) < 1e-9),
+    'a fração do neutro é exatamente o retorno por real, por dois caminhos',
+    doisCaminhos.map((c) => `${c.jogo}: ${(c.fracao * 100).toFixed(1)}%`).join(' · ')
+  );
+
+  // Uma oferta acima do neutro é reconhecida como tal. Nenhuma banca real
+  // paga isso, e é justamente por isso que a tela precisa saber dizer: sem
+  // esse ramo, a régua viraria uma escala que só desce.
+  const campo23 = pagina.locator('#lot-cotacao input').nth(6);
+  await campo23.fill('7');
+  const acima = (await pagina.locator('.regua-cotacao').nth(6).textContent()).replace(/\s+/g, ' ');
+  marcar(
+    /acima do neutro/.test(acima) && /105,0%/.test(acima),
+    'e uma oferta acima do neutro é reconhecida, em vez de ficar na faixa boa',
+    acima.trim().slice(0, 70)
+  );
+  await campo23.fill('4');
+
   // ─── 6b. o veredito: este fechamento paga? ───
   //
   // Duas perguntas diferentes, e confundi-las é o que custa dinheiro:

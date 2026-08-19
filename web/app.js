@@ -685,6 +685,56 @@ function lotEsquecerFechamento() {
    quem joga em outra banca troca o número e a tela recalcula na hora. */
 const lotCotacao = { ...lotinha.COTACAO_PADRAO };
 
+/**
+ * A régua ao lado de cada cotação: quanto seria neutro, e quanto a oferta paga
+ * disso.
+ *
+ * ## Por que isto é a informação mais valiosa da tela
+ *
+ * É a **única** coisa que muda o retorno. Nem o tamanho do fechamento, nem o
+ * pool, nem a garantia: o retorno por real é `multiplicador ÷ cotação justa`, e
+ * o único termo que alguém pode negociar é o primeiro.
+ *
+ * E é a informação que a tabela da banca esconde. Um multiplicador de 7.000×
+ * numa cartela de 17 dezenas parece generoso e paga 29% do neutro; 4× numa de
+ * 23 parece miséria e paga 60%. Sem a régua, a intuição erra o sinal — escolhe
+ * justamente a aposta em que a banca cobra mais caro.
+ *
+ * Com ela, avaliar uma tabela nova é ler uma linha, e não fazer conta.
+ */
+function lotTextoDaRegua(jogo, multiplicador) {
+  const justo = lotinha.cotacaoJusta(jogo);
+
+  // Uma casa decimal abaixo de cem, e é onde isso decide: em 23 dezenas o
+  // neutro é 6,7×, e arredondar para 7 faria uma oferta de 7× — que está
+  // **acima** do neutro — parecer exatamente neutra. É justamente a linha em
+  // que vale procurar outra banca.
+  const emVezes = (v) =>
+    v < 100 ? v.toFixed(1).replace('.', ',') : milhares(v);
+  const neutro = `neutro seria <b>${emVezes(justo)}×</b>`;
+
+  if (!Number.isFinite(multiplicador) || multiplicador <= 0) {
+    return `<span class="sem-oferta">${neutro}</span>`;
+  }
+
+  const fracao = multiplicador / justo;
+  if (fracao >= 1) {
+    return (
+      `<span class="acima">${neutro} — esta paga ` +
+      `<b>${porcento(fracao)}</b> disso, acima do neutro</span>`
+    );
+  }
+
+  // Três faixas, e o corte não é arbitrário: metade do neutro é onde a banca
+  // fica com mais do que devolve, e é a diferença entre uma aposta cara e uma
+  // aposta muito cara.
+  const faixa = fracao >= 0.55 ? 'boa' : fracao >= 0.4 ? 'media' : 'ruim';
+  return (
+    `<span class="${faixa}">${neutro} — esta paga <b>${porcento(fracao)}</b> ` +
+    `disso; a banca fica com ${porcento(1 - fracao)}</span>`
+  );
+}
+
 function lotMontar() {
   // Tamanho do pool.
   const alvoPool = $('lot-pool');
@@ -740,13 +790,25 @@ function lotMontar() {
     campo.inputMode = 'decimal';
     campo.placeholder = 'quanto paga';
     if (lotCotacao[k]) campo.value = String(lotCotacao[k]);
+
+    // A régua: quanto seria neutro, e que fração disso a oferta paga.
+    const regua = document.createElement('small');
+    regua.className = 'regua-cotacao';
+    const medir = () => {
+      regua.innerHTML = lotTextoDaRegua(k, Number(campo.value));
+    };
+    medir();
+
     campo.addEventListener('input', () => {
       const v = Number(campo.value);
       if (v > 0) lotCotacao[k] = v;
       else delete lotCotacao[k];
+      medir();
+      lotMontarMatriz();
       lotPintarEconomia();
     });
     rotulo.appendChild(campo);
+    rotulo.appendChild(regua);
     cot.appendChild(rotulo);
   }
 
