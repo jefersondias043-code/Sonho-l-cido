@@ -508,7 +508,8 @@ try {
   //     de cartelas cancela na conta. Otimizar não muda isso.
   //   - **no ramo em que se ganha**, o fechamento garante `r` cartelas com as
   //     15, que pagam `r · mult`, contra um custo de `N` cartelas. Aí sim o
-  //     tamanho decide.
+  //     tamanho decide — e em 23/20 falta **uma** cartela para o fechamento
+  //     passar a pagar, depois de o ataque dedicado tirar duas.
   //
   // O veredito responde só a segunda, e a asserção final desta seção é o que
   // impede alguém de, um dia, transformá-lo numa promessa de lucro.
@@ -559,9 +560,9 @@ try {
     `sobram ${vereditos.lucra.folga}× a aposta`
   );
   marcar(
-    vereditos.possivel.classe === 'possivel' && vereditos.possivel.faltamCortar === 3,
-    '23 com jogos de 20 está a três cartelas de pagar, e o piso permite',
-    `102 hoje, prêmio 100×, piso ${vereditos.possivel.piso}`
+    vereditos.possivel.classe === 'possivel' && vereditos.possivel.faltamCortar === 1,
+    '23 com jogos de 20 está a uma cartela de pagar, e o piso permite',
+    `100 hoje, prêmio 100×, piso ${vereditos.possivel.piso}`
   );
   marcar(
     vereditos.impossivel.classe === 'impossivel' &&
@@ -616,7 +617,7 @@ try {
       .join(' · ')
   );
   marcar(
-    /Faltam cortar 3 cartelas/.test(selos['23/20'].texto),
+    /Faltam cortar 1 cartela\b/.test(selos['23/20'].texto),
     'e diz quantas cartelas faltam cortar para a combinação passar a pagar',
     selos['23/20'].texto.slice(0, 76)
   );
