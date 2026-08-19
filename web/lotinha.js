@@ -150,13 +150,27 @@ export function maximoPremiadas(pool, jogo, garantia = SORTEIO) {
 }
 
 /**
- * Cota de Schönheim para cobrir todo subconjunto de `t` dentro de `v`, com `k`.
+ * Cota de Schönheim para cobrir todo subconjunto de `t` dentro de `v`, com `k`,
+ * ao menos `r` vezes cada.
  *
- *     L(v, k, 1) = ⌈v / k⌉
- *     L(v, k, t) = ⌈ (v / k) · L(v−1, k−1, t−1) ⌉
+ *     L_r(v, k, 1) = ⌈r·v / k⌉
+ *     L_r(v, k, t) = ⌈ (v / k) · L_r(v−1, k−1, t−1) ⌉
  *
- * O argumento: fixe uma dezena. Os jogos que a contêm precisam cobrir todos os
- * `(t−1)`-subconjuntos das outras `v−1`, e cada jogo contribui com `k−1` delas.
+ * O argumento: fixe uma dezena `x`. Os jogos que contêm `x`, tirado `x`,
+ * precisam cobrir `r` vezes todos os `(t−1)`-subconjuntos das outras `v−1`, e
+ * cada jogo contribui com `k−1` delas. Somando os graus, `k·N ≥ v·L_r(v−1,…)`.
+ *
+ * ## Por que a garantia entra só na base
+ *
+ * Porque é lá que ela é uma exigência sobre dezenas, e não sobre jogos: cada
+ * dezena precisa aparecer em `r` jogos, então `N·k ≥ r·v`. O passo seguinte já
+ * herda `r` pelo valor que carrega, e multiplicá-lo de novo contaria duas vezes.
+ *
+ * Vale a pena o cuidado: durante muito tempo esta função ignorou `r`, e o piso
+ * que ela devolvia era o de uma cartela premiada. Em 23 dezenas com jogos de 21
+ * e duas premiadas isso dizia 27 quando o mínimo verdadeiro é 33 — e 33 é
+ * exatamente o que a construção entrega, ou seja, a combinação era **exata** e
+ * o aplicativo a anunciava como problema em aberto.
  *
  * ## Por que ela importa tanto aqui
  *
@@ -168,9 +182,9 @@ export function maximoPremiadas(pool, jogo, garantia = SORTEIO) {
  * 114" enquanto a tela de Buscar, que consulta o motor, dizia 160 para o mesmo
  * problema. Duas telas discordando, e a que estava certa era a outra.
  */
-function schonheim(v, k, t) {
+function schonheim(v, k, t, premiadas = 1) {
   if (t < 1 || k < 1 || t > k || k > v) return 0;
-  let valor = Math.ceil((v - t + 1) / (k - t + 1));
+  let valor = Math.ceil((premiadas * (v - t + 1)) / (k - t + 1));
   for (let i = 2; i <= t; i++) {
     valor = Math.ceil(((v - t + i) * valor) / (k - t + i));
   }
@@ -233,10 +247,10 @@ export function minimo(pool, jogo, garantia = SORTEIO, premiadas = 1) {
   // diferentes para o mesmo problema.
   //
   // Schönheim só vale para cobertura completa: ela conta jogos que **contêm**
-  // o sorteio, e uma garantia parcial não exige isso. E não se multiplica por
-  // `premiadas`: nenhum teorema autoriza. Mas continua valendo inteira, porque
-  // atender cada sorteio `r` vezes implica atendê-lo ao menos uma.
-  const porSchonheim = garantia === SORTEIO ? schonheim(pool, jogo, SORTEIO) : 0;
+  // o sorteio, e uma garantia parcial não exige isso. Dentro da garantia cheia
+  // ela acompanha `premiadas`, pela recursão generalizada.
+  const porSchonheim =
+    garantia === SORTEIO ? schonheim(pool, jogo, SORTEIO, premiadas) : 0;
   const piso = Math.max(porContagem, porSchonheim);
 
   // Jogo do tamanho do pool: uma aposta só, e ela ou ganha ou perde inteira.
@@ -265,19 +279,19 @@ export function minimo(pool, jogo, garantia = SORTEIO, premiadas = 1) {
       : { jogos: null, exato: false, piso };
   }
 
-  // Faltam duas: teorema de Turán. Parte-se o pool em `b − 1` grupos e tomam-se
-  // todos os pares dentro de cada um; qualquer sorteio deixa `b` dezenas de
-  // fora, e duas delas caem no mesmo grupo pela casa dos pombos.
+  // Faltam duas ou mais: quem responde é a construção fechada, e ela é o mínimo
+  // **provado** exatamente quando encosta no piso — uma é limite superior, o
+  // outro é limite inferior, e iguais só podem ser o mínimo.
   //
-  // O argumento é de cobertura simples e não se estende a `r > 1`.
-  if (a === 2 && premiadas === 1) {
-    const g = b - 1;
-    let total = 0;
-    for (let i = 0; i < g; i++) {
-      const tam = Math.floor(pool / g) + (i < pool % g ? 1 : 0);
-      total += combinacoes(tam, 2);
-    }
-    return { jogos: total, exato: true, piso };
+  // Esta regra substituiu um ramo que tratava `a = 2` à mão, pelo teorema de
+  // Turán, e só valia para uma cartela premiada. A regra geral recupera aquele
+  // caso (as nove combinações com `a = 2` continuam exatas, com os mesmos
+  // números) e acrescenta os que a garantia maior torna exatos: em 23 dezenas
+  // com jogos de 21 são 27, 33, 42 e 55 para uma a quatro cartelas premiadas,
+  // todos comprovados.
+  const daConstrucao = tamanhoDaConstrucao(pool, jogo, garantia, premiadas);
+  if (daConstrucao !== null && daConstrucao === piso) {
+    return { jogos: daConstrucao, exato: true, piso };
   }
 
   return { jogos: null, exato: false, piso };
@@ -306,6 +320,32 @@ export function matriz() {
  */
 /** Impossível: não existe família que sirva. */
 const INVIAVEL = Infinity;
+
+/**
+ * O memo de [`turanTamanho`], no módulo e não por chamada.
+ *
+ * A função é determinística e o espaço de chaves é minúsculo — `v ≤ 25`,
+ * `a ≤ 10`, `b ≤ 10` e a garantia até algumas dezenas —, então guardar entre
+ * chamadas custa alguns milhares de entradas e poupa refazer a recursão inteira
+ * a cada repintura da tela. Era um `new Map()` por chamada, o que jogava fora
+ * todo o trabalho entre uma combinação e a seguinte.
+ */
+const memoDeTuran = new Map();
+
+/**
+ * Quantos blocos o pior `b`-conjunto encontra quando cada uma das `g` partes
+ * guarda **todos** os seus `a`-subconjuntos.
+ *
+ * O pior caso é a divisão mais uniforme, e isso é um teorema, não uma
+ * suposição: `C(·,a)` é convexa, então espalhar minimiza a soma. É o que
+ * autoriza parar o laço de `g` assim que a garantia cai abaixo do pedido —
+ * dividir em mais partes só espalha mais.
+ */
+function garantiaDoAgrupamento(b, g, a) {
+  const base = Math.floor(b / g);
+  const sobra = b % g;
+  return sobra * combinacoes(base + 1, a) + (g - sobra) * combinacoes(base, a);
+}
 
 /**
  * Quantos `a`-subconjuntos de `v` pontos bastam para que todo `b`-subconjunto
@@ -343,33 +383,52 @@ const INVIAVEL = Infinity;
  * medidas nas 21 combinações em aberto, e não melhoraram nenhuma. A partição
  * mais igual possível já é a melhor desta família.
  */
-function turanTamanho(v, a, b, memo) {
+function turanTamanho(v, a, b, premiadas = 1) {
   if (a > b || b > v) return INVIAVEL;
-  if (a === 0 || v === b) return 1;
+  // Nem tomando **todos** os `a`-subconjuntos: um `b`-conjunto contém `C(b,a)`
+  // deles, e nenhum sorteio pode ser atendido mais vezes do que isso.
+  if (combinacoes(b, a) < premiadas) return INVIAVEL;
+  // Daqui para baixo a guarda acima já garantiu `premiadas = 1` sempre que só
+  // existe um bloco possível dentro de cada `b`-conjunto.
+  if (a === 0) return 1;
+  if (v === b) return premiadas; // um único `b`-conjunto: `r` blocos quaisquer
   if (a === b) return combinacoes(v, b);
-  if (a === 1) return v - b + 1;
+  if (a === 1) return v - b + premiadas;
 
-  const chave = `${v},${a},${b}`;
-  const pronto = memo.get(chave);
+  const chave = `${v},${a},${b},${premiadas}`;
+  const pronto = memoDeTuran.get(chave);
   if (pronto !== undefined) return pronto;
 
   let melhor = combinacoes(v, a);
   melhor = Math.min(
     melhor,
-    turanTamanho(v - 1, a, b, memo) + turanTamanho(v - 1, a - 1, b - 1, memo)
+    turanTamanho(v - 1, a, b, premiadas) +
+      turanTamanho(v - 1, a - 1, b - 1, premiadas)
   );
 
   for (let g = 2; g <= b; g++) {
-    const alvo = Math.ceil(b / g);
-    if (alvo < a) break; // partir mais só afrouxa a casa dos pombos
     let total = 0;
-    for (let i = 0; i < g && total < melhor; i++) {
-      total += turanTamanho(Math.floor(v / g) + (i < v % g ? 1 : 0), a, alvo, memo);
+    if (premiadas === 1) {
+      const alvo = Math.ceil(b / g);
+      if (alvo < a) break; // partir mais só afrouxa a casa dos pombos
+      for (let i = 0; i < g && total < melhor; i++) {
+        total += turanTamanho(Math.floor(v / g) + (i < v % g ? 1 : 0), a, alvo, 1);
+      }
+    } else {
+      // A casa dos pombos entrega **uma** parte com `⌈b/g⌉` pontos, não várias,
+      // e o adversário concentra o sorteio numa parte só — então a forma
+      // recursiva acima não se generaliza. O que se generaliza é a forma
+      // achatada: cada parte guarda todos os seus `a`-subconjuntos, e a
+      // garantia é a soma sobre a divisão mais uniforme.
+      if (garantiaDoAgrupamento(b, g, a) < premiadas) break;
+      for (let i = 0; i < g && total < melhor; i++) {
+        total += combinacoes(Math.floor(v / g) + (i < v % g ? 1 : 0), a);
+      }
     }
     melhor = Math.min(melhor, total);
   }
 
-  memo.set(chave, melhor);
+  memoDeTuran.set(chave, melhor);
   return melhor;
 }
 
@@ -379,45 +438,70 @@ function turanTamanho(v, a, b, memo) {
  * Repete exatamente as mesmas escolhas: mede as três alternativas e constrói a
  * vencedora. Devolve o que **falta** a cada jogo, não o jogo.
  */
-function turanFaltas(pontos, a, b, memo) {
+function turanFaltas(pontos, a, b, premiadas = 1) {
   const v = pontos.length;
   if (a === 0) return [[]];
-  if (v === b) return [pontos.slice(0, a)];
+  if (v === b) {
+    const saida = [];
+    for (const bloco of subconjuntos(pontos, a)) {
+      saida.push(bloco);
+      if (saida.length === premiadas) break;
+    }
+    return saida;
+  }
   if (a === b) return [...subconjuntos(pontos, a)];
-  if (a === 1) return pontos.slice(0, v - b + 1).map((p) => [p]);
+  if (a === 1) return pontos.slice(0, v - b + premiadas).map((p) => [p]);
 
-  const alvo = turanTamanho(v, a, b, memo);
+  const alvo = turanTamanho(v, a, b, premiadas);
   if (alvo === combinacoes(v, a)) return [...subconjuntos(pontos, a)];
 
   const porPonto =
-    turanTamanho(v - 1, a, b, memo) + turanTamanho(v - 1, a - 1, b - 1, memo);
+    turanTamanho(v - 1, a, b, premiadas) +
+    turanTamanho(v - 1, a - 1, b - 1, premiadas);
   if (alvo === porPonto) {
     const x = pontos[0];
     const resto = pontos.slice(1);
     return [
-      ...turanFaltas(resto, a, b, memo),
-      ...turanFaltas(resto, a - 1, b - 1, memo).map((menor) => [...menor, x]),
+      ...turanFaltas(resto, a, b, premiadas),
+      ...turanFaltas(resto, a - 1, b - 1, premiadas).map((menor) => [...menor, x]),
     ];
   }
 
   for (let g = 2; g <= b; g++) {
-    const alvoDoGrupo = Math.ceil(b / g);
-    if (alvoDoGrupo < a) break;
     const partes = Array.from({ length: g }, () => []);
+    // Rodízio: a parte `i` fica com `⌊v/g⌋ + (i < v mod g)` pontos, exatamente
+    // os tamanhos que [`turanTamanho`] mediu. As duas contas precisam concordar,
+    // senão a família construída não é a que foi escolhida.
     pontos.forEach((p, i) => partes[i % g].push(p));
-    const total = partes.reduce(
-      (soma, parte) => soma + turanTamanho(parte.length, a, alvoDoGrupo, memo),
-      0
-    );
-    if (total === alvo) {
-      return partes.flatMap((parte) => turanFaltas(parte, a, alvoDoGrupo, memo));
+
+    if (premiadas === 1) {
+      const alvoDoGrupo = Math.ceil(b / g);
+      if (alvoDoGrupo < a) break;
+      const total = partes.reduce(
+        (soma, parte) => soma + turanTamanho(parte.length, a, alvoDoGrupo, 1),
+        0
+      );
+      if (total === alvo) {
+        return partes.flatMap((parte) => turanFaltas(parte, a, alvoDoGrupo, 1));
+      }
+    } else {
+      if (garantiaDoAgrupamento(b, g, a) < premiadas) break;
+      const total = partes.reduce(
+        (soma, parte) => soma + combinacoes(parte.length, a),
+        0
+      );
+      if (total === alvo) {
+        return partes.flatMap((parte) => [...subconjuntos(parte, a)]);
+      }
     }
   }
 
   // A medida não bateu com nenhuma construção: só pode ser erro de programação,
   // e devolver a família trivial esconderia o defeito atrás de um resultado
   // grande porém correto.
-  throw new Error(`medida de Turán sem construção em (${v}, ${a}, ${b})`);
+  throw new Error(
+    `medida de Turán sem construção em (${v}, ${a}, ${b}, r=${premiadas})`
+  );
 }
 
 const TETO_PARA_CONSTRUIR = 25_000;
@@ -465,14 +549,9 @@ export function construir(pool, jogo, dezenas, garantia = SORTEIO, premiadas = 1
     return dezenas.slice(0, quantos).map((fora) => dezenas.filter((d) => d !== fora));
   }
 
-  // Daqui em diante a construção por grupos só vale para uma cartela premiada:
-  // o argumento da casa dos pombos garante **um** subconjunto no grupo, não `r`.
-  if (premiadas !== 1) return null;
+  if (turanTamanho(pool, a, b, premiadas) > TETO_PARA_CONSTRUIR) return null;
 
-  const memo = new Map();
-  if (turanTamanho(pool, a, b, memo) > TETO_PARA_CONSTRUIR) return null;
-
-  return turanFaltas(dezenas, a, b, memo).map((fora) => {
+  return turanFaltas(dezenas, a, b, premiadas).map((fora) => {
     const excluir = new Set(fora);
     return dezenas.filter((d) => !excluir.has(d));
   });
@@ -506,9 +585,9 @@ export function tamanhoDaConstrucao(pool, jogo, garantia = SORTEIO, premiadas = 
   const b = pool - SORTEIO;
   if (a === 0) return premiadas;
   if (a === 1) return premiadas <= b && SORTEIO + premiadas <= pool ? SORTEIO + premiadas : null;
-  if (premiadas !== 1) return null;
 
-  return turanTamanho(pool, a, b, new Map());
+  const medida = turanTamanho(pool, a, b, premiadas);
+  return medida === INVIAVEL ? null : medida;
 }
 
 /* ─────────── o banco de fechamentos ─────────── */
@@ -927,4 +1006,194 @@ export function veredito({
     // Cruzar a linha é ficar **abaixo** do prêmio, não empatar com ele.
     faltamCortar: Number.isFinite(quantidade) ? quantidade - premio + 1 : null,
   };
+}
+
+/* ─────────── escolher a configuração pelo bolso ─────────── */
+
+/**
+ * O retorno que nenhum fechamento desta dupla passa, com nenhum número de
+ * cartelas e nenhuma garantia.
+ *
+ *     teto = multiplicador · C(jogo,15) / C(pool,15)
+ *
+ * Sai de uma contagem só: cada cartela de `k` dezenas contém `C(k,15)` dos
+ * `C(P,15)` sorteios que cabem no pool, então atender todos `r` vezes exige
+ * `N ≥ r · C(P,15)/C(k,15)` cartelas, e o retorno `r·mult/N` fica preso abaixo
+ * de `mult · C(k,15)/C(P,15)`. O `r` cancela — é por isso que subir a garantia
+ * aproxima do teto e nunca o ultrapassa.
+ *
+ * ## Para que serve na prática
+ *
+ * Responde "isto pode pagar algum dia?" sem busca nenhuma, e a resposta é
+ * definitiva. Num pool de 25 o sorteio sempre cai dentro, `C(pool,15)` é o
+ * universo inteiro, e o teto vira o próprio retorno esperado: de R$ 0,29 a
+ * R$ 0,60 conforme o tamanho da cartela. Nenhuma das sete combinações do pool
+ * 25 chega a 1, e por isso nenhuma delas paga — com um bilhete premiado, com
+ * dez, ou com todos.
+ *
+ * Devolve `null` quando a banca não cota jogos daquele tamanho.
+ */
+export function tetoDoRetorno(pool, jogo, cotacao = COTACAO_PADRAO) {
+  const multiplicador = cotacao?.[jogo] ?? null;
+  if (!multiplicador) return null;
+  return (multiplicador * chanceDe(jogo)) / chanceDe(pool);
+}
+
+/**
+ * Qual fechamento comprar, dado o quanto se pode gastar.
+ *
+ * ## A pergunta invertida
+ *
+ * O resto do aplicativo pergunta "quantas cartelas custa garantir isto?". Esta
+ * função pergunta o contrário: **dado um orçamento, o que vale a pena comprar?**
+ * E trata a garantia como resposta, não como pergunta — varre `premiadas` de 1
+ * até o teto de cada dupla, porque é justamente aí que mora o que a busca por
+ * uma cartela premiada escondia.
+ *
+ * O caso que motivou isto: 24 dezenas com jogos de 23. Com uma cartela premiada
+ * são 16 jogos para um prêmio de 4×, e o aplicativo dizia "impossível" — o piso
+ * já custava mais que o prêmio. Com **nove** premiadas são 24 jogos, todos os
+ * que cabem no pool, e o prêmio é 36×: todo sorteio dentro das 24 deixa nove
+ * dezenas de fora, e são exatamente essas nove cartelas que o contêm. Paga 1,50×
+ * fixo, e o pool acerta 40% dos concursos — a configuração que paga com mais
+ * frequência da modalidade inteira, escondida atrás de um padrão.
+ *
+ * ## Por que a ordenação é por frequência, e não por retorno
+ *
+ * Ordenar por retorno degenera. O topo vira `17/17`: uma cartela só de 17
+ * dezenas, prêmio de 7000×, retorno 7000× — e 0,004% de chance de o pool
+ * acertar, o que é comprar um bilhete e chamar de fechamento. O número grande
+ * não vem de fechar bem, vem de quase nunca ganhar.
+ *
+ * A ordem primária é **com que frequência o fechamento paga**, entre os que
+ * pagam; o retorno desempata, e o custo desempata o desempate. Quem quiser a
+ * outra leitura reordena a lista, que vem inteira.
+ *
+ * ## O que isto não é
+ *
+ * Não é conselho de aposta, e o ranking não contém nenhuma combinação com
+ * retorno esperado positivo, porque não existe nenhuma: `retornoEsperado` vem
+ * junto em cada linha, é sempre menor que 1, e não depende de nada que esta
+ * função escolha. O que muda entre uma linha e outra é **quando** se ganha e
+ * **quanto** de cada vez.
+ *
+ * ## O bilhete único, e por que ele ganha quase sempre
+ *
+ * Num pool de até 23 dezenas a resposta ótima é constrangedora: **uma cartela
+ * só**, com as 23 dezenas do pool. Ela paga 4× sempre que o sorteio cai dentro,
+ * contra 1,82× do melhor fechamento de 21 dezenas com 33 cartelas — e paga
+ * sozinha, sem variação. Não há diversificação a comprar: todas as cartelas de
+ * um fechamento ganham e perdem juntas, com o mesmo pool.
+ *
+ * Fechar só passa a valer quando a banca **não aceita** a cartela do tamanho do
+ * pool. É o caso do pool 24: não há cotação para 24 dezenas, então o jeito de
+ * apostar nas 24 é aproximá-las com cartelas de 23 — e aí o fechamento aparece
+ * como a única forma de comprar aquela frequência de acerto.
+ *
+ * As linhas trazem `bilheteUnico`, e `minimoDeCartelas` permite pedir só
+ * fechamentos de verdade a quem quiser comparar dentro do pool.
+ *
+ * Devolve `{ opcoes, melhor, semTeto }`, onde `semTeto` lista as duplas
+ * descartadas sem sequer olhar a garantia, com o teto de cada uma — é o que
+ * permite à tela explicar por que o pool 25 nunca aparece.
+ */
+export function melhorConfiguracao({
+  cotacao = COTACAO_PADRAO,
+  orcamento = Infinity,
+  valorDoJogo = 1,
+  chanceMinima = 0,
+  minimoDeCartelas = 1,
+  garantia = SORTEIO,
+} = {}) {
+  const opcoes = [];
+  const semTeto = [];
+
+  for (let pool = MENOR_POOL; pool <= MAIOR_POOL; pool++) {
+    const chanceDoPool = chanceDe(pool);
+    if (chanceDoPool < chanceMinima) continue;
+
+    for (let jogo = MENOR_POOL; jogo <= pool; jogo++) {
+      const multiplicador = cotacao?.[jogo] ?? null;
+      if (!multiplicador) continue;
+
+      // O teto decide a dupla inteira antes de olhar uma única garantia. É a
+      // poda que torna a varredura barata e, mais que isso, é a que dá a
+      // resposta honesta para quem insiste numa dupla que não tem como pagar.
+      const teto = tetoDoRetorno(pool, jogo, cotacao);
+      if (teto <= 1) {
+        semTeto.push({ pool, jogo, multiplicador, teto });
+        continue;
+      }
+
+      for (let premiadas = 1; premiadas <= maximoPremiadas(pool, jogo, garantia); premiadas++) {
+        const { quantidade, origem, piso, exato } = previsao(pool, jogo, garantia, premiadas);
+        if (quantidade === null || quantidade > orcamento) continue;
+        if (quantidade < minimoDeCartelas) continue;
+
+        const premio = premiadas * multiplicador;
+        const retorno = premio / quantidade;
+        if (retorno <= 1) continue;
+
+        opcoes.push({
+          pool,
+          jogo,
+          premiadas,
+          quantidade,
+          origem,
+          piso,
+          exato,
+          multiplicador,
+          teto,
+          chanceDoPool,
+          // Jogar o pool inteiro numa cartela só não é fechamento nenhum, e
+          // marcar isso evita que a tela venda um bilhete como estratégia.
+          bilheteUnico: jogo === pool,
+          custo: quantidade * valorDoJogo,
+          premioGarantido: premio * valorDoJogo,
+          retorno,
+          folga: (premio - quantidade) * valorDoJogo,
+          // Igual a `mult · chanceDe(jogo)`: o pool cancela, e por isso este
+          // número não é afetado por nada que a varredura escolha.
+          retornoEsperado: chanceDoPool * teto,
+        });
+      }
+    }
+  }
+
+  const fronteira = semDominadas(opcoes);
+  fronteira.sort(
+    (x, y) =>
+      y.chanceDoPool - x.chanceDoPool ||
+      y.retorno - x.retorno ||
+      x.quantidade - y.quantidade
+  );
+
+  return { opcoes: fronteira, melhor: fronteira[0] ?? null, semTeto };
+}
+
+/**
+ * Tira da lista o que outra linha do **mesmo pool** faz melhor e mais barato.
+ *
+ * Sem isto a varredura devolve lixo com aparência de opção: em 24 dezenas com
+ * jogos de 22, as garantias de 33 a 36 cartelas premiadas custam as mesmas 276
+ * cartelas, porque a construção é a mesma família — só a de 36 interessa, as
+ * outras três pedem o mesmo dinheiro por menos prêmio. E pagar 132 cartelas por
+ * 1,21× não faz sentido quando 24 cartelas do mesmo pool pagam 1,50×.
+ *
+ * A comparação é dentro do pool de propósito. Entre pools ela seria injusta:
+ * um pool maior paga menos por acertar muito mais vezes, e essa troca é a
+ * decisão do usuário, não uma dominância.
+ */
+function semDominadas(opcoes) {
+  return opcoes.filter(
+    (x) =>
+      !opcoes.some(
+        (y) =>
+          y !== x &&
+          y.pool === x.pool &&
+          y.quantidade <= x.quantidade &&
+          y.retorno >= x.retorno &&
+          (y.quantidade < x.quantidade || y.retorno > x.retorno)
+      )
+  );
 }

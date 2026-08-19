@@ -360,6 +360,151 @@ try {
     `${varredura.cobertos} de ${varredura.total} sorteios`
   );
 
+  // ─── 3e. o piso e a construção valem para qualquer garantia ───
+  //
+  // Durante muito tempo o aplicativo só sabia fechar para **uma** cartela
+  // premiada. O piso que ele mostrava para duas era o de uma, e a construção
+  // simplesmente desistia: `construir()` devolvia `null` assim que faltavam
+  // duas dezenas ao jogo e se pediam duas premiadas.
+  //
+  // Generalizar isso mexe no caminho mais usado do aplicativo, e é por isso que
+  // o primeiro teste desta seção é uma **trava contra regressão**: com uma
+  // cartela premiada, a construção precisa devolver exatamente o que devolvia
+  // antes, nas 45 combinações. Os números abaixo foram tirados da versão
+  // anterior e ficam aqui congelados de propósito — se algum mudar, a mudança
+  // foi para pior e o teste tem de gritar.
+  const ANTES_DE_GENERALIZAR = {
+    '17,17': 1, '18,17': 16, '18,18': 1, '19,17': 51, '19,18': 16, '19,19': 1,
+    '20,17': 240, '20,18': 40, '20,19': 16, '20,20': 1,
+    '21,17': 1200, '21,18': 260, '21,19': 34, '21,20': 16, '21,21': 1,
+    '22,17': 5016, '22,18': 660, '22,19': 126, '22,20': 30, '22,21': 16, '22,22': 1,
+    '23,17': 18282, '23,18': 2838, '23,19': 651, '23,20': 147, '23,21': 27,
+    '23,22': 16, '23,23': 1,
+    '24,17': 59664, '24,18': 10560, '24,19': 1584, '24,20': 400, '24,21': 80,
+    '24,22': 24, '24,23': 16, '24,24': 1,
+    '25,17': 177672, '25,18': 35112, '25,19': 6072, '25,20': 1784, '25,21': 266,
+    '25,22': 78, '25,23': 23, '25,24': 16, '25,25': 1,
+  };
+  const intacto = await pagina.evaluate((esperado) =>
+    import('./lotinha.js').then((lot) =>
+      Object.entries(esperado)
+        .map(([chave, valor]) => {
+          const [pool, jogo] = chave.split(',').map(Number);
+          return { chave, valor, obtido: lot.tamanhoDaConstrucao(pool, jogo) };
+        })
+        .filter((l) => l.valor !== l.obtido)
+    ), ANTES_DE_GENERALIZAR);
+  marcar(
+    intacto.length === 0,
+    'com uma cartela premiada a construção não mudou uma vírgula nas 45 combinações',
+    intacto.length ? intacto.map((l) => `${l.chave}: ${l.valor}→${l.obtido}`).join(', ') : '45 conferidas'
+  );
+
+  // O piso de Schönheim acompanha a garantia pela base da recursão: cada dezena
+  // precisa aparecer em `r` jogos, e não em um. Onde falta uma dezena ao jogo o
+  // mínimo é `15 + r`, e o piso tem de bater nele exatamente — senão ele não é
+  // piso, é palpite.
+  const pisoPorGarantia = await pagina.evaluate(() =>
+    import('./lotinha.js').then((lot) => ({
+      a1: [1, 2, 3, 4, 5].map((r) => lot.minimo(23, 22, 15, r).piso),
+      a2: [1, 2, 3, 4].map((r) => lot.minimo(23, 21, 15, r).piso),
+      umaSo: lot.minimo(23, 21, 15, 1).piso,
+      duas: lot.minimo(23, 21, 15, 2).piso,
+    }))
+  );
+  marcar(
+    pisoPorGarantia.a1.every((v, i) => v === 15 + (i + 1)),
+    'o piso segue a garantia: em 23/22 ele dá 15 + r, para r de 1 a 5',
+    pisoPorGarantia.a1.join(', ')
+  );
+  marcar(
+    pisoPorGarantia.umaSo === 27 && pisoPorGarantia.duas === 33,
+    'e em 23/21 ele sobe de 27 para 33 ao pedir a segunda cartela premiada',
+    `${pisoPorGarantia.umaSo} → ${pisoPorGarantia.duas}`
+  );
+
+  // Construção e piso iguais significam mínimo provado: uma é limite de cima, o
+  // outro é limite de baixo. É assim que o aplicativo passou a saber que 33 é o
+  // mínimo de 23/21 com duas premiadas — antes ele chamava isso de problema em
+  // aberto.
+  const exatos = await pagina.evaluate(() =>
+    import('./lotinha.js').then((lot) =>
+      [22, 21].map((jogo) => ({
+        jogo,
+        linhas: [1, 2, 3, 4].map((r) => {
+          const m = lot.minimo(23, jogo, 15, r);
+          return { r, jogos: m.jogos, exato: m.exato };
+        }),
+      }))
+    )
+  );
+  const a1 = exatos.find((e) => e.jogo === 22).linhas;
+  const a2 = exatos.find((e) => e.jogo === 21).linhas;
+  marcar(
+    a1.every((l, i) => l.exato && l.jogos === 16 + i),
+    'em 23/22 o mínimo é comprovado de 1 a 4 premiadas — 16, 17, 18 e 19',
+    a1.map((l) => l.jogos).join(', ')
+  );
+  marcar(
+    a2.every((l) => l.exato) && [27, 33, 42, 55].every((v, i) => a2[i].jogos === v),
+    'e em 23/21 são 27, 33, 42 e 55, todos comprovados',
+    a2.map((l) => l.jogos).join(', ')
+  );
+
+  // A prova de que a construção generalizada entrega o que promete não é o
+  // argumento — é a varredura. Cada fechamento produzido é conferido sorteio a
+  // sorteio, contando **quantas** cartelas atendem cada um, porque um fechamento
+  // que prometa duas premiadas e entregue uma passaria batido numa conferência
+  // que só perguntasse "alguém cobre?".
+  //
+  // Foi este teste que reprovou a primeira tentativa de generalizar o argumento
+  // por grupos. A casa dos pombos garante que **uma** parte recebe ⌈b/g⌉ pontos,
+  // não que várias recebam — o adversário concentra o sorteio numa parte só — e
+  // a versão errada produzia fechamentos que cobriam tudo uma vez e prometiam
+  // duas.
+  const varreduraComGarantia = await pagina.evaluate(() =>
+    import('./lotinha.js').then((lot) => {
+      const saida = { conferidos: 0, falhas: [] };
+      for (let pool = 17; pool <= 23; pool++) {
+        const dezenas = Array.from({ length: pool }, (_, i) => i + 1);
+        for (let jogo = 17; jogo <= pool; jogo++) {
+          const teto = Math.min(lot.maximoPremiadas(pool, jogo), 4);
+          for (let premiadas = 1; premiadas <= teto; premiadas++) {
+            const quantos = lot.tamanhoDaConstrucao(pool, jogo, 15, premiadas);
+            // Acima disto a varredura fica cara demais para uma suíte; os casos
+            // grandes são justamente aqueles em que a construção é grosseira.
+            if (quantos === null || quantos > 1000) continue;
+            const jogos = lot.construir(pool, jogo, dezenas, 15, premiadas);
+            if (!jogos) continue;
+            const c = lot.conferirCobertura(dezenas, jogos, 15, premiadas, { exaustivo: true });
+            const distintos = new Set(jogos.map((j) => j.join(','))).size;
+            saida.conferidos += 1;
+            if (
+              jogos.length !== quantos ||
+              c.cobertos !== c.total ||
+              c.minimoPremiadas < premiadas ||
+              distintos !== jogos.length ||
+              jogos.some((j) => j.length !== jogo)
+            ) {
+              saida.falhas.push(
+                `${pool}/${jogo} r=${premiadas}: ${jogos.length} jogos, ` +
+                  `${c.cobertos}/${c.total} cobertos, pior caso ${c.minimoPremiadas}`
+              );
+            }
+          }
+        }
+      }
+      return saida;
+    })
+  );
+  marcar(
+    varreduraComGarantia.falhas.length === 0 && varreduraComGarantia.conferidos >= 60,
+    'e toda construção entrega a garantia que promete, conferida sorteio a sorteio',
+    varreduraComGarantia.falhas.length
+      ? varreduraComGarantia.falhas.slice(0, 3).join(' | ')
+      : `${varreduraComGarantia.conferidos} fechamentos varridos até 4 premiadas`
+  );
+
   // ─── 4. o fechamento pronto, e a conferência ───
   await pagina.click('#lot-jogo .opcao[data-jogo="17"]');
   await pagina.click('#lot-iniciar');
@@ -872,6 +1017,129 @@ try {
     !/Garantia comprovada: 100%/.test(daFormula) || /conferidos um a um/.test(daFormula),
     'uma conferência por amostra nunca é apresentada como 100% comprovada',
     /ao acaso/.test(daFormula) ? 'diz "ao acaso"' : 'varreu tudo'
+  );
+
+  // ─── 12. o motor escolhe pelo bolso ───
+  //
+  // A pergunta que o aplicativo passa a responder é a inversa da de sempre. Não
+  // "quantas cartelas custa garantir isto", mas "dado o que posso gastar, o que
+  // vale a pena comprar" — com a garantia como resposta, e não como pergunta.
+  //
+  // O caso que motivou a mudança: alguém pediu um fechamento lucrativo de 25
+  // dezenas com jogos de 18. Não existe, e não é questão de procurar melhor.
+  // Cada cartela de 18 contém C(18,15) = 816 dos C(25,15) sorteios, cobrir todos
+  // `r` vezes exige N ≥ r · 4.006 cartelas, e o retorno 1300r/N fica preso
+  // abaixo de 0,325× — para qualquer N, qualquer garantia, qualquer algoritmo.
+  const tetos = await pagina.evaluate(() =>
+    import('./lotinha.js').then((lot) => ({
+      pool25: [17, 18, 19, 20, 21, 22, 23].map((jogo) => ({
+        jogo,
+        teto: lot.tetoDoRetorno(25, jogo),
+      })),
+      oCaso: lot.tetoDoRetorno(25, 18),
+      vinteQuatro: lot.tetoDoRetorno(24, 23),
+    }))
+  );
+  marcar(
+    tetos.pool25.every((l) => l.teto < 1),
+    'nenhuma das sete combinações do pool 25 pode pagar, com garantia nenhuma',
+    tetos.pool25.map((l) => `${l.jogo}:${l.teto.toFixed(2)}`).join(' ')
+  );
+  marcar(
+    Math.abs(tetos.oCaso - 0.3245) < 0.001,
+    'e o 25/18 devolve no máximo R$ 0,32 por real, que é o teto dele',
+    tetos.oCaso.toFixed(4)
+  );
+
+  // O outro lado da mesma conta: o pool 24 com jogos de 23 era rotulado de
+  // impossível porque o aplicativo só olhava uma cartela premiada. Com nove,
+  // são as 24 cartelas que cabem no pool, todo sorteio deixa nove dezenas de
+  // fora, e são essas nove que o premiam — 36× por 24×, fixo.
+  const vinteQuatro = await pagina.evaluate(() =>
+    import('./lotinha.js').then((lot) => {
+      const m = lot.minimo(24, 23, 15, 9);
+      const v = lot.veredito({ jogo: 23, quantidade: m.jogos, piso: m.piso, premiadas: 9 });
+      const dezenas = Array.from({ length: 24 }, (_, i) => i + 1);
+      const jogos = lot.construir(24, 23, dezenas, 15, 9);
+      const c = lot.conferirCobertura(dezenas, jogos, 15, 9, { exaustivo: true });
+      return {
+        jogos: m.jogos,
+        exato: m.exato,
+        classe: v.classe,
+        premio: v.premio,
+        construidas: jogos.length,
+        cobertos: c.cobertos,
+        total: c.total,
+        pior: c.minimoPremiadas,
+        comUma: lot.veredito({ jogo: 23, quantidade: 16, piso: lot.minimo(24, 23).piso, premiadas: 1 }).classe,
+      };
+    })
+  );
+  marcar(
+    vinteQuatro.jogos === 24 && vinteQuatro.exato && vinteQuatro.classe === 'lucra',
+    'o 24/23 com nove premiadas são 24 cartelas, é mínimo provado, e paga',
+    `${vinteQuatro.jogos} cartelas, prêmio ${vinteQuatro.premio}×, veredito ${vinteQuatro.classe}`
+  );
+  marcar(
+    vinteQuatro.comUma === 'impossivel',
+    'e a mesma dupla com uma cartela premiada é impossível — era só isso que se via',
+    `com 1: ${vinteQuatro.comUma}, com 9: ${vinteQuatro.classe}`
+  );
+  marcar(
+    vinteQuatro.cobertos === vinteQuatro.total && vinteQuatro.pior === 9,
+    'e as nove premiadas são conferidas nos 1.307.504 sorteios, uma a uma',
+    `${vinteQuatro.cobertos} de ${vinteQuatro.total}, pior caso ${vinteQuatro.pior}`
+  );
+
+  // A varredura inteira, e as três propriedades que ela não pode violar.
+  const escolha = await pagina.evaluate(() =>
+    import('./lotinha.js').then((lot) => {
+      const r = lot.melhorConfiguracao({ orcamento: 5000, minimoDeCartelas: 2 });
+      return {
+        total: r.opcoes.length,
+        melhor: r.melhor,
+        temPool25: r.opcoes.some((o) => o.pool === 25),
+        acimaDoOrcamento: r.opcoes.filter((o) => o.quantidade > 5000).length,
+        naoPagam: r.opcoes.filter((o) => o.retorno <= 1).length,
+        lucroLongoPrazo: r.opcoes.filter((o) => o.retornoEsperado >= 1).length,
+        dominadas: r.opcoes.filter((x) =>
+          r.opcoes.some(
+            (y) =>
+              y !== x &&
+              y.pool === x.pool &&
+              y.quantidade <= x.quantidade &&
+              y.retorno >= x.retorno &&
+              (y.quantidade < x.quantidade || y.retorno > x.retorno)
+          )
+        ).length,
+        semTeto: r.semTeto.length,
+      };
+    })
+  );
+  marcar(
+    escolha.melhor.pool === 24 && escolha.melhor.jogo === 23 && escolha.melhor.premiadas === 9,
+    'a varredura elege 24/23 com nove premiadas — o que paga com mais frequência',
+    `${escolha.melhor.pool}/${escolha.melhor.jogo}, ${escolha.melhor.quantidade} cartelas, ` +
+      `${escolha.melhor.retorno.toFixed(2)}×, acerta ${(escolha.melhor.chanceDoPool * 100).toFixed(0)}% dos concursos`
+  );
+  marcar(
+    !escolha.temPool25 && escolha.semTeto === 10,
+    'o pool 25 não aparece em oferta nenhuma, e as dez duplas sem teto vêm explicadas',
+    `${escolha.semTeto} descartadas antes de olhar a garantia`
+  );
+  marcar(
+    escolha.naoPagam === 0 && escolha.acimaDoOrcamento === 0 && escolha.dominadas === 0,
+    'nada que não pague, nada acima do orçamento, nada que outra linha faça melhor e mais barato',
+    `${escolha.total} opções na fronteira`
+  );
+
+  // E a asserção que impede o painel novo de virar promessa de lucro. O retorno
+  // esperado é `multiplicador · chance da cartela`, o número de cartelas cancela
+  // na conta, e nenhuma escolha desta varredura o altera.
+  marcar(
+    escolha.lucroLongoPrazo === 0,
+    'e nenhuma oferta tem retorno esperado positivo, porque nenhuma pode ter',
+    `${escolha.total} conferidas, todas abaixo de R$ 1,00 por real`
   );
 
   marcar(errosDeConsole.length === 0, 'nenhum erro no console', errosDeConsole.join(' | ').slice(0, 120));
