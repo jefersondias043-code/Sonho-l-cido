@@ -1123,3 +1123,16 @@ main { padding: 8px 16px 0; }
   outline: 2px solid var(--acento);
   outline-offset: -2px;
 }
+
+/* O cabeçalho de cada pool dentro da tabela do orçamento. */
+#lot-bolso-tabela tr.grupo th {
+  text-align: left;
+  padding-top: 16px;
+  color: var(--acento);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  background: var(--fundo-cartao);
+  position: static;
+  box-shadow: none;
+}

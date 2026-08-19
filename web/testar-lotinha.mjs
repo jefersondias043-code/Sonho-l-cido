@@ -1203,7 +1203,7 @@ try {
   );
 
   const bolso = await pagina.evaluate(() => ({
-    linhas: [...document.querySelectorAll('#lot-bolso-tabela tbody tr')].map((tr) => ({
+    linhas: [...document.querySelectorAll('#lot-bolso-tabela tbody tr[data-pool]')].map((tr) => ({
       pool: Number(tr.dataset.pool),
       jogo: Number(tr.dataset.jogo),
       premiadas: Number(tr.dataset.premiadas),
@@ -1218,10 +1218,45 @@ try {
     'com R$ 50 por concurso, a primeira oferta é 24/23 com nove cartelas premiadas',
     bolso.linhas.map((l) => `${l.pool}/${l.jogo}·${l.premiadas}`).join(' ')
   );
+  // A tabela mostrava a melhor de cada pool, e com isso escondia a troca que o
+  // usuário mais quer ver: quanto a mais se ganha gastando um pouco mais dentro
+  // do mesmo pool. No pool 23 são sete degraus, de 17 cartelas pagando 1,18× a
+  // 23 cartelas pagando 3,48×.
+  const degraus = bolso.linhas.filter((l) => l.pool === 23).length;
   marcar(
-    new Set(bolso.linhas.map((l) => l.pool)).size === bolso.linhas.length,
-    'e vem uma linha por pool, que é onde está a troca que o usuário decide',
-    `${bolso.linhas.length} linhas, ${new Set(bolso.linhas.map((l) => l.pool)).size} pools`
+    degraus >= 5 && new Set(bolso.linhas.map((l) => l.pool)).size >= 6,
+    'a fronteira vem inteira: vários degraus de garantia dentro de cada pool',
+    `${bolso.linhas.length} linhas em ${new Set(bolso.linhas.map((l) => l.pool)).size} pools, ${degraus} no pool 23`
+  );
+
+  // E o que ela **não** mostra é o que importa tanto quanto. Garantia alta em
+  // cartela pequena é seduzente e péssima: no pool 23, garantir 28 premiadas com
+  // jogos de 21 custa 253 cartelas e devolve 3,32×, enquanto garantir 8 com
+  // jogos de 22 custa 23 e devolve 3,48×. Perseguir o número de premiadas por
+  // ele mesmo leva para o lado errado, e a dominância é o que barra isso.
+  const dominadas = await pagina.evaluate(() =>
+    import('./lotinha.js').then((lot) => {
+      const { opcoes } = lot.melhorConfiguracao({ orcamento: 200000, minimoDeCartelas: 2 });
+      return {
+        total: opcoes.length,
+        maiorGarantiaPorPool: Object.fromEntries(
+          [...new Set(opcoes.map((o) => o.pool))].map((pool) => {
+            const doPool = opcoes.filter((o) => o.pool === pool);
+            const melhor = doPool.reduce((a, b) => (b.retorno > a.retorno ? b : a));
+            return [pool, { premiadas: melhor.premiadas, cartelas: melhor.quantidade, retorno: melhor.retorno }];
+          })
+        ),
+        // uma configuração de garantia alta em cartela menor, para comparar
+        vinteOito: lot.previsao(23, 21, 15, 28).quantidade,
+      };
+    })
+  );
+  const p23 = dominadas.maiorGarantiaPorPool[23];
+  marcar(
+    p23.cartelas < dominadas.vinteOito && p23.retorno > (28 * 30) / dominadas.vinteOito,
+    'e o melhor do pool 23 é mais barato E paga mais que a garantia de 28 premiadas',
+    `${p23.cartelas} cartelas a ${p23.retorno.toFixed(2)}× contra ` +
+      `${dominadas.vinteOito} cartelas a ${((28 * 30) / dominadas.vinteOito).toFixed(2)}×`
   );
 
   // A pergunta que originou tudo isto — um fechamento lucrativo de 25 dezenas
@@ -1239,7 +1274,7 @@ try {
 
   // Tocar numa linha configura os passos seguintes: é o que liga a escolha
   // financeira ao resto da tela, em vez de deixar o usuário transcrever.
-  await pagina.click('#lot-bolso-tabela tbody tr:first-child');
+  await pagina.click('#lot-bolso-tabela tbody tr[data-pool]');
   await pagina.waitForTimeout(200);
   const configurado = await pagina.evaluate(() => ({
     pool: document.querySelector('#lot-pool .opcao.ativa')?.textContent,
@@ -1256,6 +1291,35 @@ try {
     configurado.botoes.includes('9'),
     'e a régua de premiadas alcança o teto, que é onde o retorno é maior',
     configurado.botoes.join(' ')
+  );
+
+  // Nenhuma garantia possível pode ficar fora de alcance. A régua de botões
+  // cobre 1 a 8 e o teto; o campo ao lado cobre o meio, que em 23/21 vai até 28.
+  await pagina.click('#lot-pool .opcao[data-pool="23"]');
+  await pagina.click('#lot-jogo .opcao[data-jogo="21"]');
+  const livre = await pagina.evaluate(async () => {
+    const campo = document.getElementById('lot-premiadas-livre');
+    const disparar = (v) => {
+      campo.value = String(v);
+      campo.dispatchEvent(new Event('change', { bubbles: true }));
+    };
+    const teto = campo.max;
+    disparar(20);
+    await new Promise((ok) => setTimeout(ok, 200));
+    const vinte = campo.value;
+    disparar(999);
+    await new Promise((ok) => setTimeout(ok, 200));
+    return { teto, vinte, cortado: campo.value, nota: document.getElementById('lot-premiadas-teto').textContent };
+  });
+  marcar(
+    livre.teto === '28' && livre.vinte === '20',
+    'o campo livre aceita garantias que a régua de botões não mostra — 20 em 23/21',
+    `teto ${livre.teto}, pedi 20 e ficou ${livre.vinte}`
+  );
+  marcar(
+    livre.cortado === '28' && /teto é 28/.test(livre.nota),
+    'e corta no teto matemático, dizendo por que ele existe',
+    `pedi 999 e ficou ${livre.cortado}`
   );
 
   // A matriz das 45 respondia "paga?" olhando só uma cartela premiada, e

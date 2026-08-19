@@ -966,13 +966,13 @@ function lotMontarExigencias() {
   }
 
   // O limite dos botões é de tela, não de matemática: uma fileira de 252 botões
-  // não serve a ninguém.
+  // não serve a ninguém. A régua vai de 1 a 8 e sempre inclui o teto, e o campo
+  // ao lado aceita qualquer valor entre eles — nenhuma garantia possível fica
+  // fora de alcance.
   //
-  // Mas cortar em dez escondia justamente a opção que costuma ser a melhor. O
-  // retorno de um fechamento cresce com a garantia, e o pico está no teto — em
-  // 24 dezenas com jogos de 23 são as nove premiadas, 24 cartelas pagando 36×,
-  // e é o fechamento que paga com mais frequência da modalidade. Então a régua
-  // vai de 1 a 8 e **sempre** inclui o teto, mesmo quando ele é 28.
+  // O teto é o número de jogos **distintos** que podem conter um mesmo sorteio.
+  // Acima dele não há o que comprar: só repetir cartela, que soma prêmio e custo
+  // na mesma proporção e não muda nada.
   const teto = Math.max(lotinha.maximoPremiadas(lotPool, lotJogo, lotGarantia), 1);
   if (lotPremiadas > teto) lotPremiadas = teto;
 
@@ -1009,6 +1009,22 @@ function lotMontarExigencias() {
     b.classList.toggle('ativa', ativa);
     b.setAttribute('aria-pressed', String(ativa));
   });
+
+  const livre = $('lot-premiadas-livre');
+  if (livre) {
+    livre.max = String(teto);
+    livre.value = String(lotPremiadas);
+    livre.disabled = teto <= 1;
+  }
+  const nota = $('lot-premiadas-teto');
+  if (nota) {
+    nota.innerHTML =
+      teto <= 1
+        ? 'Aqui só uma cartela pode conter o sorteio, então a garantia é uma.'
+        : `O teto é <b>${milhares(teto)}</b> — são ${milhares(teto)} jogos distintos ` +
+          `de ${lotJogo} dezenas capazes de conter um mesmo sorteio dentro do seu pool. ` +
+          'Acima disso só repetindo cartela, o que soma prêmio e custo junto e não muda nada.';
+  }
 }
 
 /**
@@ -1421,14 +1437,26 @@ function lotValorDoJogo() {
 /**
  * O que o orçamento compra — e a garantia deixa de ser ajuste, vira resposta.
  *
- * ## Por que uma linha por pool
+ * ## Por que a fronteira inteira, agrupada por pool
  *
- * A fronteira inteira tem dezenas de linhas, e quase toda a variação dentro de
- * um mesmo pool é ruído: mudar a garantia sobe o prêmio e o custo juntos, e a
- * melhor de cada pool domina as outras. O que **não** é ruído é a troca entre
- * pools, porque ela é a única coisa que muda a frequência com que o fechamento
- * paga — de 0,004% num pool de 17 a 40% num de 24. Uma linha por pool põe essa
- * troca inteira na tela, e é a decisão que cabe ao usuário tomar.
+ * São duas trocas, e as duas são do usuário:
+ *
+ * - **entre pools** — muda a frequência com que o fechamento paga, de 0,004%
+ *   num pool de 17 a 40% num de 24;
+ * - **dentro do pool** — muda quantas cartelas premiadas se garante. Cada
+ *   degrau custa mais e devolve mais: no pool 23 vai de 17 cartelas pagando
+ *   1,18× até 23 cartelas pagando 3,48×.
+ *
+ * A segunda ficava escondida quando a tela mostrava só a melhor de cada pool, e
+ * é justamente a que responde "quanto a mais eu ganho se gastar um pouco mais".
+ *
+ * O que **não** aparece é o que outra linha do mesmo pool faz melhor e mais
+ * barato. Isso importa mais do que parece: garantias altas em cartelas pequenas
+ * são sedutoras e péssimas. No pool 23, garantir 28 cartelas premiadas com
+ * jogos de 21 custa 253 cartelas e devolve 3,32×; garantir 8 com jogos de 22
+ * custa 23 e devolve 3,48× — onze vezes mais barato e melhor. Perseguir o
+ * número de premiadas por ele mesmo leva para o lado errado, e a filtragem por
+ * dominância é o que impede a tela de sugerir isso.
  *
  * ## O que a tabela não faz
  *
@@ -1464,12 +1492,7 @@ function lotPintarBolso() {
   const vezes = (v) => `${v < 100 ? v.toFixed(2).replace('.', ',') : milhares(v)}×`;
   const chance = (f) => `${(f * 100).toFixed(2).replace('.', ',')}%`;
 
-  // Uma por pool: a fronteira já vem ordenada, então a primeira de cada pool é
-  // a melhor daquele pool.
-  const porPool = [];
-  for (const o of opcoes) if (!porPool.some((x) => x.pool === o.pool)) porPool.push(o);
-
-  if (porPool.length === 0) {
+  if (opcoes.length === 0) {
     alvo.innerHTML =
       `<div class="referencia"><b>${dinheiro(reais)} não compra fechamento que pague.</b> ` +
       `<em>Com jogos de ${dinheiro(valor)} são ${milhares(cartelas)} cartelas, e nenhum ` +
@@ -1478,28 +1501,39 @@ function lotPintarBolso() {
     return;
   }
 
-  const linhas = porPool
-    .map(
-      (o) =>
+  // Um cabeçalho por pool: a frequência é a mesma para todas as linhas dele, e
+  // repeti-la em cada uma gastaria a coluna mais larga da tabela com o mesmo
+  // número seguidas vezes.
+  let poolAtual = null;
+  const linhas = opcoes
+    .map((o) => {
+      const cabecalho =
+        o.pool === poolAtual
+          ? ''
+          : `<tr class="grupo"><th scope="rowgroup" colspan="6">${o.pool} dezenas — ` +
+            `paga em ${chance(o.chanceDoPool)} dos concursos</th></tr>`;
+      poolAtual = o.pool;
+      return (
+        cabecalho +
         `<tr data-pool="${o.pool}" data-jogo="${o.jogo}" data-premiadas="${o.premiadas}" tabindex="0" role="button">` +
         `<th scope="row">${o.pool}/${o.jogo}</th>` +
-        `<td>${o.premiadas}</td>` +
+        `<td>${milhares(o.premiadas)}</td>` +
         `<td>${milhares(o.quantidade)}</td>` +
         `<td>${dinheiro(o.custo)}</td>` +
         `<td>${dinheiro(o.premioGarantido)}</td>` +
         `<td class="paga">${vezes(o.retorno)}</td>` +
-        `<td>${chance(o.chanceDoPool)}</td>` +
         '</tr>'
-    )
+      );
+    })
     .join('');
 
-  const topo = porPool[0];
-  const raro = porPool[porPool.length - 1];
+  const topo = opcoes[0];
+  const raro = opcoes[opcoes.length - 1];
 
   alvo.innerHTML =
     `<div class="rolagem"><table class="matriz" id="lot-bolso-tabela">` +
     '<thead><tr><th>Fech.</th><th>Premiadas</th><th>Cartelas</th><th>Custo</th>' +
-    '<th>Prêmio mín.</th><th>Retorno</th><th>Paga em</th></tr></thead>' +
+    '<th>Prêmio mín.</th><th>Retorno</th></tr></thead>' +
     `<tbody>${linhas}</tbody></table></div>` +
     `<div class="referencia"><b>A troca é essa.</b> <em>${topo.pool}/${topo.jogo} paga ` +
     `${vezes(topo.retorno)} e acerta o pool em ${chance(topo.chanceDoPool)} dos ` +
@@ -1518,7 +1552,10 @@ function lotPintarBolso() {
         'cartelas se compra nem de quantas se exige premiadas.</em></div>'
       : '');
 
-  for (const linha of alvo.querySelectorAll('#lot-bolso-tabela tbody tr')) {
+  // `[data-pool]` exclui os cabeçalhos de grupo, que são `tr` também e não têm
+  // configuração para aplicar — sem isso o clique num deles pediria um pool
+  // `NaN`.
+  for (const linha of alvo.querySelectorAll('#lot-bolso-tabela tbody tr[data-pool]')) {
     const usar = () => {
       lotPool = Number(linha.dataset.pool);
       lotJogo = Number(linha.dataset.jogo);
@@ -1611,6 +1648,30 @@ ligar('lot-valor', 'input', () => {
   lotPintarBolso();
 });
 ligar('lot-orcamento', 'input', lotPintarBolso);
+
+/*
+ * O campo livre de cartelas premiadas.
+ *
+ * A régua de botões cobre 1 a 8 e o teto, que é o que a fronteira de fato usa.
+ * Este campo cobre o resto: quem quiser experimentar vinte, trinta ou cento e
+ * vinte premiadas digita aqui, sem limite artificial nenhum.
+ *
+ * `change` e não `input` de propósito: repintar a cada dígito faria o campo
+ * saltar para o teto no meio da digitação de "12", porque "1" já é válido.
+ */
+ligar('lot-premiadas-livre', 'change', (evento) => {
+  const teto = Math.max(lotinha.maximoPremiadas(lotPool, lotJogo, lotGarantia), 1);
+  const pedido = Math.round(Number(evento.target.value));
+  if (!Number.isFinite(pedido) || pedido < 1) {
+    evento.target.value = String(lotPremiadas);
+    return;
+  }
+  lotPremiadas = Math.min(pedido, teto);
+  lotEsquecerFechamento();
+  lotMontarExigencias();
+  lotPintarExplicacao();
+  lotPintarEconomia();
+});
 
 /**
  * Carrega o fechamento pronto, confere, mostra — e só então oferece o motor.
