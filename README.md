@@ -164,6 +164,54 @@ São três eixos, e não um:
 | **quantos acertos garantir** (15 a 11) | 15 é o que a Lotinha paga; menos é Lotofácil |
 | **quantas cartelas premiadas** (1 ao teto) | quantas das suas cartelas precisam ganhar |
 
+#### Começar pelo bolso
+
+A tela abre pela pergunta invertida: em vez de *"quantas cartelas custa garantir
+isto"*, **"dado o que posso gastar, o que vale a pena comprar"** — e a garantia
+deixa de ser um ajuste para virar resposta. Informado o teto por concurso, uma
+linha por pool mostra o que ele compra, e tocar numa linha ajusta os passos
+seguintes.
+
+A troca que sobra para o usuário decidir é sempre a mesma, e é a única que a
+matemática não resolve sozinha:
+
+| fechamento | cartelas | prêmio garantido | retorno | paga em |
+|---|---:|---:|---:|---:|
+| 24/23 com 9 premiadas | 24 | 36× | 1,50× | 40,00% dos concursos |
+| 23/22 com 8 premiadas | 23 | 80× | 3,48× | 15,00% |
+| 22/21 com 7 premiadas | 22 | 210× | 9,55× | 5,22% |
+| 19/18 com 4 premiadas | 19 | 5.200× | 273,68× | 0,12% |
+
+Foi esta varredura que tirou o pool 24 da lista de impossíveis. Com **uma**
+cartela premiada, 24 dezenas com jogos de 23 custam 16 cartelas para um prêmio
+de 4× — o mínimo matemático já é mais caro que o prêmio, e o aplicativo dizia
+"não paga". Com **nove**, são as 24 cartelas que cabem no pool: todo sorteio
+dentro das 24 deixa nove dezenas de fora, e são exatamente essas nove cartelas
+que o contêm. Paga 36× por 24×, fixo, e é o fechamento que paga com mais
+frequência da modalidade inteira.
+
+Nada disso torna a aposta boa. O retorno esperado por real vai de R$ 0,29 a
+R$ 0,60 nas duas pontas da tabela, é sempre menor que R$ 1,00, e **não depende
+do fechamento**: a quantidade de cartelas cancela na conta. O que a escolha
+muda é *quando* se ganha e *quanto* de cada vez.
+
+#### O teto: quando nenhuma garantia salva
+
+Para uma dupla pool/jogo, o retorno tem um limite que nenhum fechamento passa:
+
+    teto = multiplicador · C(jogo,15) / C(pool,15)
+
+Cada cartela de `k` dezenas contém `C(k,15)` dos `C(P,15)` sorteios do pool,
+então atender todos `r` vezes exige `N ≥ r · C(P,15)/C(k,15)` cartelas — e o `r`
+cancela no retorno `r·mult/N`. Subir a garantia aproxima do teto e nunca o
+ultrapassa.
+
+Isso decide dez duplas sem varrer nada. Todo o pool 25 fica abaixo de 1: com 25
+dezenas o sorteio sempre cai dentro, o teto vira o próprio retorno esperado, e
+ele vai de R$ 0,29 a R$ 0,60. Um fechamento de 25 dezenas com jogos de 18
+devolve no máximo R$ 0,32 por real apostado — para qualquer número de cartelas,
+qualquer garantia e qualquer algoritmo.
+
 #### A conta que quase todo mundo erra
 
 Para fechar um pool de `P` dezenas com jogos de `k`, a intuição manda dividir os

@@ -49,8 +49,27 @@
 -->
 <section id="lotinha" class="painel ativo" role="tabpanel">
 
+  <!-- A pergunta invertida: em vez de "quantas cartelas custa garantir isto",
+       "dado o que posso gastar, o que vale a pena comprar". A garantia deixa de
+       ser um ajuste e passa a ser resposta — é onde mora a maior parte da
+       diferença, e era o eixo que o aplicativo mantinha travado em 1. -->
+  <div class="cartao" id="lot-bolso-cartao">
+    <h2>1 · Quanto dá para gastar</h2>
+    <p class="ajuda">
+      Diga o teto por concurso e veja o que ele compra. A tabela abaixo escolhe
+      também <b>quantas cartelas premiadas</b> pedir, que é a decisão que mais
+      muda o resultado e a que costuma passar batido. Tocar numa linha ajusta os
+      passos seguintes.
+    </p>
+    <label class="campo linha">
+      <span>Teto por concurso (R$)</span>
+      <input type="number" id="lot-orcamento" value="50" min="1" step="1" inputmode="decimal">
+    </label>
+    <div id="lot-bolso"></div>
+  </div>
+
   <div class="cartao">
-    <h2>1 · Quantas dezenas você vai jogar</h2>
+    <h2>2 · Quantas dezenas você vai jogar</h2>
     <div class="opcoes" id="lot-pool"></div>
     <div class="grade-numeros" id="lot-grade"></div>
     <div class="referencia" id="lot-contagem"></div>
@@ -61,7 +80,7 @@
   </div>
 
   <div class="cartao">
-    <h2>2 · Tamanho de cada jogo</h2>
+    <h2>3 · Tamanho de cada jogo</h2>
     <p class="ajuda">
       Jogos menores pagam mais, mas exigem mais jogos para fechar o pool. As
       opções mudam conforme o pool: o jogo nunca pode ser maior que ele.
@@ -72,7 +91,7 @@
   <!-- Os dois eixos que mudam o tamanho do fechamento por ordens de grandeza,
        e que quase nenhuma ferramenta deixa mexer. -->
   <div class="cartao">
-    <h2>3 · O que garantir</h2>
+    <h2>4 · O que garantir</h2>
     <p class="ajuda">
       <b>Acertos</b> — na Lotinha só 15 paga, e é o padrão. Garantir menos custa
       uma fração disso, e é o que a Lotofácil premia a partir de 11.
@@ -121,7 +140,7 @@
   <button class="principal" id="lot-iniciar" disabled>Carregar fechamento</button>
 
   <div class="cartao" id="lot-resultado-cartao">
-    <div class="rotulo">4 · Conferência independente</div>
+    <div class="rotulo">5 · Conferência independente</div>
     <div class="referencia" id="lot-conferencia">
       <em>Ao carregar, cada sorteio possível dentro do seu pool é conferido um a
       um — sem consultar o motor que produziu o fechamento.</em>
@@ -143,7 +162,7 @@
   <!-- O simulador: testar a estrutura contra qualquer resultado hipotético,
        sem esperar sorteio nenhum. -->
   <details class="cartao" id="lot-simulador-cartao">
-    <summary>5 · Simular um resultado</summary>
+    <summary>6 · Simular um resultado</summary>
     <p class="ajuda">
       Digite 15 dezenas e veja como o seu fechamento teria se saído.
     </p>

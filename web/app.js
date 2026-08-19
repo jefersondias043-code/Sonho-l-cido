@@ -806,6 +806,7 @@ function lotMontar() {
       medir();
       lotMontarMatriz();
       lotPintarEconomia();
+      lotPintarBolso();
     });
     rotulo.appendChild(campo);
     rotulo.appendChild(regua);
@@ -813,6 +814,7 @@ function lotMontar() {
   }
 
   lotMontarMatriz();
+  lotPintarBolso();
   lotPintarTudo();
 }
 
@@ -843,16 +845,25 @@ function lotMontarExigencias() {
     alvoGarantia.appendChild(b);
   }
 
-  // O limite dos botões é de tela, não de matemática: uma fileira de 252
-  // botões não serve a ninguém. Dez cobre qualquer uso realista, e o teto
-  // verdadeiro — quantos jogos distintos podem premiar juntos — aparece na
-  // explicação quando ele é menor que isto.
-  const teto = Math.min(lotinha.maximoPremiadas(lotPool, lotJogo, lotGarantia), 10);
+  // O limite dos botões é de tela, não de matemática: uma fileira de 252 botões
+  // não serve a ninguém.
+  //
+  // Mas cortar em dez escondia justamente a opção que costuma ser a melhor. O
+  // retorno de um fechamento cresce com a garantia, e o pico está no teto — em
+  // 24 dezenas com jogos de 23 são as nove premiadas, 24 cartelas pagando 36×,
+  // e é o fechamento que paga com mais frequência da modalidade. Então a régua
+  // vai de 1 a 8 e **sempre** inclui o teto, mesmo quando ele é 28.
+  const teto = Math.max(lotinha.maximoPremiadas(lotPool, lotJogo, lotGarantia), 1);
   if (lotPremiadas > teto) lotPremiadas = teto;
+
+  const escala = [];
+  for (let r = 1; r <= Math.min(teto, 8); r++) escala.push(r);
+  if (!escala.includes(teto)) escala.push(teto);
+  if (!escala.includes(lotPremiadas)) escala.splice(escala.length - 1, 0, lotPremiadas);
 
   const alvoPremiadas = $('lot-premiadas');
   alvoPremiadas.innerHTML = '';
-  for (let r = 1; r <= Math.max(teto, 1); r++) {
+  for (const r of escala) {
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'opcao';
@@ -1281,6 +1292,134 @@ function lotPintarEconomia() {
  * o piso: era o piso que aparecia nas combinações em aberto, e comparar um piso
  * com um prêmio daria um veredito que a compra não cumpre.
  */
+/** O valor de cada jogo, saneado — o mesmo que a economia usa. */
+function lotValorDoJogo() {
+  const digitado = Number($('lot-valor').value);
+  return Number.isFinite(digitado) && digitado > 0 ? digitado : 1;
+}
+
+/**
+ * O que o orçamento compra — e a garantia deixa de ser ajuste, vira resposta.
+ *
+ * ## Por que uma linha por pool
+ *
+ * A fronteira inteira tem dezenas de linhas, e quase toda a variação dentro de
+ * um mesmo pool é ruído: mudar a garantia sobe o prêmio e o custo juntos, e a
+ * melhor de cada pool domina as outras. O que **não** é ruído é a troca entre
+ * pools, porque ela é a única coisa que muda a frequência com que o fechamento
+ * paga — de 0,004% num pool de 17 a 40% num de 24. Uma linha por pool põe essa
+ * troca inteira na tela, e é a decisão que cabe ao usuário tomar.
+ *
+ * ## O que a tabela não faz
+ *
+ * Não ordena por "melhor". A primeira linha é a que paga com mais frequência,
+ * não a de maior retorno — ordenar por retorno coroaria um bilhete só de 17
+ * dezenas, que devolve 7.000× e quase nunca ganha. E nenhuma linha tem retorno
+ * esperado positivo, porque nenhuma pode ter.
+ */
+function lotPintarBolso() {
+  const alvo = $('lot-bolso');
+  const valor = lotValorDoJogo();
+  const digitado = Number($('lot-orcamento').value);
+  const reais = Number.isFinite(digitado) && digitado > 0 ? digitado : 0;
+  const cartelas = Math.floor(reais / valor);
+
+  if (cartelas < 1) {
+    alvo.innerHTML =
+      '<div class="referencia"><em>Informe quanto dá para gastar por concurso, ' +
+      'e a tabela diz o que esse valor compra.</em></div>';
+    return;
+  }
+
+  const { opcoes, semTeto } = lotinha.melhorConfiguracao({
+    cotacao: lotCotacao,
+    orcamento: cartelas,
+    valorDoJogo: valor,
+    minimoDeCartelas: 2,
+  });
+
+  const dinheiro = (v) =>
+    v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  // Retornos vão de 1,14× a mais de mil: casa decimal fixa deixaria "1167,00×".
+  const vezes = (v) => `${v < 100 ? v.toFixed(2).replace('.', ',') : milhares(v)}×`;
+  const chance = (f) => `${(f * 100).toFixed(2).replace('.', ',')}%`;
+
+  // Uma por pool: a fronteira já vem ordenada, então a primeira de cada pool é
+  // a melhor daquele pool.
+  const porPool = [];
+  for (const o of opcoes) if (!porPool.some((x) => x.pool === o.pool)) porPool.push(o);
+
+  if (porPool.length === 0) {
+    alvo.innerHTML =
+      `<div class="referencia"><b>${dinheiro(reais)} não compra fechamento que pague.</b> ` +
+      `<em>Com jogos de ${dinheiro(valor)} são ${milhares(cartelas)} cartelas, e nenhum ` +
+      'fechamento desse tamanho devolve mais do que custa nem quando o sorteio cai ' +
+      'dentro do pool. Aumente o teto, ou baixe o valor de cada jogo.</em></div>';
+    return;
+  }
+
+  const linhas = porPool
+    .map(
+      (o) =>
+        `<tr data-pool="${o.pool}" data-jogo="${o.jogo}" data-premiadas="${o.premiadas}" tabindex="0" role="button">` +
+        `<th scope="row">${o.pool}/${o.jogo}</th>` +
+        `<td>${o.premiadas}</td>` +
+        `<td>${milhares(o.quantidade)}</td>` +
+        `<td>${dinheiro(o.custo)}</td>` +
+        `<td>${dinheiro(o.premioGarantido)}</td>` +
+        `<td class="paga">${vezes(o.retorno)}</td>` +
+        `<td>${chance(o.chanceDoPool)}</td>` +
+        '</tr>'
+    )
+    .join('');
+
+  const topo = porPool[0];
+  const raro = porPool[porPool.length - 1];
+
+  alvo.innerHTML =
+    `<div class="rolagem"><table class="matriz" id="lot-bolso-tabela">` +
+    '<thead><tr><th>Fech.</th><th>Premiadas</th><th>Cartelas</th><th>Custo</th>' +
+    '<th>Prêmio mín.</th><th>Retorno</th><th>Paga em</th></tr></thead>' +
+    `<tbody>${linhas}</tbody></table></div>` +
+    `<div class="referencia"><b>A troca é essa.</b> <em>${topo.pool}/${topo.jogo} paga ` +
+    `${vezes(topo.retorno)} e acerta o pool em ${chance(topo.chanceDoPool)} dos ` +
+    `concursos; ${raro.pool}/${raro.jogo} paga ${vezes(raro.retorno)} e acerta em ` +
+    `${chance(raro.chanceDoPool)}. Nas duas pontas o retorno esperado é o mesmo tipo de ` +
+    `negócio: ${dinheiro(topo.retornoEsperado)} e ${dinheiro(raro.retornoEsperado)} por real ` +
+    'apostado, porque a quantidade de cartelas cancela nessa conta. O que muda é ' +
+    '<b>quando</b> se ganha e <b>quanto</b> de cada vez, nunca a média.</em></div>' +
+    (semTeto.length
+      ? '<div class="referencia"><em>Fora da tabela por matemática, não por preço: ' +
+        semTeto
+          .map((d) => `${d.pool}/${d.jogo} (teto ${vezes(d.teto)})`)
+          .join(', ') +
+        '. Nessas duplas o prêmio não cobre o mínimo de cartelas necessário, e ' +
+        'nenhuma garantia conserta — o teto do retorno não depende de quantas ' +
+        'cartelas se compra nem de quantas se exige premiadas.</em></div>'
+      : '');
+
+  for (const linha of alvo.querySelectorAll('#lot-bolso-tabela tbody tr')) {
+    const usar = () => {
+      lotPool = Number(linha.dataset.pool);
+      lotJogo = Number(linha.dataset.jogo);
+      lotPremiadas = Number(linha.dataset.premiadas);
+      lotGarantia = lotinha.SORTEIO;
+      // A seleção de dezenas que sobrou pode não caber no pool novo.
+      if (lotDezenas.size > lotPool) lotDezenas = new Set([...lotDezenas].slice(0, lotPool));
+      lotEsquecerFechamento();
+      lotPintarTudo();
+      $('lot-grade').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    };
+    linha.addEventListener('click', usar);
+    linha.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter' || ev.key === ' ') {
+        ev.preventDefault();
+        usar();
+      }
+    });
+  }
+}
+
 function lotMontarMatriz() {
   const linhas = lotinha
     .matriz()
@@ -1296,17 +1435,28 @@ function lotMontarMatriz() {
         piso: l.piso,
         cotacao: lotCotacao,
       });
+
+      // A coluna respondia a pergunta errada. Ela dizia se a combinação paga
+      // **com uma cartela premiada**, e rotulava de "não paga" o que só não
+      // paga com uma — 23/22 vira lucro com duas, e todo o pool 24 com jogos de
+      // 20 a 23 vira lucro pedindo mais. O que interessa é se existe alguma
+      // garantia em que a dupla paga, e qual é a primeira delas.
+      const quando =
+        v.classe === 'sem-cotacao'
+          ? null
+          : lotinha.garantiaQuePaga(l.pool, l.jogo, lotCotacao);
+      const semSalvacao = v.classe !== 'sem-cotacao' && quando === null;
       const paga =
-        v.classe === 'lucra'
-          ? '<td class="paga">paga</td>'
-          : v.classe === 'possivel'
-            ? `<td class="quase">faltam ${milhares(v.faltamCortar ?? 0)}</td>`
-            : v.classe === 'impossivel'
-              ? '<td class="nao-paga">não paga</td>'
-              : '<td class="sem-cotacao">—</td>';
+        v.classe === 'sem-cotacao'
+          ? '<td class="sem-cotacao">—</td>'
+          : quando === null
+            ? '<td class="nao-paga">não paga</td>'
+            : quando.premiadas === 1
+              ? '<td class="paga">paga</td>'
+              : `<td class="quase">paga com ${milhares(quando.premiadas)}</td>`;
 
       return (
-        `<tr class="${v.classe === 'impossivel' ? 'linha-apagada' : ''}">` +
+        `<tr class="${semSalvacao ? 'linha-apagada' : ''}">` +
         `<td>${l.pool}</td><td>${l.jogo}</td><td>${quantos}</td>` +
         `<td class="${l.exato ? '' : 'aberto'}">${situacao}</td>` +
         `<td>1 em ${milhares(1 / lotinha.chanceDe(l.jogo))}</td>${paga}</tr>`
@@ -1336,7 +1486,11 @@ $('lot-sortear').addEventListener('click', () => {
   lotPintarTudo();
 });
 
-$('lot-valor').addEventListener('input', lotPintarEconomia);
+$('lot-valor').addEventListener('input', () => {
+  lotPintarEconomia();
+  lotPintarBolso();
+});
+$('lot-orcamento').addEventListener('input', lotPintarBolso);
 
 /**
  * Carrega o fechamento pronto, confere, mostra — e só então oferece o motor.

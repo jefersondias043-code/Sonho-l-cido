@@ -1142,6 +1142,111 @@ try {
     `${escolha.total} conferidas, todas abaixo de R$ 1,00 por real`
   );
 
+  // ─── 13. a tela do orçamento ───
+  //
+  // O primeiro passo da Lotinha deixou de ser "escolha as dezenas" e passou a
+  // ser "diga quanto dá para gastar". A tabela responde com uma linha por pool,
+  // porque a troca entre pools — quanto paga contra com que frequência paga — é
+  // a única decisão que sobra depois que a matemática escolheu o resto.
+  await pagina.click('.aba[data-painel="lotinha"]');
+  await pagina.waitForSelector('#lotinha.ativo');
+  await pagina.fill('#lot-orcamento', '50');
+  await pagina.waitForFunction(
+    () => document.querySelectorAll('#lot-bolso-tabela tbody tr').length > 0,
+    undefined,
+    { timeout: 15000 }
+  );
+
+  const bolso = await pagina.evaluate(() => ({
+    linhas: [...document.querySelectorAll('#lot-bolso-tabela tbody tr')].map((tr) => ({
+      pool: Number(tr.dataset.pool),
+      jogo: Number(tr.dataset.jogo),
+      premiadas: Number(tr.dataset.premiadas),
+    })),
+    texto: document.getElementById('lot-bolso').textContent.replace(/\s+/g, ' '),
+  }));
+  marcar(
+    bolso.linhas.length > 0 &&
+      bolso.linhas[0].pool === 24 &&
+      bolso.linhas[0].jogo === 23 &&
+      bolso.linhas[0].premiadas === 9,
+    'com R$ 50 por concurso, a primeira oferta é 24/23 com nove cartelas premiadas',
+    bolso.linhas.map((l) => `${l.pool}/${l.jogo}·${l.premiadas}`).join(' ')
+  );
+  marcar(
+    new Set(bolso.linhas.map((l) => l.pool)).size === bolso.linhas.length,
+    'e vem uma linha por pool, que é onde está a troca que o usuário decide',
+    `${bolso.linhas.length} linhas, ${new Set(bolso.linhas.map((l) => l.pool)).size} pools`
+  );
+
+  // A pergunta que originou tudo isto — um fechamento lucrativo de 25 dezenas
+  // com jogos de 18 — precisa aparecer respondida, e não apenas ausente.
+  marcar(
+    /25\/18 \(teto 0,32×\)/.test(bolso.texto) && !bolso.linhas.some((l) => l.pool === 25),
+    'e o 25/18 aparece explicado como impossível, com o teto dele, em vez de sumir',
+    (bolso.texto.match(/Fora da tabela[^.]*\./) ?? [''])[0].slice(0, 90)
+  );
+  marcar(
+    /quantidade de cartelas cancela/.test(bolso.texto),
+    'o aviso de que o retorno médio não muda continua junto da oferta',
+    /nunca a média/.test(bolso.texto) ? 'diz "nunca a média"' : 'ausente'
+  );
+
+  // Tocar numa linha configura os passos seguintes: é o que liga a escolha
+  // financeira ao resto da tela, em vez de deixar o usuário transcrever.
+  await pagina.click('#lot-bolso-tabela tbody tr:first-child');
+  await pagina.waitForTimeout(200);
+  const configurado = await pagina.evaluate(() => ({
+    pool: document.querySelector('#lot-pool .opcao.ativa')?.textContent,
+    jogo: document.querySelector('#lot-jogo .opcao.ativa')?.textContent,
+    premiadas: document.querySelector('#lot-premiadas .opcao.ativa')?.textContent,
+    botoes: [...document.querySelectorAll('#lot-premiadas .opcao')].map((b) => b.textContent),
+  }));
+  marcar(
+    configurado.pool === '24' && configurado.jogo === '23' && configurado.premiadas === '9',
+    'tocar na linha ajusta pool, tamanho de jogo e cartelas premiadas de uma vez',
+    `${configurado.pool}/${configurado.jogo} com ${configurado.premiadas}`
+  );
+  marcar(
+    configurado.botoes.includes('9'),
+    'e a régua de premiadas alcança o teto, que é onde o retorno é maior',
+    configurado.botoes.join(' ')
+  );
+
+  // A matriz das 45 respondia "paga?" olhando só uma cartela premiada, e
+  // mandava embora quem parasse nela: 23/22 é impossível com uma e lucra com
+  // duas; o pool 24 inteiro, de jogos de 20 a 23, lucra pedindo mais.
+  const coluna = await pagina.evaluate(() => {
+    const linhas = [...document.querySelectorAll('#lot-matriz tbody tr')];
+    const ler = (pool, jogo) => {
+      const tr = linhas.find(
+        (l) => l.children[0].textContent === String(pool) && l.children[1].textContent === String(jogo)
+      );
+      return tr ? { texto: tr.children[5].textContent, apagada: tr.classList.contains('linha-apagada') } : null;
+    };
+    return {
+      a: ler(23, 22),
+      b: ler(24, 23),
+      c: ler(25, 18),
+      d: ler(22, 20),
+    };
+  });
+  marcar(
+    /paga com 2/.test(coluna.a.texto) && !coluna.a.apagada,
+    'a matriz diz que 23/22 paga com duas premiadas, em vez de "não paga"',
+    coluna.a.texto
+  );
+  marcar(
+    /paga com 6/.test(coluna.b.texto) && !coluna.b.apagada,
+    'e que 24/23 paga com seis — o pool que acerta 40% dos concursos',
+    coluna.b.texto
+  );
+  marcar(
+    /não paga/.test(coluna.c.texto) && coluna.c.apagada && /^paga$/.test(coluna.d.texto.trim()),
+    'e continua apagando o que não paga com garantia nenhuma, como o 25/18',
+    `25/18: ${coluna.c.texto} · 22/20: ${coluna.d.texto}`
+  );
+
   marcar(errosDeConsole.length === 0, 'nenhum erro no console', errosDeConsole.join(' | ').slice(0, 120));
 } finally {
   await navegador.close();

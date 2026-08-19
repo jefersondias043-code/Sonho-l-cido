@@ -1197,3 +1197,31 @@ function semDominadas(opcoes) {
       )
   );
 }
+
+/**
+ * A menor garantia em que esta dupla passa a pagar — ou `null` se nenhuma paga.
+ *
+ * Separa três situações que a tela mostrava como uma só:
+ *
+ * - **paga já com uma cartela premiada** — devolve `{ premiadas: 1, … }`;
+ * - **paga, mas só pedindo mais** — é o caso de 23 dezenas com jogos de 20, que
+ *   empata em 100 cartelas para um prêmio de 100× e vira lucro em 147 cartelas
+ *   para 200×. Chamar isso de "não paga" mandava o usuário embora de uma
+ *   combinação que paga;
+ * - **não paga com garantia nenhuma** — e aí [`tetoDoRetorno`] já resolve sem
+ *   varrer nada, porque o teto não depende da garantia.
+ */
+export function garantiaQuePaga(pool, jogo, cotacao = COTACAO_PADRAO, garantia = SORTEIO) {
+  const multiplicador = cotacao?.[jogo] ?? null;
+  if (!multiplicador) return null;
+  if (tetoDoRetorno(pool, jogo, cotacao) <= 1) return null;
+
+  for (let premiadas = 1; premiadas <= maximoPremiadas(pool, jogo, garantia); premiadas++) {
+    const { quantidade, origem, exato } = previsao(pool, jogo, garantia, premiadas);
+    const premio = premiadas * multiplicador;
+    if (quantidade !== null && quantidade < premio) {
+      return { premiadas, quantidade, premio, origem, exato, retorno: premio / quantidade };
+    }
+  }
+  return null;
+}
