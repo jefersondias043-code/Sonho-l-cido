@@ -1091,6 +1091,51 @@ try {
     `${vinteQuatro.cobertos} de ${vinteQuatro.total}, pior caso ${vinteQuatro.pior}`
   );
 
+  // O melhor fechamento de cada pool não é "o melhor que achamos": é o melhor
+  // que **existe**. São todas as `P` cartelas de `P − 1` dezenas — todo sorteio
+  // dentro do pool deixa `b = P − 15` dezenas de fora, e são exatamente essas
+  // `b` cartelas que o contêm —, e o retorno `b·mult/P` é idêntico ao teto
+  // `mult · C(P−1,15)/C(P,15)`, que nenhum fechamento passa.
+  //
+  // É por isso que um banco com garantia maior não melhoraria a escolha: não
+  // há para onde melhorar. Se este teste cair, a afirmação deixou de valer e a
+  // decisão de não guardar esses fechamentos precisa ser revista.
+  const noTeto = await pagina.evaluate(() =>
+    import('./lotinha.js').then((lot) => {
+      const linhas = [];
+      for (let pool = 18; pool <= 24; pool++) {
+        const jogo = pool - 1;
+        const mult = lot.COTACAO_PADRAO[jogo];
+        if (!mult) continue;
+        const b = pool - 15;
+        const quantidade = lot.previsao(pool, jogo, 15, b).quantidade;
+        const maiorDosMenores = Math.max(
+          0,
+          ...Array.from({ length: jogo - 17 }, (_, i) => lot.tetoDoRetorno(pool, 17 + i))
+        );
+        linhas.push({
+          pool,
+          quantidade,
+          retorno: (b * mult) / quantidade,
+          teto: lot.tetoDoRetorno(pool, jogo),
+          maiorDosMenores,
+        });
+      }
+      return linhas;
+    })
+  );
+  marcar(
+    noTeto.length === 7 &&
+      noTeto.every((l) => l.quantidade === l.pool && Math.abs(l.retorno - l.teto) < 1e-9),
+    'o melhor fechamento de cada pool são as P cartelas de P−1 dezenas, e ele encosta no teto',
+    noTeto.map((l) => `${l.pool}: ${l.quantidade} cartelas, ${l.retorno.toFixed(2)}×`).join(' · ')
+  );
+  marcar(
+    noTeto.every((l) => l.maiorDosMenores < l.teto),
+    'e nenhum tamanho de jogo menor tem teto maior, então não há o que procurar abaixo dele',
+    noTeto.map((l) => `${l.pool}: ${l.teto.toFixed(2)}× vs ${l.maiorDosMenores.toFixed(2)}×`).join(' · ')
+  );
+
   // A varredura inteira, e as três propriedades que ela não pode violar.
   const escolha = await pagina.evaluate(() =>
     import('./lotinha.js').then((lot) => {
