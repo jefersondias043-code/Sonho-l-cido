@@ -86,8 +86,12 @@ console.log('Teste da atualização automática\n');
 
 const caminhoSw = join(RAIZ, 'sw.js');
 const caminhoEstilo = join(RAIZ, 'estilo.css');
+const caminhoLotinha = join(RAIZ, 'lotinha.js');
+const caminhoIndex = join(RAIZ, 'index.html');
 const swOriginal = await readFile(caminhoSw, 'utf8');
 const estiloOriginal = await readFile(caminhoEstilo, 'utf8');
+const lotinhaOriginal = await readFile(caminhoLotinha, 'utf8');
+const indexOriginal = await readFile(caminhoIndex, 'utf8');
 
 try {
   // ─── 1. a versão que o usuário já tem ───
@@ -207,9 +211,98 @@ try {
   marcar(motorOffline, 'sem internet, o motor roda a partir do cache');
 
   await contexto.setOffline(false);
+
+  // ─── peças de construções diferentes ───
+  //
+  // O acidente real: o `app.js` de uma construção chegou ao aparelho junto com
+  // o `lotinha.js` da anterior. A primeira função que ele chamou ainda não
+  // existia lá, o `TypeError` subiu no corpo do módulo, e **tudo o que vinha
+  // depois nunca foi executado** — quarenta `addEventListener` de topo, nenhum
+  // registrado.
+  //
+  // Do lado do usuário: a primeira tela da Lotinha respondia, porque os botões
+  // dela são pendurados antes, e o aplicativo inteiro depois disso estava
+  // morto, sem uma mensagem. Um arquivo velho no cache parecendo um aplicativo
+  // quebrado.
+  //
+  // O teste serve a mistura de propósito e exige as duas defesas: perceber
+  // antes de usar, e não recarregar para sempre quando o remendo não resolve.
+  const semAsNovas = lotinhaOriginal
+    .replace(/export function garantiaQuePaga/, 'function garantiaQuePagaAntiga')
+    .replace(/export function melhorConfiguracao/, 'function melhorConfiguracaoAntiga');
+  await writeFile(caminhoLotinha, semAsNovas);
+
+  const pagina2 = await contexto.newPage();
+  let cargas = 0;
+  pagina2.on('load', () => (cargas += 1));
+  await pagina2.goto(`http://localhost:${PORTA}${BASE}`);
+  await pagina2.waitForTimeout(3500);
+
+  marcar(
+    cargas > 1,
+    'peças de construções diferentes fazem o aplicativo buscar as certas sozinho',
+    `${cargas} cargas`
+  );
+  marcar(
+    await pagina2.evaluate(() => {
+      const aviso = document.getElementById('aviso');
+      return !!aviso && !aviso.hidden && /incompleta/.test(aviso.textContent);
+    }),
+    'e quando nem isso resolve, ele diz o que houve em vez de morrer calado',
+    await pagina2.evaluate(() => document.getElementById('aviso')?.textContent?.slice(0, 60) ?? '')
+  );
+  marcar(
+    cargas < 5,
+    'e não recarrega em laço, que seria pior do que o defeito',
+    `${cargas} cargas em 3,5 s`
+  );
+  await writeFile(caminhoLotinha, lotinhaOriginal);
+  await pagina2.close();
+
+  // ─── uma peça de tela ausente não apaga o resto ───
+  //
+  // O outro caminho para o mesmo estrago: `$('x').addEventListener(...)` com o
+  // elemento ausente lança, e os registros seguintes somem junto. `#lot-simular`
+  // fica de fora do `index.html` — ele não está na lista de peças exigidas, então
+  // a auto-cura não entra e o que se mede é o isolamento.
+  await writeFile(caminhoIndex, indexOriginal.replace('id="lot-simular"', 'id="lot-simular-ausente"'));
+  const pagina3 = await contexto.newPage();
+  await pagina3.goto(`http://localhost:${PORTA}${BASE}`);
+  await pagina3.waitForTimeout(2500);
+
+  const vivos = await pagina3.evaluate(async () => {
+    const dormir = (ms) => new Promise((ok) => setTimeout(ok, ms));
+    const antesLot = document.querySelectorAll('#lot-grade .numero.escolhido').length;
+    document.getElementById('lot-sortear')?.click();
+    await dormir(300);
+    const lotinhaViva = document.querySelectorAll('#lot-grade .numero.escolhido').length !== antesLot;
+
+    const botao = document.getElementById('chk-sortear');
+    const antesChk = (document.getElementById('chk-resultado')?.value ?? '').length;
+    if (botao) {
+      botao.disabled = false;
+      botao.click();
+    }
+    await dormir(400);
+    const checarViva = (document.getElementById('chk-resultado')?.value ?? '').length !== antesChk;
+
+    document.querySelector('.aba[data-painel="historico"]')?.click();
+    await dormir(200);
+    const historicoVivo = document.getElementById('historico').classList.contains('ativo');
+
+    return { lotinhaViva, checarViva, historicoVivo };
+  });
+  marcar(
+    vivos.lotinhaViva && vivos.checarViva && vivos.historicoVivo,
+    'um elemento ausente derruba só o botão dele, e não as telas registradas depois',
+    `Lotinha ${vivos.lotinhaViva ? 'viva' : 'morta'} · Checar ${vivos.checarViva ? 'viva' : 'morta'} · Histórico ${vivos.historicoVivo ? 'vivo' : 'morto'}`
+  );
+  await pagina3.close();
 } finally {
   await writeFile(caminhoSw, swOriginal);
   await writeFile(caminhoEstilo, estiloOriginal);
+  await writeFile(caminhoLotinha, lotinhaOriginal);
+  await writeFile(caminhoIndex, indexOriginal);
   await navegador.close();
   servidor.close();
 }

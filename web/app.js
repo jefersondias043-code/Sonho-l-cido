@@ -26,6 +26,126 @@ import * as checagem from './checagem.js';
 
 const $ = (id) => document.getElementById(id);
 
+/* ─────────── as peças precisam ser da mesma construção ─────────── */
+
+/**
+ * Confere se a página, os módulos e o script vieram todos da mesma publicação.
+ *
+ * ## O acidente que isto evita
+ *
+ * O `app.js` de uma construção carregou com o `lotinha.js` da anterior — cache
+ * meio atualizado, que acontece — e a primeira coisa que ele chamou foi uma
+ * função que ainda não existia lá. O `TypeError` subiu no meio do corpo do
+ * módulo, e **tudo o que vinha depois nunca foi executado**: quarenta
+ * `addEventListener` de topo, um atrás do outro, nenhum registrado.
+ *
+ * O estrago não foi proporcional à causa. Para o usuário, a primeira tela da
+ * Lotinha respondia — os botões dela são pendurados antes — e o aplicativo
+ * inteiro depois disso estava morto, sem uma mensagem sequer. Um arquivo velho
+ * no cache parecia um aplicativo quebrado.
+ *
+ * ## A saída
+ *
+ * Peças que não combinam não são recuperáveis por remendo: falta código. O que
+ * dá para fazer é **perceber antes de usar** e buscar as peças certas — apagar
+ * os caches, dispensar o service worker e recarregar uma vez.
+ *
+ * A trava de sessão é o que impede o laço: se depois de recarregar as peças
+ * ainda não combinarem, o problema é da publicação e não do cache, e aí é
+ * melhor seguir com o que der e mostrar o aviso do que recarregar para sempre.
+ */
+function pecasQueFaltam() {
+  const daLotinha = [
+    'melhorConfiguracao',
+    'tetoDoRetorno',
+    'garantiaQuePaga',
+    'previsao',
+    'minimo',
+    'construir',
+    'conferirCobertura',
+    'economia',
+    'veredito',
+  ].filter((nome) => typeof lotinha[nome] !== 'function');
+
+  const daPagina = ['lot-orcamento', 'lot-bolso', 'lot-pool', 'lot-matriz', 'chk-conferir']
+    .filter((id) => !$(id))
+    .map((id) => `#${id}`);
+
+  return [...daLotinha, ...daPagina];
+}
+
+async function buscarPecasNovas(faltando) {
+  console.error('peças de construções diferentes; faltando:', faltando.join(', '));
+  const CHAVE = 'sonho-lucido:recarregou-por-pecas';
+  if (sessionStorage.getItem(CHAVE)) {
+    const aviso = $('aviso');
+    if (aviso) {
+      aviso.textContent =
+        'Esta versão chegou incompleta ao aparelho. Feche e abra o aplicativo; ' +
+        'se continuar, desinstale e instale de novo.';
+      aviso.hidden = false;
+    }
+    return;
+  }
+  sessionStorage.setItem(CHAVE, '1');
+  try {
+    if ('caches' in window) {
+      const chaves = await caches.keys();
+      await Promise.all(chaves.map((c) => caches.delete(c)));
+    }
+    if ('serviceWorker' in navigator) {
+      const registros = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(registros.map((r) => r.unregister()));
+    }
+  } catch {
+    /* sem cache para limpar: recarregar já é o suficiente */
+  }
+  location.reload();
+}
+
+const PECAS_FALTANDO = pecasQueFaltam();
+if (PECAS_FALTANDO.length) buscarPecasNovas(PECAS_FALTANDO);
+
+/**
+ * Executa um passo de inicialização sem deixar que ele derrube os seguintes.
+ *
+ * Cada bloco de topo deste arquivo pendura os botões de uma tela. Sem este
+ * isolamento, um erro em qualquer um deles deixa todas as telas seguintes sem
+ * botão nenhum — e foi exatamente assim que uma falha na tela da Lotinha
+ * apagou as abas Buscar, Resultado, Checar e Histórico de uma vez.
+ */
+function aoIniciar(nome, passo) {
+  try {
+    passo();
+  } catch (erro) {
+    console.error(`falhou ao montar ${nome}:`, erro);
+    const aviso = $('aviso');
+    if (aviso && aviso.hidden) {
+      aviso.textContent = `Algo falhou ao montar ${nome}. O resto do aplicativo continua funcionando.`;
+      aviso.hidden = false;
+    }
+  }
+}
+
+/**
+ * Pendura um ouvinte, e não derruba o arquivo se o elemento não estiver lá.
+ *
+ * O `$('x').addEventListener(...)` de sempre é uma linha só, e é por isso que
+ * ele é perigoso: com o elemento ausente ela lança, e as vinte registradas
+ * depois dela nunca acontecem. Um `index.html` de outra construção no cache
+ * bastava para apagar os botões de metade do aplicativo.
+ *
+ * Aqui a falha fica do tamanho dela: aquele botão não responde, e o resto sim.
+ */
+function ligar(id, evento, acao) {
+  const elemento = $(id);
+  if (!elemento) {
+    console.error(`sem elemento #${id} para ouvir "${evento}"`);
+    return;
+  }
+  elemento.addEventListener(evento, acao);
+}
+
 /* ─────────── estado da página ─────────── */
 
 let trabalhador = null;
@@ -1469,13 +1589,13 @@ function lotMontarMatriz() {
     '<th>chance de 1 jogo</th><th>paga?</th></tr></thead><tbody>' + linhas + '</tbody>';
 }
 
-$('lot-limpar').addEventListener('click', () => {
+ligar('lot-limpar', 'click', () => {
   lotDezenas.clear();
   lotEsquecerFechamento();
   lotPintarTudo();
 });
 
-$('lot-sortear').addEventListener('click', () => {
+ligar('lot-sortear', 'click', () => {
   const todas = Array.from({ length: lotinha.UNIVERSO }, (_, i) => i + 1);
   for (let i = todas.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
@@ -1486,11 +1606,11 @@ $('lot-sortear').addEventListener('click', () => {
   lotPintarTudo();
 });
 
-$('lot-valor').addEventListener('input', () => {
+ligar('lot-valor', 'input', () => {
   lotPintarEconomia();
   lotPintarBolso();
 });
-$('lot-orcamento').addEventListener('input', lotPintarBolso);
+ligar('lot-orcamento', 'input', lotPintarBolso);
 
 /**
  * Carrega o fechamento pronto, confere, mostra — e só então oferece o motor.
@@ -1499,7 +1619,7 @@ $('lot-orcamento').addEventListener('input', lotPintarBolso);
  * independente confirma a cobertura sem consultar quem a produziu; e a
  * otimização é um passo separado, que o usuário decide se quer.
  */
-$('lot-iniciar').addEventListener('click', async () => {
+ligar('lot-iniciar', 'click', async () => {
   if (lotDezenas.size !== lotPool) return;
 
   const dezenas = [...lotDezenas].sort((a, b) => a - b);
@@ -1602,7 +1722,7 @@ $('lot-iniciar').addEventListener('click', async () => {
  */
 const ALVOS_PESADOS = 1_000_000;
 
-$('lot-otimizar').addEventListener('click', () => {
+ligar('lot-otimizar', 'click', () => {
   if (!lotConfiguracao || !lotFechamento) return;
   $('lot-otimizar').hidden = true;
   comecar({ configuracao: lotConfiguracao, doBanco: lotFechamento }, lotFechamento);
@@ -1665,7 +1785,7 @@ function lotPintarConferencia(dezenas, jogos, origem = null, exaustivo = null) {
     `pronto e furado.</em>`;
 }
 
-$('lot-conferir').addEventListener('click', async () => {
+ligar('lot-conferir', 'click', async () => {
   if (lotDezenas.size !== lotPool) return;
   const dezenas = [...lotDezenas].sort((a, b) => a - b);
   const jogos = melhorCartelas;
@@ -1686,7 +1806,7 @@ $('lot-conferir').addEventListener('click', async () => {
   lotPintarEconomia();
 });
 
-$('lot-simular').addEventListener('click', () => {
+ligar('lot-simular', 'click', () => {
   if (!lotFechamento) return;
 
   const numeros = ($('lot-resultado').value.match(/\d+/g) ?? []).map(Number);
@@ -1735,7 +1855,7 @@ $('lot-simular').addEventListener('click', () => {
     '</div>';
 });
 
-lotMontar();
+aoIniciar('a tela da Lotinha', lotMontar);
 
 // O banco embutido, buscado assim que a tela existe.
 //
@@ -1757,7 +1877,7 @@ lotinha
   })
   .catch(() => {});
 
-$('ir-para-historico').addEventListener('click', () => mostrarPainel('historico'));
+ligar('ir-para-historico', 'click', () => mostrarPainel('historico'));
 
 /**
  * Retoma um trabalho do histórico exatamente de onde parou.
@@ -1835,7 +1955,7 @@ function comecar(
   segurarTelaLigada();
 }
 
-$('pausar').addEventListener('click', () => {
+ligar('pausar', 'click', () => {
   if (!trabalhador) return;
 
   if (fase === 'buscando') {
@@ -1848,7 +1968,7 @@ $('pausar').addEventListener('click', () => {
   }
 });
 
-$('encerrar').addEventListener('click', () => {
+ligar('encerrar', 'click', () => {
   if (!trabalhador) {
     definirFase('ocioso');
     mostrarPainel('lotinha');
@@ -1860,7 +1980,7 @@ $('encerrar').addEventListener('click', () => {
   trabalhador.postMessage({ tipo: 'encerrar' });
 });
 
-$('copiar').addEventListener('click', async () => {
+ligar('copiar', 'click', async () => {
   if (!melhorCartelas.length) return avisar('Nenhuma solução para copiar ainda.');
 
   // Um fechamento grande demora a copiar: 11.546 jogos são 589 mil caracteres,
@@ -1883,7 +2003,7 @@ $('copiar').addEventListener('click', async () => {
   }
 });
 
-$('compartilhar').addEventListener('click', async () => {
+ligar('compartilhar', 'click', async () => {
   if (!melhorCartelas.length) return avisar('Nenhuma solução para compartilhar ainda.');
 
   const texto = textoDoFechamento();
@@ -2040,7 +2160,7 @@ function excluirSessao(id) {
   avisar('Trabalho excluído.', true);
 }
 
-$('limpar-historico').addEventListener('click', () => {
+ligar('limpar-historico', 'click', () => {
   const total = historico.quantidade();
   if (!total) return;
   if (!confirm(`Apagar todos os ${total} trabalhos do histórico? Não dá para desfazer.`)) return;
@@ -2514,9 +2634,9 @@ async function chkSimularVarios() {
 
 /* ─────────── ligações da tela ─────────── */
 
-$('chk-fechamento').addEventListener('change', (e) => chkSelecionar(e.target.value));
+ligar('chk-fechamento', 'change', (e) => chkSelecionar(e.target.value));
 
-$('chk-conferir').addEventListener('click', () => {
+ligar('chk-conferir', 'click', () => {
   const lido = checagem.interpretarResultado($('chk-resultado').value);
   if (lido.erro) {
     chkMostrarErro(lido.erro);
@@ -2525,7 +2645,7 @@ $('chk-conferir').addEventListener('click', () => {
   chkConferir(lido.dezenas);
 });
 
-$('chk-sortear').addEventListener('click', () => {
+ligar('chk-sortear', 'click', () => {
   const dezenas = checagem.sortearResultado();
   $('chk-resultado').value = dezenas.map((d) => String(d).padStart(2, '0')).join(' ');
   chkConferir(dezenas);
@@ -2535,11 +2655,11 @@ $('chk-sortear').addEventListener('click', () => {
   $('chk-sortear').textContent = 'Novo sorteio';
 });
 
-$('chk-mais').addEventListener('click', chkMostrarMaisCartelas);
-$('chk-simular').addEventListener('click', chkSimularVarios);
+ligar('chk-mais', 'click', chkMostrarMaisCartelas);
+ligar('chk-simular', 'click', chkSimularVarios);
 
-$('res-checar').addEventListener('click', () => abrirChecagem('busca'));
-$('lot-checar').addEventListener('click', () => abrirChecagem('lotinha'));
+ligar('res-checar', 'click', () => abrirChecagem('busca'));
+ligar('lot-checar', 'click', () => abrirChecagem('lotinha'));
 
 /** Abre a ferramenta já com um fechamento escolhido. */
 function abrirChecagem(chave) {
@@ -2565,8 +2685,10 @@ function chkAtualizarFontes() {
   chkPintarSeletor(pedida);
 }
 
-chkPintarQuantos();
-chkAtualizarFontes();
+aoIniciar('a tela de Checar', () => {
+  chkPintarQuantos();
+  chkAtualizarFontes();
+});
 
 /* ─────────── manter a tela ligada ─────────── */
 
@@ -2590,7 +2712,7 @@ function soltarTelaLigada() {
   travaDeTela = null;
 }
 
-$('manter-tela').addEventListener('change', () => {
+ligar('manter-tela', 'change', () => {
   if ($('manter-tela').checked && fase === 'buscando') segurarTelaLigada();
   else soltarTelaLigada();
 });
