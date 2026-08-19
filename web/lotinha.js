@@ -1225,3 +1225,76 @@ export function garantiaQuePaga(pool, jogo, cotacao = COTACAO_PADRAO, garantia =
   }
   return null;
 }
+
+/**
+ * Dada a **meta** de cartelas premiadas, qual fechamento a entrega melhor.
+ *
+ * ## A pergunta que faltava
+ *
+ * [`melhorConfiguracao`] varre tudo e devolve a fronteira; esta fixa o que o
+ * usuário decidiu — "quero trinta cartelas premiadas" — e procura, entre todas
+ * as combinações da modalidade, a que entrega isso pelo melhor preço.
+ *
+ * A diferença importa porque o teto de garantia é **por combinação**: são os
+ * jogos distintos capazes de conter um mesmo sorteio, `C(P−15, k−15)`. Em 23
+ * dezenas com jogos de 21 o teto é 28, e pedir trinta ali não é caro — é
+ * impossível. Mas 22 dezenas com jogos de 19 chega a 35, e entrega as trinta.
+ * Travar o usuário no teto da combinação que ele tinha aberto escondia isso.
+ *
+ * ## A ordem
+ *
+ * Com a garantia fixa, o retorno `r·mult/N` já compara custo, quantidade de
+ * cartelas e pagamento numa conta só, e é a ordem primária. O empate vai para o
+ * fechamento menor. A **frequência** viaja junto em cada linha, sem entrar na
+ * ordem: ela é a outra metade da decisão e continua sendo do usuário — trinta
+ * premiadas em 22 dezenas devolvem 5,84× e acertam o pool em 5,22% dos
+ * concursos; as mesmas trinta em 23 dezenas devolvem menos e acertam 15%.
+ *
+ * Devolve `{ melhor, opcoes, teto }`, com `teto` sendo a maior garantia que a
+ * modalidade inteira comporta — acima dela não há jogos distintos suficientes,
+ * e nenhuma configuração existe.
+ */
+export function melhorParaGarantia(
+  premiadas,
+  { cotacao = COTACAO_PADRAO, garantia = SORTEIO, orcamento = Infinity } = {}
+) {
+  const opcoes = [];
+  let teto = 0;
+
+  for (let pool = MENOR_POOL; pool <= MAIOR_POOL; pool++) {
+    for (let jogo = MENOR_POOL; jogo <= pool; jogo++) {
+      const multiplicador = cotacao?.[jogo] ?? null;
+      if (!multiplicador) continue;
+
+      const tetoDoPar = maximoPremiadas(pool, jogo, garantia);
+      if (tetoDoPar > teto) teto = tetoDoPar;
+      if (tetoDoPar < premiadas) continue;
+
+      const { quantidade, origem, piso, exato } = previsao(pool, jogo, garantia, premiadas);
+      if (quantidade === null || quantidade > orcamento) continue;
+
+      const premio = premiadas * multiplicador;
+      const chanceDoPool = chanceDe(pool);
+      opcoes.push({
+        pool,
+        jogo,
+        premiadas,
+        quantidade,
+        origem,
+        piso,
+        exato,
+        multiplicador,
+        premio,
+        chanceDoPool,
+        tetoDoPar,
+        retorno: premio / quantidade,
+        // Igual a `mult · chanceDe(jogo)`: nada aqui o altera, e ele é sempre
+        // menor que 1. Viaja junto para que a tela não possa esquecê-lo.
+        retornoEsperado: chanceDoPool * tetoDoRetorno(pool, jogo, cotacao),
+      });
+    }
+  }
+
+  opcoes.sort((x, y) => y.retorno - x.retorno || x.quantidade - y.quantidade);
+  return { melhor: opcoes[0] ?? null, opcoes, teto };
+}

@@ -1293,33 +1293,89 @@ try {
     configurado.botoes.join(' ')
   );
 
-  // Nenhuma garantia possível pode ficar fora de alcance. A régua de botões
-  // cobre 1 a 8 e o teto; o campo ao lado cobre o meio, que em 23/21 vai até 28.
+  // ─── 13b. o knob da meta ───
+  //
+  // O teto de garantia é **por combinação**: `C(P−15, k−15)`, os jogos distintos
+  // capazes de conter um mesmo sorteio. Em 23 dezenas com jogos de 21 são 28, e
+  // pedir trinta ali não é caro — não existe. O campo que havia antes cortava em
+  // 28, e aquilo parecia um limite do aplicativo quando era um limite daquela
+  // combinação.
+  //
+  // O knob inverte a pergunta: a meta é do usuário e a combinação é consequência
+  // dela. Trinta premiadas existem — em 22 dezenas com jogos de 19, cujo teto é
+  // 35 — e a tela tem de achar isso sozinha, partindo de 23/21.
   await pagina.click('#lot-pool .opcao[data-pool="23"]');
   await pagina.click('#lot-jogo .opcao[data-jogo="21"]');
-  const livre = await pagina.evaluate(async () => {
-    const campo = document.getElementById('lot-premiadas-livre');
-    const disparar = (v) => {
-      campo.value = String(v);
-      campo.dispatchEvent(new Event('change', { bubbles: true }));
-    };
-    const teto = campo.max;
-    disparar(20);
-    await new Promise((ok) => setTimeout(ok, 200));
-    const vinte = campo.value;
-    disparar(999);
-    await new Promise((ok) => setTimeout(ok, 200));
-    return { teto, vinte, cortado: campo.value, nota: document.getElementById('lot-premiadas-teto').textContent };
+
+  const arrastar = async (meta) => {
+    await pagina.evaluate((n) => {
+      const knob = document.getElementById('lot-meta');
+      knob.value = String(n);
+      knob.dispatchEvent(new Event('input', { bubbles: true }));
+    }, meta);
+    await pagina.waitForTimeout(250);
+    return (await pagina.locator('#lot-meta-resposta').textContent()).replace(/\s+/g, ' ');
+  };
+
+  const knob = await pagina.evaluate(() => {
+    const k = document.getElementById('lot-meta');
+    return { min: k.min, max: k.max, tipo: k.type };
   });
   marcar(
-    livre.teto === '28' && livre.vinte === '20',
-    'o campo livre aceita garantias que a régua de botões não mostra — 20 em 23/21',
-    `teto ${livre.teto}, pedi 20 e ficou ${livre.vinte}`
+    knob.tipo === 'range' && knob.min === '1' && knob.max === '100',
+    'a meta virou um controle deslizante de 1 a 100 cartelas premiadas',
+    `${knob.tipo} de ${knob.min} a ${knob.max}`
+  );
+
+  const trinta = await arrastar(30);
+  marcar(
+    /22 dezenas · jogos de 19/.test(trinta) && /1\.540 cartelas/.test(trinta),
+    'pedir 30 premiadas em 23/21 — onde o teto é 28 — encontra 22/19, que entrega',
+    trinta.slice(0, 95)
   );
   marcar(
-    livre.cortado === '28' && /teto é 28/.test(livre.nota),
-    'e corta no teto matemático, dizendo por que ele existe',
-    `pedi 999 e ficou ${livre.cortado}`
+    /10 combinações/.test(trinta),
+    'e diz de quantas combinações ela é a melhor, em vez de só apresentar uma',
+    (trinta.match(/melhor das [^.]*/) ?? [''])[0]
+  );
+  marcar(
+    /R\$ 0,36/.test(trinta),
+    'com o retorno médio por real ao lado, que a meta maior não muda',
+    (trinta.match(/retorno médio[^.]*/) ?? [''])[0]
+  );
+
+  // Aplicar troca a combinação inteira: a meta é a decisão, o resto é consequência.
+  await pagina.click('#lot-meta-aplicar');
+  await pagina.waitForTimeout(400);
+  const aplicado = await pagina.evaluate(() => ({
+    pool: document.querySelector('#lot-pool .opcao.ativa')?.textContent,
+    jogo: document.querySelector('#lot-jogo .opcao.ativa')?.textContent,
+    premiadas: document.querySelector('#lot-premiadas .opcao.ativa')?.textContent,
+  }));
+  marcar(
+    aplicado.pool === '22' && aplicado.jogo === '19' && aplicado.premiadas === '30',
+    'e aplicar a meta reconfigura pool, tamanho de jogo e garantia de uma vez',
+    `${aplicado.pool}/${aplicado.jogo} com ${aplicado.premiadas}`
+  );
+
+  // O outro extremo: 100 premiadas ainda existem, e o knob não pode prometer o
+  // que não existe.
+  const cem = await arrastar(100);
+  marcar(
+    /24 dezenas · jogos de 20/.test(cem) && /10\.626 cartelas/.test(cem),
+    'e a meta de 100 premiadas também tem resposta — 24/20, com 10.626 cartelas',
+    cem.slice(0, 80)
+  );
+  const semResposta = await pagina.evaluate(() =>
+    import('./lotinha.js').then((lot) => ({
+      teto: lot.melhorParaGarantia(1).teto,
+      acimaDoTeto: lot.melhorParaGarantia(300).melhor,
+    }))
+  );
+  marcar(
+    semResposta.teto === 252 && semResposta.acimaDoTeto === null,
+    'acima do teto da modalidade — 252 — não há configuração, e a busca devolve nada',
+    `teto ${semResposta.teto}, meta 300 devolve ${semResposta.acimaDoTeto}`
   );
 
   // A matriz das 45 respondia "paga?" olhando só uma cartela premiada, e

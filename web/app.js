@@ -1010,21 +1010,87 @@ function lotMontarExigencias() {
     b.setAttribute('aria-pressed', String(ativa));
   });
 
-  const livre = $('lot-premiadas-livre');
-  if (livre) {
-    livre.max = String(teto);
-    livre.value = String(lotPremiadas);
-    livre.disabled = teto <= 1;
+  const knob = $('lot-meta');
+  if (knob && Number(knob.value) !== lotPremiadas && lotPremiadas <= Number(knob.max)) {
+    knob.value = String(lotPremiadas);
   }
-  const nota = $('lot-premiadas-teto');
-  if (nota) {
-    nota.innerHTML =
-      teto <= 1
-        ? 'Aqui só uma cartela pode conter o sorteio, então a garantia é uma.'
-        : `O teto é <b>${milhares(teto)}</b> — são ${milhares(teto)} jogos distintos ` +
-          `de ${lotJogo} dezenas capazes de conter um mesmo sorteio dentro do seu pool. ` +
-          'Acima disso só repetindo cartela, o que soma prêmio e custo junto e não muda nada.';
+  lotPintarMeta();
+}
+
+/**
+ * O knob da meta, e o que ele descobre.
+ *
+ * ## Por que ele não é um ajuste da combinação aberta
+ *
+ * O teto de garantia é **por combinação**: `C(P−15, k−15)`, os jogos distintos
+ * capazes de conter um mesmo sorteio. Em 23 dezenas com jogos de 21 são 28, e
+ * pedir trinta ali não é caro — não existe. O campo que havia antes cortava no
+ * teto e devolvia 28, o que parecia um limite do aplicativo e era um limite
+ * daquela combinação.
+ *
+ * O knob pergunta outra coisa: **quero trinta cartelas premiadas — onde isso é
+ * melhor?** E aí a resposta existe: 22 dezenas com jogos de 19, cujo teto é 35.
+ * A combinação inteira é trocada, porque a meta é do usuário e a configuração é
+ * consequência dela.
+ */
+function lotPintarMeta() {
+  const alvo = $('lot-meta-resposta');
+  const knob = $('lot-meta');
+  if (!alvo || !knob) return;
+
+  const meta = Number(knob.value);
+  const rotulo = $('lot-meta-valor');
+  if (rotulo) rotulo.textContent = milhares(meta);
+  const legenda = rotulo?.parentElement;
+  if (legenda) {
+    legenda.innerHTML =
+      `Ou arraste até a meta: <b id="lot-meta-valor">${milhares(meta)}</b> ` +
+      `cartela${meta === 1 ? '' : 's'} premiada${meta === 1 ? '' : 's'}`;
   }
+
+  const { melhor, opcoes } = lotinha.melhorParaGarantia(meta, { cotacao: lotCotacao });
+  if (!melhor) {
+    alvo.innerHTML =
+      `<em>Não existe fechamento com ${milhares(meta)} cartelas premiadas: em ` +
+      'nenhuma combinação há tantos jogos distintos capazes de conter um mesmo ' +
+      'sorteio.</em>';
+    return;
+  }
+
+  const dinheiro = (v) =>
+    v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  const vezes = (v) => `${v < 100 ? v.toFixed(2).replace('.', ',') : milhares(v)}×`;
+  const valor = lotValorDoJogo();
+  const jaEstou = melhor.pool === lotPool && melhor.jogo === lotJogo && lotPremiadas === meta;
+
+  alvo.innerHTML =
+    `<b>${melhor.pool} dezenas · jogos de ${melhor.jogo}</b> — ` +
+    `${milhares(melhor.quantidade)} cartelas, ${dinheiro(melhor.quantidade * valor)}, ` +
+    `prêmio garantido de ${dinheiro(melhor.premio * valor)} ` +
+    `(<b class="${melhor.retorno > 1 ? 'paga' : 'nao-paga'}">${vezes(melhor.retorno)}</b>). ` +
+    `<em>É a melhor das ${milhares(opcoes.length)} combinações que entregam ` +
+    `${milhares(meta)} premiada${meta === 1 ? '' : 's'}. O pool acerta em ` +
+    `${(melhor.chanceDoPool * 100).toFixed(2).replace('.', ',')}% dos concursos, e o retorno ` +
+    `médio por real continua ${dinheiro(melhor.retornoEsperado)}.</em>` +
+    (jaEstou
+      ? ''
+      : `<button type="button" class="secundario" id="lot-meta-aplicar">Usar ${melhor.pool}/${melhor.jogo} com ${milhares(meta)} premiadas</button>`);
+
+  // Sem botão quando a configuração aberta já é a da meta: não há o que aplicar,
+  // e pedir o ouvinte assim mesmo faria `ligar` reclamar de um elemento que
+  // deliberadamente não existe.
+  if (jaEstou) return;
+
+  ligar('lot-meta-aplicar', 'click', () => {
+    lotPool = melhor.pool;
+    lotJogo = melhor.jogo;
+    lotPremiadas = meta;
+    lotGarantia = lotinha.SORTEIO;
+    if (lotDezenas.size > lotPool) lotDezenas = new Set([...lotDezenas].slice(0, lotPool));
+    lotEsquecerFechamento();
+    lotPintarTudo();
+    $('lot-grade').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  });
 }
 
 /**
@@ -1650,28 +1716,14 @@ ligar('lot-valor', 'input', () => {
 ligar('lot-orcamento', 'input', lotPintarBolso);
 
 /*
- * O campo livre de cartelas premiadas.
+ * O knob da meta.
  *
- * A régua de botões cobre 1 a 8 e o teto, que é o que a fronteira de fato usa.
- * Este campo cobre o resto: quem quiser experimentar vinte, trinta ou cento e
- * vinte premiadas digita aqui, sem limite artificial nenhum.
- *
- * `change` e não `input` de propósito: repintar a cada dígito faria o campo
- * saltar para o teto no meio da digitação de "12", porque "1" já é válido.
+ * `input` repinta a resposta enquanto o dedo arrasta — é o que faz o controle
+ * valer a pena, porque o usuário vê o fechamento mudar de combinação ao passar
+ * pelos tetos. Aplicar de verdade fica no botão que a resposta traz: trocar o
+ * pool no meio de um arrasto apagaria a seleção de dezenas a cada pixel.
  */
-ligar('lot-premiadas-livre', 'change', (evento) => {
-  const teto = Math.max(lotinha.maximoPremiadas(lotPool, lotJogo, lotGarantia), 1);
-  const pedido = Math.round(Number(evento.target.value));
-  if (!Number.isFinite(pedido) || pedido < 1) {
-    evento.target.value = String(lotPremiadas);
-    return;
-  }
-  lotPremiadas = Math.min(pedido, teto);
-  lotEsquecerFechamento();
-  lotMontarExigencias();
-  lotPintarExplicacao();
-  lotPintarEconomia();
-});
+ligar('lot-meta', 'input', lotPintarMeta);
 
 /**
  * Carrega o fechamento pronto, confere, mostra — e só então oferece o motor.

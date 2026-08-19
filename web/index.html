@@ -103,11 +103,18 @@
       apenas uma. Custa mais, às vezes bem menos do que parece.
     </p>
     <div class="opcoes" id="lot-premiadas"></div>
-    <label class="campo linha" id="lot-premiadas-campo">
-      <span>Ou digite quantas</span>
-      <input type="number" id="lot-premiadas-livre" min="1" step="1" inputmode="numeric">
-    </label>
-    <p class="ajuda" id="lot-premiadas-teto"></p>
+
+    <!-- A meta, e não o ajuste. Arrastar até 30 não pergunta se a combinação
+         aberta comporta 30: procura, entre as 45, a que entrega 30 melhor, e
+         ajusta os passos acima sozinha. -->
+    <div class="knob" id="lot-meta-cartao">
+      <label class="knob-rotulo" for="lot-meta">
+        Ou arraste até a meta: <b id="lot-meta-valor">1</b> cartela premiada
+      </label>
+      <input type="range" id="lot-meta" min="1" max="100" step="1" value="1">
+      <div class="knob-escala" aria-hidden="true"><span>1</span><span>25</span><span>50</span><span>75</span><span>100</span></div>
+      <div class="referencia" id="lot-meta-resposta"></div>
+    </div>
 
     <div class="referencia" id="lot-explicacao"></div>
   </div>

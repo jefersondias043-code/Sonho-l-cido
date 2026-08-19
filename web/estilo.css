@@ -1136,3 +1136,75 @@ main { padding: 8px 16px 0; }
   position: static;
   box-shadow: none;
 }
+
+/* ─────────── o knob da meta de cartelas premiadas ─────────── */
+
+.knob {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--borda);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.knob-rotulo { color: var(--texto-fraco); font-size: 14px; }
+.knob-rotulo b { color: var(--texto); font-size: 17px; }
+
+/*
+ * A pista precisa ser confortável no polegar: 44px de altura de alvo, com o
+ * traço fino desenhado no meio. `-webkit-appearance: none` é o que permite
+ * pintar o botão; sem ele o iOS ignora tudo e devolve o controle nativo.
+ */
+#lot-meta {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 44px;
+  background: transparent;
+  margin: 0;
+}
+
+#lot-meta::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--fundo-campo);
+  border: 1px solid var(--borda);
+}
+#lot-meta::-moz-range-track {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--fundo-campo);
+  border: 1px solid var(--borda);
+}
+
+#lot-meta::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 30px;
+  height: 30px;
+  margin-top: -13px;
+  border-radius: 50%;
+  background: var(--acento);
+  border: 3px solid var(--fundo);
+  cursor: grab;
+}
+#lot-meta::-moz-range-thumb {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--acento);
+  border: 3px solid var(--fundo);
+  cursor: grab;
+}
+
+#lot-meta:focus-visible { outline: 2px solid var(--acento); outline-offset: 4px; }
+
+.knob-escala {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--texto-fraco);
+  font-variant-numeric: tabular-nums;
+  margin-top: -6px;
+}
