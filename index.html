@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<!-- `viewport-fit=cover` deixa o fundo ir até as bordas; o CSS devolve o
+     espaço da ilha dinâmica e do indicador de início via safe-area. -->
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b1020">
+<meta name="description" content="Fechamentos matemáticos para a Lotinha — 17 a 23 dezenas entre 25, conferidos sorteio a sorteio">
+
+<!-- Faz o iPhone abrir em tela cheia quando adicionado à tela de início. -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Sonho Lúcido">
+
+<title>Sonho Lúcido</title>
+
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="apple-touch-icon" href="./icone-180.png">
+<link rel="icon" type="image/svg+xml" href="./icone.svg">
+<link rel="stylesheet" href="./estilo.css">
+</head>
+<body>
+
+<header class="topo">
+  <h1>Sonho Lúcido</h1>
+  <p class="subtitulo">fechamentos da Lotinha, conferidos um a um</p>
+</header>
+
+<nav class="abas" role="tablist" aria-label="Telas do aplicativo">
+  <button class="aba ativa" role="tab" id="aba-lotinha" aria-controls="lotinha" aria-selected="true" data-painel="lotinha">Lotinha</button>
+  <button class="aba" role="tab" id="aba-buscar" aria-controls="buscar" aria-selected="false" tabindex="-1" data-painel="buscar">Buscar</button>
+  <button class="aba" role="tab" id="aba-resultado" aria-controls="resultado" aria-selected="false" tabindex="-1" data-painel="resultado">Resultado</button>
+  <button class="aba" role="tab" id="aba-checar" aria-controls="checar" aria-selected="false" tabindex="-1" data-painel="checar">Checar</button>
+  <button class="aba" role="tab" id="aba-historico" aria-controls="historico" aria-selected="false" tabindex="-1" data-painel="historico">Histórico</button>
+</nav>
+
+<main>
+
+<!-- ══════════════════ LOTINHA ══════════════════ -->
+<!--
+  A modalidade inteira: escolhem-se de 17 a 23 dezenas entre 25, o resultado da
+  Lotofácil é a referência, e ganha-se quando as 15 sorteadas caem todas dentro
+  do conjunto escolhido.
+
+  São 28 combinações de (pool, tamanho do jogo). O fechamento de cada uma já vem
+  pronto no aplicativo, conferido antes de ser gravado — o motor não recalcula
+  nada ao abrir a tela; ele entra depois, para tentar superar o que já existe.
+-->
+<section id="lotinha" class="painel ativo" role="tabpanel" aria-labelledby="aba-lotinha">
+
+  <div class="cartao">
+    <h2>1 · Quantas dezenas você vai jogar</h2>
+    <div class="opcoes" id="lot-pool"></div>
+    <div class="grade-numeros" id="lot-grade"></div>
+    <div class="referencia" id="lot-contagem"></div>
+    <div class="acoes-linha">
+      <button class="secundario" id="lot-limpar">Limpar</button>
+      <button class="secundario" id="lot-sortear">Preencher ao acaso</button>
+    </div>
+  </div>
+
+  <div class="cartao">
+    <h2>2 · Tamanho de cada jogo</h2>
+    <p class="ajuda">
+      Jogos menores pagam mais, mas exigem mais jogos para fechar o pool. As
+      opções mudam conforme o pool: o jogo nunca pode ser maior que ele.
+    </p>
+    <div class="opcoes" id="lot-jogo"></div>
+  </div>
+
+  <!-- Os dois eixos que mudam o tamanho do fechamento por ordens de grandeza,
+       e que quase nenhuma ferramenta deixa mexer. -->
+  <div class="cartao">
+    <h2>3 · O que garantir</h2>
+    <p class="ajuda">
+      <b>Acertos</b> — na Lotinha só 15 paga, e é o padrão. Garantir menos custa
+      uma fração disso, e é o que a Lotofácil premia a partir de 11.
+    </p>
+    <div class="opcoes" id="lot-garantia"></div>
+
+    <p class="ajuda">
+      <b>Cartelas premiadas</b> — quantas cartelas suas precisam ganhar, e não
+      apenas uma. Custa mais, às vezes bem menos do que parece.
+    </p>
+    <div class="opcoes" id="lot-premiadas"></div>
+
+    <div class="referencia" id="lot-explicacao"></div>
+  </div>
+
+  <!-- O motor financeiro, separado do combinatório de propósito: as cotações
+       mudam por banca e não são auditadas, então quem as informa é você. -->
+  <details class="cartao" id="lot-cotacao-cartao">
+    <summary>Cotação da sua banca</summary>
+    <p class="ajuda">
+      Quanto a sua banca paga por R$&nbsp;1 apostado, em cada tamanho de jogo.
+      Vem preenchido com a tabela de uma banca — troque pelos números da sua,
+      porque eles variam e não são auditados por ninguém. Os campos vazios são
+      os tamanhos que a tabela dessa banca não cobria: 15 e 16 dezenas, que a
+      maioria das casas aceita, e 24 e 25, que praticamente nenhuma. Preencha o
+      que a sua pagar e as telas passam a julgar aquele tamanho também.
+    </p>
+    <p class="ajuda">
+      Abaixo de cada campo está <b>quanto seria neutro</b> — o multiplicador
+      que devolveria, no longo prazo, exatamente o que foi apostado — e que
+      fração disso a oferta paga. É a <b>única</b> informação capaz de mudar o
+      seu retorno: nem o tamanho do fechamento, nem o pool, nem a garantia
+      entram nessa conta. Serve para medir a tabela de qualquer banca numa
+      linha, em vez de acreditar no número grande.
+    </p>
+    <div id="lot-cotacao"></div>
+    <label class="campo linha">
+      <span>Valor de cada jogo (R$)</span>
+      <input type="number" id="lot-valor" value="1" min="0.01" step="0.01" inputmode="decimal">
+    </label>
+  </details>
+
+  <div class="cartao destaque" id="lot-economia-cartao" hidden>
+    <div class="rotulo">O que esse fechamento significa em dinheiro</div>
+    <div id="lot-economia"></div>
+  </div>
+
+  <button class="principal" id="lot-iniciar" disabled>Carregar fechamento</button>
+
+  <div class="cartao" id="lot-resultado-cartao">
+    <div class="rotulo">4 · Conferência independente</div>
+    <div class="referencia" id="lot-conferencia">
+      <em>Ao carregar, cada sorteio possível dentro do seu pool é conferido um a
+      um — sem consultar o motor que produziu o fechamento.</em>
+    </div>
+    <button class="secundario" id="lot-conferir" hidden>
+      Conferir o que está na tela agora
+    </button>
+    <!-- Nos pools grandes o motor deixa de partir sozinho: o fechamento já
+         está pronto e correto na tela, e a busca por um menor custa 39 MB e
+         segundos por iteração. Quem quiser, pede. -->
+    <button class="principal" id="lot-otimizar" hidden>
+      Procurar um fechamento menor
+    </button>
+    <button class="secundario" id="lot-checar" hidden>
+      Checar este fechamento
+    </button>
+  </div>
+
+  <details class="cartao" id="lot-avancado">
+    <summary>Avançado</summary>
+    <label class="campo linha">
+      <span>Semente <em>— a mesma semente repete a mesma busca</em></span>
+      <input type="number" id="semente" value="1361508949" min="0" inputmode="numeric">
+    </label>
+    <p class="ajuda">
+      O motor sorteia os caminhos que tenta. Trocar a semente faz ele explorar
+      outros; repetir a semente reproduz a mesma busca, jogada por jogada.
+    </p>
+  </details>
+
+  <button class="secundario" id="ir-para-historico" hidden>
+    Continuar um trabalho salvo
+  </button>
+
+  <p class="rodape-nota">
+    A conta de "dividir os sorteios pelo que cada jogo cobre" subestima o número
+    de jogos por duas a três vezes. Os números aqui vêm da fórmula correta, e
+    cada fechamento foi conferido sorteio a sorteio antes de entrar no aplicativo.
+    <br>
+    Tudo roda dentro do seu aparelho. Nenhum dado sai daqui, e depois da
+    primeira visita funciona sem internet.
+    <br>
+    <!-- A tabela da LJCR viaja embutida no motor, alimentando o limite inferior
+         de qualquer cobertura. A licença CC BY 4.0 pede o crédito onde o dado
+         é distribuído — e ele é, em todo aparelho que instala o aplicativo. -->
+    Os limites publicados que o motor usa vêm da
+    <a href="https://github.com/dmgordo/LJCR" target="_blank" rel="noopener">La
+    Jolla Covering Repository</a>, de D. M. Gordon, sob licença CC BY 4.0, e
+    estão embutidos no aplicativo.
+    <br>
+    <!-- Torna verificável, sem adivinhação, se uma correção publicada chegou
+         mesmo a este aparelho. -->
+    <span id="versao" class="versao"></span>
+  </p>
+</section>
+
+<!-- ══════════════════ BUSCAR ══════════════════ -->
+<section id="buscar" class="painel" role="tabpanel" aria-labelledby="aba-buscar">
+
+  <!-- Fica no topo e sempre visível: é aqui que o usuário confere, de relance,
+       se o motor está trabalhando ou parado. -->
+  <div class="situacao" id="situacao">
+    <span class="pulso" id="pulso"></span>
+    <span id="texto-situacao">preparando…</span>
+    <span class="relogio" id="relogio">0,0 s</span>
+  </div>
+
+  <div class="cartao destaque">
+    <div class="rotulo">Melhor solução conhecida</div>
+    <div class="numerao"><span id="melhor-cartelas">—</span><small>cartelas</small></div>
+    <div class="selo" id="selo-otimo" hidden>★ ótimo provado</div>
+    <div class="selo recorde" id="selo-recorde" hidden>★ acima do melhor conhecido no mundo</div>
+    <div class="referencia" id="referencia-busca" hidden></div>
+    <!-- De onde a busca partiu. Torna visível o aproveitamento: sem isto, quem
+         cola um fechamento não sabe se ele foi usado, podado ou preterido. -->
+    <div class="referencia partida" id="partida" hidden></div>
+    <div class="barra-limite">
+      <div class="marca">
+        <span class="valor" id="limite-inferior">—</span>
+        <span class="chave">mínimo</span>
+      </div>
+      <div class="marca">
+        <span class="valor" id="gap">—</span>
+        <span class="chave">distância</span>
+      </div>
+      <div class="marca">
+        <span class="valor" id="cobertura">—</span>
+        <span class="chave">cobertura</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="cartao">
+    <div class="rotulo">Explorando agora</div>
+    <p class="ajuda">
+      A solução atual pode ficar bem pior que o recorde. Isso não é falha — é o
+      motor saindo de uma região para procurar em outra. O recorde acima nunca
+      é destruído.
+    </p>
+    <div class="grade">
+      <div class="item"><span id="atual-cartelas">—</span><small>cartelas agora</small></div>
+      <div class="item"><span id="atual-descobertos">—</span><small>ainda a cobrir</small></div>
+      <div class="item"><span id="meta">—</span><small>meta perseguida</small></div>
+      <div class="item"><span id="elites">—</span><small>soluções guardadas</small></div>
+      <div class="item"><span id="iteracoes">—</span><small>iterações</small></div>
+      <div class="item"><span id="velocidade">—</span><small>por segundo</small></div>
+      <div class="item"><span id="recordes">—</span><small>melhorias</small></div>
+    </div>
+  </div>
+
+  <div class="controles">
+    <button class="principal" id="pausar">Pausar</button>
+    <button class="secundario perigo" id="encerrar">Encerrar</button>
+  </div>
+  <p class="ajuda">
+    O motor não para sozinho — nem quando já encontrou o menor fechamento que
+    existe. Quem decide é você. <strong>Pausar</strong> congela a busca e guarda
+    tudo, dá para continuar do mesmo ponto. <strong>Encerrar</strong> desliga o
+    motor de vez e libera a memória, para você montar outro fechamento. O
+    resultado já encontrado continua na aba Resultado.
+  </p>
+
+  <label class="alternador">
+    <input type="checkbox" id="manter-tela">
+    <span>Manter a tela ligada enquanto busca</span>
+  </label>
+  <p class="ajuda" id="aviso-tela">
+    O iPhone congela a página quando a tela apaga. Com isto ligado a busca
+    continua; sem isto ela pausa sozinha e retoma quando você voltar.
+  </p>
+
+  <div class="cartao">
+    <div class="rotulo">Recordes</div>
+    <ol class="recordes" id="lista-recordes"></ol>
+  </div>
+</section>
+
+<!-- ══════════════════ RESULTADO ══════════════════ -->
+<section id="resultado" class="painel" role="tabpanel" aria-labelledby="aba-resultado">
+  <div class="cartao destaque">
+    <div class="rotulo">Fechamento encontrado</div>
+    <div class="numerao"><span id="res-cartelas">—</span><small>cartelas</small></div>
+    <div class="selo" id="res-selo-otimo" hidden>★ ótimo provado</div>
+    <div class="selo recorde" id="res-selo-recorde" hidden>★ acima do melhor conhecido no mundo</div>
+    <div class="referencia" id="referencia-resultado" hidden></div>
+    <div class="barra-limite">
+      <div class="marca">
+        <span class="valor" id="res-cobertura">—</span>
+        <span class="chave">cobertura</span>
+      </div>
+      <div class="marca">
+        <span class="valor" id="res-redundancia">—</span>
+        <span class="chave">redundância</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="controles">
+    <button class="principal" id="compartilhar">Compartilhar</button>
+    <button class="secundario" id="copiar">Copiar</button>
+  </div>
+
+  <button class="secundario" id="res-checar">Checar este fechamento</button>
+
+  <div class="cartao">
+    <div class="rotulo">As cartelas</div>
+    <div class="cartelas" id="lista-cartelas">
+      <p class="ajuda">Nenhuma solução ainda. Inicie uma busca.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════ CHECAR ══════════════════ -->
+<!--
+  Conferir um fechamento contra um resultado — real ou sorteado — e ver como
+  ele se comportou. Não recalcula fechamento nenhum: confere exatamente as
+  cartelas que foram geradas, sejam as da tela ou as guardadas no histórico.
+-->
+<section id="checar" class="painel" role="tabpanel" aria-labelledby="aba-checar">
+  <div class="cartao">
+    <h2>1 · Qual fechamento</h2>
+    <p class="ajuda">
+      As cartelas conferidas são as que foram geradas de verdade — nada é
+      montado de novo aqui.
+    </p>
+    <select id="chk-fechamento" aria-label="Fechamento a conferir"></select>
+    <div class="referencia" id="chk-ficha"></div>
+  </div>
+
+  <div class="cartao" id="chk-entrada-cartao">
+    <h2>2 · O resultado</h2>
+    <p class="ajuda">
+      Digite as 15 dezenas sorteadas, ou peça um sorteio simulado. Separadas
+      por espaço, vírgula ou linha — tanto faz.
+    </p>
+    <textarea id="chk-resultado" rows="2" spellcheck="false" inputmode="numeric"
+      placeholder="01 03 04 05 07 08 10 11 13 14 16 18 20 22 24"></textarea>
+    <div class="controles">
+      <button class="principal" id="chk-conferir">Conferir fechamento</button>
+      <button class="secundario" id="chk-sortear">Simular sorteio</button>
+    </div>
+    <div class="referencia" id="chk-erro" hidden></div>
+  </div>
+
+  <div class="cartao destaque" id="chk-resumo-cartao" hidden>
+    <div class="rotulo">Resultado conferido</div>
+    <div class="dezenas-sorteadas" id="chk-sorteio"></div>
+    <div id="chk-premiacao"></div>
+    <div class="rolagem"><table class="matriz" id="chk-faixas"></table></div>
+    <p class="ajuda" id="chk-nota-premio"></p>
+  </div>
+
+  <div class="cartao" id="chk-cartelas-cartao" hidden>
+    <div class="rotulo">Cartelas por faixa</div>
+    <div class="opcoes" id="chk-faixa-botoes"></div>
+    <div class="cartelas" id="chk-cartelas"></div>
+    <button class="secundario" id="chk-mais" hidden>Mostrar mais cartelas</button>
+  </div>
+
+  <details class="cartao" id="chk-multi-cartao">
+    <summary>Simular vários sorteios</summary>
+    <p class="ajuda">
+      Cada sorteio é gerado do zero, com a mesma chance para toda combinação.
+      <b>Isto é simulação, não previsão:</b> descreve como o fechamento se
+      comporta, não o que vai sair no próximo concurso.
+    </p>
+    <div class="opcoes" id="chk-quantos"></div>
+    <button class="principal" id="chk-simular">Simular</button>
+    <div class="referencia" id="chk-andamento" hidden></div>
+    <div class="rolagem" hidden id="chk-estatistica-rolagem">
+      <table class="matriz" id="chk-estatistica"></table>
+    </div>
+  </details>
+
+  <p class="rodape-nota">
+    Um fechamento garante cobertura, não sorte. Nenhuma simulação prevê
+    resultado futuro, e a frequência observada aqui não muda a chance do
+    próximo sorteio.
+  </p>
+</section>
+
+<!-- ══════════════════ HISTÓRICO ══════════════════ -->
+<section id="historico" class="painel" role="tabpanel" aria-labelledby="aba-historico">
+  <div class="cartao">
+    <h2>Seus trabalhos</h2>
+    <p class="ajuda">
+      Cada busca é salva sozinha, e vai sendo atualizada a cada melhoria
+      encontrada. Você pode voltar a qualquer uma delas e continuar de onde
+      parou — o motor retoma com a solução que já havia alcançado.
+    </p>
+  </div>
+
+  <div id="lista-historico"></div>
+
+  <button class="secundario perigo" id="limpar-historico" hidden>
+    Apagar todo o histórico
+  </button>
+
+  <p class="rodape-nota">
+    O histórico fica guardado neste aparelho. Apagar os dados do navegador
+    apaga o histórico junto — exporte as cartelas que quiser guardar de vez.
+  </p>
+</section>
+
+</main>
+
+<div class="aviso" id="aviso" hidden></div>
+
+<script type="module" src="./app.js"></script>
+</body>
+</html>
