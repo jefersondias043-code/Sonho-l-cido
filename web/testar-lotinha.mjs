@@ -1229,6 +1229,104 @@ try {
     `${comSetas.filter(Boolean).length} de ${comSetas.length} movimentos certos`
   );
 
+  // ─── 15. o que o dedo alcança e o olho lê ───
+  //
+  // Duas medidas objetivas, feitas sobre a tela pintada e não sobre o código:
+  // todo controle visível tem pelo menos 44 px na menor dimensão, e todo texto
+  // visível tem o contraste que a WCAG pede. Foi assim que se descobriu que os
+  // títulos dos cartões que abrem tinham 25 px de faixa tocável e que o único
+  // link do aplicativo saía na cor padrão do navegador — azul escuro sobre fundo
+  // azul escuro, 2,0:1, ilegível.
+  const aTela = await pagina.evaluate(() => {
+    const visivel = (e) => {
+      const c = e.getBoundingClientRect();
+      return c.width > 0 && c.height > 0 && getComputedStyle(e).visibility !== 'hidden';
+    };
+    const luminancia = (c) => {
+      const [r, g, b] = c.map((v) => {
+        v /= 255;
+        return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+      });
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    };
+    const razao = (a, b) => {
+      const [x, y] = [luminancia(a), luminancia(b)].sort((m, n) => n - m);
+      return (x + 0.05) / (y + 0.05);
+    };
+    const fundoAtras = (e) => {
+      for (let n = e; n; n = n.parentElement) {
+        const m = getComputedStyle(n).backgroundColor.match(/[\d.]+/g);
+        if (m && (m.length < 4 || Number(m[3]) > 0.5)) return m.slice(0, 3).map(Number);
+      }
+      return [255, 255, 255];
+    };
+
+    const apertados = [];
+    for (const e of document.querySelectorAll('button, a, [role="button"], input, select, summary')) {
+      if (!visivel(e)) continue;
+      // Quando um rótulo embrulha o controle, o alvo é o rótulo inteiro: tocar
+      // em qualquer parte dele aciona o controle.
+      const alvo = e.closest('label') ?? e;
+      const c = alvo.getBoundingClientRect();
+      // Link dentro de uma frase é a exceção explícita da regra: o tamanho dele
+      // é ditado pela entrelinha do texto ao redor, não por quem o desenhou.
+      if (e.tagName === 'A' && e.closest('p')) continue;
+      // Meio pixel de folga: o layout devolve alturas fracionárias, e um
+      // `min-height: 44px` chega aqui às vezes como 43,999999. A folga é menor
+      // que qualquer diferença que um dedo perceba.
+      if (Math.min(c.width, c.height) < 43.5)
+        apertados.push(`<${e.tagName.toLowerCase()}${e.id ? '#' + e.id : ''}> ${Math.round(c.width)}x${Math.round(c.height)}`);
+    }
+
+    const apagados = [];
+    for (const e of document.querySelectorAll('*')) {
+      if (!visivel(e)) continue;
+      if (![...e.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim())) continue;
+      const s = getComputedStyle(e);
+      const bruto = s.color.match(/[\d.]+/g);
+      // Texto pintado por gradiente tem `color: transparent`; medir isso seria
+      // medir o recorte, não o que aparece.
+      if (!bruto || (bruto.length > 3 && Number(bruto[3]) < 0.5)) continue;
+      const tam = parseFloat(s.fontSize);
+      const grande = tam >= 24 || (tam >= 18.66 && Number(s.fontWeight) >= 700);
+      const r = razao(bruto.slice(0, 3).map(Number), fundoAtras(e));
+      if (r < (grande ? 3 : 4.5))
+        apagados.push(`${e.tagName.toLowerCase()} ${r.toFixed(2)}:1 "${e.textContent.trim().slice(0, 24)}"`);
+    }
+    return { apertados: [...new Set(apertados)], apagados: [...new Set(apagados)] };
+  });
+  marcar(
+    aTela.apertados.length === 0,
+    'todo controle da tela tem os 44 px que o dedo precisa',
+    aTela.apertados.join(' · ').slice(0, 120) || 'nenhum apertado'
+  );
+  marcar(
+    aTela.apagados.length === 0,
+    'e todo texto tem o contraste que a WCAG pede',
+    aTela.apagados.join(' · ').slice(0, 120) || 'nenhum apagado'
+  );
+
+  // O triângulo que o navegador desenha some quando o <summary> vira flex, e sem
+  // sinal nenhum ninguém descobre que o cartão abre.
+  const girarCartao = async (aberto) => {
+    await pagina.evaluate((v) => {
+      document.querySelector('details.cartao').open = v;
+    }, aberto);
+    // A transição de 0,15 s faz o valor computado ficar no meio do caminho: sem
+    // esperar, lê-se o giro anterior.
+    await pagina.waitForTimeout(300);
+    return pagina.evaluate(
+      () => getComputedStyle(document.querySelector('details.cartao > summary'), '::after').transform
+    );
+  };
+  const sinal = { fechado: await girarCartao(false), aberto: await girarCartao(true) };
+
+  marcar(
+    sinal.fechado !== 'none' && sinal.fechado !== sinal.aberto,
+    'e o cartão que abre mostra que abre, virando o sinal quando abre',
+    `${sinal.fechado.slice(0, 26)} → ${sinal.aberto.slice(0, 26)}`
+  );
+
   marcar(errosDeConsole.length === 0, 'nenhum erro no console', errosDeConsole.join(' | ').slice(0, 120));
 } finally {
   await navegador.close();

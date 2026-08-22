@@ -546,31 +546,60 @@ main { padding: 8px 16px 0; }
 
 .matriz td.aberto { color: var(--ouro); }
 
-/* ─────────── importar um fechamento ─────────── */
+/* ─────────── cartões que abrem e fecham ─────────── */
 
-#importar summary {
+/*
+ * O título de um <details> é a única coisa que se toca para abri-lo, e o
+ * triângulo sozinho é pequeno demais para o dedo — errar o toque num <details>
+ * não dá retorno nenhum, a pessoa só acha que o cartão não abre. Sem esta regra
+ * a faixa tocável tinha 25 px de altura; 44 px é o mínimo que a Apple e a WCAG
+ * pedem, e é o que as outras coisas tocáveis do aplicativo já têm.
+ */
+details.cartao > summary {
   cursor: pointer;
   font-weight: 600;
   font-size: 16px;
-  /* Alvo de toque confortável: o triângulo sozinho é pequeno demais para o
-     dedo, e errar o toque num <details> não dá retorno nenhum. */
-  padding: 4px 0;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  /* A margem negativa devolve à faixa tocável a largura inteira do cartão, sem
+     empurrar o texto para dentro. */
+  margin: -6px -4px;
+  padding: 0 4px;
 }
 
-#texto-fechamento {
-  width: 100%;
-  margin-top: 10px;
-  padding: 12px;
-  border-radius: 12px;
-  border: 1px solid var(--borda);
-  background: rgba(255, 255, 255, 0.04);
-  color: var(--texto);
-  /* Monoespaçada para as colunas de números ficarem alinhadas, e 16px porque
-     abaixo disso o Safari do iOS dá zoom sozinho ao focar o campo. */
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 16px;
-  line-height: 1.6;
-  resize: vertical;
+/*
+ * O triângulo que o navegador desenha sozinho some quando o <summary> vira
+ * flex, e sem ele nada diz que o cartão abre. Este é o mesmo sinal, desenhado
+ * de propósito: encostado na direita, onde o polegar já está, e virando para
+ * cima quando o cartão está aberto.
+ */
+details.cartao > summary::marker,
+details.cartao > summary::-webkit-details-marker {
+  display: none;
+  content: '';
+}
+
+details.cartao > summary::after {
+  content: '';
+  width: 9px;
+  height: 9px;
+  margin-left: auto;
+  margin-bottom: 4px;
+  border-right: 2px solid var(--texto-fraco);
+  border-bottom: 2px solid var(--texto-fraco);
+  transform: rotate(45deg);
+  transition: transform 0.15s ease-out;
+}
+
+details.cartao[open] > summary::after {
+  transform: rotate(-135deg);
+  margin-bottom: -4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  details.cartao > summary::after { transition: none; }
 }
 
 .acoes-linha {
@@ -752,6 +781,23 @@ main { padding: 8px 16px 0; }
   font-size: 12.5px;
   text-align: center;
   padding: 4px 8px 0;
+}
+
+/*
+ * O único link do aplicativo é o crédito da LJCR, e sem esta regra ele saía na
+ * cor padrão do navegador: azul escuro sobre fundo azul escuro, 2,0:1 de
+ * contraste, ilegível. Com `--acento` são 7,6:1, bem acima do mínimo, e a área
+ * tocável passa de 32 px para 44 px sem mexer no texto ao redor — a caixa em
+ * linha do link não abre espaço no parágrafo, então o acréscimo é só na faixa
+ * que o dedo alcança.
+ */
+.rodape-nota a {
+  color: var(--acento);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  display: inline-block;
+  padding: 6px 0;
+  margin: -6px 0;
 }
 
 /* ─────────── aviso flutuante ─────────── */
