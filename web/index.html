@@ -27,12 +27,12 @@
   <p class="subtitulo">fechamentos da Lotinha, conferidos um a um</p>
 </header>
 
-<nav class="abas" role="tablist">
-  <button class="aba ativa" role="tab" aria-selected="true" data-painel="lotinha">Lotinha</button>
-  <button class="aba" role="tab" aria-selected="false" data-painel="buscar">Buscar</button>
-  <button class="aba" role="tab" aria-selected="false" data-painel="resultado">Resultado</button>
-  <button class="aba" role="tab" aria-selected="false" data-painel="checar">Checar</button>
-  <button class="aba" role="tab" aria-selected="false" data-painel="historico">Histórico</button>
+<nav class="abas" role="tablist" aria-label="Telas do aplicativo">
+  <button class="aba ativa" role="tab" id="aba-lotinha" aria-controls="lotinha" aria-selected="true" data-painel="lotinha">Lotinha</button>
+  <button class="aba" role="tab" id="aba-buscar" aria-controls="buscar" aria-selected="false" tabindex="-1" data-painel="buscar">Buscar</button>
+  <button class="aba" role="tab" id="aba-resultado" aria-controls="resultado" aria-selected="false" tabindex="-1" data-painel="resultado">Resultado</button>
+  <button class="aba" role="tab" id="aba-checar" aria-controls="checar" aria-selected="false" tabindex="-1" data-painel="checar">Checar</button>
+  <button class="aba" role="tab" id="aba-historico" aria-controls="historico" aria-selected="false" tabindex="-1" data-painel="historico">Histórico</button>
 </nav>
 
 <main>
@@ -47,7 +47,7 @@
   pronto no aplicativo, conferido antes de ser gravado — o motor não recalcula
   nada ao abrir a tela; ele entra depois, para tentar superar o que já existe.
 -->
-<section id="lotinha" class="painel ativo" role="tabpanel">
+<section id="lotinha" class="painel ativo" role="tabpanel" aria-labelledby="aba-lotinha">
 
   <div class="cartao">
     <h2>1 · Quantas dezenas você vai jogar</h2>
@@ -181,7 +181,7 @@
 </section>
 
 <!-- ══════════════════ BUSCAR ══════════════════ -->
-<section id="buscar" class="painel" role="tabpanel">
+<section id="buscar" class="painel" role="tabpanel" aria-labelledby="aba-buscar">
 
   <!-- Fica no topo e sempre visível: é aqui que o usuário confere, de relance,
        se o motor está trabalhando ou parado. -->
@@ -262,7 +262,7 @@
 </section>
 
 <!-- ══════════════════ RESULTADO ══════════════════ -->
-<section id="resultado" class="painel" role="tabpanel">
+<section id="resultado" class="painel" role="tabpanel" aria-labelledby="aba-resultado">
   <div class="cartao destaque">
     <div class="rotulo">Fechamento encontrado</div>
     <div class="numerao"><span id="res-cartelas">—</span><small>cartelas</small></div>
@@ -302,7 +302,7 @@
   ele se comportou. Não recalcula fechamento nenhum: confere exatamente as
   cartelas que foram geradas, sejam as da tela ou as guardadas no histórico.
 -->
-<section id="checar" class="painel" role="tabpanel">
+<section id="checar" class="painel" role="tabpanel" aria-labelledby="aba-checar">
   <div class="cartao">
     <h2>1 · Qual fechamento</h2>
     <p class="ajuda">
@@ -366,7 +366,7 @@
 </section>
 
 <!-- ══════════════════ HISTÓRICO ══════════════════ -->
-<section id="historico" class="painel" role="tabpanel">
+<section id="historico" class="painel" role="tabpanel" aria-labelledby="aba-historico">
   <div class="cartao">
     <h2>Seus trabalhos</h2>
     <p class="ajuda">

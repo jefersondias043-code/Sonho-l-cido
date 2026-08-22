@@ -333,6 +333,11 @@ function mostrarPainel(nome) {
     // de tela. Sem ela, quem navega por áudio ouve quatro botões iguais e não
     // sabe em qual está.
     a.setAttribute('aria-selected', String(ativa));
+    // Índice móvel: só a aba aberta entra na ordem de tabulação, e as setas
+    // andam entre elas. É o que o padrão de abas manda, e é o que um leitor de
+    // tela anuncia — sem isso, Tab percorre as cinco uma a uma e as setas, que
+    // é o que a pessoa tenta primeiro, não fazem nada.
+    a.tabIndex = ativa ? 0 : -1;
   });
   document.querySelectorAll('.painel').forEach((p) => {
     p.classList.toggle('ativo', p.id === nome);
@@ -344,6 +349,35 @@ function mostrarPainel(nome) {
   if (nome === 'checar') chkAtualizarFontes();
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
+
+/*
+ * As setas andam entre as abas, como manda o padrão.
+ *
+ * `role="tablist"` é uma promessa: quem usa leitor de tela ouve "aba 1 de 5" e
+ * tenta a seta para a direita, porque é assim que abas funcionam em toda parte.
+ * Sem isto a promessa era falsa — as setas não faziam nada e a única saída era
+ * Tab, que percorria as cinco uma a uma.
+ *
+ * `Home` e `End` vão para a primeira e a última, que é o resto do padrão.
+ */
+document.querySelector('.abas')?.addEventListener('keydown', (evento) => {
+  const abas = [...document.querySelectorAll('.aba')];
+  const atual = abas.indexOf(document.activeElement);
+  if (atual < 0) return;
+
+  const passo = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[evento.key];
+  let destino = null;
+  if (passo) destino = (atual + passo + abas.length) % abas.length;
+  else if (evento.key === 'Home') destino = 0;
+  else if (evento.key === 'End') destino = abas.length - 1;
+  if (destino === null) return;
+
+  evento.preventDefault();
+  mostrarPainel(abas[destino].dataset.painel);
+  // O foco acompanha a seleção: deixá-lo para trás faria a próxima seta partir
+  // da aba errada.
+  abas[destino].focus();
+});
 
 /* ─────────── conversa com o worker ─────────── */
 
@@ -774,6 +808,19 @@ let lotGarantia = lotinha.SORTEIO;
 let lotPremiadas = 1;
 let lotDezenas = new Set();
 let lotFechamento = null;
+/*
+ * A geração da configuração: quantas vezes a seleção mudou.
+ *
+ * Cada conferência guarda a geração em que nasceu e desiste de pintar se ela já
+ * passou. Sem isso, trocar de pool no meio de uma conferência de cinco segundos
+ * faria a resposta antiga chegar depois e pintar por cima da nova — a tela
+ * diria "3.268.760 sorteios conferidos" sobre um fechamento de 18 dezenas.
+ *
+ * Enquanto a conferência bloqueava a linha principal o defeito não existia,
+ * porque nada podia ser trocado durante o cálculo. Tirá-la do bloqueio o cria,
+ * e é por isso que as duas coisas andam juntas.
+ */
+let lotGeracao = 0;
 /* A configuração da seleção atual, guardada para o botão que liga o motor
    depois — nos casos pesados ele deixou de partir sozinho. */
 let lotConfiguracao = null;
@@ -787,6 +834,8 @@ let lotConfiguracao = null;
  * dos dois estava certo sobre uma pergunta diferente, e juntos mentiam.
  */
 function lotEsquecerFechamento() {
+  // Invalida conferência em voo: a resposta dela é sobre a seleção que saiu.
+  lotGeracao += 1;
   lotFechamento = null;
   lotConfiguracao = null;
   $('lot-conferir').hidden = true;
@@ -1528,14 +1577,90 @@ ligar('lot-otimizar', 'click', () => {
  * prometa duas cartelas premiadas e entregue uma passaria batido numa
  * conferência que só perguntasse "alguém cobre?".
  */
-function lotPintarConferencia(dezenas, jogos, origem = null, exaustivo = null) {
+/*
+ * A conferência roda fora da linha principal.
+ *
+ * Medido num aparelho quatro vezes mais lento que o desta máquina: 25 dezenas
+ * com jogos de 21 travavam a tela por **cinco segundos**, 22/17 por dois, e
+ * meia dúzia de outras combinações por mais de um. Durante esse tempo o toque
+ * não respondia e nada na tela dizia que havia trabalho em curso.
+ *
+ * O trabalhador é criado na primeira conferência e reaproveitado: construí-lo
+ * custa alguns milissegundos e carregar `lotinha.js` dentro dele, mais alguns.
+ */
+let lotConferidor = null;
+let lotConferenciaId = 0;
+const lotConferenciasEmVoo = new Map();
+
+function lotPedirConferencia(dezenas, jogos, garantia, premiadas, exaustivo) {
+  if (typeof Worker !== 'function') {
+    // Sem trabalhador não há como não travar, mas há como não quebrar.
+    return Promise.resolve(
+      lotinha.conferirCobertura(dezenas, jogos, garantia, premiadas, { exaustivo })
+    );
+  }
+
+  if (!lotConferidor) {
+    try {
+      lotConferidor = new Worker('./conferidor.js', { type: 'module' });
+      lotConferidor.onmessage = ({ data }) => {
+        const espera = lotConferenciasEmVoo.get(data?.id);
+        if (!espera) return;
+        lotConferenciasEmVoo.delete(data.id);
+        if (data.tipo === 'pronto') espera.resolver(data.resultado);
+        else espera.rejeitar(new Error(data.erro ?? 'conferência falhou'));
+      };
+      lotConferidor.onerror = () => {
+        // O trabalhador morreu: quem esperava não pode ficar esperando para
+        // sempre, e a próxima conferência tenta criar outro.
+        for (const espera of lotConferenciasEmVoo.values()) espera.rejeitar(new Error('trabalhador caiu'));
+        lotConferenciasEmVoo.clear();
+        lotConferidor = null;
+      };
+    } catch {
+      lotConferidor = null;
+      return Promise.resolve(
+        lotinha.conferirCobertura(dezenas, jogos, garantia, premiadas, { exaustivo })
+      );
+    }
+  }
+
+  const id = ++lotConferenciaId;
+  return new Promise((resolver, rejeitar) => {
+    lotConferenciasEmVoo.set(id, { resolver, rejeitar });
+    lotConferidor.postMessage({ tipo: 'conferir', id, dezenas, jogos, garantia, premiadas, exaustivo });
+  });
+}
+
+async function lotPintarConferencia(dezenas, jogos, origem = null, exaustivo = null) {
   const destino = $('lot-conferencia');
-  const { total, cobertos, falha, minimoPremiadas, exaustivo: varreuTudo, possiveis } =
-    lotinha.conferirCobertura(dezenas, jogos, lotGarantia, lotPremiadas, { exaustivo });
+  const garantia = lotGarantia;
+  const premiadas = lotPremiadas;
+  const minhaGeracao = lotGeracao;
+
+  destino.innerHTML =
+    `<b>Conferindo…</b> <em>cada sorteio possível dentro do seu pool, um a um, ` +
+    `contra as ${milhares(jogos.length)} cartelas. A tela continua respondendo.</em>`;
+
+  let resultado;
+  try {
+    resultado = await lotPedirConferencia(dezenas, jogos, garantia, premiadas, exaustivo);
+  } catch (erro) {
+    if (minhaGeracao !== lotGeracao) return;
+    destino.innerHTML =
+      `<b>A conferência não pôde ser feita.</b> <em>${String(erro.message ?? erro)}. ` +
+      'O fechamento na tela continua válido — o que faltou foi a segunda opinião.</em>';
+    return;
+  }
+
+  // A configuração mudou enquanto isto rodava: o resultado é sobre outra coisa.
+  if (minhaGeracao !== lotGeracao) return;
+
+  const { total, cobertos, falha, minimoPremiadas, exaustivo: varreuTudo, possiveis } = resultado;
 
   const oQue =
-    `${lotPremiadas === 1 ? 'uma cartela' : `${lotPremiadas} cartelas`} com ` +
-    `${lotGarantia} acerto${lotGarantia === 1 ? '' : 's'}`;
+    `${premiadas === 1 ? 'uma cartela' : `${premiadas} cartelas`} com ` +
+    `${garantia} acerto${garantia === 1 ? '' : 's'}`;
 
   const veioDe =
     origem === 'fórmula'
@@ -1545,8 +1670,8 @@ function lotPintarConferencia(dezenas, jogos, origem = null, exaustivo = null) {
       : '';
 
   const aMais =
-    minimoPremiadas > lotPremiadas && Number.isFinite(minimoPremiadas)
-      ? ` <em>No pior caso são ${minimoPremiadas} cartelas, não ${lotPremiadas}.</em>`
+    minimoPremiadas > premiadas && Number.isFinite(minimoPremiadas)
+      ? ` <em>No pior caso são ${minimoPremiadas} cartelas, não ${premiadas}.</em>`
       : '';
 
   if (cobertos === total) {

@@ -98,6 +98,14 @@ await mkdir(new URL('../capturas/', import.meta.url).pathname, { recursive: true
 const servidor = await servir();
 const navegador = await chromium.launch();
 const contexto = await navegador.newContext({ ...devices['iPhone 13'] });
+// Tarefas longas: qualquer bloco de mais de 50 ms na linha principal é tempo em
+// que o toque não responde. É o que mede "a tela travou".
+await contexto.addInitScript(() => {
+  window.__longas = [];
+  new PerformanceObserver((lista) => {
+    for (const e of lista.getEntries()) window.__longas.push(Math.round(e.duration));
+  }).observe({ entryTypes: ['longtask'] });
+});
 const pagina = await contexto.newPage();
 
 const errosDeConsole = [];
@@ -1094,6 +1102,131 @@ try {
     semLucroNoLongoPrazo.total === 42 && semLucroNoLongoPrazo.positivas.length === 0,
     'nenhuma das 42 combinações cotadas tem retorno esperado positivo, porque nenhuma pode ter',
     `${semLucroNoLongoPrazo.total} conferidas, todas abaixo de R$ 1,00 por real`
+  );
+
+  // ─── 13. a conferência não pode congelar a tela ───
+  //
+  // A conferência varre todo sorteio possível do pool contra toda cartela. Em
+  // 25 dezenas com jogos de 21 são 266 cartelas contra 3.268.760 sorteios: 869
+  // milhões de comparações. Medido num aparelho quatro vezes mais lento que o
+  // desta máquina, isso travava a tela por **cinco segundos** — sem toque, sem
+  // cursor, sem nada dizendo que havia trabalho em curso; 22/17 travava por
+  // dois, e meia dúzia de outras combinações por mais de um.
+  //
+  // Agora roda num trabalhador. O que este teste exige é o que o usuário sente:
+  // que a tela continue respondendo, e que ela diga o que está fazendo.
+  await pagina.click('.aba[data-painel="lotinha"]');
+  await pagina.waitForSelector('#lotinha.ativo');
+  await pagina.click('#lot-pool .opcao[data-pool="25"]');
+  await pagina.click('#lot-jogo .opcao[data-jogo="21"]');
+  await pagina.click('#lot-sortear');
+  await pagina.evaluate(() => { window.__longas = []; });
+
+  await pagina.click('#lot-iniciar');
+  await pagina.waitForFunction(() => /Conferindo/.test(document.getElementById('lot-conferencia').textContent), undefined, { timeout: 20000 });
+  const avisou = (await pagina.locator('#lot-conferencia').textContent()).replace(/\s+/g, ' ');
+
+  // Durante o cálculo: trocar de aba tem de responder na hora.
+  const comecouTroca = Date.now();
+  await pagina.click('.aba[data-painel="checar"]');
+  await pagina.waitForSelector('#checar.ativo', { timeout: 5000 });
+  const trocaMs = Date.now() - comecouTroca;
+  await pagina.click('.aba[data-painel="lotinha"]');
+
+  await pagina.waitForFunction(
+    () => /Garantia comprovada/.test(document.getElementById('lot-conferencia').textContent),
+    undefined,
+    { timeout: 120000 }
+  );
+  const longas = await pagina.evaluate(() => window.__longas.filter((d) => d > 300));
+
+  marcar(
+    /Conferindo/.test(avisou),
+    'a conferência diz que está trabalhando, em vez de deixar a tela muda',
+    avisou.slice(0, 70)
+  );
+  marcar(
+    trocaMs < 1500,
+    'e a tela responde durante ela — trocar de aba não espera o cálculo',
+    `${trocaMs} ms para trocar de aba no meio de 869 milhões de comparações`
+  );
+  marcar(
+    longas.length === 0,
+    'nenhum bloco acima de 300 ms na linha principal, onde antes havia um de 5.000',
+    longas.length ? `blocos: ${longas.join(', ')} ms` : 'nenhum'
+  );
+  marcar(
+    /3\.268\.760 sorteios conferidos um a um/.test(
+      (await pagina.locator('#lot-conferencia').textContent()).replace(/\s+/g, ' ')
+    ),
+    'e o resultado é o mesmo de antes: os 3.268.760 sorteios, um a um',
+    (await pagina.locator('#lot-conferencia').textContent()).replace(/\s+/g, ' ').slice(0, 70)
+  );
+
+  // Trocar a configuração no meio de uma conferência longa: a resposta antiga
+  // não pode chegar depois e pintar por cima da nova. Enquanto o cálculo
+  // bloqueava, este defeito não existia — tirá-lo do bloqueio o cria.
+  await pagina.click('#lot-pool .opcao[data-pool="25"]');
+  await pagina.click('#lot-jogo .opcao[data-jogo="21"]');
+  await pagina.click('#lot-sortear');
+  await pagina.click('#lot-iniciar');
+  await pagina.waitForFunction(() => /Conferindo/.test(document.getElementById('lot-conferencia').textContent), undefined, { timeout: 20000 });
+  await pagina.click('#lot-pool .opcao[data-pool="18"]');
+  await pagina.waitForTimeout(6000);
+  const depoisDaTroca = (await pagina.locator('#lot-conferencia').textContent()).replace(/\s+/g, ' ');
+  marcar(
+    !/3\.268\.760/.test(depoisDaTroca),
+    'e um resultado que chega tarde não pinta por cima da seleção nova',
+    depoisDaTroca.slice(0, 70)
+  );
+
+  // ─── 14. as abas como o padrão manda ───
+  //
+  // `role="tablist"` é uma promessa: quem usa leitor de tela ouve "aba 1 de 5"
+  // e tenta a seta para a direita, porque é assim que abas funcionam em toda
+  // parte. A promessa era falsa — as setas não faziam nada, as abas não diziam
+  // que painel abriam, e os painéis não diziam de que aba vinham.
+  const abas = await pagina.evaluate(() => {
+    const abas = [...document.querySelectorAll('[role="tab"]')];
+    const paineis = [...document.querySelectorAll('[role="tabpanel"]')];
+    return {
+      total: abas.length,
+      comControle: abas.filter((a) => document.getElementById(a.getAttribute('aria-controls'))).length,
+      paineisRotulados: paineis.filter((x) => document.getElementById(x.getAttribute('aria-labelledby'))).length,
+      naTabulacao: abas.filter((a) => a.tabIndex === 0).length,
+      rotuloDaLista: document.querySelector('[role="tablist"]').getAttribute('aria-label') ?? '',
+    };
+  });
+  marcar(
+    abas.comControle === abas.total && abas.paineisRotulados === abas.total,
+    'cada aba diz que painel abre, e cada painel diz de que aba veio',
+    `${abas.comControle} de ${abas.total} abas, ${abas.paineisRotulados} painéis`
+  );
+  marcar(
+    abas.naTabulacao === 1 && abas.rotuloDaLista.length > 0,
+    'e só a aba aberta entra na tabulação, como manda o índice móvel',
+    `${abas.naTabulacao} na tabulação, lista rotulada "${abas.rotuloDaLista}"`
+  );
+
+  await pagina.click('.aba[data-painel="lotinha"]');
+  const comSetas = [];
+  for (const [tecla, esperado] of [
+    ['ArrowRight', 'buscar'],
+    ['ArrowRight', 'resultado'],
+    ['ArrowLeft', 'buscar'],
+    ['End', 'historico'],
+    ['Home', 'lotinha'],
+  ]) {
+    await pagina.keyboard.press(tecla);
+    await pagina.waitForTimeout(120);
+    const painel = await pagina.evaluate(() => document.querySelector('.painel.ativo')?.id);
+    const foco = await pagina.evaluate(() => document.activeElement?.dataset?.painel);
+    comSetas.push(painel === esperado && foco === esperado);
+  }
+  marcar(
+    comSetas.every(Boolean),
+    'as setas andam entre as abas, e o foco vai junto — Home e End também',
+    `${comSetas.filter(Boolean).length} de ${comSetas.length} movimentos certos`
   );
 
   marcar(errosDeConsole.length === 0, 'nenhum erro no console', errosDeConsole.join(' | ').slice(0, 120));
