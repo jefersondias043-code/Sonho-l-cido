@@ -1107,59 +1107,6 @@ main { padding: 8px 16px 0; }
 .regua-cotacao .acima { color: var(--verde); }
 .regua-cotacao .acima b { color: var(--verde); }
 
-/* ─────────── o que o orçamento compra ─────────── */
-
-/*
- * Sete colunas não cabem em 320px, e a que não pode sumir é a identidade do
- * fechamento: sem ela, "R$ 24,00 · 1,50× · 40%" não diz de quê. A primeira
- * coluna fica presa à esquerda enquanto o resto rola por baixo dela.
- */
-#lot-bolso-tabela th[scope='row'] {
-  position: sticky;
-  left: 0;
-  z-index: 1;
-  text-align: left;
-  color: var(--texto);
-  font-size: 13.5px;
-  text-transform: none;
-  letter-spacing: 0;
-  background: var(--fundo-cartao);
-  /* `border-collapse` come a borda de um elemento preso; a sombra a devolve. */
-  box-shadow: 1px 0 0 var(--borda);
-}
-
-#lot-bolso-tabela tbody tr {
-  cursor: pointer;
-}
-
-#lot-bolso-tabela tbody tr:hover th[scope='row'],
-#lot-bolso-tabela tbody tr:focus-visible th[scope='row'] {
-  background: var(--fundo-campo);
-}
-
-#lot-bolso-tabela tbody tr:hover td,
-#lot-bolso-tabela tbody tr:focus-visible td {
-  background: var(--fundo-campo);
-}
-
-#lot-bolso-tabela tbody tr:focus-visible {
-  outline: 2px solid var(--acento);
-  outline-offset: -2px;
-}
-
-/* O cabeçalho de cada pool dentro da tabela do orçamento. */
-#lot-bolso-tabela tr.grupo th {
-  text-align: left;
-  padding-top: 16px;
-  color: var(--acento);
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  background: var(--fundo-cartao);
-  position: static;
-  box-shadow: none;
-}
-
 /* ─────────── o knob da meta de cartelas premiadas ─────────── */
 
 .knob {

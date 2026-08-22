@@ -164,36 +164,30 @@ São três eixos, e não um:
 | **quantos acertos garantir** (15 a 11) | 15 é o que a Lotinha paga; menos é Lotofácil |
 | **quantas cartelas premiadas** (1 ao teto) | quantas das suas cartelas precisam ganhar |
 
-#### Começar pelo bolso
+#### A meta de cartelas premiadas
 
-A tela abre pela pergunta invertida: em vez de *"quantas cartelas custa garantir
-isto"*, **"dado o que posso gastar, o que vale a pena comprar"** — e a garantia
-deixa de ser um ajuste para virar resposta. Informado o teto por concurso, uma
-linha por pool mostra o que ele compra, e tocar numa linha ajusta os passos
-seguintes.
+O teto de garantia é **por combinação**: `C(P−15, k−15)`, os jogos distintos
+capazes de conter um mesmo sorteio. Em 23 dezenas com jogos de 21 são 28, e
+pedir trinta ali não é caro — não existe.
 
-A troca que sobra para o usuário decidir é sempre a mesma, e é a única que a
-matemática não resolve sozinha:
+O controle deslizante inverte a pergunta: a meta é do usuário e a combinação é
+consequência dela. Arrastar até 30 procura, entre as 66 combinações, a que
+entrega 30 pelo melhor preço — 22 dezenas com jogos de 19, cujo teto é 35 — e um
+botão reconfigura pool, tamanho de jogo e garantia de uma vez.
 
-| fechamento | cartelas | prêmio garantido | retorno | paga em |
-|---|---:|---:|---:|---:|
-| 24/23 com 9 premiadas | 24 | 36× | 1,50× | 40,00% dos concursos |
-| 23/22 com 8 premiadas | 23 | 80× | 3,48× | 15,00% |
-| 22/21 com 7 premiadas | 22 | 210× | 9,55× | 5,22% |
-| 19/18 com 4 premiadas | 19 | 5.200× | 273,68× | 0,12% |
-
-Foi esta varredura que tirou o pool 24 da lista de impossíveis. Com **uma**
+Foi essa varredura que tirou o pool 24 da lista de impossíveis. Com **uma**
 cartela premiada, 24 dezenas com jogos de 23 custam 16 cartelas para um prêmio
 de 4× — o mínimo matemático já é mais caro que o prêmio, e o aplicativo dizia
 "não paga". Com **nove**, são as 24 cartelas que cabem no pool: todo sorteio
 dentro das 24 deixa nove dezenas de fora, e são exatamente essas nove cartelas
-que o contêm. Paga 36× por 24×, fixo, e é o fechamento que paga com mais
-frequência da modalidade inteira.
+que o contêm. Paga 36× por 24×, fixo, e o pool acerta em 40% dos concursos. A
+coluna "paga?" da matriz passou a dizer **em qual garantia** cada combinação
+começa a pagar, em vez de julgar todas por uma cartela só.
 
 Nada disso torna a aposta boa. O retorno esperado por real vai de R$ 0,29 a
-R$ 0,60 nas duas pontas da tabela, é sempre menor que R$ 1,00, e **não depende
-do fechamento**: a quantidade de cartelas cancela na conta. O que a escolha
-muda é *quando* se ganha e *quanto* de cada vez.
+R$ 0,60, é sempre menor que R$ 1,00, e **não depende do fechamento**: a
+quantidade de cartelas cancela na conta. O que a escolha muda é *quando* se
+ganha e *quanto* de cada vez.
 
 #### O teto: quando nenhuma garantia salva
 

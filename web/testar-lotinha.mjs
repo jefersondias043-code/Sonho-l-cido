@@ -1165,164 +1165,33 @@ try {
     noTeto.map((l) => `${l.pool}: ${l.teto.toFixed(2)}× vs ${l.maiorDosMenores.toFixed(2)}×`).join(' · ')
   );
 
-  // A varredura inteira, e as três propriedades que ela não pode violar.
-  const escolha = await pagina.evaluate(() =>
+  // A trava que não pode sumir: no longo prazo **nenhuma** combinação devolve o
+  // que custa. O retorno esperado é `multiplicador · chance da cartela`, o
+  // número de cartelas cancela na conta, e nada que a tela ofereça o altera.
+  const semLucroNoLongoPrazo = await pagina.evaluate(() =>
     import('./lotinha.js').then((lot) => {
-      const r = lot.melhorConfiguracao({ orcamento: 5000, minimoDeCartelas: 2 });
-      return {
-        total: r.opcoes.length,
-        melhor: r.melhor,
-        temPool25: r.opcoes.some((o) => o.pool === 25),
-        acimaDoOrcamento: r.opcoes.filter((o) => o.quantidade > 5000).length,
-        naoPagam: r.opcoes.filter((o) => o.retorno <= 1).length,
-        lucroLongoPrazo: r.opcoes.filter((o) => o.retornoEsperado >= 1).length,
-        dominadas: r.opcoes.filter((x) =>
-          r.opcoes.some(
-            (y) =>
-              y !== x &&
-              y.pool === x.pool &&
-              y.quantidade <= x.quantidade &&
-              y.retorno >= x.retorno &&
-              (y.quantidade < x.quantidade || y.retorno > x.retorno)
-          )
-        ).length,
-        semTeto: r.semTeto.length,
-      };
+      const cotadas = lot
+        .matriz()
+        .filter((l) => lot.COTACAO_PADRAO[l.jogo])
+        .map((l) => ({
+          par: `${l.pool}/${l.jogo}`,
+          retorno: lot.economia({
+            pool: l.pool,
+            jogo: l.jogo,
+            quantidade: 1,
+            cotacao: lot.COTACAO_PADRAO,
+          }).retornoEsperado,
+        }));
+      return { total: cotadas.length, positivas: cotadas.filter((c) => c.retorno >= 1) };
     })
   );
   marcar(
-    escolha.melhor.pool === 24 && escolha.melhor.jogo === 23 && escolha.melhor.premiadas === 9,
-    'a varredura elege 24/23 com nove premiadas — o que paga com mais frequência',
-    `${escolha.melhor.pool}/${escolha.melhor.jogo}, ${escolha.melhor.quantidade} cartelas, ` +
-      `${escolha.melhor.retorno.toFixed(2)}×, acerta ${(escolha.melhor.chanceDoPool * 100).toFixed(0)}% dos concursos`
-  );
-  marcar(
-    !escolha.temPool25 && escolha.semTeto === 10,
-    'o pool 25 não aparece em oferta nenhuma, e as dez duplas sem teto vêm explicadas',
-    `${escolha.semTeto} descartadas antes de olhar a garantia`
-  );
-  marcar(
-    escolha.naoPagam === 0 && escolha.acimaDoOrcamento === 0 && escolha.dominadas === 0,
-    'nada que não pague, nada acima do orçamento, nada que outra linha faça melhor e mais barato',
-    `${escolha.total} opções na fronteira`
+    semLucroNoLongoPrazo.total === 42 && semLucroNoLongoPrazo.positivas.length === 0,
+    'nenhuma das 42 combinações cotadas tem retorno esperado positivo, porque nenhuma pode ter',
+    `${semLucroNoLongoPrazo.total} conferidas, todas abaixo de R$ 1,00 por real`
   );
 
-  // E a asserção que impede o painel novo de virar promessa de lucro. O retorno
-  // esperado é `multiplicador · chance da cartela`, o número de cartelas cancela
-  // na conta, e nenhuma escolha desta varredura o altera.
-  marcar(
-    escolha.lucroLongoPrazo === 0,
-    'e nenhuma oferta tem retorno esperado positivo, porque nenhuma pode ter',
-    `${escolha.total} conferidas, todas abaixo de R$ 1,00 por real`
-  );
-
-  // ─── 13. a tela do orçamento ───
-  //
-  // O primeiro passo da Lotinha deixou de ser "escolha as dezenas" e passou a
-  // ser "diga quanto dá para gastar". A tabela responde com uma linha por pool,
-  // porque a troca entre pools — quanto paga contra com que frequência paga — é
-  // a única decisão que sobra depois que a matemática escolheu o resto.
-  await pagina.click('.aba[data-painel="lotinha"]');
-  await pagina.waitForSelector('#lotinha.ativo');
-  await pagina.fill('#lot-orcamento', '50');
-  await pagina.waitForFunction(
-    () => document.querySelectorAll('#lot-bolso-tabela tbody tr').length > 0,
-    undefined,
-    { timeout: 15000 }
-  );
-
-  const bolso = await pagina.evaluate(() => ({
-    linhas: [...document.querySelectorAll('#lot-bolso-tabela tbody tr[data-pool]')].map((tr) => ({
-      pool: Number(tr.dataset.pool),
-      jogo: Number(tr.dataset.jogo),
-      premiadas: Number(tr.dataset.premiadas),
-    })),
-    texto: document.getElementById('lot-bolso').textContent.replace(/\s+/g, ' '),
-  }));
-  marcar(
-    bolso.linhas.length > 0 &&
-      bolso.linhas[0].pool === 24 &&
-      bolso.linhas[0].jogo === 23 &&
-      bolso.linhas[0].premiadas === 9,
-    'com R$ 50 por concurso, a primeira oferta é 24/23 com nove cartelas premiadas',
-    bolso.linhas.map((l) => `${l.pool}/${l.jogo}·${l.premiadas}`).join(' ')
-  );
-  // A tabela mostrava a melhor de cada pool, e com isso escondia a troca que o
-  // usuário mais quer ver: quanto a mais se ganha gastando um pouco mais dentro
-  // do mesmo pool. No pool 23 são sete degraus, de 17 cartelas pagando 1,18× a
-  // 23 cartelas pagando 3,48×.
-  const degraus = bolso.linhas.filter((l) => l.pool === 23).length;
-  marcar(
-    degraus >= 5 && new Set(bolso.linhas.map((l) => l.pool)).size >= 6,
-    'a fronteira vem inteira: vários degraus de garantia dentro de cada pool',
-    `${bolso.linhas.length} linhas em ${new Set(bolso.linhas.map((l) => l.pool)).size} pools, ${degraus} no pool 23`
-  );
-
-  // E o que ela **não** mostra é o que importa tanto quanto. Garantia alta em
-  // cartela pequena é seduzente e péssima: no pool 23, garantir 28 premiadas com
-  // jogos de 21 custa 253 cartelas e devolve 3,32×, enquanto garantir 8 com
-  // jogos de 22 custa 23 e devolve 3,48×. Perseguir o número de premiadas por
-  // ele mesmo leva para o lado errado, e a dominância é o que barra isso.
-  const dominadas = await pagina.evaluate(() =>
-    import('./lotinha.js').then((lot) => {
-      const { opcoes } = lot.melhorConfiguracao({ orcamento: 200000, minimoDeCartelas: 2 });
-      return {
-        total: opcoes.length,
-        maiorGarantiaPorPool: Object.fromEntries(
-          [...new Set(opcoes.map((o) => o.pool))].map((pool) => {
-            const doPool = opcoes.filter((o) => o.pool === pool);
-            const melhor = doPool.reduce((a, b) => (b.retorno > a.retorno ? b : a));
-            return [pool, { premiadas: melhor.premiadas, cartelas: melhor.quantidade, retorno: melhor.retorno }];
-          })
-        ),
-        // uma configuração de garantia alta em cartela menor, para comparar
-        vinteOito: lot.previsao(23, 21, 15, 28).quantidade,
-      };
-    })
-  );
-  const p23 = dominadas.maiorGarantiaPorPool[23];
-  marcar(
-    p23.cartelas < dominadas.vinteOito && p23.retorno > (28 * 30) / dominadas.vinteOito,
-    'e o melhor do pool 23 é mais barato E paga mais que a garantia de 28 premiadas',
-    `${p23.cartelas} cartelas a ${p23.retorno.toFixed(2)}× contra ` +
-      `${dominadas.vinteOito} cartelas a ${((28 * 30) / dominadas.vinteOito).toFixed(2)}×`
-  );
-
-  // A pergunta que originou tudo isto — um fechamento lucrativo de 25 dezenas
-  // com jogos de 18 — precisa aparecer respondida, e não apenas ausente.
-  marcar(
-    /25\/18 \(teto 0,32×\)/.test(bolso.texto) && !bolso.linhas.some((l) => l.pool === 25),
-    'e o 25/18 aparece explicado como impossível, com o teto dele, em vez de sumir',
-    (bolso.texto.match(/Fora da tabela[^.]*\./) ?? [''])[0].slice(0, 90)
-  );
-  marcar(
-    /quantidade de cartelas cancela/.test(bolso.texto),
-    'o aviso de que o retorno médio não muda continua junto da oferta',
-    /nunca a média/.test(bolso.texto) ? 'diz "nunca a média"' : 'ausente'
-  );
-
-  // Tocar numa linha configura os passos seguintes: é o que liga a escolha
-  // financeira ao resto da tela, em vez de deixar o usuário transcrever.
-  await pagina.click('#lot-bolso-tabela tbody tr[data-pool]');
-  await pagina.waitForTimeout(200);
-  const configurado = await pagina.evaluate(() => ({
-    pool: document.querySelector('#lot-pool .opcao.ativa')?.textContent,
-    jogo: document.querySelector('#lot-jogo .opcao.ativa')?.textContent,
-    premiadas: document.querySelector('#lot-premiadas .opcao.ativa')?.textContent,
-    botoes: [...document.querySelectorAll('#lot-premiadas .opcao')].map((b) => b.textContent),
-  }));
-  marcar(
-    configurado.pool === '24' && configurado.jogo === '23' && configurado.premiadas === '9',
-    'tocar na linha ajusta pool, tamanho de jogo e cartelas premiadas de uma vez',
-    `${configurado.pool}/${configurado.jogo} com ${configurado.premiadas}`
-  );
-  marcar(
-    configurado.botoes.includes('9'),
-    'e a régua de premiadas alcança o teto, que é onde o retorno é maior',
-    configurado.botoes.join(' ')
-  );
-
-  // ─── 13b. o knob da meta ───
+  // ─── 13. o knob da meta ───
   //
   // O teto de garantia é **por combinação**: `C(P−15, k−15)`, os jogos distintos
   // capazes de conter um mesmo sorteio. Em 23 dezenas com jogos de 21 são 28, e
@@ -1333,6 +1202,8 @@ try {
   // O knob inverte a pergunta: a meta é do usuário e a combinação é consequência
   // dela. Trinta premiadas existem — em 22 dezenas com jogos de 19, cujo teto é
   // 35 — e a tela tem de achar isso sozinha, partindo de 23/21.
+  await pagina.click('.aba[data-painel="lotinha"]');
+  await pagina.waitForSelector('#lotinha.ativo');
   await pagina.click('#lot-pool .opcao[data-pool="23"]');
   await pagina.click('#lot-jogo .opcao[data-jogo="21"]');
 
@@ -1407,7 +1278,7 @@ try {
     `teto ${semResposta.teto}, meta 300 devolve ${semResposta.acimaDoTeto}`
   );
 
-  // A matriz das 45 respondia "paga?" olhando só uma cartela premiada, e
+  // A matriz das 66 respondia "paga?" olhando só uma cartela premiada, e
   // mandava embora quem parasse nela: 23/22 é impossível com uma e lucra com
   // duas; o pool 24 inteiro, de jogos de 20 a 23, lucra pedindo mais.
   const coluna = await pagina.evaluate(() => {
@@ -1439,113 +1310,6 @@ try {
     /não paga/.test(coluna.c.texto) && coluna.c.apagada && /^paga$/.test(coluna.d.texto.trim()),
     'e continua apagando o que não paga com garantia nenhuma, como o 25/18',
     `25/18: ${coluna.c.texto} · 22/20: ${coluna.d.texto}`
-  );
-
-  // ─── 14. conquistando o impossível ───
-  //
-  // 25 dezenas com jogos de 23 é o caso em que o sorteio cai dentro do pool com
-  // **certeza**, e por isso o único em que "lucrar sempre" e "lucrar em média"
-  // são a mesma pergunta. A aba ataca isso de frente: roda a busca inteira,
-  // mostra o melhor que existe, e mostra por que não existe mais.
-  await pagina.click('.aba[data-painel="impossivel"]');
-  await pagina.waitForSelector('#impossivel.ativo');
-  await pagina.click('#imp-atacar');
-  await pagina.waitForFunction(
-    () => !document.getElementById('imp-achado-cartao').hidden,
-    undefined,
-    { timeout: 30000 }
-  );
-
-  const impossivel = await pagina.evaluate(() => ({
-    busca: document.getElementById('imp-busca').textContent.replace(/\s+/g, ' '),
-    achado: document.getElementById('imp-achado').textContent.replace(/\s+/g, ' '),
-    certificado: document.getElementById('imp-certificado').textContent.replace(/\s+/g, ' '),
-    alavanca: document.getElementById('imp-alavanca').textContent.replace(/\s+/g, ' '),
-    linhas: document.querySelectorAll('#imp-distribuicao tbody tr').length,
-  }));
-
-  marcar(
-    /estruturas varridas/.test(impossivel.busca) && impossivel.linhas >= 5,
-    'a busca varre as estruturas de verdade e mostra o ranking',
-    impossivel.busca.slice(0, 70)
-  );
-
-  // O resultado que a aba existe para mostrar: lucrar sempre é impossível, mas
-  // lucrar mais vezes não é. O fechamento mínimo lucra em 4,8% dos concursos, e
-  // uma estrutura desequilibrada leva isso a 14,4% — três vezes mais.
-  marcar(
-    /14,4\d*% dos concursos/.test(impossivel.achado) && /4,8\d*% deles/.test(impossivel.achado),
-    'e encontra a estrutura que triplica a fatia de concursos com lucro — 4,8% para 14,4%',
-    impossivel.achado.slice(0, 90)
-  );
-
-  // A parede, com a conta conferível. É o que impede a aba de virar promessa.
-  marcar(
-    /maior peso é 0,6000/.test(impossivel.certificado) &&
-      /apostando valores diferentes em cada uma/.test(impossivel.certificado),
-    'e prova por que nenhuma busca passa disso — inclusive com apostas diferentes por cartela',
-    impossivel.certificado.slice(0, 80)
-  );
-
-  const provaPura = await pagina.evaluate(() =>
-    import('./lotinha.js').then((lot) => {
-      const p = lot.porQueNaoLucra(25);
-      return {
-        maiorPeso: p.maior.peso,
-        limiar: p.limiar,
-        possivel: p.possivel,
-        todosAbaixoDeUm: p.pesos.every((l) => l.peso < 1),
-        viraAcimaDoLimiar: lot.porQueNaoLucra(25, { 23: 7 }).possivel,
-      };
-    })
-  );
-  marcar(
-    Math.abs(provaPura.maiorPeso - 0.6) < 1e-9 &&
-      Math.abs(provaPura.limiar - 20 / 3) < 1e-9 &&
-      !provaPura.possivel &&
-      provaPura.todosAbaixoDeUm,
-    'no pool 25 os sete tamanhos de cartela têm peso abaixo de 1, e a fronteira é 6,67×',
-    `maior peso ${provaPura.maiorPeso}, fronteira ${provaPura.limiar.toFixed(2)}`
-  );
-  marcar(
-    provaPura.viraAcimaDoLimiar,
-    'e a conta vira de sinal se a banca pagasse 7× — é o preço, não a otimização',
-    'porQueNaoLucra(25, {23: 7}).possivel === true'
-  );
-  marcar(
-    /continua impossível/.test(impossivel.alavanca) && /6,67×/.test(impossivel.alavanca),
-    'a alavanca diz quanto a banca paga do justo, e que 4× não chega lá',
-    impossivel.alavanca.slice(0, 70)
-  );
-
-  // O fechamento que a busca achou tem de cobrir de verdade. Terceira opinião:
-  // nem quem procurou, nem quem construiu.
-  const conferido = await pagina.evaluate(() =>
-    import('./lotinha.js').then((lot) => {
-      const { melhor } = lot.maiorFatiaDeLucro(25, 23);
-      const total = melhor.distribuicao.reduce((soma, [, quantos]) => soma + quantos, 0);
-      const premiadasNoTotal = melhor.distribuicao.reduce(
-        (soma, [premiadas, quantos]) => soma + premiadas * quantos,
-        0
-      );
-      return {
-        cartelas: melhor.cartelas,
-        total,
-        sorteios: lot.combinacoes(25, 15),
-        garantia: melhor.garantia,
-        // Cada cartela premia C(23,15) sorteios: a soma das premiações tem de
-        // bater exatamente com isso, senão a contagem por convolução mentiu.
-        esperado: melhor.cartelas * lot.combinacoes(23, 15),
-        obtido: premiadasNoTotal,
-      };
-    })
-  );
-  marcar(
-    conferido.total === conferido.sorteios &&
-      conferido.obtido === conferido.esperado &&
-      conferido.garantia >= 1,
-    'e a contagem por convolução fecha com a conta direta, sorteio a sorteio',
-    `${conferido.total.toLocaleString('pt-BR')} sorteios, ${conferido.obtido.toLocaleString('pt-BR')} premiações contra ${conferido.esperado.toLocaleString('pt-BR')}`
   );
 
   marcar(errosDeConsole.length === 0, 'nenhum erro no console', errosDeConsole.join(' | ').slice(0, 120));

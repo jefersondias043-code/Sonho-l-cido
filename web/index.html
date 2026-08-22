@@ -32,7 +32,6 @@
   <button class="aba" role="tab" aria-selected="false" data-painel="buscar">Buscar</button>
   <button class="aba" role="tab" aria-selected="false" data-painel="resultado">Resultado</button>
   <button class="aba" role="tab" aria-selected="false" data-painel="checar">Checar</button>
-  <button class="aba" role="tab" aria-selected="false" data-painel="impossivel">Impossível</button>
   <button class="aba" role="tab" aria-selected="false" data-painel="historico">Histórico</button>
 </nav>
 
@@ -50,27 +49,8 @@
 -->
 <section id="lotinha" class="painel ativo" role="tabpanel">
 
-  <!-- A pergunta invertida: em vez de "quantas cartelas custa garantir isto",
-       "dado o que posso gastar, o que vale a pena comprar". A garantia deixa de
-       ser um ajuste e passa a ser resposta — é onde mora a maior parte da
-       diferença, e era o eixo que o aplicativo mantinha travado em 1. -->
-  <div class="cartao" id="lot-bolso-cartao">
-    <h2>1 · Quanto dá para gastar</h2>
-    <p class="ajuda">
-      Diga o teto por concurso e veja o que ele compra. A tabela abaixo escolhe
-      também <b>quantas cartelas premiadas</b> pedir, que é a decisão que mais
-      muda o resultado e a que costuma passar batido. Tocar numa linha ajusta os
-      passos seguintes.
-    </p>
-    <label class="campo linha">
-      <span>Teto por concurso (R$)</span>
-      <input type="number" id="lot-orcamento" value="50" min="1" step="1" inputmode="decimal">
-    </label>
-    <div id="lot-bolso"></div>
-  </div>
-
   <div class="cartao">
-    <h2>2 · Quantas dezenas você vai jogar</h2>
+    <h2>1 · Quantas dezenas você vai jogar</h2>
     <div class="opcoes" id="lot-pool"></div>
     <div class="grade-numeros" id="lot-grade"></div>
     <div class="referencia" id="lot-contagem"></div>
@@ -81,7 +61,7 @@
   </div>
 
   <div class="cartao">
-    <h2>3 · Tamanho de cada jogo</h2>
+    <h2>2 · Tamanho de cada jogo</h2>
     <p class="ajuda">
       Jogos menores pagam mais, mas exigem mais jogos para fechar o pool. As
       opções mudam conforme o pool: o jogo nunca pode ser maior que ele.
@@ -92,7 +72,7 @@
   <!-- Os dois eixos que mudam o tamanho do fechamento por ordens de grandeza,
        e que quase nenhuma ferramenta deixa mexer. -->
   <div class="cartao">
-    <h2>4 · O que garantir</h2>
+    <h2>3 · O que garantir</h2>
     <p class="ajuda">
       <b>Acertos</b> — na Lotinha só 15 paga, e é o padrão. Garantir menos custa
       uma fração disso, e é o que a Lotofácil premia a partir de 11.
@@ -155,7 +135,7 @@
   <button class="principal" id="lot-iniciar" disabled>Carregar fechamento</button>
 
   <div class="cartao" id="lot-resultado-cartao">
-    <div class="rotulo">5 · Conferência independente</div>
+    <div class="rotulo">4 · Conferência independente</div>
     <div class="referencia" id="lot-conferencia">
       <em>Ao carregar, cada sorteio possível dentro do seu pool é conferido um a
       um — sem consultar o motor que produziu o fechamento.</em>
@@ -177,7 +157,7 @@
   <!-- O simulador: testar a estrutura contra qualquer resultado hipotético,
        sem esperar sorteio nenhum. -->
   <details class="cartao" id="lot-simulador-cartao">
-    <summary>6 · Simular um resultado</summary>
+    <summary>5 · Simular um resultado</summary>
     <p class="ajuda">
       Digite 15 dezenas e veja como o seu fechamento teria se saído.
     </p>
@@ -421,66 +401,6 @@
 </section>
 
 <!-- ══════════════════ HISTÓRICO ══════════════════ -->
-<!--
-  A aba que ataca o caso que a matemática dá como perdido: lucro garantido em 25
-  dezenas com jogos de 23. Ela roda a busca de verdade, mostra o que a busca
-  achou, e mostra também por que ela não vai achar mais do que isso — com a
-  conta na tela, para conferir em vez de acreditar.
--->
-<section id="impossivel" class="painel" role="tabpanel">
-
-  <div class="cartao">
-    <h2>Conquistando o impossível</h2>
-    <p class="ajuda">
-      <b>O desafio:</b> 25 dezenas, jogos de 23, os 15 acertos garantidos em pelo
-      menos uma cartela — e que sobre dinheiro. Com as 25 o sorteio cai dentro do
-      pool <b>sempre</b>, então não há aposta condicional nenhuma: ou o
-      fechamento se paga todo concurso, ou não se paga.
-    </p>
-    <button class="principal" id="imp-atacar">Atacar o problema</button>
-    <div class="referencia" id="imp-busca">
-      <em>A busca percorre todas as estruturas possíveis de fechamento e mede,
-      para cada uma, em quantos dos 3.268.760 sorteios ela devolve mais do que
-      custou. Exaustiva, e não por amostragem.</em>
-    </div>
-  </div>
-
-  <div class="cartao" id="imp-achado-cartao" hidden>
-    <h2>O que a busca encontrou</h2>
-    <div class="referencia" id="imp-achado"></div>
-    <div id="imp-distribuicao"></div>
-    <button class="secundario" id="imp-usar" hidden>Carregar este fechamento</button>
-  </div>
-
-  <div class="cartao" id="imp-parede-cartao" hidden>
-    <h2>Onde está a parede</h2>
-    <p class="ajuda">
-      Nenhuma busca vai passar daqui, e o motivo não é falta de esforço. Some as
-      3.268.760 desigualdades que exigiriam lucro em todo sorteio: cada cartela de
-      <i>k</i> dezenas aparece do lado que recebe em exatamente C(<i>k</i>,15)
-      deles. O que sobra é um peso por tamanho de cartela — e o maior deles decide.
-    </p>
-    <div id="imp-pesos"></div>
-    <div class="referencia" id="imp-certificado"></div>
-  </div>
-
-  <div class="cartao" id="imp-alavanca-cartao" hidden>
-    <h2>A única alavanca</h2>
-    <p class="ajuda">
-      A conta acima tem um só termo negociável: quanto a banca paga. Nem o
-      tamanho do fechamento, nem a garantia, nem a estrutura entram nela.
-      Experimente outro multiplicador para cartelas de 23 dezenas e veja o sinal
-      virar — ou não.
-    </p>
-    <label class="campo linha">
-      <span>Se a banca pagasse (×)</span>
-      <input type="number" id="imp-cotacao" min="0.1" step="0.1" inputmode="decimal">
-    </label>
-    <div class="referencia" id="imp-alavanca"></div>
-  </div>
-
-</section>
-
 <section id="historico" class="painel" role="tabpanel">
   <div class="cartao">
     <h2>Seus trabalhos</h2>
