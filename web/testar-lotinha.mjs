@@ -114,8 +114,8 @@ try {
   // ─── 1. a estrutura da modalidade ───
   const tamanhos = await pagina.$$eval('#lot-pool .opcao', (b) => b.map((x) => x.textContent));
   marcar(
-    tamanhos.join(',') === '17,18,19,20,21,22,23,24,25',
-    'o pool vai de 17 a 25 dezenas — as bancas param em 23, a matemática não',
+    tamanhos.join(',') === '15,16,17,18,19,20,21,22,23,24,25',
+    'o pool vai de 15 a 25 dezenas — 15 é o sorteio, e abaixo dele não há aposta',
     tamanhos.join(' · ')
   );
 
@@ -123,10 +123,10 @@ try {
   marcar(quantosNumeros === 25, 'as 25 dezenas do universo estão na tela');
 
   const linhasMatriz = await pagina.locator('#lot-matriz tbody tr').count();
-  marcar(linhasMatriz === 45, 'a matriz cobre as 45 combinações da modalidade', `${linhasMatriz} linhas`);
+  marcar(linhasMatriz === 66, 'a matriz cobre as 66 combinações da modalidade', `${linhasMatriz} linhas`);
 
   const emAberto = await pagina.locator('#lot-matriz td.aberto').count();
-  marcar(emAberto === 21, 'e marca as 21 em que o mínimo é problema aberto', `${emAberto} marcadas`);
+  marcar(emAberto === 28, 'e marca as 28 em que o mínimo é problema aberto', `${emAberto} marcadas`);
 
   // ─── 2. a seleção é do usuário ───
   await pagina.click('#lot-pool .opcao[data-pool="18"]');
@@ -223,15 +223,20 @@ try {
   const conhecidas = pisos.filter((l) => l.exato && l.jogos > 1);
   const cravadas = conhecidas.filter((l) => l.piso === l.jogos);
   marcar(
-    conhecidas.length === 15 && cravadas.length === 15,
+    conhecidas.length === 27 && cravadas.length === 27,
     'onde o mínimo é conhecido, o piso da tela é o próprio mínimo',
     `${cravadas.length} de ${conhecidas.length} combinações cravadas`
   );
 
+  // A cota de contagem erra por muito quase sempre — e acerta em cheio numa
+  // família só, a dos jogos de 15 dezenas. Ali cada cartela contém **um**
+  // sorteio, o igual a ela, então "sorteios ÷ sorteios por cartela" não é
+  // aproximação nenhuma: é a conta certa, e o mínimo é `C(P,15)`.
   const frouxas = conhecidas.filter((l) => l.contagem < l.jogos);
+  const justas = conhecidas.filter((l) => l.contagem === l.jogos);
   marcar(
-    frouxas.length === conhecidas.length,
-    'e a cota de contagem sozinha ficaria abaixo do mínimo em todas elas',
+    frouxas.length === 17 && justas.length === 10 && justas.every((l) => l.jogo === 15),
+    'e a cota de contagem fica abaixo do mínimo em 17 delas — só nos jogos de 15 ela acerta',
     `pior caso: ${Math.max(...frouxas.map((l) => Math.round((l.jogos / l.contagem - 1) * 100)))}% de folga`
   );
 
@@ -294,9 +299,9 @@ try {
     return prontas;
   });
   marcar(
-    prontidao === 44,
-    '44 das 45 combinações têm o tamanho conhecido antes do toque',
-    `${prontidao} de 45`
+    prontidao === 61,
+    '61 das 66 combinações têm o tamanho conhecido antes do toque',
+    `${prontidao} de 66`
   );
 
   await pagina.click('#lot-pool .opcao[data-pool="18"]');
@@ -330,7 +335,7 @@ try {
   const comprovadas = formula.filter((l) => l.exato);
   const naMosca = comprovadas.filter((l) => l.construcao === l.jogos);
   marcar(
-    comprovadas.length === 24 && naMosca.length === 24,
+    comprovadas.length === 38 && naMosca.length === 38,
     'nas 24 combinações de mínimo comprovado, a fórmula acerta o mínimo',
     `${naMosca.length} de ${comprovadas.length}`
   );
@@ -557,15 +562,26 @@ try {
   // A tabela vem preenchida. Antes eram sete campos vazios, e sem número
   // nenhum a tela não podia dizer se o fechamento paga — que é a pergunta que
   // decide a compra.
-  const cotacoes = await pagina.$$eval('#lot-cotacao input', (i) => i.map((x) => x.value));
-  marcar(
-    cotacoes.slice(0, 7).join(',') === '7000,1300,300,100,30,10,4',
-    'a cotação vem preenchida, de 17 a 23 dezenas',
-    cotacoes.slice(0, 7).join(' · ')
+  //
+  // Por rótulo: os tamanhos vão de 15 a 25, e a tabela da banca cobria 17 a 23.
+  const cotacoes = await pagina.evaluate(() =>
+    Object.fromEntries(
+      [...document.querySelectorAll('#lot-cotacao label')].map((l) => [
+        l.textContent.trim().split(' ')[0],
+        l.querySelector('input').value,
+      ])
+    )
   );
   marcar(
-    cotacoes.slice(7).every((v) => v === ''),
-    'e 24 e 25 ficam vazios — banca nenhuma aceita cartela desse tamanho'
+    [17, 18, 19, 20, 21, 22, 23].map((k) => cotacoes[k]).join(',') ===
+      '7000,1300,300,100,30,10,4',
+    'a cotação vem preenchida, de 17 a 23 dezenas',
+    [17, 18, 19, 20, 21, 22, 23].map((k) => cotacoes[k]).join(' · ')
+  );
+  marcar(
+    [15, 16, 24, 25].every((k) => cotacoes[k] === '') && Object.keys(cotacoes).length === 11,
+    'e os tamanhos que a tabela dessa banca não cobria ficam vazios — 15, 16, 24 e 25',
+    `${Object.keys(cotacoes).length} campos, de ${Object.keys(cotacoes)[0]} a ${Object.keys(cotacoes).at(-1)} dezenas`
   );
 
   const economia = (await pagina.locator('#lot-economia').textContent()).trim();
@@ -593,18 +609,31 @@ try {
   // esconde. 7.000× numa cartela de 17 parece generoso e paga 29% do neutro;
   // 4× numa de 23 parece miséria e paga 60%. Sem a régua, a intuição escolhe
   // justamente a aposta em que a banca cobra mais caro.
-  const reguas = await pagina.$$eval('.regua-cotacao', (r) =>
-    r.map((x) => x.textContent.replace(/\s+/g, ' ').trim())
-  );
+  // Por rótulo, e não por posição: a lista começou em 17 e passou a começar em
+  // 15, e três testes quebraram de uma vez por contarem a partir do zero.
+  const reguaDe = async (jogo) =>
+    (
+      await pagina.evaluate((k) => {
+        const rotulo = [...document.querySelectorAll('#lot-cotacao label')].find((l) =>
+          l.textContent.startsWith(`${k} dezenas`)
+        );
+        return rotulo.querySelector('.regua-cotacao').textContent;
+      }, jogo)
+    )
+      .replace(/\s+/g, ' ')
+      .trim();
+
+  const regua17 = await reguaDe(17);
+  const regua23 = await reguaDe(23);
   marcar(
-    /neutro seria 24\.035×/.test(reguas[0]) && /29,1%/.test(reguas[0]),
+    /neutro seria 24\.035×/.test(regua17) && /29,1%/.test(regua17),
     'cada cotação vem com a régua: quanto seria neutro e quanto a oferta paga',
-    reguas[0].slice(0, 76)
+    regua17.slice(0, 76)
   );
   marcar(
-    /neutro seria 6,7×/.test(reguas[6]),
+    /neutro seria 6,7×/.test(regua23),
     'e o neutro sai com decimal onde ele decide — 6,7× e não 7× nas de 23',
-    reguas[6].slice(0, 60)
+    regua23.slice(0, 60)
   );
 
   // A conferência independente: a régua tem de bater com o retorno esperado,
@@ -635,9 +664,9 @@ try {
   // Uma oferta acima do neutro é reconhecida como tal. Nenhuma banca real
   // paga isso, e é justamente por isso que a tela precisa saber dizer: sem
   // esse ramo, a régua viraria uma escala que só desce.
-  const campo23 = pagina.locator('#lot-cotacao input').nth(6);
+  const campo23 = pagina.locator('#lot-cotacao label', { hasText: /^23 dezenas/ }).locator('input');
   await campo23.fill('7');
-  const acima = (await pagina.locator('.regua-cotacao').nth(6).textContent()).replace(/\s+/g, ' ');
+  const acima = await reguaDe(23);
   marcar(
     /acima do neutro/.test(acima) && /105,0%/.test(acima),
     'e uma oferta acima do neutro é reconhecida, em vez de ficar na faixa boa',
@@ -723,8 +752,8 @@ try {
     vereditos.conta.lucra === 23 &&
       vereditos.conta.possivel === 4 &&
       vereditos.conta.impossivel === 15 &&
-      vereditos.conta['sem-cotacao'] === 3,
-    'as 45 combinações se repartem em 23 que pagam, 4 possíveis e 15 que não',
+      vereditos.conta['sem-cotacao'] === 24,
+    'as 66 combinações se repartem em 23 que pagam, 4 possíveis, 15 que não e 24 sem cotação',
     JSON.stringify(vereditos.conta)
   );
 

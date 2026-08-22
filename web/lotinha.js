@@ -62,8 +62,20 @@
 
 export const UNIVERSO = 25;
 export const SORTEIO = 15;
-export const MENOR_POOL = 17;
-export const MAIOR_POOL = 25;
+
+/**
+ * O menor pool, e também o menor tamanho de jogo — são o mesmo número por
+ * necessidade.
+ *
+ * Uma cartela com menos de 15 dezenas não pode conter as 15 sorteadas, então
+ * abaixo daqui não existe aposta nesta modalidade. E com exatamente 15 ela
+ * contém um único sorteio: o que for igual a ela. É a aposta simples, a mais
+ * comum que existe, e por muito tempo esta ferramenta não sabia representá-la —
+ * começava em 17 porque foi ali que a conversa começou, não porque a matemática
+ * mandasse.
+ */
+export const MENOR_POOL = SORTEIO;
+export const MAIOR_POOL = UNIVERSO;
 
 /** Menor garantia de acertos oferecida — é a faixa mais baixa que a Lotofácil paga. */
 export const MENOR_GARANTIA = 11;
@@ -370,7 +382,7 @@ function garantiaDoAgrupamento(b, g, a) {
  *    sozinha até aqui.
  *
  * O ganho de somar as três é grande e foi medido conferindo sorteio a sorteio
- * as 45 combinações da modalidade: em 25 dezenas com jogos de 19 a construção
+ * as 66 combinações da modalidade: em 25 dezenas com jogos de 19 a construção
  * por grupos pede 177.100 jogos e esta pede 6.072 — vinte e nove vezes menos,
  * sem busca nenhuma. E nas 15 combinações de mínimo conhecido ela **alcança o
  * mínimo**, as 15.
@@ -510,7 +522,7 @@ const TETO_PARA_CONSTRUIR = 25_000;
  * O fechamento montado por fórmula, sem busca nenhuma.
  *
  * Esta é a resposta rápida, e na maior parte da modalidade ela é também a
- * resposta certa: em 24 das 45 combinações a construção **é** o mínimo
+ * resposta certa: em 38 das 66 combinações a construção **é** o mínimo
  * comprovado. Medido em 25 dezenas com jogos de 22: a fórmula dá 78 jogos num
  * piscar, e o guloso do motor gasta seis segundos para chegar a 139.
  *
@@ -525,7 +537,7 @@ const TETO_PARA_CONSTRUIR = 25_000;
  *
  * A garantia vem do argumento, não de uma varredura. O validador independente
  * do aplicativo confere assim mesmo, porque um argumento certo não protege
- * contra um erro de digitação — e conferiu: as 45 combinações da modalidade
+ * contra um erro de digitação — e conferiu: as 66 combinações da modalidade
  * foram varridas sorteio a sorteio, sem um único descoberto.
  *
  * Devolve `null` quando não há construção fechada para o pedido — garantia
@@ -627,7 +639,7 @@ export async function carregarBanco() {
  * armazenamento: guardar 6 números em vez de 17 corta o arquivo em 65%.
  *
  * O ganho não é o arquivo em si, e sim o que ele permite: com o mesmo espaço
- * cabem 44 das 45 combinações da modalidade prontas de fábrica, contra as 28 de
+ * cabem 44 das 66 combinações da modalidade prontas de fábrica, contra as 28 de
  * antes. Quanto mais vem pronto, menos o celular precisa calcular.
  */
 export async function fechamentoPara(pool, jogo, dezenas) {

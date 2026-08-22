@@ -761,7 +761,7 @@ function pintarCartelas() {
  * A modalidade inteira, numa tela só.
  *
  * Escolhem-se de 17 a 23 dezenas entre 25; ganha-se quando as 15 sorteadas caem
- * todas dentro do conjunto escolhido. São 45 combinações de (pool, tamanho do
+ * todas dentro do conjunto escolhido. São 66 combinações de (pool, tamanho do
  * jogo), e o fechamento de cada uma já vem pronto no aplicativo — conferido
  * sorteio a sorteio antes de ser gravado.
  *
@@ -1482,7 +1482,7 @@ function lotPintarEconomia() {
 }
 
 /*
- * A matriz das 45 combinações — agora com a coluna que decide a compra.
+ * A matriz das 66 combinações — agora com a coluna que decide a compra.
  *
  * Escolher aqui é escolher com quanto se vai gastar e o que se pode receber, e
  * até agora a tabela só falava do lado combinatório. A coluna "paga?" põe o
@@ -1753,9 +1753,9 @@ ligar('lot-iniciar', 'click', async () => {
 
     // ── 2. a fórmula, quando o banco não tem ──
     //
-    // Com o banco cobrindo 44 das 45 combinações, este ramo virou a rede de
+    // Com o banco cobrindo 44 das 66 combinações, este ramo virou a rede de
     // segurança: é o que responde se o banco não puder ser lido. Continua
-    // valendo a pena tê-lo — a construção sai em milissegundos e em 24 das 45
+    // valendo a pena tê-lo — a construção sai em milissegundos e em 38 das 66
     // combinações ela **é** o mínimo comprovado.
     //
     // Medido em 25 dezenas com jogos de 22: a fórmula dá 78 jogos em menos de

@@ -223,14 +223,25 @@ main { padding: 8px 16px 0; }
   border-color: var(--acento);
 }
 
+/*
+ * A fileira de opções quebra em linhas.
+ *
+ * Sem `wrap`, `flex: 1` espremia os botões até o texto encostar na borda e,
+ * passado esse ponto, a fileira simplesmente transbordava — os últimos ficavam
+ * fora da tela e não havia como tocá-los. Aconteceu quando o pool passou a ir
+ * de 15 a 25: onze botões não cabem em 320px, e "24" e "25" saíram do alcance.
+ *
+ * Quebrando, cabem quantos forem, e `min-width` mantém cada um num alvo que o
+ * polegar acerta.
+ */
 .opcoes {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(44px, 1fr));
   gap: 8px;
   margin-top: 10px;
 }
 
 .opcao {
-  flex: 1;
   min-height: 46px;
   border: 1px solid var(--borda);
   background: var(--fundo-campo);

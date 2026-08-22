@@ -235,12 +235,18 @@ verdade é 6, a divisão diz 3.
 
 #### O que é sabido e o que está em aberto
 
-Das 45 combinações de dezenas e tamanho de jogo: **9 são triviais** (jogo = pool,
-aposta única), **15 têm mínimo exato** — `a = 1` dá sempre 16 jogos, qualquer que
-seja o pool, e `a = 2` sai do teorema de Turán — e **21 são problema em aberto na
-matemática**.
+Das 66 combinações de dezenas e tamanho de jogo, **38 têm mínimo comprovado** e
+**28 são problema em aberto na matemática**. As comprovadas se repartem em quatro
+famílias:
 
-Nessas 21 é que o motor persistente trabalha de verdade. O banco embutido traz o
+| família | quantas | por quê |
+|---|---:|---|
+| jogo = pool (`a = 0`) | 11 | aposta única, não há o que fechar |
+| falta uma dezena (`a = 1`) | 10 | são sempre `15 + r` jogos, qualquer que seja o pool |
+| faltam duas (`a = 2`) | 9 | teorema de Turán |
+| jogo = 15 | 8 | cada cartela contém **um** sorteio, o igual a ela: são `C(P,15)` |
+
+Nas 28 em aberto é que o motor persistente trabalha de verdade. O banco embutido traz o
 melhor fechamento encontrado até agora, com o piso conhecido ao lado, e o usuário
 pode deixar o motor procurando um menor.
 
@@ -339,7 +345,7 @@ tenta, nesta ordem:
 
 A diferença é grande. Em 25 dezenas com jogos de 22, o motor gastava seis
 segundos e 39 MB para chegar a 139 jogos; a fórmula dá **78** em menos de um
-milissegundo. Em 24 das 45 combinações a construção **é** o mínimo comprovado —
+milissegundo. Em 38 das 66 combinações a construção **é** o mínimo comprovado —
 não há o que melhorar.
 
 Por isso, nos pools de 24 e 25 ele deixou de partir sozinho: o fechamento aparece
@@ -354,7 +360,7 @@ arquivo em 65%, e o banco inteiro em 69%.
 
 É a mesma troca de ponto de vista que dá os valores exatos da modalidade, agora
 aplicada ao armazenamento. E o ganho não é o arquivo: é o que ele permite. No
-mesmo espaço cabem **44 das 45 combinações** prontas de fábrica, contra as 28 de
+mesmo espaço cabem **44 das 66 combinações** prontas de fábrica, contra as 28 de
 antes. Quanto mais vem pronto, menos o celular precisa calcular.
 
 A que fica de fora é `(25,17)`, com 81.556 jogos — quase 2 MiB, para descrever
