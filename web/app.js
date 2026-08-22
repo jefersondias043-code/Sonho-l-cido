@@ -56,9 +56,6 @@ const $ = (id) => document.getElementById(id);
  */
 function pecasQueFaltam() {
   const daLotinha = [
-    'melhorParaGarantia',
-    'tetoDoRetorno',
-    'garantiaQuePaga',
     'previsao',
     'minimo',
     'construir',
@@ -67,7 +64,7 @@ function pecasQueFaltam() {
     'veredito',
   ].filter((nome) => typeof lotinha[nome] !== 'function');
 
-  const daPagina = ['lot-meta', 'lot-pool', 'lot-matriz', 'chk-conferir']
+  const daPagina = ['lot-pool', 'lot-grade', 'lot-iniciar', 'chk-conferir']
     .filter((id) => !$(id))
     .map((id) => `#${id}`);
 
@@ -190,7 +187,6 @@ let referenciaDaBusca = null;
 let inicioDoTrecho = 0;
 let tempoAcumulado = 0;
 let cronometro = null;
-
 
 /* ─────────── formatação ─────────── */
 
@@ -924,19 +920,13 @@ function lotMontar() {
       if (v > 0) lotCotacao[k] = v;
       else delete lotCotacao[k];
       medir();
-      lotMontarMatriz();
       lotPintarEconomia();
-      // A resposta do knob sai de `melhorParaGarantia`, que lê a cotação: sem
-      // repintar aqui, ela continuaria mostrando o fechamento escolhido pelos
-      // números antigos.
-      lotPintarMeta();
     });
     rotulo.appendChild(campo);
     rotulo.appendChild(regua);
     cot.appendChild(rotulo);
   }
 
-  lotMontarMatriz();
   lotPintarTudo();
 }
 
@@ -1012,87 +1002,6 @@ function lotMontarExigencias() {
     b.setAttribute('aria-pressed', String(ativa));
   });
 
-  const knob = $('lot-meta');
-  if (knob && Number(knob.value) !== lotPremiadas && lotPremiadas <= Number(knob.max)) {
-    knob.value = String(lotPremiadas);
-  }
-  lotPintarMeta();
-}
-
-/**
- * O knob da meta, e o que ele descobre.
- *
- * ## Por que ele não é um ajuste da combinação aberta
- *
- * O teto de garantia é **por combinação**: `C(P−15, k−15)`, os jogos distintos
- * capazes de conter um mesmo sorteio. Em 23 dezenas com jogos de 21 são 28, e
- * pedir trinta ali não é caro — não existe. O campo que havia antes cortava no
- * teto e devolvia 28, o que parecia um limite do aplicativo e era um limite
- * daquela combinação.
- *
- * O knob pergunta outra coisa: **quero trinta cartelas premiadas — onde isso é
- * melhor?** E aí a resposta existe: 22 dezenas com jogos de 19, cujo teto é 35.
- * A combinação inteira é trocada, porque a meta é do usuário e a configuração é
- * consequência dela.
- */
-function lotPintarMeta() {
-  const alvo = $('lot-meta-resposta');
-  const knob = $('lot-meta');
-  if (!alvo || !knob) return;
-
-  const meta = Number(knob.value);
-  const rotulo = $('lot-meta-valor');
-  if (rotulo) rotulo.textContent = milhares(meta);
-  const legenda = rotulo?.parentElement;
-  if (legenda) {
-    legenda.innerHTML =
-      `Ou arraste até a meta: <b id="lot-meta-valor">${milhares(meta)}</b> ` +
-      `cartela${meta === 1 ? '' : 's'} premiada${meta === 1 ? '' : 's'}`;
-  }
-
-  const { melhor, opcoes } = lotinha.melhorParaGarantia(meta, { cotacao: lotCotacao });
-  if (!melhor) {
-    alvo.innerHTML =
-      `<em>Não existe fechamento com ${milhares(meta)} cartelas premiadas: em ` +
-      'nenhuma combinação há tantos jogos distintos capazes de conter um mesmo ' +
-      'sorteio.</em>';
-    return;
-  }
-
-  const dinheiro = (v) =>
-    v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-  const vezes = (v) => `${v < 100 ? v.toFixed(2).replace('.', ',') : milhares(v)}×`;
-  const valor = lotValorDoJogo();
-  const jaEstou = melhor.pool === lotPool && melhor.jogo === lotJogo && lotPremiadas === meta;
-
-  alvo.innerHTML =
-    `<b>${melhor.pool} dezenas · jogos de ${melhor.jogo}</b> — ` +
-    `${milhares(melhor.quantidade)} cartelas, ${dinheiro(melhor.quantidade * valor)}, ` +
-    `prêmio garantido de ${dinheiro(melhor.premio * valor)} ` +
-    `(<b class="${melhor.retorno > 1 ? 'paga' : 'nao-paga'}">${vezes(melhor.retorno)}</b>). ` +
-    `<em>É a melhor das ${milhares(opcoes.length)} combinações que entregam ` +
-    `${milhares(meta)} premiada${meta === 1 ? '' : 's'}. O pool acerta em ` +
-    `${(melhor.chanceDoPool * 100).toFixed(2).replace('.', ',')}% dos concursos, e o retorno ` +
-    `médio por real continua ${dinheiro(melhor.retornoEsperado)}.</em>` +
-    (jaEstou
-      ? ''
-      : `<button type="button" class="secundario" id="lot-meta-aplicar">Usar ${melhor.pool}/${melhor.jogo} com ${milhares(meta)} premiadas</button>`);
-
-  // Sem botão quando a configuração aberta já é a da meta: não há o que aplicar,
-  // e pedir o ouvinte assim mesmo faria `ligar` reclamar de um elemento que
-  // deliberadamente não existe.
-  if (jaEstou) return;
-
-  ligar('lot-meta-aplicar', 'click', () => {
-    lotPool = melhor.pool;
-    lotJogo = melhor.jogo;
-    lotPremiadas = meta;
-    lotGarantia = lotinha.SORTEIO;
-    if (lotDezenas.size > lotPool) lotDezenas = new Set([...lotDezenas].slice(0, lotPool));
-    lotEsquecerFechamento();
-    lotPintarTudo();
-    $('lot-grade').scrollIntoView({ behavior: 'smooth', block: 'center' });
-  });
 }
 
 /**
@@ -1483,74 +1392,6 @@ function lotPintarEconomia() {
     `cada vez; nunca a média.</p>`;
 }
 
-/*
- * A matriz das 66 combinações — agora com a coluna que decide a compra.
- *
- * Escolher aqui é escolher com quanto se vai gastar e o que se pode receber, e
- * até agora a tabela só falava do lado combinatório. A coluna "paga?" põe o
- * outro lado ao alcance do olho: em catorze das quarenta e cinco, o mínimo
- * matemático já custa mais que o prêmio — e essas ficam apagadas, porque
- * nenhuma quantidade de busca as salva.
- *
- * A quantidade mostrada passa a ser a que o aplicativo **entrega**, e não mais
- * o piso: era o piso que aparecia nas combinações em aberto, e comparar um piso
- * com um prêmio daria um veredito que a compra não cumpre.
- */
-/** O valor de cada jogo, saneado — o mesmo que a economia usa. */
-function lotValorDoJogo() {
-  const digitado = Number($('lot-valor').value);
-  return Number.isFinite(digitado) && digitado > 0 ? digitado : 1;
-}
-
-function lotMontarMatriz() {
-  const linhas = lotinha
-    .matriz()
-    .map((l) => {
-      const previsao = lotinha.previsao(l.pool, l.jogo);
-      const entrega = previsao.quantidade;
-      const quantos = entrega === null ? `≥ ${milhares(l.piso)}` : milhares(entrega);
-      const situacao = l.jogo === l.pool ? 'aposta única' : l.exato ? 'exato' : 'em aberto';
-
-      const v = lotinha.veredito({
-        jogo: l.jogo,
-        quantidade: entrega,
-        piso: l.piso,
-        cotacao: lotCotacao,
-      });
-
-      // A coluna respondia a pergunta errada. Ela dizia se a combinação paga
-      // **com uma cartela premiada**, e rotulava de "não paga" o que só não
-      // paga com uma — 23/22 vira lucro com duas, e todo o pool 24 com jogos de
-      // 20 a 23 vira lucro pedindo mais. O que interessa é se existe alguma
-      // garantia em que a dupla paga, e qual é a primeira delas.
-      const quando =
-        v.classe === 'sem-cotacao'
-          ? null
-          : lotinha.garantiaQuePaga(l.pool, l.jogo, lotCotacao);
-      const semSalvacao = v.classe !== 'sem-cotacao' && quando === null;
-      const paga =
-        v.classe === 'sem-cotacao'
-          ? '<td class="sem-cotacao">—</td>'
-          : quando === null
-            ? '<td class="nao-paga">não paga</td>'
-            : quando.premiadas === 1
-              ? '<td class="paga">paga</td>'
-              : `<td class="quase">paga com ${milhares(quando.premiadas)}</td>`;
-
-      return (
-        `<tr class="${semSalvacao ? 'linha-apagada' : ''}">` +
-        `<td>${l.pool}</td><td>${l.jogo}</td><td>${quantos}</td>` +
-        `<td class="${l.exato ? '' : 'aberto'}">${situacao}</td>` +
-        `<td>1 em ${milhares(1 / lotinha.chanceDe(l.jogo))}</td>${paga}</tr>`
-      );
-    })
-    .join('');
-
-  $('lot-matriz').innerHTML =
-    '<thead><tr><th>pool</th><th>jogo</th><th>jogos</th><th>mínimo</th>' +
-    '<th>chance de 1 jogo</th><th>paga?</th></tr></thead><tbody>' + linhas + '</tbody>';
-}
-
 ligar('lot-limpar', 'click', () => {
   lotDezenas.clear();
   lotEsquecerFechamento();
@@ -1568,28 +1409,8 @@ ligar('lot-sortear', 'click', () => {
   lotPintarTudo();
 });
 
-ligar('lot-valor', 'input', () => {
-  lotPintarEconomia();
-  lotPintarMeta();
-});
+ligar('lot-valor', 'input', lotPintarEconomia);
 
-/*
- * O knob da meta.
- *
- * `input` repinta a resposta enquanto o dedo arrasta — é o que faz o controle
- * valer a pena, porque o usuário vê o fechamento mudar de combinação ao passar
- * pelos tetos. Aplicar de verdade fica no botão que a resposta traz: trocar o
- * pool no meio de um arrasto apagaria a seleção de dezenas a cada pixel.
- */
-ligar('lot-meta', 'input', lotPintarMeta);
-
-/**
- * Carrega o fechamento pronto, confere, mostra — e só então oferece o motor.
- *
- * A ordem importa. O banco entrega a solução na hora, sem cálculo; o validador
- * independente confirma a cobertura sem consultar quem a produziu; e a
- * otimização é um passo separado, que o usuário decide se quer.
- */
 ligar('lot-iniciar', 'click', async () => {
   if (lotDezenas.size !== lotPool) return;
 
@@ -1777,55 +1598,6 @@ ligar('lot-conferir', 'click', async () => {
   lotPintarEconomia();
 });
 
-ligar('lot-simular', 'click', () => {
-  if (!lotFechamento) return;
-
-  const numeros = ($('lot-resultado').value.match(/\d+/g) ?? []).map(Number);
-  const destino = $('lot-simulacao');
-  destino.hidden = false;
-
-  if (numeros.length !== lotinha.SORTEIO) {
-    destino.innerHTML = `<b>Digite exatamente 15 dezenas.</b> <em>Você digitou ${numeros.length}.</em>`;
-    return;
-  }
-
-  // Um sorteio da Lotofácil são 15 dezenas **distintas** entre 1 e 25. Sem
-  // estas duas checagens, digitar "1 1 1 …" simulava um sorteio de uma dezena
-  // só, e digitar 99 simulava uma dezena que não existe — nos dois casos com
-  // uma resposta de aparência normal, que é o pior jeito de errar.
-  const foraDoUniverso = numeros.filter((n) => n < 1 || n > lotinha.UNIVERSO);
-  if (foraDoUniverso.length) {
-    destino.innerHTML =
-      `<b>Dezena fora do intervalo.</b> <em>A Lotofácil vai de 1 a ${lotinha.UNIVERSO}, ` +
-      `e você digitou ${foraDoUniverso.join(', ')}.</em>`;
-    return;
-  }
-
-  const distintas = new Set(numeros);
-  if (distintas.size !== numeros.length) {
-    const repetidas = [...new Set(numeros.filter((n, i) => numeros.indexOf(n) !== i))];
-    destino.innerHTML =
-      `<b>Dezena repetida.</b> <em>Um sorteio não repete dezena, e ` +
-      `${repetidas.join(', ')} apareceu mais de uma vez.</em>`;
-    return;
-  }
-
-  const { distribuicao, comQuinze } = lotinha.simular(lotFechamento, numeros, lotGarantia);
-  const faixas = [...distribuicao.entries()].sort((a, b) => b[0] - a[0]);
-
-  destino.innerHTML =
-    (comQuinze.length
-      ? `<b>${comQuinze.length} jogo${comQuinze.length > 1 ? 's' : ''} com 15 acertos.</b> ` +
-        `<em>Jogo ${comQuinze.map((p) => p.indice).join(', ')}.</em>`
-      : `<b>Nenhum jogo com 15.</b> <em>Nesta modalidade só 15 paga — as faixas ` +
-        `abaixo mostram o quão perto se chegou, não prêmio.</em>`) +
-    '<div class="faixas">' +
-    faixas
-      .map(([acertos, quantos]) => `<span><b>${quantos}</b> com ${acertos}</span>`)
-      .join('') +
-    '</div>';
-});
-
 aoIniciar('a tela da Lotinha', lotMontar);
 
 // O banco embutido, buscado assim que a tela existe.
@@ -1842,9 +1614,6 @@ lotinha
   .then(() => {
     lotPintarExplicacao();
     lotPintarEconomia();
-    // A matriz mostra a quantidade entregue, que só se conhece com o banco na
-    // mão: sem esta repintura ela ficaria com os números da fórmula.
-    lotMontarMatriz();
   })
   .catch(() => {});
 

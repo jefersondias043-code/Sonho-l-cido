@@ -174,10 +174,11 @@ try {
   // faltasse, os ouvintes não existiriam e a tela não reagiria a nada.
   let offlineUtilizavel = true;
   try {
-    // A matriz das 66 combinações é desenhada por `lotinha.js`, importado por
-    // `app.js` — se o módulo faltasse no cache, a tabela ficaria vazia.
+    // Os onze botões de pool são desenhados a partir de `lotinha.MENOR_POOL` e
+    // `MAIOR_POOL`, importados de `lotinha.js` — se o módulo faltasse no cache,
+    // a fileira ficaria vazia.
     await pagina.waitForFunction(
-      () => document.querySelectorAll('#lot-matriz tbody tr').length === 66,
+      () => document.querySelectorAll('#lot-pool .opcao').length === 11,
       undefined,
       { timeout: 10000 }
     );
@@ -228,8 +229,8 @@ try {
   // O teste serve a mistura de propósito e exige as duas defesas: perceber
   // antes de usar, e não recarregar para sempre quando o remendo não resolve.
   const semAsNovas = lotinhaOriginal
-    .replace(/export function garantiaQuePaga/, 'function garantiaQuePagaAntiga')
-    .replace(/export function melhorConfiguracao/, 'function melhorConfiguracaoAntiga');
+    .replace(/export function veredito/, 'function vereditoAntigo')
+    .replace(/export function previsao/, 'function previsaoAntiga');
   await writeFile(caminhoLotinha, semAsNovas);
 
   const pagina2 = await contexto.newPage();

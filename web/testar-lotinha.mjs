@@ -122,12 +122,6 @@ try {
   const quantosNumeros = await pagina.locator('#lot-grade .numero').count();
   marcar(quantosNumeros === 25, 'as 25 dezenas do universo estão na tela');
 
-  const linhasMatriz = await pagina.locator('#lot-matriz tbody tr').count();
-  marcar(linhasMatriz === 66, 'a matriz cobre as 66 combinações da modalidade', `${linhasMatriz} linhas`);
-
-  const emAberto = await pagina.locator('#lot-matriz td.aberto').count();
-  marcar(emAberto === 28, 'e marca as 28 em que o mínimo é problema aberto', `${emAberto} marcadas`);
-
   // ─── 2. a seleção é do usuário ───
   await pagina.click('#lot-pool .opcao[data-pool="18"]');
   marcar(await pagina.locator('#lot-iniciar').isDisabled(), 'nada começa sem escolher as dezenas');
@@ -818,29 +812,6 @@ try {
   await pagina.click('.aba[data-painel="lotinha"]');
   await pagina.waitForSelector('#lotinha.ativo');
 
-  // ─── 7. o simulador ───
-  await pagina.locator('#lot-simulador-cartao summary').click();
-  // Um sorteio dentro do pool: as 15 primeiras escolhidas. Tem de premiar.
-  await pagina.fill('#lot-resultado', ESCOLHIDAS.slice(0, 15).join(' '));
-  await pagina.click('#lot-simular');
-  const dentro = (await pagina.locator('#lot-simulacao').textContent()).trim();
-  marcar(
-    /com 15 acertos/.test(dentro),
-    'o simulador premia um sorteio que cai dentro do pool',
-    dentro.replace(/\s+/g, ' ').slice(0, 66)
-  );
-
-  // E um que não cai: troca uma dezena por outra de fora.
-  const deFora = [3, 6, 9, 12].find((n) => !ESCOLHIDAS.includes(n));
-  await pagina.fill('#lot-resultado', [...ESCOLHIDAS.slice(0, 14), deFora].join(' '));
-  await pagina.click('#lot-simular');
-  const naoCai = (await pagina.locator('#lot-simulacao').textContent()).trim();
-  marcar(
-    /Nenhum jogo com 15/.test(naoCai),
-    'e não premia um sorteio que sai do pool',
-    naoCai.replace(/\s+/g, ' ').slice(0, 66)
-  );
-
   // ─── 8. garantir mais de uma cartela premiada ───
   //
   // A funcionalidade e a surpresa que ela guarda: num pool de 18 com jogos de
@@ -1059,27 +1030,6 @@ try {
   // Cada cartela de 18 contém C(18,15) = 816 dos C(25,15) sorteios, cobrir todos
   // `r` vezes exige N ≥ r · 4.006 cartelas, e o retorno 1300r/N fica preso
   // abaixo de 0,325× — para qualquer N, qualquer garantia, qualquer algoritmo.
-  const tetos = await pagina.evaluate(() =>
-    import('./lotinha.js').then((lot) => ({
-      pool25: [17, 18, 19, 20, 21, 22, 23].map((jogo) => ({
-        jogo,
-        teto: lot.tetoDoRetorno(25, jogo),
-      })),
-      oCaso: lot.tetoDoRetorno(25, 18),
-      vinteQuatro: lot.tetoDoRetorno(24, 23),
-    }))
-  );
-  marcar(
-    tetos.pool25.every((l) => l.teto < 1),
-    'nenhuma das sete combinações do pool 25 pode pagar, com garantia nenhuma',
-    tetos.pool25.map((l) => `${l.jogo}:${l.teto.toFixed(2)}`).join(' ')
-  );
-  marcar(
-    Math.abs(tetos.oCaso - 0.3245) < 0.001,
-    'e o 25/18 devolve no máximo R$ 0,32 por real, que é o teto dele',
-    tetos.oCaso.toFixed(4)
-  );
-
   // O outro lado da mesma conta: o pool 24 com jogos de 23 era rotulado de
   // impossível porque o aplicativo só olhava uma cartela premiada. Com nove,
   // são as 24 cartelas que cabem no pool, todo sorteio deixa nove dezenas de
@@ -1120,51 +1070,6 @@ try {
     `${vinteQuatro.cobertos} de ${vinteQuatro.total}, pior caso ${vinteQuatro.pior}`
   );
 
-  // O melhor fechamento de cada pool não é "o melhor que achamos": é o melhor
-  // que **existe**. São todas as `P` cartelas de `P − 1` dezenas — todo sorteio
-  // dentro do pool deixa `b = P − 15` dezenas de fora, e são exatamente essas
-  // `b` cartelas que o contêm —, e o retorno `b·mult/P` é idêntico ao teto
-  // `mult · C(P−1,15)/C(P,15)`, que nenhum fechamento passa.
-  //
-  // É por isso que um banco com garantia maior não melhoraria a escolha: não
-  // há para onde melhorar. Se este teste cair, a afirmação deixou de valer e a
-  // decisão de não guardar esses fechamentos precisa ser revista.
-  const noTeto = await pagina.evaluate(() =>
-    import('./lotinha.js').then((lot) => {
-      const linhas = [];
-      for (let pool = 18; pool <= 24; pool++) {
-        const jogo = pool - 1;
-        const mult = lot.COTACAO_PADRAO[jogo];
-        if (!mult) continue;
-        const b = pool - 15;
-        const quantidade = lot.previsao(pool, jogo, 15, b).quantidade;
-        const maiorDosMenores = Math.max(
-          0,
-          ...Array.from({ length: jogo - 17 }, (_, i) => lot.tetoDoRetorno(pool, 17 + i))
-        );
-        linhas.push({
-          pool,
-          quantidade,
-          retorno: (b * mult) / quantidade,
-          teto: lot.tetoDoRetorno(pool, jogo),
-          maiorDosMenores,
-        });
-      }
-      return linhas;
-    })
-  );
-  marcar(
-    noTeto.length === 7 &&
-      noTeto.every((l) => l.quantidade === l.pool && Math.abs(l.retorno - l.teto) < 1e-9),
-    'o melhor fechamento de cada pool são as P cartelas de P−1 dezenas, e ele encosta no teto',
-    noTeto.map((l) => `${l.pool}: ${l.quantidade} cartelas, ${l.retorno.toFixed(2)}×`).join(' · ')
-  );
-  marcar(
-    noTeto.every((l) => l.maiorDosMenores < l.teto),
-    'e nenhum tamanho de jogo menor tem teto maior, então não há o que procurar abaixo dele',
-    noTeto.map((l) => `${l.pool}: ${l.teto.toFixed(2)}× vs ${l.maiorDosMenores.toFixed(2)}×`).join(' · ')
-  );
-
   // A trava que não pode sumir: no longo prazo **nenhuma** combinação devolve o
   // que custa. O retorno esperado é `multiplicador · chance da cartela`, o
   // número de cartelas cancela na conta, e nada que a tela ofereça o altera.
@@ -1189,127 +1094,6 @@ try {
     semLucroNoLongoPrazo.total === 42 && semLucroNoLongoPrazo.positivas.length === 0,
     'nenhuma das 42 combinações cotadas tem retorno esperado positivo, porque nenhuma pode ter',
     `${semLucroNoLongoPrazo.total} conferidas, todas abaixo de R$ 1,00 por real`
-  );
-
-  // ─── 13. o knob da meta ───
-  //
-  // O teto de garantia é **por combinação**: `C(P−15, k−15)`, os jogos distintos
-  // capazes de conter um mesmo sorteio. Em 23 dezenas com jogos de 21 são 28, e
-  // pedir trinta ali não é caro — não existe. O campo que havia antes cortava em
-  // 28, e aquilo parecia um limite do aplicativo quando era um limite daquela
-  // combinação.
-  //
-  // O knob inverte a pergunta: a meta é do usuário e a combinação é consequência
-  // dela. Trinta premiadas existem — em 22 dezenas com jogos de 19, cujo teto é
-  // 35 — e a tela tem de achar isso sozinha, partindo de 23/21.
-  await pagina.click('.aba[data-painel="lotinha"]');
-  await pagina.waitForSelector('#lotinha.ativo');
-  await pagina.click('#lot-pool .opcao[data-pool="23"]');
-  await pagina.click('#lot-jogo .opcao[data-jogo="21"]');
-
-  const arrastar = async (meta) => {
-    await pagina.evaluate((n) => {
-      const knob = document.getElementById('lot-meta');
-      knob.value = String(n);
-      knob.dispatchEvent(new Event('input', { bubbles: true }));
-    }, meta);
-    await pagina.waitForTimeout(250);
-    return (await pagina.locator('#lot-meta-resposta').textContent()).replace(/\s+/g, ' ');
-  };
-
-  const knob = await pagina.evaluate(() => {
-    const k = document.getElementById('lot-meta');
-    return { min: k.min, max: k.max, tipo: k.type };
-  });
-  marcar(
-    knob.tipo === 'range' && knob.min === '1' && knob.max === '100',
-    'a meta virou um controle deslizante de 1 a 100 cartelas premiadas',
-    `${knob.tipo} de ${knob.min} a ${knob.max}`
-  );
-
-  const trinta = await arrastar(30);
-  marcar(
-    /22 dezenas · jogos de 19/.test(trinta) && /1\.540 cartelas/.test(trinta),
-    'pedir 30 premiadas em 23/21 — onde o teto é 28 — encontra 22/19, que entrega',
-    trinta.slice(0, 95)
-  );
-  marcar(
-    /10 combinações/.test(trinta),
-    'e diz de quantas combinações ela é a melhor, em vez de só apresentar uma',
-    (trinta.match(/melhor das [^.]*/) ?? [''])[0]
-  );
-  marcar(
-    /R\$ 0,36/.test(trinta),
-    'com o retorno médio por real ao lado, que a meta maior não muda',
-    (trinta.match(/retorno médio[^.]*/) ?? [''])[0]
-  );
-
-  // Aplicar troca a combinação inteira: a meta é a decisão, o resto é consequência.
-  await pagina.click('#lot-meta-aplicar');
-  await pagina.waitForTimeout(400);
-  const aplicado = await pagina.evaluate(() => ({
-    pool: document.querySelector('#lot-pool .opcao.ativa')?.textContent,
-    jogo: document.querySelector('#lot-jogo .opcao.ativa')?.textContent,
-    premiadas: document.querySelector('#lot-premiadas .opcao.ativa')?.textContent,
-  }));
-  marcar(
-    aplicado.pool === '22' && aplicado.jogo === '19' && aplicado.premiadas === '30',
-    'e aplicar a meta reconfigura pool, tamanho de jogo e garantia de uma vez',
-    `${aplicado.pool}/${aplicado.jogo} com ${aplicado.premiadas}`
-  );
-
-  // O outro extremo: 100 premiadas ainda existem, e o knob não pode prometer o
-  // que não existe.
-  const cem = await arrastar(100);
-  marcar(
-    /24 dezenas · jogos de 20/.test(cem) && /10\.626 cartelas/.test(cem),
-    'e a meta de 100 premiadas também tem resposta — 24/20, com 10.626 cartelas',
-    cem.slice(0, 80)
-  );
-  const semResposta = await pagina.evaluate(() =>
-    import('./lotinha.js').then((lot) => ({
-      teto: lot.melhorParaGarantia(1).teto,
-      acimaDoTeto: lot.melhorParaGarantia(300).melhor,
-    }))
-  );
-  marcar(
-    semResposta.teto === 252 && semResposta.acimaDoTeto === null,
-    'acima do teto da modalidade — 252 — não há configuração, e a busca devolve nada',
-    `teto ${semResposta.teto}, meta 300 devolve ${semResposta.acimaDoTeto}`
-  );
-
-  // A matriz das 66 respondia "paga?" olhando só uma cartela premiada, e
-  // mandava embora quem parasse nela: 23/22 é impossível com uma e lucra com
-  // duas; o pool 24 inteiro, de jogos de 20 a 23, lucra pedindo mais.
-  const coluna = await pagina.evaluate(() => {
-    const linhas = [...document.querySelectorAll('#lot-matriz tbody tr')];
-    const ler = (pool, jogo) => {
-      const tr = linhas.find(
-        (l) => l.children[0].textContent === String(pool) && l.children[1].textContent === String(jogo)
-      );
-      return tr ? { texto: tr.children[5].textContent, apagada: tr.classList.contains('linha-apagada') } : null;
-    };
-    return {
-      a: ler(23, 22),
-      b: ler(24, 23),
-      c: ler(25, 18),
-      d: ler(22, 20),
-    };
-  });
-  marcar(
-    /paga com 2/.test(coluna.a.texto) && !coluna.a.apagada,
-    'a matriz diz que 23/22 paga com duas premiadas, em vez de "não paga"',
-    coluna.a.texto
-  );
-  marcar(
-    /paga com 6/.test(coluna.b.texto) && !coluna.b.apagada,
-    'e que 24/23 paga com seis — o pool que acerta 40% dos concursos',
-    coluna.b.texto
-  );
-  marcar(
-    /não paga/.test(coluna.c.texto) && coluna.c.apagada && /^paga$/.test(coluna.d.texto.trim()),
-    'e continua apagando o que não paga com garantia nenhuma, como o 25/18',
-    `25/18: ${coluna.c.texto} · 22/20: ${coluna.d.texto}`
   );
 
   marcar(errosDeConsole.length === 0, 'nenhum erro no console', errosDeConsole.join(' | ').slice(0, 120));

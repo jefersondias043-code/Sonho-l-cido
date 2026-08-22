@@ -309,7 +309,15 @@ export function minimo(pool, jogo, garantia = SORTEIO, premiadas = 1) {
   return { jogos: null, exato: false, piso };
 }
 
-/** Todas as combinações da modalidade, com o que se sabe de cada uma. */
+/**
+ * Todas as combinações da modalidade, com o que se sabe de cada uma.
+ *
+ * A tabela que mostrava isto na tela saiu, mas a enumeração fica: é sobre ela
+ * que a suíte de testes afirma o que afirma — "nas 38 de mínimo comprovado a
+ * fórmula acerta", "nas 42 cotadas o retorno esperado é negativo" — e reescrever
+ * esse laço dentro de cada teste criaria uma segunda definição de quais são as
+ * combinações, que é exatamente o tipo de duplicata que sai de sincronia.
+ */
 export function matriz() {
   const linhas = [];
   for (let pool = MENOR_POOL; pool <= MAIOR_POOL; pool++) {
@@ -854,35 +862,6 @@ function bitsEm(n) {
 /* ─────────── o simulador ─────────── */
 
 /**
- * Como o fechamento se sairia contra um resultado qualquer.
- *
- * Devolve a distribuição de acertos e quais jogos premiaram. Serve para testar
- * uma estrutura contra qualquer sorteio hipotético sem esperar o próximo.
- *
- * `garantia` diz o que conta como premiado nesta simulação. Na Lotinha só o
- * jogo que contém as **15** paga; quem fechou para 12 ou 13 está mirando a
- * Lotofácil, onde essas faixas premiam. A distribuição completa vem junto de
- * qualquer forma, para mostrar o quão perto se chegou.
- */
-export function simular(jogos, resultado, garantia = SORTEIO) {
-  const sorteadas = new Set(resultado);
-  const distribuicao = new Map();
-  const premiados = [];
-  const comQuinze = [];
-
-  jogos.forEach((jogo, i) => {
-    const acertos = jogo.reduce((n, d) => n + (sorteadas.has(d) ? 1 : 0), 0);
-    distribuicao.set(acertos, (distribuicao.get(acertos) ?? 0) + 1);
-    if (acertos >= garantia) premiados.push({ indice: i + 1, acertos, jogo });
-    if (acertos === SORTEIO) comQuinze.push({ indice: i + 1, jogo });
-  });
-
-  return { distribuicao, premiados, comQuinze };
-}
-
-/* ─────────── o motor financeiro, separado do combinatório ─────────── */
-
-/**
  * A economia de um fechamento, dada a tabela de cotação do usuário.
  *
  * `cotacao` mapeia tamanho do jogo → multiplicador. Nada vem embutido: as
@@ -1018,136 +997,4 @@ export function veredito({
     // Cruzar a linha é ficar **abaixo** do prêmio, não empatar com ele.
     faltamCortar: Number.isFinite(quantidade) ? quantidade - premio + 1 : null,
   };
-}
-
-/* ─────────── escolher a configuração pelo bolso ─────────── */
-
-/**
- * O retorno que nenhum fechamento desta dupla passa, com nenhum número de
- * cartelas e nenhuma garantia.
- *
- *     teto = multiplicador · C(jogo,15) / C(pool,15)
- *
- * Sai de uma contagem só: cada cartela de `k` dezenas contém `C(k,15)` dos
- * `C(P,15)` sorteios que cabem no pool, então atender todos `r` vezes exige
- * `N ≥ r · C(P,15)/C(k,15)` cartelas, e o retorno `r·mult/N` fica preso abaixo
- * de `mult · C(k,15)/C(P,15)`. O `r` cancela — é por isso que subir a garantia
- * aproxima do teto e nunca o ultrapassa.
- *
- * ## Para que serve na prática
- *
- * Responde "isto pode pagar algum dia?" sem busca nenhuma, e a resposta é
- * definitiva. Num pool de 25 o sorteio sempre cai dentro, `C(pool,15)` é o
- * universo inteiro, e o teto vira o próprio retorno esperado: de R$ 0,29 a
- * R$ 0,60 conforme o tamanho da cartela. Nenhuma das sete combinações do pool
- * 25 chega a 1, e por isso nenhuma delas paga — com um bilhete premiado, com
- * dez, ou com todos.
- *
- * Devolve `null` quando a banca não cota jogos daquele tamanho.
- */
-export function tetoDoRetorno(pool, jogo, cotacao = COTACAO_PADRAO) {
-  const multiplicador = cotacao?.[jogo] ?? null;
-  if (!multiplicador) return null;
-  return (multiplicador * chanceDe(jogo)) / chanceDe(pool);
-}
-
-/**
- * A menor garantia em que esta dupla passa a pagar — ou `null` se nenhuma paga.
- *
- * Separa três situações que a tela mostrava como uma só:
- *
- * - **paga já com uma cartela premiada** — devolve `{ premiadas: 1, … }`;
- * - **paga, mas só pedindo mais** — é o caso de 23 dezenas com jogos de 20, que
- *   empata em 100 cartelas para um prêmio de 100× e vira lucro em 147 cartelas
- *   para 200×. Chamar isso de "não paga" mandava o usuário embora de uma
- *   combinação que paga;
- * - **não paga com garantia nenhuma** — e aí [`tetoDoRetorno`] já resolve sem
- *   varrer nada, porque o teto não depende da garantia.
- */
-export function garantiaQuePaga(pool, jogo, cotacao = COTACAO_PADRAO, garantia = SORTEIO) {
-  const multiplicador = cotacao?.[jogo] ?? null;
-  if (!multiplicador) return null;
-  if (tetoDoRetorno(pool, jogo, cotacao) <= 1) return null;
-
-  for (let premiadas = 1; premiadas <= maximoPremiadas(pool, jogo, garantia); premiadas++) {
-    const { quantidade, origem, exato } = previsao(pool, jogo, garantia, premiadas);
-    const premio = premiadas * multiplicador;
-    if (quantidade !== null && quantidade < premio) {
-      return { premiadas, quantidade, premio, origem, exato, retorno: premio / quantidade };
-    }
-  }
-  return null;
-}
-
-/**
- * Dada a **meta** de cartelas premiadas, qual fechamento a entrega melhor.
- *
- * ## A pergunta que faltava
- *
- * [`melhorConfiguracao`] varre tudo e devolve a fronteira; esta fixa o que o
- * usuário decidiu — "quero trinta cartelas premiadas" — e procura, entre todas
- * as combinações da modalidade, a que entrega isso pelo melhor preço.
- *
- * A diferença importa porque o teto de garantia é **por combinação**: são os
- * jogos distintos capazes de conter um mesmo sorteio, `C(P−15, k−15)`. Em 23
- * dezenas com jogos de 21 o teto é 28, e pedir trinta ali não é caro — é
- * impossível. Mas 22 dezenas com jogos de 19 chega a 35, e entrega as trinta.
- * Travar o usuário no teto da combinação que ele tinha aberto escondia isso.
- *
- * ## A ordem
- *
- * Com a garantia fixa, o retorno `r·mult/N` já compara custo, quantidade de
- * cartelas e pagamento numa conta só, e é a ordem primária. O empate vai para o
- * fechamento menor. A **frequência** viaja junto em cada linha, sem entrar na
- * ordem: ela é a outra metade da decisão e continua sendo do usuário — trinta
- * premiadas em 22 dezenas devolvem 5,84× e acertam o pool em 5,22% dos
- * concursos; as mesmas trinta em 23 dezenas devolvem menos e acertam 15%.
- *
- * Devolve `{ melhor, opcoes, teto }`, com `teto` sendo a maior garantia que a
- * modalidade inteira comporta — acima dela não há jogos distintos suficientes,
- * e nenhuma configuração existe.
- */
-export function melhorParaGarantia(
-  premiadas,
-  { cotacao = COTACAO_PADRAO, garantia = SORTEIO, orcamento = Infinity } = {}
-) {
-  const opcoes = [];
-  let teto = 0;
-
-  for (let pool = MENOR_POOL; pool <= MAIOR_POOL; pool++) {
-    for (let jogo = MENOR_POOL; jogo <= pool; jogo++) {
-      const multiplicador = cotacao?.[jogo] ?? null;
-      if (!multiplicador) continue;
-
-      const tetoDoPar = maximoPremiadas(pool, jogo, garantia);
-      if (tetoDoPar > teto) teto = tetoDoPar;
-      if (tetoDoPar < premiadas) continue;
-
-      const { quantidade, origem, piso, exato } = previsao(pool, jogo, garantia, premiadas);
-      if (quantidade === null || quantidade > orcamento) continue;
-
-      const premio = premiadas * multiplicador;
-      const chanceDoPool = chanceDe(pool);
-      opcoes.push({
-        pool,
-        jogo,
-        premiadas,
-        quantidade,
-        origem,
-        piso,
-        exato,
-        multiplicador,
-        premio,
-        chanceDoPool,
-        tetoDoPar,
-        retorno: premio / quantidade,
-        // Igual a `mult · chanceDe(jogo)`: nada aqui o altera, e ele é sempre
-        // menor que 1. Viaja junto para que a tela não possa esquecê-lo.
-        retornoEsperado: chanceDoPool * tetoDoRetorno(pool, jogo, cotacao),
-      });
-    }
-  }
-
-  opcoes.sort((x, y) => y.retorno - x.retorno || x.quantidade - y.quantidade);
-  return { melhor: opcoes[0] ?? null, opcoes, teto };
 }

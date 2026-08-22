@@ -85,18 +85,6 @@
     </p>
     <div class="opcoes" id="lot-premiadas"></div>
 
-    <!-- A meta, e não o ajuste. Arrastar até 30 não pergunta se a combinação
-         aberta comporta 30: procura, entre as 66, a que entrega 30 melhor, e
-         ajusta os passos acima sozinha. -->
-    <div class="knob" id="lot-meta-cartao">
-      <label class="knob-rotulo" for="lot-meta">
-        Ou arraste até a meta: <b id="lot-meta-valor">1</b> cartela premiada
-      </label>
-      <input type="range" id="lot-meta" min="1" max="100" step="1" value="1">
-      <div class="knob-escala" aria-hidden="true"><span>1</span><span>25</span><span>50</span><span>75</span><span>100</span></div>
-      <div class="referencia" id="lot-meta-resposta"></div>
-    </div>
-
     <div class="referencia" id="lot-explicacao"></div>
   </div>
 
@@ -153,29 +141,6 @@
       Checar este fechamento
     </button>
   </div>
-
-  <!-- O simulador: testar a estrutura contra qualquer resultado hipotético,
-       sem esperar sorteio nenhum. -->
-  <details class="cartao" id="lot-simulador-cartao">
-    <summary>5 · Simular um resultado</summary>
-    <p class="ajuda">
-      Digite 15 dezenas e veja como o seu fechamento teria se saído.
-    </p>
-    <textarea id="lot-resultado" rows="2" spellcheck="false"
-      placeholder="01 03 04 05 07 08 10 11 13 14 16 18 20 22 24"></textarea>
-    <button class="secundario" id="lot-simular">Simular</button>
-    <div class="referencia" id="lot-simulacao" hidden></div>
-  </details>
-
-  <details class="cartao" open>
-    <summary>As 66 combinações da modalidade</summary>
-    <p class="ajuda">
-      Todas as combinações de dezenas e tamanho de jogo, garantindo os 15
-      acertos numa cartela. Onde diz "em aberto", ninguém no mundo sabe o
-      mínimo — é onde o motor tem trabalho de verdade.
-    </p>
-    <div class="rolagem"><table class="matriz" id="lot-matriz"></table></div>
-  </details>
 
   <details class="cartao" id="lot-avancado">
     <summary>Avançado</summary>
