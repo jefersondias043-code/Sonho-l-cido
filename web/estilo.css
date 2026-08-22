@@ -695,6 +695,43 @@ main { padding: 8px 16px 0; }
   min-width: 20px;
 }
 
+/*
+ * Levas: fatias de 60 cartelas que o navegador só desenha quando chegam perto.
+ *
+ * Um fechamento grande passa de 3.000 cartelas, e calcular o desenho de todas
+ * elas de uma vez custava 430 ms de tela parada a cada repintura. Com
+ * `content-visibility: auto` o trabalho é adiado até a leva se aproximar da
+ * janela; `contain-intrinsic-size: auto` guarda a altura medida da última vez
+ * que ela apareceu, e `--reserva-leva`, que o JavaScript acerta medindo a
+ * primeira leva, vale só antes da primeira aparição.
+ *
+ * Por que 60 e por que em leva, e não cartela por cartela: marcar 3.000 cartelas
+ * uma a uma faz o navegador vigiar 3.000 fronteiras a cada rolagem, e isso, medido,
+ * derruba a rolagem de 17 ms para 26 ms por quadro. Em levas de 60 são 50
+ * fronteiras, e a rolagem volta a ser exatamente a de antes. O 60 também não é
+ * arbitrário: a página tem 720 px de largura máxima, o que dá no máximo quatro
+ * colunas de 150 px, e 60 é divisível por 1, 2, 3 e 4 — toda leva fecha um
+ * número inteiro de linhas, em qualquer tela.
+ *
+ * Nada some da página: a cartela continua no DOM, continua selecionável,
+ * continua achável pela busca do navegador e continua saindo na exportação.
+ */
+.cartelas.em-levas {
+  display: block;
+}
+
+.cartelas.em-levas .leva {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px;
+  content-visibility: auto;
+  contain-intrinsic-size: auto var(--reserva-leva, 1800px);
+}
+
+.cartelas.em-levas .leva + .leva {
+  margin-top: 8px;
+}
+
 .alternador {
   display: flex;
   align-items: center;

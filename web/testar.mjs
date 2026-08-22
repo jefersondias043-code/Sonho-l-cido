@@ -157,6 +157,14 @@ const servidor = await servir();
 const navegador = await chromium.launch();
 // Um iPhone de verdade: viewport, toque e agente de usuário do Safari móvel.
 const contexto = await navegador.newContext({ ...devices['iPhone 13'] });
+// Tarefas longas: um bloco de mais de 300 ms na linha principal é a tela parada
+// na mão de quem está usando. É assim que se mede "travou".
+await contexto.addInitScript(() => {
+  window.__longas = [];
+  new PerformanceObserver((lista) => {
+    for (const e of lista.getEntries()) window.__longas.push(Math.round(e.duration));
+  }).observe({ entryTypes: ['longtask'] });
+});
 const pagina = await contexto.newPage();
 
 const errosDeConsole = [];
@@ -509,6 +517,87 @@ try {
     /dezenas · jogos de/.test(descricao),
     'e descreve os trabalhos na língua da modalidade',
     descricao.replace(/\s+/g, ' ').slice(0, 60)
+  );
+
+  // ─── 8. um fechamento grande não trava a tela ───
+  //
+  // 22 dezenas com jogos de 17 são 3.495 cartelas, quase 11.000 elementos na
+  // página. Desenhar todas de uma vez custava 430 ms de tela parada a cada
+  // repintura e 130 ms toda vez que a aba Resultado abria. As cartelas agora vão
+  // em levas de 60 que o navegador só desenha quando chegam perto da janela —
+  // sem que nenhuma saia do documento, o que é o que este bloco confere.
+  const VINTE_E_DUAS = Array.from({ length: 22 }, (_, i) => i + 1);
+  await carregarFechamento(22, 17, VINTE_E_DUAS);
+  await pagina.click('.aba[data-painel="historico"]');
+  await pagina.waitForSelector('#historico.ativo');
+
+  await pagina.evaluate(() => {
+    window.__longas.length = 0;
+  });
+  const abriu = Date.now();
+  await pagina.click('.aba[data-painel="resultado"]');
+  await pagina.waitForSelector('#resultado.ativo');
+  await pagina.evaluate(() => document.getElementById('lista-cartelas').getBoundingClientRect());
+  const msAbrir = Date.now() - abriu;
+
+  const lista = await pagina.evaluate(() => {
+    const alvo = document.getElementById('lista-cartelas');
+    return {
+      cartelas: alvo.querySelectorAll('.cartela').length,
+      levas: alvo.querySelectorAll('.leva').length,
+      reserva: alvo.style.getPropertyValue('--reserva-leva'),
+      alturaDaPrimeira: Math.round(alvo.querySelector('.leva').getBoundingClientRect().height),
+    };
+  });
+  marcar(
+    lista.cartelas === 3495,
+    'as 3.495 cartelas do fechamento de 22 dezenas estão todas no documento',
+    `${lista.cartelas} cartelas em ${lista.levas} levas`
+  );
+  marcar(
+    lista.levas === Math.ceil(3495 / 60),
+    'repartidas em levas de 60, que é o que o navegador desenha por vez',
+    `${lista.levas} levas`
+  );
+  marcar(
+    Math.abs(parseFloat(lista.reserva) - lista.alturaDaPrimeira) <= 4,
+    'e a altura reservada para as levas que ainda não apareceram é a medida, não um chute',
+    `reserva ${lista.reserva}, leva real ${lista.alturaDaPrimeira}px`
+  );
+
+  const longasAoAbrir = await pagina.evaluate(() => window.__longas.slice());
+  marcar(
+    !longasAoAbrir.some((ms) => ms > 300) && msAbrir < 1000,
+    'abrir o Resultado com 3.495 cartelas não para a tela',
+    `${msAbrir} ms, maior bloco ${longasAoAbrir.length ? Math.max(...longasAoAbrir) : 0} ms`
+  );
+
+  // Repintar é o caminho que mais doía: acontece a cada recorde novo do motor
+  // com o painel aberto.
+  const repintura = await pagina.evaluate(() => {
+    window.__longas.length = 0;
+    const alvo = document.getElementById('lista-cartelas');
+    const html = alvo.innerHTML;
+    alvo.innerHTML = '';
+    alvo.getBoundingClientRect();
+    const t = performance.now();
+    alvo.innerHTML = html;
+    alvo.getBoundingClientRect();
+    return Math.round(performance.now() - t);
+  });
+  marcar(repintura < 300, 'e repintar a lista inteira também não', `${repintura} ms`);
+
+  // A prova de que nada foi escondido: as dezenas da última cartela da última
+  // leva, longe de qualquer viewport, continuam legíveis no documento.
+  const ultima = await pagina.evaluate(() => {
+    const todas = document.querySelectorAll('#lista-cartelas .cartela');
+    const alvo = todas[todas.length - 1];
+    return alvo.lastElementChild.textContent.trim().split(/\s+/).map(Number);
+  });
+  marcar(
+    ultima.length === 17 && ultima.every((n) => VINTE_E_DUAS.includes(n)),
+    'a última cartela, fora da tela, continua inteira e legível no documento',
+    `${ultima.length} dezenas`
   );
 
   marcar(errosDeConsole.length === 0, 'nenhum erro no console', errosDeConsole.join(' | ').slice(0, 120));

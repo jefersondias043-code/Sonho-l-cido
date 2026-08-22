@@ -149,6 +149,16 @@ let trabalhador = null;
 let fase = 'ocioso';
 let recordes = [];
 let melhorCartelas = [];
+
+/*
+ * O tamanho de uma leva de cartelas.
+ *
+ * Serve a duas coisas ao mesmo tempo: é de quantas em quantas a tela Checar
+ * revela as cartelas de uma faixa, e é o tamanho do bloco que o navegador desenha
+ * de uma vez nas listas grandes (ver `.leva` em estilo.css). Sessenta fecha um
+ * número inteiro de linhas em qualquer largura que a página alcance.
+ */
+const CARTELAS_POR_LEVA = 60;
 let travaDeTela = null;
 
 /*
@@ -342,6 +352,9 @@ function mostrarPainel(nome) {
   document.querySelectorAll('.painel').forEach((p) => {
     p.classList.toggle('ativo', p.id === nome);
   });
+  // Com o painel fechado a cartela mede zero, então a reserva das que estão fora
+  // da tela só pode ser acertada agora, com ele aberto.
+  document.getElementById(nome)?.querySelectorAll('.cartelas').forEach(ajustarReservaDasLevas);
   // A lista de fechamentos disponíveis muda enquanto o usuário usa o
   // aplicativo — carregar um fechamento novo, terminar uma busca, salvar no
   // histórico. Atualizar ao abrir a aba é o único momento em que isso importa,
@@ -768,21 +781,67 @@ function pintarRecordes() {
     .join('');
 }
 
+/**
+ * Acerta o tamanho de reserva das levas que ainda não foram desenhadas.
+ *
+ * As levas usam `content-visibility: auto`: o navegador só calcula o desenho das
+ * que chegam perto da janela, e para as outras confia no valor de
+ * `--reserva-leva`. Um chute errado não esconde nem apaga nada — só faz a barra
+ * de rolagem encolher enquanto se rola, porque a altura estimada da lista vai
+ * sendo corrigida. Todas as levas de uma lista têm as mesmas 60 cartelas, do
+ * mesmo tamanho, no mesmo número de colunas, então medir a primeira já dá o
+ * valor certo para as outras.
+ *
+ * Mede a caixa de conteúdo, que é o que `contain-intrinsic-size` espera, e
+ * desiste em silêncio quando o painel está fechado — `display: none` devolve
+ * zero, e nesse caso a medida sai quando a aba abrir.
+ */
+function ajustarReservaDasLevas(lista) {
+  const primeira = lista?.querySelector('.leva');
+  if (!primeira) return;
+  // Uma leva ainda não desenhada responde com o tamanho de reserva, e medir isso
+  // seria medir o próprio chute. Ligar o desenho dela durante a medição é o que
+  // devolve a altura de verdade — e custa o layout de 60 cartelas, que é menos
+  // de uma tela.
+  primeira.style.contentVisibility = 'visible';
+  const caixa = primeira.getBoundingClientRect().height;
+  primeira.style.contentVisibility = '';
+  if (!caixa) return;
+  const estilo = getComputedStyle(primeira);
+  const fora =
+    parseFloat(estilo.paddingTop) +
+    parseFloat(estilo.paddingBottom) +
+    parseFloat(estilo.borderTopWidth) +
+    parseFloat(estilo.borderBottomWidth);
+  lista.style.setProperty('--reserva-leva', `${Math.max(1, Math.round(caixa - fora))}px`);
+}
+
+/** Reparte um punhado de cartelas já escritas em HTML nas levas que o navegador desenha por vez. */
+function emLevas(cartelas) {
+  const partes = [];
+  for (let i = 0; i < cartelas.length; i += CARTELAS_POR_LEVA) {
+    partes.push(`<div class="leva">${cartelas.slice(i, i + CARTELAS_POR_LEVA).join('')}</div>`);
+  }
+  return partes.join('');
+}
+
 function pintarCartelas() {
   const destino = $('lista-cartelas');
   if (!melhorCartelas.length) {
+    destino.classList.remove('em-levas');
     destino.innerHTML = '<p class="ajuda">Nenhuma solução ainda. Inicie uma busca.</p>';
     return;
   }
-  destino.innerHTML = melhorCartelas
-    .map(
-      (cartela, i) => `
+  const cartelas = melhorCartelas.map(
+    (cartela, i) => `
       <div class="cartela">
         <span class="indice">${String(i + 1).padStart(2, '0')}</span>
         <span>${cartela.map((n) => String(n).padStart(2, '0')).join(' ')}</span>
       </div>`
-    )
-    .join('');
+  );
+  destino.classList.add('em-levas');
+  destino.innerHTML = emLevas(cartelas);
+  ajustarReservaDasLevas(destino);
 }
 
 /* ─────────── Lotinha ─────────── */
@@ -2060,9 +2119,6 @@ function atualizarAtalhoDoHistorico(total = historico.quantidade()) {
  * reusá-las dentro do worker das simulações longas. Aqui só há tela.
  */
 
-/** Quantas cartelas mostrar de uma vez ao abrir uma faixa. */
-const CARTELAS_POR_LEVA = 60;
-
 /** A partir de quantas cartelas-sorteio a simulação vai para o worker. */
 const TRABALHO_PARA_O_WORKER = 2_000_000;
 
@@ -2360,7 +2416,9 @@ function chkMostrarMaisCartelas() {
     );
   }
 
-  $('chk-cartelas').insertAdjacentHTML('beforeend', pedaco.join(''));
+  $('chk-cartelas').classList.add('em-levas');
+  $('chk-cartelas').insertAdjacentHTML('beforeend', `<div class="leva">${pedaco.join('')}</div>`);
+  ajustarReservaDasLevas($('chk-cartelas'));
   chkMostradas = ate;
 
   const faltam = indices.length - chkMostradas;
