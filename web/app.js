@@ -64,7 +64,7 @@ function pecasQueFaltam() {
     'veredito',
   ].filter((nome) => typeof lotinha[nome] !== 'function');
 
-  const daPagina = ['lot-pool', 'lot-grade', 'lot-iniciar', 'chk-conferir']
+  const daPagina = ['lot-pool', 'lot-grade', 'lot-iniciar', 'chk-conferir', 'modo-automatico']
     .filter((id) => !$(id))
     .map((id) => `#${id}`);
 
@@ -162,6 +162,36 @@ const CARTELAS_POR_LEVA = 60;
 let travaDeTela = null;
 
 /*
+ * O ciclo do modo automático.
+ *
+ * Quinze minutos de motor e dez de repouso, indefinidamente. O número vem da
+ * queixa que o gerou: por volta dos dez minutos de busca contínua o aparelho
+ * esquenta de verdade, e dez de descanso bastam para ele voltar a uma
+ * temperatura baixa.
+ *
+ * O repouso é uma pausa de verdade e não um relógio na tela: o worker recebe a
+ * mesma mensagem `pausar` do botão, e a partir dela não roda mais nenhum lote.
+ * O motor em WebAssembly continua vivo com o estado inteiro na memória — a
+ * solução atual, o arquivo de elites, a aceitação tardia, as estatísticas — e
+ * `rodar` retoma exatamente de onde parou. É por isso que o descanso não custa
+ * progresso nenhum.
+ */
+const SEGUNDOS_TRABALHANDO = 900;
+const SEGUNDOS_DESCANSANDO = 600;
+
+/**
+ * O prazo é um instante do relógio de parede, não uma contagem regressiva.
+ *
+ * Um `setTimeout` de quinze minutos não sobrevive ao iPhone: com a aba ao fundo
+ * ou a tela apagada, o navegador estrangula os temporizadores e o disparo chega
+ * tarde — ou não chega. Guardando o instante em que a etapa vence, qualquer
+ * tique que aconteça depois dele resolve a troca, e voltar para a aba já corrige
+ * o ciclo sozinho.
+ */
+let cicloAutomatico = null;
+let relogioDoCiclo = null;
+
+/*
  * A sessão do histórico que esta busca está escrevendo.
  *
  * Ao iniciar do zero, nasce quando a primeira solução existe. Ao continuar um
@@ -232,6 +262,7 @@ const SITUACOES = {
   preparando: { classe: 'trabalhando', texto: 'montando a primeira solução…' },
   buscando: { classe: 'trabalhando', texto: 'procurando soluções melhores' },
   pausado: { classe: 'pausada', texto: 'pausado' },
+  descansando: { classe: 'pausada', texto: 'descansando — o aparelho esfria' },
   falhou: { classe: 'falhou', texto: 'algo deu errado' },
 };
 
@@ -262,7 +293,10 @@ function definirFase(nova, textoExtra = null) {
   if (trabalhando) iniciarCronometro();
   else pararCronometro();
 
-  $('pausar').textContent = nova === 'pausado' ? 'Continuar' : 'Pausar';
+  // Durante o descanso o botão oferece encurtá-lo, que é a única coisa que
+  // alguém quer dele ali: voltar ao trabalho antes da hora.
+  $('pausar').textContent =
+    nova === 'descansando' ? 'Voltar agora' : nova === 'pausado' ? 'Continuar' : 'Pausar';
   $('pausar').disabled = ['ocioso', 'carregando', 'preparando', 'falhou'].includes(nova);
 }
 
@@ -420,6 +454,9 @@ function garantirTrabalhador() {
         // melhor possível, quem decide encerrar é o usuário.
         trabalhador.postMessage({ tipo: 'rodar' });
         definirFase('buscando');
+        // Quem marcou o modo automático antes de carregar o fechamento espera
+        // que ele valha desde o primeiro minuto.
+        ligarCicloAutomatico();
         break;
 
       case 'estado':
@@ -429,13 +466,17 @@ function garantirTrabalhador() {
 
       case 'pausado':
         aplicarMensagem(data);
-        definirFase('pausado');
+        // O descanso do modo automático usa a mesma mensagem `pausar` do botão,
+        // e a resposta do worker é a mesma. Quem sabe distinguir uma da outra é
+        // o ciclo: se ele está na etapa de descanso, foi ele quem pediu.
+        definirFase(cicloAutomatico?.etapa === 'descanso' ? 'descansando' : 'pausado');
         break;
 
       // O usuário mandou encerrar. O worker já devolveu tudo e liberou a
       // memória; aqui só resta desmontá-lo e voltar à Lotinha.
       case 'encerrado':
         aplicarMensagem(data);
+        desligarCicloAutomatico();
         desmontarTrabalhador();
         definirFase('ocioso');
         zerarCronometro();
@@ -446,6 +487,7 @@ function garantirTrabalhador() {
         break;
 
       case 'erro':
+        desligarCicloAutomatico();
         definirFase('falhou', data.mensagem);
         soltarTelaLigada();
         avisar(data.mensagem);
@@ -1882,6 +1924,13 @@ function comecar(
 ligar('pausar', 'click', () => {
   if (!trabalhador) return;
 
+  if (fase === 'descansando') {
+    // "Voltar agora": encurta o descanso e recomeça o período de trabalho
+    // inteiro. O ciclo continua ligado — quem quer sair dele desmarca a opção.
+    voltarAoTrabalho();
+    return;
+  }
+
   if (fase === 'buscando') {
     trabalhador.postMessage({ tipo: 'pausar' });
     soltarTelaLigada();
@@ -1889,6 +1938,10 @@ ligar('pausar', 'click', () => {
     trabalhador.postMessage({ tipo: 'rodar' });
     definirFase('buscando');
     segurarTelaLigada();
+    // Uma pausa manual suspende o ciclo; continuar recomeça o período de
+    // trabalho do zero, em vez de cair num descanso que venceu enquanto o motor
+    // estava parado pela mão do usuário.
+    if ($('modo-automatico').checked) comecarEtapa('trabalho');
   }
 });
 
@@ -2636,12 +2689,167 @@ function soltarTelaLigada() {
 }
 
 ligar('manter-tela', 'change', () => {
-  if ($('manter-tela').checked && fase === 'buscando') segurarTelaLigada();
+  if ($('manter-tela').checked && trabalhoEmCurso()) segurarTelaLigada();
   else soltarTelaLigada();
 });
 
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible' && fase === 'buscando') segurarTelaLigada();
+  if (document.visibilityState !== 'visible') return;
+  if (trabalhoEmCurso()) segurarTelaLigada();
+  // A aba ao fundo estrangula os temporizadores: o tique do ciclo pode ter
+  // ficado minutos sem rodar. Conferir o prazo ao voltar recupera o atraso de
+  // uma vez, em vez de deixar o descanso se esticar sozinho.
+  conferirOCiclo();
+});
+
+/*
+ * Enquanto o motor está vivo, a tela precisa continuar ligada — inclusive no
+ * descanso do modo automático.
+ *
+ * Parece contraditório manter a tela acesa para o aparelho esfriar, e não é: o
+ * que aquece é o WebAssembly ocupando o processador, não a retroiluminação. Se
+ * a trava caísse durante o repouso, o iPhone apagaria a tela, o Safari
+ * congelaria a página, e os dez minutos de descanso virariam um sono do qual o
+ * ciclo só acordaria quando alguém voltasse a olhar — que é exatamente o
+ * "ficar interrompendo e reiniciando na mão" que o modo automático existe para
+ * acabar.
+ */
+function trabalhoEmCurso() {
+  return ['carregando', 'preparando', 'buscando', 'descansando'].includes(fase);
+}
+
+/* ─────────── modo automático: trabalha, descansa, repete ─────────── */
+
+/**
+ * Liga o ciclo, começando por um período de trabalho.
+ *
+ * Chamado ao marcar a opção e também ao começar uma busca com ela já marcada —
+ * quem liga o modo antes de carregar o fechamento espera que ele valha desde o
+ * primeiro minuto.
+ */
+function ligarCicloAutomatico() {
+  if (!document.getElementById('modo-automatico')?.checked) return;
+  if (!trabalhador || !['buscando', 'descansando', 'pausado'].includes(fase)) return;
+
+  if (fase !== 'buscando') {
+    trabalhador.postMessage({ tipo: 'rodar' });
+    definirFase('buscando');
+    segurarTelaLigada();
+  }
+  comecarEtapa('trabalho');
+}
+
+/** Desliga o ciclo sem tocar no motor: quem estava rodando continua rodando. */
+function desligarCicloAutomatico() {
+  cicloAutomatico = null;
+  clearInterval(relogioDoCiclo);
+  relogioDoCiclo = null;
+  const destino = document.getElementById('proxima-etapa');
+  if (destino) destino.textContent = '';
+}
+
+/**
+ * Quantos segundos dura cada etapa.
+ *
+ * O número vem do atributo no HTML, com o valor do código como rede de
+ * segurança. Fica lá em cima porque é uma decisão de produto — quinze minutos de
+ * motor e dez de descanso — e porque assim o teste de ponta a ponta consegue
+ * rodar o ciclo inteiro em segundos, medindo o motor de verdade em vez de
+ * confiar na palavra do temporizador.
+ */
+function duracaoDaEtapa(etapa) {
+  const controle = document.getElementById('modo-automatico');
+  const bruto =
+    etapa === 'trabalho'
+      ? controle?.dataset?.segundosTrabalho
+      : controle?.dataset?.segundosDescanso;
+  const segundos = Number(bruto);
+  if (Number.isFinite(segundos) && segundos > 0) return segundos;
+  return etapa === 'trabalho' ? SEGUNDOS_TRABALHANDO : SEGUNDOS_DESCANSANDO;
+}
+
+/** Marca o início de uma etapa e o instante em que ela vence. */
+function comecarEtapa(etapa) {
+  cicloAutomatico = { etapa, venceEm: Date.now() + duracaoDaEtapa(etapa) * 1000 };
+
+  clearInterval(relogioDoCiclo);
+  // Um tique por segundo custa nada e é o que mantém a contagem honesta na
+  // tela; a troca de etapa não depende dele, e sim do instante gravado acima.
+  relogioDoCiclo = setInterval(conferirOCiclo, 1000);
+  pintarOCiclo();
+}
+
+/**
+ * Um tique do ciclo: atualiza a contagem e troca de etapa quando o prazo vence.
+ *
+ * Chamado pelo relógio de um em um segundo e também ao voltar para a aba, onde
+ * pode encontrar um prazo vencido há minutos. Nos dois casos a resposta é a
+ * mesma, porque a decisão é sobre o instante e não sobre quantos tiques
+ * passaram.
+ */
+function conferirOCiclo() {
+  if (!cicloAutomatico || !trabalhador) return;
+
+  // Uma pausa manual suspende o ciclo: quem tocou em Pausar quer o motor
+  // parado, e não parado por quinze minutos e depois ligado sozinho.
+  if (fase === 'pausado') return;
+
+  if (Date.now() >= cicloAutomatico.venceEm) {
+    if (cicloAutomatico.etapa === 'trabalho') descansar();
+    else voltarAoTrabalho();
+    return;
+  }
+  pintarOCiclo();
+}
+
+/** Fim do período de trabalho: o motor para de verdade. */
+function descansar() {
+  // A mesma mensagem do botão Pausar. O laço do worker termina, nenhum lote novo
+  // é agendado, e o processador volta a zero — o motor continua na memória com o
+  // estado inteiro, que é o que faz `rodar` retomar sem perder nada.
+  trabalhador.postMessage({ tipo: 'pausar' });
+  definirFase('descansando');
+  comecarEtapa('descanso');
+}
+
+/** Fim do descanso: retoma do ponto exato em que parou. */
+function voltarAoTrabalho() {
+  trabalhador.postMessage({ tipo: 'rodar' });
+  definirFase('buscando');
+  segurarTelaLigada();
+  comecarEtapa('trabalho');
+}
+
+/** A contagem regressiva da etapa atual, em minutos e segundos. */
+function pintarOCiclo() {
+  const destino = document.getElementById('proxima-etapa');
+  if (!destino) return;
+  if (!cicloAutomatico) {
+    destino.textContent = '';
+    return;
+  }
+  const faltam = Math.max(0, Math.round((cicloAutomatico.venceEm - Date.now()) / 1000));
+  const relogio = `${Math.floor(faltam / 60)}:${String(faltam % 60).padStart(2, '0')}`;
+  destino.textContent =
+    cicloAutomatico.etapa === 'trabalho'
+      ? `Descansa em ${relogio}`
+      : `Volta a trabalhar em ${relogio}`;
+}
+
+ligar('modo-automatico', 'change', () => {
+  if ($('modo-automatico').checked) {
+    ligarCicloAutomatico();
+    return;
+  }
+  // Desmarcar durante o descanso devolve o motor ao trabalho: ninguém desliga o
+  // modo automático querendo ficar parado.
+  const descansando = fase === 'descansando';
+  desligarCicloAutomatico();
+  if (descansando) {
+    trabalhador?.postMessage({ tipo: 'rodar' });
+    definirFase('buscando');
+    segurarTelaLigada();
+  }
 });
 
 if (!('wakeLock' in navigator)) {

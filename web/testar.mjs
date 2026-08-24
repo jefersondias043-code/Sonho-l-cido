@@ -600,6 +600,105 @@ try {
     `${ultima.length} dezenas`
   );
 
+  // ─── 9. o modo automático trabalha, descansa e volta ───
+  //
+  // A exigência que interessa não é o relógio na tela: é o motor parar de
+  // verdade durante o descanso. O que se mede aqui é o contador de iterações —
+  // se ele avança durante o repouso, o aparelho continua esquentando e o modo
+  // não serve para nada. E ao voltar, o recorde precisa ser o mesmo de antes da
+  // pausa: descanso é pausa, não recomeço.
+  await carregarFechamento(20, 17, VINTE);
+  await pagina.evaluate(() => {
+    // As etapas de verdade são 15 e 10 minutos; aqui viram segundos, para o
+    // ciclo inteiro caber no teste sem mudar uma linha do que ele exercita.
+    const controle = document.getElementById('modo-automatico');
+    controle.dataset.segundosTrabalho = '4';
+    controle.dataset.segundosDescanso = '8';
+  });
+  await pagina.click('#modo-automatico');
+  marcar(
+    /Descansa em/.test(await texto('#proxima-etapa')),
+    'ligar o modo automático anuncia quando vem o descanso',
+    await texto('#proxima-etapa')
+  );
+
+  await pagina.waitForFunction(
+    () => document.getElementById('texto-situacao').textContent.includes('descansando'),
+    undefined,
+    { timeout: 20000 }
+  );
+  const aoDescansar = {
+    iteracoes: await numero('#iteracoes'),
+    recorde: await texto('#melhor-cartelas'),
+    botao: await texto('#pausar'),
+    aviso: await texto('#proxima-etapa'),
+  };
+  marcar(true, 'e o motor entra em descanso sozinho ao fim do período de trabalho');
+  marcar(
+    /Volta a trabalhar em/.test(aoDescansar.aviso),
+    'a tela diz quando o trabalho recomeça',
+    aoDescansar.aviso
+  );
+  marcar(
+    aoDescansar.botao === 'Voltar agora',
+    'e o botão passa a oferecer encurtar o descanso',
+    aoDescansar.botao
+  );
+
+  // A prova de que o descanso é pausa e não relógio: o contador de iterações
+  // congela.
+  //
+  // O primeiro segundo não conta. O worker só lê mensagens entre lotes, então o
+  // lote em curso quando o pedido de pausa chega termina — são os 220 ms de
+  // trabalho que ele já tinha começado, e a tela ainda recebe o número final
+  // deles. Contra dez minutos de repouso é irrelevante; o que não pode é o
+  // contador continuar subindo depois disso.
+  await pagina.waitForTimeout(1000);
+  const inicioDoDescanso = await numero('#iteracoes');
+  await pagina.waitForTimeout(4000);
+  const fimDoDescanso = await numero('#iteracoes');
+  marcar(
+    fimDoDescanso === inicioDoDescanso,
+    'o descanso para o motor de verdade — quatro segundos sem uma iteração',
+    `${inicioDoDescanso} → ${fimDoDescanso} (cauda do lote em curso: ${
+      inicioDoDescanso - aoDescansar.iteracoes
+    })`
+  );
+
+  await pagina.waitForFunction(
+    () => document.getElementById('texto-situacao').textContent.includes('procurando'),
+    undefined,
+    { timeout: 20000 }
+  );
+  const aoVoltar = {
+    iteracoes: fimDoDescanso,
+    recorde: await texto('#melhor-cartelas'),
+  };
+  marcar(
+    aoVoltar.recorde === aoDescansar.recorde,
+    'e volta do descanso com o mesmo recorde — nada do progresso se perde',
+    `${aoDescansar.recorde} antes, ${aoVoltar.recorde} depois`
+  );
+
+  await pagina.waitForTimeout(1500);
+  marcar(
+    (await numero('#iteracoes')) > aoVoltar.iteracoes,
+    'e continua de onde parou, somando iterações às que já tinha',
+    `${fimDoDescanso} na pausa → ${await numero('#iteracoes')} agora`
+  );
+
+  // Desmarcar durante o trabalho não pode parar nada.
+  await pagina.click('#modo-automatico');
+  marcar(
+    (await texto('#proxima-etapa')) === '' &&
+      (await texto('#texto-situacao')).includes('procurando'),
+    'desligar o modo automático some com a contagem e deixa o motor rodando'
+  );
+
+  await pagina.click('#encerrar');
+  await pagina.waitForSelector('#lotinha.ativo', { timeout: 20000 });
+  marcar(true, 'e encerrar continua devolvendo à Lotinha com o modo automático usado');
+
   marcar(errosDeConsole.length === 0, 'nenhum erro no console', errosDeConsole.join(' | ').slice(0, 120));
 } finally {
   await navegador.close();

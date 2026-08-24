@@ -776,6 +776,16 @@ details.cartao[open] > summary::after {
   accent-color: var(--acento);
 }
 
+.proxima-etapa {
+  color: var(--ouro);
+  font-size: 13.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  padding: 0 8px;
+  min-height: 18px;
+}
+
 .rodape-nota {
   color: var(--texto-fraco);
   font-size: 12.5px;

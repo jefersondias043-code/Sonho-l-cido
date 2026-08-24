@@ -255,6 +255,29 @@
     continua; sem isto ela pausa sozinha e retoma quando você voltar.
   </p>
 
+  <label class="alternador">
+    <!-- A duração de cada etapa mora aqui, e não no código, para o teste de
+         ponta a ponta poder rodar o ciclo inteiro em segundos em vez de em meia
+         hora. Os números de verdade são estes; o teste os reduz e mede o que
+         acontece de fato com o motor. -->
+    <input
+      type="checkbox"
+      id="modo-automatico"
+      data-segundos-trabalho="900"
+      data-segundos-descanso="600"
+    >
+    <span>Modo automático — 15 min trabalhando, 10 descansando</span>
+  </label>
+  <p class="ajuda" id="aviso-automatico">
+    Para deixar rodando por horas sem tocar no aparelho. O descanso é uma pausa
+    de verdade: o motor para, o aparelho esfria, e nada do progresso se perde —
+    ao voltar, a busca continua exatamente de onde estava. O ciclo se repete
+    sozinho até você tocar em Encerrar.
+  </p>
+  <!-- A contagem da etapa em curso. `aria-live` para quem usa leitor de tela
+       ouvir a troca de trabalho para descanso sem precisar ir procurar. -->
+  <p class="proxima-etapa" id="proxima-etapa" aria-live="polite"></p>
+
   <div class="cartao">
     <div class="rotulo">Recordes</div>
     <ol class="recordes" id="lista-recordes"></ol>
