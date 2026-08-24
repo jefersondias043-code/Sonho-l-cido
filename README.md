@@ -47,7 +47,7 @@ abre em tela cheia, com ícone próprio, e funciona **sem internet**.
 Medido num navegador com perfil de iPhone: **168 mil iterações por segundo** —
 cerca de metade da velocidade nativa.
 
-Duas coisas que valem saber antes de usar:
+Três coisas que valem saber antes de usar:
 
 - **Quando a tela apaga, o iOS congela a página** e a busca para. Há um
   interruptor "manter a tela ligada" que evita isso; sem ele, a busca pausa e
@@ -56,6 +56,11 @@ Duas coisas que valem saber antes de usar:
   existe. Quem encerra é você, em Pausar ou Encerrar. A tela diz qual dos dois
   casos é o seu: quando o mínimo é comprovado, ela avisa que não há o que achar;
   quando é problema em aberto, avisa o piso e o quanto o motor já cortou.
+- **O modo automático deixa o aparelho trabalhar por horas.** Quinze minutos de
+  motor, dez de descanso, repetindo até você encerrar. O descanso é uma pausa de
+  verdade — medido, o consumo da linha principal cai 95% e o motor não faz uma
+  iteração sequer —, e o estado inteiro da otimização continua na memória, de
+  modo que voltar não custa progresso nenhum.
 
 Para buscas longas, o computador continua sendo o lugar certo — e é para isso
 que existe a linha de comando abaixo.
