@@ -264,6 +264,67 @@ try {
     'o histórico sobrevive a fechar e reabrir o aplicativo'
   );
 
+  // ─── quando o aparelho fica sem espaço, quem perde trabalho fica sabendo ───
+  //
+  // O histórico abre espaço descartando os mais antigos, e essa é a escolha
+  // certa: perder o que se está fazendo agora seria pior. O que estava errado
+  // era fazer isso calado. Um fechamento de 23 dezenas com jogos de 17 ocupa
+  // meio megabyte, oito enchem o armazenamento de um iPhone, e o nono comia os
+  // primeiros sem uma palavra — a pessoa só descobria ao ir procurar.
+  const semEspaco = await pagina.evaluate(async () => {
+    const h = await import('./historico.js');
+    h.limpar();
+    const recados = [];
+    // O registro devolve como desfazer só o dele: o aviso que o aplicativo
+    // registrou na partida continua de pé, e é o que a próxima verificação usa.
+    const parar = h.quandoFaltarEspaco((r) => recados.push(r));
+    // Cartelas grandes de propósito: é assim que se chega ao limite sem esperar
+    // uma busca de verdade.
+    const gordas = Array.from({ length: 11546 }, () =>
+      Array.from({ length: 17 }, (_, i) => i + 1)
+    );
+    const config = { pool: Array.from({ length: 23 }, (_, i) => i + 1), cartela: 17 };
+    let criadas = 0;
+    for (let i = 0; i < 14 && !recados.length; i++) {
+      h.criar(config, { melhor: gordas });
+      criadas++;
+    }
+    const guardadas = h.quantidade();
+    parar();
+    h.limpar();
+    return { criadas, guardadas, recados };
+  });
+  marcar(
+    semEspaco.recados.length > 0,
+    'o histórico avisa quando precisa descartar trabalhos por falta de espaço',
+    `${semEspaco.criadas} gravados, ${semEspaco.guardadas} couberam, ${semEspaco.recados.length} aviso(s)`
+  );
+  marcar(
+    semEspaco.recados.every((r) => r.descartadas > 0 && typeof r.guardou === 'boolean'),
+    'e diz quantos saíram e se o novo entrou',
+    JSON.stringify(semEspaco.recados[0] ?? null)
+  );
+
+  // O aviso chega até a tela: é o mesmo caminho, e é o que a pessoa vê.
+  const naTela = await pagina.evaluate(async () => {
+    const h = await import('./historico.js');
+    h.limpar();
+    const gordas = Array.from({ length: 11546 }, () =>
+      Array.from({ length: 17 }, (_, i) => i + 1)
+    );
+    const config = { pool: Array.from({ length: 23 }, (_, i) => i + 1), cartela: 17 };
+    const caixa = document.getElementById('aviso');
+    for (let i = 0; i < 14 && caixa.hidden; i++) h.criar(config, { melhor: gordas });
+    const texto = caixa.textContent;
+    h.limpar();
+    return { aparecido: !caixa.hidden, texto };
+  });
+  marcar(
+    naTela.aparecido && /espaço/i.test(naTela.texto),
+    'e o aviso chega à tela, em vez de morrer no módulo',
+    naTela.texto.slice(0, 70)
+  );
+
   marcar(errosDeConsole.length === 0, 'nenhum erro no console', errosDeConsole.join(' | ').slice(0, 140));
 } finally {
   await navegador.close();

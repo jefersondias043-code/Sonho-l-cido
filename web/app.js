@@ -2668,6 +2668,33 @@ function avisar(mensagem, bom = false) {
 pintarRecordes();
 definirFase('ocioso');
 
+/*
+ * Quando o aparelho fica sem espaço, quem perde trabalho fica sabendo.
+ *
+ * O histórico abre espaço descartando os trabalhos mais antigos — é a escolha
+ * certa, porque perder o que se está fazendo agora seria pior. O que estava
+ * errado era fazer isso calado: um fechamento de 23 dezenas com jogos de 17
+ * ocupa meio megabyte, oito deles enchem o armazenamento de um iPhone, e o nono
+ * comia os primeiros sem uma palavra.
+ *
+ * O aviso é represado por um minuto porque a gravação acontece a cada recorde
+ * novo do motor: sem isso, uma busca comprida repetiria a mesma frase dezenas de
+ * vezes e ninguém leria nenhuma.
+ */
+let ultimoAvisoDeEspaco = 0;
+historico.quandoFaltarEspaco(({ descartadas, guardou }) => {
+  const agora = Date.now();
+  if (agora - ultimoAvisoDeEspaco < 60_000) return;
+  ultimoAvisoDeEspaco = agora;
+  avisar(
+    guardou
+      ? `Sem espaço no aparelho: ${descartadas} ${
+          descartadas === 1 ? 'trabalho antigo saiu' : 'trabalhos antigos saíram'
+        } do histórico para guardar este.`
+      : 'Sem espaço no aparelho: este trabalho não foi guardado. Exporte as cartelas e apague trabalhos antigos.'
+  );
+});
+
 // Traz a busca única da versão anterior para dentro do histórico, para quem
 // já usava o aplicativo não perder o trabalho em andamento na atualização.
 historico.migrarDaVersaoAntiga();

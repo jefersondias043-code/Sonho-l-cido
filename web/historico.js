@@ -80,25 +80,72 @@ function ehSessaoValida(sessao) {
 }
 
 /**
+ * Quem é avisado quando o aparelho fica sem espaço.
+ *
+ * Este módulo não sabe desenhar nada, e nem deve: ele conta o que aconteceu e
+ * quem tem tela decide o que dizer.
+ */
+const ouvintesDeEspaco = new Set();
+
+/**
+ * Registra quem quer saber que faltou espaço no aparelho.
+ *
+ * O ouvinte recebe `{ descartadas, guardou }`: quantos trabalhos antigos
+ * precisaram sair, e se o trabalho novo acabou guardado. Devolve a função que
+ * desfaz este registro — e só este. Um conjunto, e não um lugar só, porque quem
+ * chega depois não pode desligar em silêncio o aviso de quem chegou antes; foi
+ * exatamente o que aconteceu quando o teste registrou o seu.
+ */
+export function quandoFaltarEspaco(ouvinte) {
+  if (typeof ouvinte !== 'function') return () => {};
+  ouvintesDeEspaco.add(ouvinte);
+  return () => ouvintesDeEspaco.delete(ouvinte);
+}
+
+function avisarQueFaltouEspaco(descartadas, guardou) {
+  if (descartadas <= 0) return;
+  for (const ouvinte of ouvintesDeEspaco) {
+    try {
+      ouvinte({ descartadas, guardou });
+    } catch {
+      /* quem escuta responde por si; a gravação não cai por causa disso */
+    }
+  }
+}
+
+/**
  * Grava, abrindo espaço se o navegador recusar por falta dele.
  *
  * O limite do `localStorage` é rígido e a exceção é a única forma de descobrir
  * que se chegou nele. Descartar as sessões mais antigas e tentar de novo é
- * preferível a perder a que o usuário está trabalhando agora.
+ * preferível a perder a que o usuário está trabalhando agora — mas fazer isso
+ * calado é apagar trabalho guardado pelas costas de quem guardou. Um fechamento
+ * de 23 dezenas com jogos de 17 ocupa meio megabyte, e bastam oito deles para o
+ * nono começar a comer os primeiros: sem aviso, a pessoa só descobre quando vai
+ * procurar e não acha.
+ *
+ * O corte em `LIMITE_DE_SESSOES` não conta como falta de espaço: aquele é o teto
+ * anunciado, e sair dele é o combinado.
  */
 function gravar(sessoes) {
+  const pedidas = Math.min(sessoes.length, LIMITE_DE_SESSOES);
   let paraGravar = sessoes.slice(0, LIMITE_DE_SESSOES);
 
   for (let tentativa = 0; tentativa < 5; tentativa++) {
     try {
       localStorage.setItem(CHAVE, JSON.stringify(paraGravar));
+      avisarQueFaltouEspaco(pedidas - paraGravar.length, true);
       return true;
     } catch {
-      if (paraGravar.length <= 1) return false;
+      if (paraGravar.length <= 1) {
+        avisarQueFaltouEspaco(pedidas, false);
+        return false;
+      }
       // Descarta o quarto mais antigo e tenta de novo.
       paraGravar = paraGravar.slice(0, Math.max(1, Math.floor(paraGravar.length * 0.75)));
     }
   }
+  avisarQueFaltouEspaco(pedidas, false);
   return false;
 }
 
