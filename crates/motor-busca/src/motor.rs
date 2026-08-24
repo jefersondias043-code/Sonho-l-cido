@@ -87,6 +87,35 @@ const ACEITAS_ENTRE_ARQUIVAMENTOS: u64 = 64;
 /// interativa — o recorde só apareceria de minuto em minuto.
 const TETO_DE_TROCAS: u64 = 5_000;
 
+/// Como a meta de cardinalidade desce depois de cada recorde.
+///
+/// A meta é um **teto**: `reparar` não acrescenta cartelas além dela. Descer a
+/// meta é, portanto, apertar a busca, e não afrouxá-la — é por isso que mirar
+/// direto no limite inferior não é "dar liberdade ao motor", e sim exigir de
+/// uma vez o que ele ainda não sabe fazer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PassoDaMeta {
+    /// Uma cartela por vez. Mantém a solução sempre perto de viável.
+    Unitario,
+    /// Dobra o passo enquanto os recordes vêm rápido e volta a um quando a meta
+    /// resiste. É o que dá quedas de várias cartelas quando há oportunidade, sem
+    /// pagar o preço de um corte grande onde não há.
+    Adaptativo {
+        /// Teto do passo, para o dobro não virar um salto ao piso.
+        maximo: usize,
+        /// Até quantas iterações depois de fixar a meta um recorde conta como
+        /// "veio fácil" e autoriza dobrar o passo.
+        iteracoes_para_dobrar: u64,
+        /// Quantas iterações sem recorde antes de desistir de uma meta ambiciosa
+        /// e afrouxá-la. Sem isto o salto vira compromisso: a meta que não fecha
+        /// trava a busca, porque o passo só é reavaliado no recorde seguinte —
+        /// que é justamente o que deixou de vir.
+        iteracoes_para_recuar: u64,
+    },
+    /// Mira direto no limite inferior conhecido.
+    AteOPiso,
+}
+
 #[derive(Debug, Clone)]
 pub struct Configuracao {
     pub semente: u64,
@@ -117,6 +146,8 @@ pub struct Configuracao {
     pub orcamento_de_troca: u64,
     /// Iterações entre dois eventos de progresso.
     pub intervalo_progresso: u64,
+    /// Como a meta de cardinalidade desce depois de cada recorde.
+    pub passo_da_meta: PassoDaMeta,
 }
 
 impl Default for Configuracao {
@@ -135,6 +166,11 @@ impl Default for Configuracao {
             fator_reacao: 0.20,
             recompensas: Recompensas::default(),
             intervalo_progresso: 100_000,
+            passo_da_meta: PassoDaMeta::Adaptativo {
+                maximo: 64,
+                iteracoes_para_dobrar: 20_000,
+                iteracoes_para_recuar: 5_000,
+            },
         }
     }
 }
@@ -159,6 +195,10 @@ pub struct MotorBusca {
 
     /// Cardinalidade que a busca persegue no momento.
     alvo_cartelas: usize,
+    /// Em que iteração a meta atual foi fixada. Mede se o recorde veio fácil.
+    iteracao_da_meta: u64,
+    /// Quantas cartelas a última meta desceu de uma vez.
+    passo_atual: usize,
 
     /// Quantos candidatos avaliar por posição ao montar uma cartela. Derivado
     /// do orçamento e do custo real de avaliação desta configuração.
@@ -250,6 +290,8 @@ impl MotorBusca {
             melhor_assinatura: 0,
             melhor_iteracao: 0,
             alvo_cartelas: usize::MAX,
+            iteracao_da_meta: 0,
+            passo_atual: 1,
             max_candidatos,
             trocas_por_iteracao,
             arquivo,
@@ -661,6 +703,14 @@ impl MotorBusca {
             self.iteracoes_sem_recorde = 0;
         } else {
             self.iteracoes_sem_recorde += 1;
+            if let PassoDaMeta::Adaptativo { iteracoes_para_recuar, .. } = self.config.passo_da_meta
+            {
+                if iteracoes_para_recuar > 0
+                    && self.iteracoes_sem_recorde % iteracoes_para_recuar == 0
+                {
+                    self.recuar_a_meta();
+                }
+            }
             if self.iteracoes_sem_recorde >= self.config.iteracoes_ate_diversificar {
                 self.diversificar(observador);
             }
@@ -712,31 +762,36 @@ impl MotorBusca {
     }
 
     /// Define a cardinalidade a perseguir a partir do recorde atual.
+    ///
+    /// ## Por que a meta não vai direto ao piso
+    ///
+    /// A meta é um **teto**: `reparar` para de acrescentar cartelas ao chegar
+    /// nela, e `encolher_ate` corta a solução atual até ela. Baixar a meta
+    /// aperta a busca; não a solta. Mirar direto no limite inferior foi medido e
+    /// piorou: os empates com a tabela mundial caíram de 41,7% para 48,4% de
+    /// distância, e `C(26,6,3)` saiu de 246 para 288 cartelas — cortar 116
+    /// cartelas de uma vez deixa um destroço que a busca não repara.
+    ///
+    /// ## Por que também não é um passo fixo de uma
+    ///
+    /// Porque desperdiça a oportunidade oposta. Quando a solução tem folga, o
+    /// recorde seguinte vem em poucas iterações, e insistir em uma cartela por
+    /// vez gasta uma rodada inteira de destruir-reconstruir-podar para cada
+    /// cartela. Medido nos fechamentos da Lotinha, sessenta segundos em
+    /// `(21,17)` tiravam quatro cartelas de 1.095.
+    ///
+    /// O passo adaptativo resolve os dois: dobra enquanto os recordes vêm fáceis
+    /// e volta a um assim que a meta resiste. É o que dá quedas de várias
+    /// cartelas onde há oportunidade, sem pagar o corte grande onde não há.
     fn definir_meta(&mut self) {
         let nova_meta = match self.problema.objetivo() {
-            // Já resolvemos com N; agora a pergunta é se dá com N − 1.
             Objetivo::MinimizarCartelas => {
                 let melhor = self.melhor_avaliacao.cartelas;
                 if melhor == 0 {
                     usize::MAX
                 } else {
-                    // Um passo por vez, e não um salto direto para o recorde
-                    // mundial.
-                    //
-                    // O salto foi tentado e medido: mirar a meta direto no
-                    // melhor conhecido levou os empates com o mundo de 41,7%
-                    // para 48,4% — e os casos com mais de 20% de distância de
-                    // 31,4% para 49,3%, com os piores piorando muito
-                    // (C(26,6,3) saiu de 246 para 288 cartelas).
-                    //
-                    // A razão é estrutural: `encolher_ate` corta a solução atual
-                    // até a meta, e cortar 116 cartelas de uma vez deixa um
-                    // destroço que a busca não consegue reparar. O passo único
-                    // mantém a solução sempre perto de viável, que é justamente
-                    // o que faz a busca por cardinalidade fixa funcionar. Quem
-                    // ganha com o salto é o caso fácil, que já ia bem; quem
-                    // perde é o difícil, que é o que o usuário sente.
-                    (melhor - 1).max(1)
+                    let passo = self.proximo_passo();
+                    melhor.saturating_sub(passo).max(self.limite.valor as usize).max(1)
                 }
             }
             // A meta é o orçamento e não se move; o que melhora é a cobertura.
@@ -747,9 +802,72 @@ impl MotorBusca {
             return;
         }
         self.alvo_cartelas = nova_meta;
+        self.iteracao_da_meta = self.estatisticas.iteracoes;
 
         self.encolher_ate(nova_meta);
         self.aceitacao.reiniciar(chave_local(&self.atual.avaliacao()));
+    }
+
+    /// Desiste de uma meta ambiciosa que não fecha, e volta a apertar devagar.
+    ///
+    /// Um salto de várias cartelas é uma **tentativa**, não um compromisso.
+    /// Medido: com o passo dobrando e nada que o desfizesse, `(21,17)` caía de
+    /// quatro recordes em um minuto para um só — o segundo salto não fechava, e
+    /// como o passo só é reavaliado no recorde seguinte, a busca ficava presa
+    /// atrás de uma meta que ela não alcançava.
+    ///
+    /// Afrouxar a meta não corta nada: `encolher_ate` só age quando a solução
+    /// está acima do teto, e aqui o teto sobe. O que a solução ganha é espaço
+    /// para `reparar` fechar a cobertura de novo.
+    fn recuar_a_meta(&mut self) {
+        if !matches!(self.config.passo_da_meta, PassoDaMeta::Adaptativo { .. }) {
+            return;
+        }
+        if !matches!(self.problema.objetivo(), Objetivo::MinimizarCartelas) {
+            return;
+        }
+        if self.passo_atual <= 1 || self.melhor_avaliacao.cartelas == 0 {
+            return;
+        }
+
+        self.passo_atual = (self.passo_atual / 2).max(1);
+        let nova_meta = self
+            .melhor_avaliacao
+            .cartelas
+            .saturating_sub(self.passo_atual)
+            .max(self.limite.valor as usize)
+            .max(1);
+        if nova_meta == self.alvo_cartelas {
+            return;
+        }
+        self.alvo_cartelas = nova_meta;
+        self.iteracao_da_meta = self.estatisticas.iteracoes;
+        self.aceitacao.reiniciar(chave_local(&self.atual.avaliacao()));
+    }
+
+    /// Quantas cartelas descer nesta meta, segundo a política configurada.
+    ///
+    /// O sinal de "veio fácil" é o número de iterações desde que a meta atual foi
+    /// fixada: um recorde que chega logo depois significa que ainda havia folga,
+    /// e a próxima meta pode ser mais ambiciosa. Um que demora significa que a
+    /// cardinalidade está apertando, e o passo volta a um — que é o regime em que
+    /// a busca por cardinalidade fixa funciona.
+    fn proximo_passo(&mut self) -> usize {
+        match self.config.passo_da_meta {
+            PassoDaMeta::Unitario => 1,
+            PassoDaMeta::AteOPiso => {
+                self.melhor_avaliacao.cartelas.saturating_sub(self.limite.valor as usize).max(1)
+            }
+            PassoDaMeta::Adaptativo { maximo, iteracoes_para_dobrar, .. } => {
+                let desde_a_meta = self.estatisticas.iteracoes.saturating_sub(self.iteracao_da_meta);
+                self.passo_atual = if desde_a_meta <= iteracoes_para_dobrar {
+                    (self.passo_atual.saturating_mul(2)).min(maximo.max(1))
+                } else {
+                    1
+                };
+                self.passo_atual.max(1)
+            }
+        }
     }
 
     /// Reduz a solução atual até `teto` cartelas, sacrificando primeiro as que
@@ -1297,6 +1415,112 @@ mod testes {
         assert!(
             houve_atual_pior_que_melhor,
             "a solução atual acompanhou o recorde o tempo todo: não houve exploração"
+        );
+    }
+
+    #[test]
+    fn a_meta_desce_mais_de_uma_cartela_quando_o_recorde_vem_facil() {
+        // A queixa que gerou isto: com passo fixo de um, o motor gastava uma
+        // rodada inteira de destruir-reconstruir-podar para cada cartela, mesmo
+        // com folga de sobra. O passo adaptativo dobra enquanto os recordes vêm
+        // rápido, e é assim que a meta desce de várias em várias.
+        let config = Configuracao {
+            passo_da_meta: PassoDaMeta::Adaptativo {
+                maximo: 64,
+                iteracoes_para_dobrar: u64::MAX,
+                iteracoes_para_recuar: 0,
+            },
+            ..config_rapida(5)
+        };
+        // C(14,5,3) sai da construção com 65 cartelas e tem piso 37: folga de
+        // sobra para a meta descer mais de uma por vez sem esbarrar no piso.
+        let mut motor = MotorBusca::novo(problema(14, 5, 3), config).unwrap();
+        motor.executar(&Controle::novo(), &CondicoesDeParada::por_iteracoes(1), &mut Silencioso);
+
+        let primeiro = motor.melhor_avaliacao().cartelas;
+        // Simula três recordes fáceis seguidos e observa o passo.
+        let mut passos = Vec::new();
+        for _ in 0..3 {
+            let antes = motor.alvo_cartelas;
+            motor.definir_meta();
+            passos.push(antes.saturating_sub(motor.alvo_cartelas));
+            // O próximo recorde precisa existir para a meta seguinte ter de onde
+            // sair; aqui basta fingir que a solução atual virou recorde.
+            motor.melhor_avaliacao.cartelas = motor.alvo_cartelas;
+        }
+
+        assert!(
+            passos.iter().any(|&p| p > 1),
+            "com recordes fáceis a meta deveria descer mais de uma cartela por vez \
+             (partida {primeiro}, passos {passos:?})"
+        );
+    }
+
+    #[test]
+    fn a_meta_ambiciosa_afrouxa_quando_nao_fecha() {
+        // Um salto é tentativa, não compromisso. Sem este recuo, a meta que não
+        // fecha trava a busca: o passo só é reavaliado no recorde seguinte, que
+        // é justamente o que deixou de vir. Medido, `(21,17)` caía de quatro
+        // recordes por minuto para um.
+        let config = Configuracao {
+            passo_da_meta: PassoDaMeta::Adaptativo {
+                maximo: 64,
+                iteracoes_para_dobrar: u64::MAX,
+                iteracoes_para_recuar: 1,
+            },
+            ..config_rapida(5)
+        };
+        let mut motor = MotorBusca::novo(problema(14, 5, 3), config).unwrap();
+        motor.executar(&Controle::novo(), &CondicoesDeParada::por_iteracoes(1), &mut Silencioso);
+
+        // Uma meta deliberadamente ambiciosa, como a que sai de vários recordes
+        // fáceis seguidos.
+        motor.passo_atual = 8;
+        motor.alvo_cartelas = motor.melhor_avaliacao().cartelas.saturating_sub(8).max(1);
+        let ambiciosa = motor.alvo_cartelas;
+
+        motor.recuar_a_meta();
+
+        assert!(
+            motor.alvo_cartelas > ambiciosa,
+            "a meta que não fecha deveria afrouxar, e ficou em {}",
+            motor.alvo_cartelas
+        );
+        assert_eq!(motor.passo_atual, 4, "o passo deveria cair pela metade");
+        assert!(
+            motor.alvo_cartelas < motor.melhor_avaliacao().cartelas,
+            "afrouxar não é desistir: a meta continua abaixo do recorde"
+        );
+    }
+
+    #[test]
+    fn o_passo_unitario_continua_disponivel_e_desce_de_um_em_um() {
+        let config = Configuracao { passo_da_meta: PassoDaMeta::Unitario, ..config_rapida(5) };
+        let mut motor = MotorBusca::novo(problema(14, 5, 3), config).unwrap();
+        motor.executar(&Controle::novo(), &CondicoesDeParada::por_iteracoes(1), &mut Silencioso);
+
+        let recorde = motor.melhor_avaliacao().cartelas;
+        motor.definir_meta();
+        assert_eq!(motor.alvo_cartelas, recorde - 1);
+    }
+
+    #[test]
+    fn a_meta_nunca_desce_abaixo_do_limite_inferior() {
+        // Perseguir menos que o piso provado é perseguir o impossível: a busca
+        // gastaria o tempo inteiro numa cardinalidade que nenhuma solução tem.
+        let config = Configuracao {
+            passo_da_meta: PassoDaMeta::AteOPiso,
+            ..config_rapida(5)
+        };
+        let mut motor = MotorBusca::novo(problema(9, 3, 2), config).unwrap();
+        motor.executar(&Controle::novo(), &CondicoesDeParada::por_iteracoes(1), &mut Silencioso);
+        motor.definir_meta();
+
+        assert!(
+            motor.alvo_cartelas >= motor.limite.valor as usize,
+            "meta {} abaixo do piso {}",
+            motor.alvo_cartelas,
+            motor.limite.valor
         );
     }
 
