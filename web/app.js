@@ -2838,6 +2838,17 @@ function pintarOCiclo() {
 
 ligar('modo-automatico', 'change', () => {
   if ($('modo-automatico').checked) {
+    // Sem a tela ligada o modo automático não cumpre o que promete: o iPhone
+    // apaga a tela, o Safari congela a página, e as horas de trabalho sozinho
+    // viram um sono. Marcar por conta própria seria mexer numa escolha de quem
+    // usa — então marca e diz que marcou, e a opção continua ali para
+    // desmarcar.
+    const manter = $('manter-tela');
+    if (!manter.checked) {
+      manter.checked = true;
+      avisar('A tela fica ligada junto: sem isso o aparelho congela a busca ao apagar.');
+    }
+    segurarTelaLigada();
     ligarCicloAutomatico();
     return;
   }

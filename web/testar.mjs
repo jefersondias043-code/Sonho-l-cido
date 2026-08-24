@@ -615,11 +615,17 @@ try {
     controle.dataset.segundosTrabalho = '4';
     controle.dataset.segundosDescanso = '8';
   });
+  const telaAntes = await pagina.locator('#manter-tela').isChecked();
   await pagina.click('#modo-automatico');
   marcar(
     /Descansa em/.test(await texto('#proxima-etapa')),
     'ligar o modo automático anuncia quando vem o descanso',
     await texto('#proxima-etapa')
+  );
+  marcar(
+    (await pagina.locator('#manter-tela').isChecked()) === true,
+    'e liga a tela junto, porque sem ela o aparelho congela a busca ao apagar',
+    `antes ${telaAntes}, depois true`
   );
 
   await pagina.waitForFunction(
