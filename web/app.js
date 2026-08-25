@@ -23,6 +23,7 @@
 import * as historico from './historico.js';
 import * as lotinha from './lotinha.js';
 import * as checagem from './checagem.js';
+import * as sessao from './sessao.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -64,7 +65,15 @@ function pecasQueFaltam() {
     'veredito',
   ].filter((nome) => typeof lotinha[nome] !== 'function');
 
-  const daPagina = ['lot-pool', 'lot-grade', 'lot-iniciar', 'chk-conferir', 'modo-automatico']
+  const daPagina = [
+    'lot-pool',
+    'lot-grade',
+    'lot-iniciar',
+    'chk-conferir',
+    'modo-automatico',
+    'exportar-sessao',
+    'arquivo-sessao',
+  ]
     .filter((id) => !$(id))
     .map((id) => `#${id}`);
 
@@ -464,6 +473,18 @@ function garantirTrabalhador() {
         if (fase === 'buscando') $('texto-situacao').textContent = textoDaProcura(data.estado);
         break;
 
+      // A sessão pedida por `exportar-sessao`. Chega com o mesmo `id` do pedido,
+      // porque dois toques seguidos no botão gerariam duas respostas e a segunda
+      // não pode resolver a promessa da primeira.
+      case 'exportado': {
+        const pedido = exportacoesEmVoo.get(data.id);
+        if (!pedido) break;
+        exportacoesEmVoo.delete(data.id);
+        clearTimeout(pedido.prazo);
+        pedido.resolver(data.sessao);
+        break;
+      }
+
       case 'pausado':
         aplicarMensagem(data);
         // O descanso do modo automático usa a mesma mensagem `pausar` do botão,
@@ -530,6 +551,12 @@ function salvarNoHistorico(estado) {
 
   const dados = {
     melhor: melhorCartelas,
+    // O estado interno do motor viaja junto do recorde, e não numa gravação
+    // separada: é o que faz "continuar um trabalho salvo" retomar a meta e os
+    // pesos aprendidos, em vez de só devolver as cartelas. As cartelas da
+    // solução em curso ficam de fora — seriam meio megabyte a cada gravação, e o
+    // motor retoma bem sem elas. Elas só entram no arquivo exportado.
+    motor: estado.retrato ?? {},
     iteracoes: estado.iteracoes ?? 0,
     avaliacao: {
       cartelas: estado.melhor_cartelas,
@@ -1997,6 +2024,202 @@ ligar('compartilhar', 'click', async () => {
     avisar('Compartilhamento indisponível aqui; as cartelas foram copiadas.', true);
   }
 });
+
+/* ─────────── exportar e importar uma sessão ─────────── */
+
+/*
+ * O trabalho do motor, fora do aparelho.
+ *
+ * O princípio é um só: o arquivo tem de carregar a **sessão**, não as cartelas.
+ * Quem deixou o motor dez horas e trocou de aparelho não pode perder as dez
+ * horas — e o que as guarda não é só o recorde, é também a meta perseguida, os
+ * contadores e o que o seletor aprendeu sobre esta configuração.
+ *
+ * O estado completo só existe dentro do WebAssembly, então a exportação pergunta
+ * ao worker. Como o worker só lê mensagens entre lotes, o que ele devolve é o
+ * estado do fim do último lote: um instante consistente, e o mais recente que
+ * existe. Por isso dá para exportar com o motor rodando, sem pausar nada.
+ */
+let pedidoDeExportacao = 0;
+const exportacoesEmVoo = new Map();
+
+function pedirSessaoAoMotor() {
+  return new Promise((resolver, recusar) => {
+    if (!trabalhador) {
+      recusar(new Error('Não há motor carregado para exportar.'));
+      return;
+    }
+    const id = ++pedidoDeExportacao;
+    // Se o worker morrer no meio, a promessa ficaria pendurada para sempre e o
+    // botão nunca voltaria ao normal.
+    const prazo = setTimeout(() => {
+      exportacoesEmVoo.delete(id);
+      recusar(new Error('O motor não respondeu a tempo.'));
+    }, 15_000);
+    exportacoesEmVoo.set(id, { resolver, recusar, prazo });
+    trabalhador.postMessage({ tipo: 'exportar', id });
+  });
+}
+
+ligar('exportar-sessao', 'click', async () => {
+  const botao = $('exportar-sessao');
+  const rotuloOriginal = botao.textContent;
+  botao.disabled = true;
+  botao.textContent = 'Empacotando a sessão…';
+  try {
+    const doMotor = await pedirSessaoAoMotor();
+    if (!doMotor) throw new Error('O motor ainda não tem uma sessão para exportar.');
+
+    const pacote = sessao.empacotar(doMotor, {
+      versao: ($('versao')?.textContent ?? '').replace(/^versão\s*/i, '').trim(),
+      rotulo: configuracaoDaBusca ? historico.descrever(configuracaoDaBusca) : '',
+    });
+    await entregarArquivo(sessao.nomeDoArquivo(pacote), JSON.stringify(pacote));
+  } catch (erro) {
+    avisar(String(erro?.message ?? erro));
+  } finally {
+    botao.disabled = false;
+    botao.textContent = rotuloOriginal;
+  }
+});
+
+/**
+ * Entrega o arquivo pelo caminho que este aparelho tiver.
+ *
+ * No iPhone o compartilhamento é o caminho natural — cai no Arquivos, no AirDrop
+ * ou onde a pessoa quiser. Onde ele não aceita arquivos, um link de download
+ * resolve. Os dois existem porque nenhum dos dois funciona em toda parte.
+ */
+async function entregarArquivo(nome, texto) {
+  const arquivo = new File([texto], nome, { type: 'application/json' });
+
+  if (navigator.canShare?.({ files: [arquivo] })) {
+    try {
+      await navigator.share({ files: [arquivo], title: nome });
+      avisar('Sessão exportada.', true);
+      return;
+    } catch (erro) {
+      // Cancelar não é falha, e não merece mensagem de erro.
+      if (erro?.name === 'AbortError') return;
+    }
+  }
+
+  const url = URL.createObjectURL(arquivo);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = nome;
+  link.click();
+  // Revogar cedo demais cancela o download que acabou de começar.
+  setTimeout(() => URL.revokeObjectURL(url), 30_000);
+  avisar('Sessão exportada.', true);
+}
+
+/*
+ * A importação nunca sobrescreve nada.
+ *
+ * O arquivo entra como um trabalho **novo** no histórico, ao lado do que já
+ * existe. É a diferença entre "trouxe do outro aparelho" e "perdi o que tinha
+ * aqui" — e a segunda não pode acontecer por acidente.
+ *
+ * Entre escolher o arquivo e começar a busca há uma parada: a tela mostra o que
+ * achou dentro dele e espera a confirmação. Importar desmonta o motor em curso,
+ * e isso não se faz sem perguntar.
+ */
+let sessaoAguardandoConfirmacao = null;
+
+ligar('importar-sessao', 'click', () => $('arquivo-sessao').click());
+
+ligar('arquivo-sessao', 'change', async (evento) => {
+  const arquivo = evento.target.files?.[0];
+  // Escolher o mesmo arquivo duas vezes seguidas não dispara `change` sem isto.
+  evento.target.value = '';
+  if (!arquivo) return;
+
+  let texto;
+  try {
+    texto = await arquivo.text();
+  } catch {
+    mostrarPreviaDaImportacao({ ok: false, erro: 'Não consegui ler o arquivo.' });
+    return;
+  }
+  const lido = sessao.interpretar(texto);
+  sessaoAguardandoConfirmacao = lido.ok ? lido.pacote : null;
+  mostrarPreviaDaImportacao(lido);
+});
+
+function mostrarPreviaDaImportacao(lido) {
+  const destino = $('previa-importacao');
+  destino.hidden = false;
+
+  if (!lido.ok) {
+    destino.innerHTML =
+      `<p class="ajuda erro"><b>A sessão não pôde ser aberta.</b> ${escapar(lido.erro)}</p>` +
+      '<p class="ajuda">Nada neste aparelho foi alterado.</p>';
+    return;
+  }
+
+  const r = lido.resumo;
+  const quando = r.criadoEm ? new Date(r.criadoEm).toLocaleString('pt-BR') : 'data desconhecida';
+  const tempo = r.segundos > 0 ? duracao(r.segundos * 1000) : '—';
+  const linhas = [
+    ['Fechamento', `${milhares(r.cartelas)} cartelas de ${r.tamanho} dezenas`],
+    ['Dezenas escolhidas', `${r.pool}`],
+    ['Trabalho do motor', `${milhares(r.iteracoes)} iterações · ${tempo}`],
+    ['Melhorias registradas', milhares(r.recordes)],
+    ['Meta em curso', r.meta > 0 ? `${milhares(r.meta)} cartelas` : '—'],
+    ['Exportada em', quando],
+  ];
+  destino.innerHTML =
+    '<div class="ficha">' +
+    linhas.map(([r1, r2]) => `<div><span>${r1}</span><b>${escapar(String(r2))}</b></div>`).join('') +
+    '</div>' +
+    `<p class="ajuda">${
+      r.temSolucaoEmCurso
+        ? 'A sessão traz o ponto exato em que a busca estava.'
+        : 'A sessão não traz o ponto de exploração — a busca continua do recorde.'
+    }${
+      r.temPesosAprendidos ? ' O que o motor aprendeu sobre esta configuração vem junto.' : ''
+    }</p>` +
+    '<button class="principal" id="confirmar-importacao">Continuar esta sessão</button>' +
+    '<p class="ajuda">Entra como um trabalho novo. O que já está neste aparelho continua onde está.</p>';
+
+  // O botão nasce agora, então o ouvinte vai nele diretamente.
+  document
+    .getElementById('confirmar-importacao')
+    ?.addEventListener('click', confirmarImportacao);
+}
+
+function confirmarImportacao() {
+  const pacote = sessaoAguardandoConfirmacao;
+  if (!pacote) return avisar('Escolha um arquivo de sessão primeiro.');
+  sessaoAguardandoConfirmacao = null;
+  $('previa-importacao').hidden = true;
+
+  const dentro = pacote.sessao;
+  const motor = dentro.motor ?? {};
+  // Nasce como sessão própria no histórico, e não por cima de nenhuma. Se o
+  // aparelho estiver sem espaço, quem avisa é o próprio histórico.
+  const nova = historico.criar(dentro.configuracao, {
+    melhor: dentro.melhor,
+    atual: dentro.atual ?? [],
+    motor,
+    iteracoes: Number(motor.iteracoes) || Number(dentro.iteracoes) || 0,
+    segundos: Number(motor.segundos) || 0,
+    avaliacao: { cartelas: dentro.melhor.length },
+  });
+  pintarHistorico();
+  atualizarAtalhoDoHistorico();
+
+  comecar(
+    {
+      configuracao: dentro.configuracao,
+      salvo: JSON.stringify(dentro),
+      sessaoId: nova.id,
+    },
+    dentro.melhor
+  );
+  avisar('Sessão importada. O motor continua de onde ela parou.', true);
+}
 
 function textoDoFechamento() {
   // O cabeçalho descreve o que produziu estas cartelas. Sem busca em curso —

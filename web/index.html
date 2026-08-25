@@ -238,6 +238,13 @@
     <button class="principal" id="pausar">Pausar</button>
     <button class="secundario perigo" id="encerrar">Encerrar</button>
   </div>
+  <button class="secundario" id="exportar-sessao">Exportar sessão para arquivo</button>
+  <p class="ajuda">
+    O arquivo leva o trabalho inteiro, não só as cartelas: o recorde, a solução
+    que a busca está mexendo, a meta perseguida, os contadores e o que o motor
+    aprendeu sobre esta configuração. Dá para exportar com o motor rodando — o
+    que sai é o estado do fim do último lote.
+  </p>
   <p class="ajuda">
     O motor não para sozinho — nem quando já encontrou o menor fechamento que
     existe. Quem decide é você. <strong>Pausar</strong> congela a busca e guarda
@@ -397,6 +404,19 @@
       encontrada. Você pode voltar a qualquer uma delas e continuar de onde
       parou — o motor retoma com a solução que já havia alcançado.
     </p>
+  </div>
+
+  <div class="cartao">
+    <div class="rotulo">Trazer de outro aparelho</div>
+    <p class="ajuda">
+      Uma sessão exportada em qualquer aparelho entra aqui como um trabalho
+      novo — o que já existe neste aparelho não é tocado.
+    </p>
+    <!-- O input fica escondido porque o estilo dele não se controla; quem o
+         aciona é o botão ao lado, que se parece com os outros do aplicativo. -->
+    <input type="file" id="arquivo-sessao" accept="application/json,.json" hidden>
+    <button class="secundario" id="importar-sessao">Escolher arquivo de sessão</button>
+    <div id="previa-importacao" hidden></div>
   </div>
 
   <div id="lista-historico"></div>

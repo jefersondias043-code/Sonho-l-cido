@@ -226,6 +226,8 @@ export function criar(configuracao, dados = {}) {
     avaliacao: dados.avaliacao ?? {},
     iteracoes: dados.iteracoes ?? 0,
     segundos: dados.segundos ?? 0,
+    atual: dados.atual ?? [],
+    motor: dados.motor ?? {},
   };
 
   gravar([sessao, ...ler()]);
@@ -285,6 +287,12 @@ export function paraRetomada(sessao) {
     configuracao: sessao.configuracao,
     melhor: sessao.melhor,
     iteracoes: sessao.iteracoes ?? 0,
+    // O que o motor guardou de si: a meta em curso, os contadores e os pesos que
+    // o seletor aprendeu. Continuar um trabalho sem isso devolve as cartelas e
+    // joga fora o rastro — o motor recomeça com todos os operadores empatados,
+    // e leva milhares de iterações para reaprender o que já sabia.
+    atual: sessao.atual ?? [],
+    motor: sessao.motor ?? {},
   });
 }
 

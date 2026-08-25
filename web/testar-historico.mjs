@@ -325,6 +325,159 @@ try {
     naTela.texto.slice(0, 70)
   );
 
+  /** O número que está num elemento da tela, sem a pontuação de milhar. */
+  const numero = async (seletor) =>
+    Number((await pagina.locator(seletor).textContent()).replace(/\D/g, ''));
+
+  // ─── a sessão atravessa para outro aparelho ───
+  //
+  // A promessa inteira do arquivo: dez horas de motor num aparelho continuam
+  // sendo dez horas no outro. O que se prova aqui é que o arquivo carrega a
+  // sessão e não as cartelas — e que importar não encosta no que já existe.
+  await pagina.click('.aba[data-painel="lotinha"]');
+  await pagina.waitForSelector('#lotinha.ativo');
+  await pagina.click('#lot-pool .opcao[data-pool="20"]');
+  await pagina.click('#lot-limpar');
+  for (let n = 1; n <= 20; n++) await pagina.click(`#lot-grade .numero[data-n="${n}"]`);
+  await pagina.click('#lot-jogo .opcao[data-jogo="17"]');
+  await pagina.click('#lot-iniciar');
+  await pagina.waitForSelector('#buscar.ativo', { timeout: 30000 });
+  await pagina.waitForFunction(
+    () => {
+      const t = document.getElementById('melhor-cartelas').textContent.trim();
+      return t !== '' && t !== '—';
+    },
+    undefined,
+    { timeout: 30000 }
+  );
+  await pagina.waitForTimeout(2500);
+
+  // A exportação não pausa nada: o motor segue rodando enquanto o arquivo sai.
+  const arquivo = await pagina.evaluate(async () => {
+    const capturado = { nome: null, texto: null };
+    // Intercepta a entrega para pegar o arquivo sem depender de download nem de
+    // compartilhamento — o que se está testando é o conteúdo, não o encanamento
+    // do sistema operacional.
+    const criarOriginal = URL.createObjectURL;
+    URL.createObjectURL = (blob) => {
+      capturado.blob = blob;
+      return criarOriginal.call(URL, blob);
+    };
+    const cliqueOriginal = HTMLAnchorElement.prototype.click;
+    HTMLAnchorElement.prototype.click = function () {
+      capturado.nome = this.download;
+    };
+    document.getElementById('exportar-sessao').click();
+    for (let i = 0; i < 100 && !capturado.blob; i++) {
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    HTMLAnchorElement.prototype.click = cliqueOriginal;
+    URL.createObjectURL = criarOriginal;
+    capturado.texto = capturado.blob ? await capturado.blob.text() : null;
+    delete capturado.blob;
+    return capturado;
+  });
+
+  marcar(
+    typeof arquivo.texto === 'string' && arquivo.texto.length > 100,
+    'exportar entrega um arquivo com o motor ainda rodando',
+    `${arquivo.nome} · ${arquivo.texto ? Math.round(arquivo.texto.length / 1024) : 0} KB`
+  );
+
+  const dentro = JSON.parse(arquivo.texto);
+  const m = dentro.sessao?.motor ?? {};
+  marcar(
+    dentro.aplicativo === 'sonho-lucido/sessao' &&
+      Array.isArray(dentro.sessao?.melhor) &&
+      dentro.sessao.melhor.length > 0 &&
+      Array.isArray(dentro.sessao?.atual) &&
+      dentro.sessao.atual.length > 0,
+    'e o arquivo traz o recorde e a solução em curso, não só as cartelas',
+    `${dentro.sessao?.melhor?.length} no recorde, ${dentro.sessao?.atual?.length} em curso`
+  );
+  marcar(
+    m.iteracoes > 0 && m.alvo_cartelas > 0 && (m.pesos_dos_operadores ?? []).length > 1,
+    'e traz o trabalho do motor: iterações, meta perseguida e pesos aprendidos',
+    `${m.iteracoes} iterações · meta ${m.alvo_cartelas} · ${
+      (m.pesos_dos_operadores ?? []).length
+    } pesos`
+  );
+
+  await pagina.click('#encerrar');
+  await pagina.waitForSelector('#lotinha.ativo', { timeout: 20000 });
+
+  // O outro aparelho: histórico zerado, nada em comum além do arquivo.
+  await pagina.evaluate(() => localStorage.clear());
+  await pagina.reload({ waitUntil: 'networkidle' });
+  await pagina.click('.aba[data-painel="historico"]');
+  await pagina.waitForSelector('#historico.ativo');
+  const antesDeImportar = await pagina.locator('.sessao').count();
+
+  await pagina.setInputFiles('#arquivo-sessao', {
+    name: arquivo.nome,
+    mimeType: 'application/json',
+    buffer: Buffer.from(arquivo.texto),
+  });
+  await pagina.waitForSelector('#confirmar-importacao', { timeout: 10000 });
+  const previa = (await pagina.locator('#previa-importacao').textContent()).replace(/\s+/g, ' ');
+  marcar(
+    /iterações/.test(previa) && /cartelas de 17 dezenas/.test(previa),
+    'a tela descreve a sessão antes de abrir, e espera confirmação',
+    previa.slice(0, 90)
+  );
+
+  await pagina.click('#confirmar-importacao');
+  await pagina.waitForSelector('#buscar.ativo', { timeout: 30000 });
+  await pagina.waitForFunction(
+    () => {
+      const t = document.getElementById('iteracoes').textContent.replace(/\D/g, '');
+      return t !== '' && Number(t) > 0;
+    },
+    undefined,
+    { timeout: 30000 }
+  );
+  const aoRetomar = await numero('#iteracoes');
+  marcar(
+    aoRetomar >= m.iteracoes,
+    'e o motor retoma com as iterações da sessão, em vez de recomeçar do zero',
+    `gravadas ${m.iteracoes}, retomadas ${aoRetomar}`
+  );
+  marcar(
+    (await numero('#melhor-cartelas')) <= dentro.sessao.melhor.length,
+    'e o recorde importado é o ponto de partida, não um recomeço',
+    `${await numero('#melhor-cartelas')} contra ${dentro.sessao.melhor.length} no arquivo`
+  );
+
+  await pagina.waitForTimeout(2500);
+  marcar(
+    (await numero('#iteracoes')) > aoRetomar,
+    'e o trabalho novo soma ao que veio no arquivo',
+    `${aoRetomar} → ${await numero('#iteracoes')}`
+  );
+
+  await pagina.click('#encerrar');
+  await pagina.waitForSelector('#lotinha.ativo', { timeout: 20000 });
+  await pagina.click('.aba[data-painel="historico"]');
+  marcar(
+    (await pagina.locator('.sessao').count()) === antesDeImportar + 1,
+    'a sessão importada entra como trabalho novo, sem encostar no que já existia',
+    `${antesDeImportar} antes, ${await pagina.locator('.sessao').count()} depois`
+  );
+
+  // Um arquivo estragado não pode desmontar nada.
+  await pagina.setInputFiles('#arquivo-sessao', {
+    name: 'quebrado.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from('{"aplicativo":"sonho-lucido/sessao","formato":1,"sessao":{}}'),
+  });
+  await pagina.waitForTimeout(400);
+  const recusa = (await pagina.locator('#previa-importacao').textContent()).replace(/\s+/g, ' ');
+  marcar(
+    /não pôde ser aberta/.test(recusa) && /Nada neste aparelho foi alterado/.test(recusa),
+    'um arquivo sem sessão dentro é recusado dizendo o que houve, sem mexer em nada',
+    recusa.slice(0, 80)
+  );
+
   marcar(errosDeConsole.length === 0, 'nenhum erro no console', errosDeConsole.join(' | ').slice(0, 140));
 } finally {
   await navegador.close();

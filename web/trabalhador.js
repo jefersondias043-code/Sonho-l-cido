@@ -98,6 +98,23 @@ function tratar(mensagem) {
         postMessage({ tipo: 'pausado', estado: lerEstado(), cartelas: JSON.parse(motor.melhor()) });
         break;
 
+      // A sessão inteira, para gravar num arquivo e continuar noutro aparelho.
+      //
+      // Sai de dentro do WebAssembly, que é o único lugar onde o estado do motor
+      // existe por completo — a tela conhece o recorde e os contadores, mas não
+      // a meta em curso nem o que o seletor aprendeu.
+      //
+      // Não pausa a busca para responder. O motor só lê mensagens entre lotes,
+      // então o que ele devolve aqui é o estado no fim do último lote: um
+      // instante consistente, e o mais recente que existe.
+      case 'exportar':
+        postMessage({
+          tipo: 'exportado',
+          id: mensagem.id,
+          sessao: motor ? JSON.parse(motor.exportar()) : null,
+        });
+        break;
+
       case 'encerrar':
         // Devolve o estado antes de liberar: é a última chance de guardar o
         // resultado, e o usuário acabou de pedir para parar de vez.

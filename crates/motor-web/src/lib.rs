@@ -150,6 +150,19 @@ pub struct Estado {
 
     /// Recordes encontrados neste lote, em ordem cronológica.
     pub novos_recordes: Vec<Recorde>,
+
+    /// O estado interno do motor, em números.
+    ///
+    /// Vai em **todo** lote, e de propósito: é o que permite ao histórico gravar
+    /// a sessão junto de cada melhoria, em vez de guardar só as cartelas. São
+    /// alguns inteiros e os pesos dos operadores — desprezível ao lado do que já
+    /// atravessa a fronteira a cada 220 ms, e é a diferença entre continuar um
+    /// trabalho salvo e recomeçá-lo com o resultado na mão.
+    ///
+    /// As cartelas da solução em curso **não** vêm aqui. Num fechamento de dez
+    /// mil elas seriam meio megabyte por lote, cinco vezes por segundo. Elas só
+    /// saem na exportação, que acontece uma vez.
+    pub retrato: RetratoSalvo,
 }
 
 /// Uma sessão de otimização inteira, em forma de arquivo.
@@ -568,7 +581,21 @@ impl MotorWeb {
         let atual = self.interno.avaliacao_atual();
         let limite = self.interno.limite_inferior();
 
+        let retrato_interno = self.interno.retrato();
         let estado = Estado {
+            retrato: RetratoSalvo {
+                iteracoes: retrato_interno.iteracoes,
+                aceitas: retrato_interno.aceitas,
+                recordes: retrato_interno.recordes,
+                diversificacoes: retrato_interno.diversificacoes,
+                duplicadas_evitadas: retrato_interno.duplicadas_evitadas,
+                segundos: retrato_interno.segundos,
+                alvo_cartelas: retrato_interno.alvo_cartelas,
+                passo_atual: retrato_interno.passo_atual,
+                iteracao_da_meta: retrato_interno.iteracao_da_meta,
+                melhor_iteracao: retrato_interno.melhor_iteracao,
+                pesos_dos_operadores: retrato_interno.pesos_dos_operadores,
+            },
             iteracoes: estatisticas.iteracoes,
             aceitas: estatisticas.aceitas,
             recordes: estatisticas.recordes,
