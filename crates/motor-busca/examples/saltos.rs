@@ -44,13 +44,16 @@ fn main() {
     let casos = if casos.is_empty() { vec![(22, 17), (23, 18), (25, 20)] } else { casos };
     let banco = ler_banco();
 
-    println!("Saltos de recorde — {segundos}s por caso e por política\n");
+    println!("Saltos de recorde — {segundos}s por caso, política e semente\n");
     println!(
-        "{:>7} {:>8} {:>8} {:>10} {:>10}",
-        "caso", "partida", "piso", "unitário", "adaptativo"
+        "{:>7} {:>8} {:>8}   {:>28}   {:>28}",
+        "caso", "partida", "piso", "passo de uma", "passo adaptativo"
     );
-    println!("{}", "─".repeat(50));
+    println!("{}", "─".repeat(90));
 
+    const SEMENTES: [u64; 6] = [7, 21, 99, 123, 404, 777];
+
+    let mut vitorias = [0usize; 3]; // unitário, calibrado, empate
     for (pool, jogo) in casos {
         let Some(partida) = banco.get(&format!("{pool},{jogo}")).cloned() else {
             println!("{pool},{jogo}: sem entrada no banco");
@@ -59,56 +62,80 @@ fn main() {
         let problema = problema_de(pool, jogo);
         let piso = motor_core::limite_inferior(&MotorCobertura::novo(&problema).unwrap()).valor;
 
-        let mut resultados = Vec::new();
-        let mut detalhes = Vec::new();
-        for politica in [
+        let politicas = [
             PassoDaMeta::Unitario,
             PassoDaMeta::Adaptativo {
                 maximo: 64,
                 iteracoes_para_dobrar: 20_000,
                 iteracoes_para_recuar: 5_000,
             },
-        ] {
-            // Três sementes: um número só é sorteio, três já dizem alguma coisa.
-            let mut soma = 0usize;
-            let mut registro = Registro { tamanhos: Vec::new(), metas: Vec::new() };
-            for semente in [7u64, 21, 99] {
+        ];
+        let mut por_politica: Vec<Vec<usize>> = Vec::new();
+        let mut saltos_por_politica: Vec<BTreeMap<usize, usize>> = Vec::new();
+        for politica in politicas {
+            let mut tamanhos = Vec::new();
+            let mut saltos: BTreeMap<usize, usize> = BTreeMap::new();
+            for semente in SEMENTES {
                 let (tamanho, r) =
                     rodar(&problema, &partida, Duration::from_secs(segundos), politica, semente);
-                soma += tamanho;
-                registro.tamanhos.extend(r.tamanhos);
-            }
-            let tamanho = soma / 3;
-            resultados.push(tamanho);
-            let mut saltos: BTreeMap<usize, usize> = BTreeMap::new();
-            for par in registro.tamanhos.windows(2) {
-                if par[0] > par[1] {
-                    *saltos.entry(par[0] - par[1]).or_default() += 1;
+                tamanhos.push(tamanho);
+                for par in r.tamanhos.windows(2) {
+                    if par[0] > par[1] {
+                        *saltos.entry(par[0] - par[1]).or_default() += 1;
+                    }
                 }
             }
-            detalhes.push(format!(
-                "{:?}: {} recordes, saltos {}",
-                politica,
-                registro.tamanhos.len(),
-                if saltos.is_empty() {
-                    "nenhum".to_string()
-                } else {
-                    saltos.iter().map(|(s, q)| format!("{s}x{q}")).collect::<Vec<_>>().join(" ")
-                }
-            ));
+            por_politica.push(tamanhos);
+            saltos_por_politica.push(saltos);
+        }
+
+        let resumo = |v: &Vec<usize>| {
+            let mut o = v.clone();
+            o.sort_unstable();
+            // O mínimo é a estatística que importa numa execução longa: o motor
+            // guarda o melhor de sempre, então uma sorte grande não se perde e
+            // um azar não fica.
+            format!("melhor {} med {} pior {}", o[0], o[o.len() / 2], o[o.len() - 1])
+        };
+        // Vitória por semente: comparar par a par é o que tira a sorte do meio.
+        let mut ganhos = [0usize; 3];
+        for (&a, &b) in por_politica[0].iter().zip(&por_politica[1]) {
+            if a < b {
+                ganhos[0] += 1;
+            } else if b < a {
+                ganhos[1] += 1;
+            } else {
+                ganhos[2] += 1;
+            }
+        }
+        for i in 0..3 {
+            vitorias[i] += ganhos[i];
         }
 
         println!(
-            "{:>7} {:>8} {piso:>8} {:>10} {:>10}",
+            "{:>7} {:>8} {piso:>8}   {:>28}   {:>28}",
             format!("{pool},{jogo}"),
             partida.len(),
-            resultados[0],
-            resultados[1]
+            resumo(&por_politica[0]),
+            resumo(&por_politica[1])
         );
-        for d in detalhes {
-            println!("        {d}");
+        println!(
+            "        por semente: uma {:?} | adaptativo {:?} | placar {}x{} ({} empates)",
+            por_politica[0], por_politica[1], ganhos[0], ganhos[1], ganhos[2]
+        );
+        for (nome, saltos) in ["uma", "adaptativo"].iter().zip(&saltos_por_politica) {
+            let txt = if saltos.is_empty() {
+                "nenhum".to_string()
+            } else {
+                saltos.iter().map(|(s, q)| format!("{s}x{q}")).collect::<Vec<_>>().join(" ")
+            };
+            println!("        saltos {nome}: {txt}");
         }
     }
+    println!(
+        "\nPlacar geral por semente: passo de uma {} × {} passo calibrado ({} empates)",
+        vitorias[0], vitorias[1], vitorias[2]
+    );
 }
 
 fn rodar(
@@ -118,12 +145,8 @@ fn rodar(
     passo_da_meta: PassoDaMeta,
     semente: u64,
 ) -> (usize, Registro) {
-    let config = Configuracao {
-        semente,
-        intervalo_progresso: 0,
-        passo_da_meta,
-        ..Default::default()
-    };
+    let config =
+        Configuracao { semente, intervalo_progresso: 0, passo_da_meta, ..Default::default() };
     let mut motor = MotorBusca::novo(problema.clone(), config).expect("problema válido");
     motor.semear(partida);
     let mut registro = Registro { tamanhos: Vec::new(), metas: Vec::new() };

@@ -89,10 +89,33 @@ const TETO_DE_TROCAS: u64 = 5_000;
 
 /// Como a meta de cardinalidade desce depois de cada recorde.
 ///
-/// A meta é um **teto**: `reparar` não acrescenta cartelas além dela. Descer a
-/// meta é, portanto, apertar a busca, e não afrouxá-la — é por isso que mirar
-/// direto no limite inferior não é "dar liberdade ao motor", e sim exigir de
-/// uma vez o que ele ainda não sabe fazer.
+/// A meta é um **teto**: `reparar` não acrescenta cartelas além dela, e
+/// `encolher_ate` corta a solução atual até ela. Descer a meta é, portanto,
+/// apertar a busca, e não afrouxá-la — é por isso que mirar direto no limite
+/// inferior não é "dar liberdade ao motor", e sim exigir de uma vez o que ele
+/// ainda não sabe fazer.
+///
+/// ## O que foi medido, para não se medir de novo
+///
+/// As três alternativas ao passo de uma foram testadas nos fechamentos da
+/// Lotinha, com seis sementes por caso e placar contado par a par:
+///
+/// | política                  | resultado |
+/// |---------------------------|-----------|
+/// | meta no piso              | **zero recordes** em `(21,17)`, `(22,17)`, `(23,18)` e `(25,20)` |
+/// | passo dobrando por limiar fixo | perde 3×1 em `(22,17)` e 4×0 em `(23,18)`, e perde o melhor-de-seis nos dois |
+/// | passo auto-calibrado      | idêntico ao unitário em `(21,17)`; perde 5×1 em `(22,17)` |
+///
+/// O padrão do passo dobrando é sempre o mesmo: um salto que fecha, e depois a
+/// busca trava numa meta que não alcança. Em `(22,17)` ela para em exatamente
+/// 3.489 nas seis sementes, enquanto o passo de uma faz 39 quedas de uma
+/// cartela e chega a 3.483. O limiar de recuo é escrito em iterações, e numa
+/// configuração onde cada iteração varre milhões de alvos ele nunca dispara —
+/// mas ajustá-lo só muda a escala em que o mesmo travamento acontece.
+///
+/// O passo de uma mantém a solução sempre perto de viável, que é a condição
+/// para a busca por cardinalidade fixa funcionar. As outras políticas ficam
+/// disponíveis para quem quiser medir de novo, e não como padrão.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PassoDaMeta {
     /// Uma cartela por vez. Mantém a solução sempre perto de viável.
@@ -166,11 +189,7 @@ impl Default for Configuracao {
             fator_reacao: 0.20,
             recompensas: Recompensas::default(),
             intervalo_progresso: 100_000,
-            passo_da_meta: PassoDaMeta::Adaptativo {
-                maximo: 64,
-                iteracoes_para_dobrar: 20_000,
-                iteracoes_para_recuar: 5_000,
-            },
+            passo_da_meta: PassoDaMeta::Unitario,
         }
     }
 }
@@ -772,17 +791,19 @@ impl MotorBusca {
     /// distância, e `C(26,6,3)` saiu de 246 para 288 cartelas — cortar 116
     /// cartelas de uma vez deixa um destroço que a busca não repara.
     ///
-    /// ## Por que também não é um passo fixo de uma
+    /// ## Por que continua sendo um passo de uma
     ///
-    /// Porque desperdiça a oportunidade oposta. Quando a solução tem folga, o
-    /// recorde seguinte vem em poucas iterações, e insistir em uma cartela por
-    /// vez gasta uma rodada inteira de destruir-reconstruir-podar para cada
-    /// cartela. Medido nos fechamentos da Lotinha, sessenta segundos em
-    /// `(21,17)` tiravam quatro cartelas de 1.095.
+    /// A queixa contra ele é justa de olhar: com folga de sobra na solução,
+    /// gastar uma rodada inteira de destruir-reconstruir-podar para tirar uma
+    /// cartela parece desperdício. Duas políticas foram escritas para aproveitar
+    /// essa folga e as duas mediram pior — veja a tabela em [`PassoDaMeta`]. O
+    /// motivo é que o desperdício aparente é o que mantém a solução perto de
+    /// viável, e é dessa proximidade que a busca por cardinalidade fixa vive.
     ///
-    /// O passo adaptativo resolve os dois: dobra enquanto os recordes vêm fáceis
-    /// e volta a um assim que a meta resiste. É o que dá quedas de várias
-    /// cartelas onde há oportunidade, sem pagar o corte grande onde não há.
+    /// Vale separar duas coisas que se confundem: o **teto** desce de uma em
+    /// uma, mas o **recorde** cai do tamanho que a poda conseguir. Uma iteração
+    /// que fecha a cobertura e descobre cinco cartelas supérfluas registra as
+    /// cinco de uma vez. O motor nunca esteve proibido de cortar em bloco.
     fn definir_meta(&mut self) {
         let nova_meta = match self.problema.objetivo() {
             Objetivo::MinimizarCartelas => {
@@ -1419,11 +1440,11 @@ mod testes {
     }
 
     #[test]
-    fn a_meta_desce_mais_de_uma_cartela_quando_o_recorde_vem_facil() {
-        // A queixa que gerou isto: com passo fixo de um, o motor gastava uma
-        // rodada inteira de destruir-reconstruir-podar para cada cartela, mesmo
-        // com folga de sobra. O passo adaptativo dobra enquanto os recordes vêm
-        // rápido, e é assim que a meta desce de várias em várias.
+    fn a_politica_adaptativa_desce_mais_de_uma_cartela_por_vez() {
+        // A política existe e faz o que promete — descer a meta de várias em
+        // várias. O que a medição mostrou é que fazer isso não ajuda (veja a
+        // tabela em `PassoDaMeta`), e por isso ela não é o padrão. O teste
+        // guarda o comportamento para quem for medir de novo.
         let config = Configuracao {
             passo_da_meta: PassoDaMeta::Adaptativo {
                 maximo: 64,
@@ -1490,6 +1511,48 @@ mod testes {
         assert!(
             motor.alvo_cartelas < motor.melhor_avaliacao().cartelas,
             "afrouxar não é desistir: a meta continua abaixo do recorde"
+        );
+    }
+
+    #[test]
+    fn o_padrao_e_o_passo_de_uma_cartela() {
+        // Três políticas foram medidas contra ela e as três perderam. Este teste
+        // é o que impede uma delas de voltar a ser padrão sem nova medição.
+        assert_eq!(Configuracao::default().passo_da_meta, PassoDaMeta::Unitario);
+    }
+
+    #[test]
+    fn o_recorde_cai_do_tamanho_que_a_poda_conseguir_ainda_que_a_meta_desca_de_uma() {
+        // A confusão que a meta de uma em uma provoca: parece que o motor está
+        // proibido de cortar em bloco. Não está. O teto desce de uma em uma; o
+        // recorde cai do tamanho que a poda encontrar de supérfluo.
+        let mut motor = MotorBusca::novo(problema(14, 5, 3), config_rapida(5)).unwrap();
+        let mut coletor = Coletor::default();
+        motor.executar(
+            &Controle::novo(),
+            &CondicoesDeParada::por_iteracoes(60_000),
+            &mut coletor,
+        );
+
+        let tamanhos: Vec<usize> = coletor
+            .eventos
+            .iter()
+            .filter_map(|e| match e {
+                Evento::NovoRecorde { avaliacao, .. } => Some(avaliacao.cartelas),
+                _ => None,
+            })
+            .collect();
+        let maior_queda = tamanhos
+            .windows(2)
+            .filter(|p| p[0] > p[1])
+            .map(|p| p[0] - p[1])
+            .max()
+            .unwrap_or(0);
+
+        assert!(
+            maior_queda > 1,
+            "nenhuma queda de mais de uma cartela em {} recordes: {tamanhos:?}",
+            tamanhos.len()
         );
     }
 

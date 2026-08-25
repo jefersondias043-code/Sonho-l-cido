@@ -505,12 +505,37 @@ cartelas contra as 130 do mundo: continua 79% acima. As piores estão todas em
 neste projeto. Ali a distância é de algoritmo, não de relógio — dar mais tempo
 não resolve, e é o próximo lugar onde vale trabalhar.
 
-Uma tentação medida e descartada: mirar a meta direto no recorde mundial, em vez
-de descer de uma cartela por vez. Levou os empates de 41,7% para 48,4% — e os
-casos a mais de 20% de distância de 30,9% para **49,3%**, com os piores piorando
-muito. Cortar cem cartelas de uma vez deixa um destroço que a busca não repara.
-Quem ganha com o salto é o caso fácil; quem perde é o difícil, que é o que o
-usuário sente.
+### Três tentações medidas e descartadas
+
+A meta desce de uma cartela por vez. É a parte do motor que mais parece
+desperdício — se o fechamento tem 3.495 cartelas e o piso provado é 1.537, por
+que perseguir 3.494? Três respostas para isso foram escritas e medidas, e as três
+perderam.
+
+A razão de todas falharem é a mesma, e é estrutural: **a meta é um teto, não um
+alvo.** A reconstrução para de acrescentar cartelas ao chegar nela, e a solução
+atual é cortada até ela. Baixar a meta aperta a busca; não a solta.
+
+| tentação | o que se mediu |
+|---|---|
+| meta no limite inferior | **zero recordes** em `(21,17)`, `(22,17)`, `(23,18)` e `(25,20)`. Na aferição contra a tabela mundial, os empates caíram de 41,7% para 48,4% de distância e `C(26,6,3)` saiu de 246 para 288 cartelas |
+| passo dobrando por limiar fixo | perde 3×1 em `(22,17)` e 4×0 em `(23,18)`, e perde o melhor-de-seis nos dois |
+| passo auto-calibrado pela média | idêntico ao unitário em `(21,17)`; perde 5×1 em `(22,17)` |
+
+O padrão do passo grande é sempre o mesmo: um salto que fecha, e depois a busca
+trava numa meta que não alcança. Em `(22,17)` ela para em exatamente 3.489 nas
+seis sementes, enquanto o passo de uma faz 39 quedas de uma cartela e chega a
+3.483.
+
+Vale separar duas coisas que se confundem ao ver a meta andar de um em um: o
+**teto** desce de uma cartela por vez, mas o **recorde** cai do tamanho que a
+poda conseguir. Uma iteração que fecha a cobertura e descobre cinco cartelas
+supérfluas registra as cinco de uma vez — há um teste que exige exatamente isso.
+O motor nunca esteve proibido de cortar em bloco.
+
+As políticas ficam em `PassoDaMeta`, para quem quiser medir de novo sem mexer no
+motor. O padrão é `Unitario`, e um teste impede que outra volte a sê-lo sem nova
+medição.
 
 ## Arquitetura
 
@@ -571,7 +596,8 @@ testes, compilado para outro alvo.
 "Minimizar cartelas" é vago demais para guiar uma busca local. O motor fixa uma
 meta — *resolver com exatamente N cartelas* — e minimiza apenas os alvos
 descobertos. Ao fechar a cobertura, registra o recorde e baixa a meta para
-`N − 1`.
+`N − 1`. Por que `N − 1` e não um salto até o piso, quando o piso é conhecido e
+está muito abaixo: veja as três tentações medidas mais acima.
 
 Isso transforma um problema de otimização difuso em uma sequência de problemas
 de viabilidade bem definidos, cada um com um gradiente claro para seguir. O
