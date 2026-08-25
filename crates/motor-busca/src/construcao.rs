@@ -11,7 +11,17 @@
 //! duas execuções a partir do mesmo ponto seguirem caminhos diferentes.
 
 use std::collections::BinaryHeap;
-use std::time::{Duration, Instant};
+use std::time::Duration;
+
+// `std::time::Instant::now()` panica no wasm32 — não há relógio de sistema no
+// navegador. `construir_guloso_global` nunca tinha rodado ali; passou a rodar
+// quando o Motor Construtor o chamou, e o pânico apareceu como um `unreachable`
+// sem mensagem.
+#[cfg(target_arch = "wasm32")]
+use web_time::Instant;
+
+#[cfg(not(target_arch = "wasm32"))]
+use std::time::Instant;
 
 use motor_core::cartela::Cartela;
 use motor_core::cobertura::MotorCobertura;

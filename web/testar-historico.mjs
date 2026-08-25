@@ -93,6 +93,12 @@ async function buscar({ pool, jogo }) {
   await pagina.click('#lot-limpar');
   for (let n = 1; n <= pool; n++) await pagina.click(`#lot-grade .numero[data-n="${n}"]`);
   await pagina.click(`#lot-jogo .opcao[data-jogo="${jogo}"]`);
+  // O estágio 0 roda em um segundo aqui: o que se testa é que ele acontece e
+  // entrega, não quanto ele consegue achar com tempo de verdade.
+  await pagina.evaluate(() => {
+    const campo = document.getElementById('segundos-construtor');
+    if (campo) campo.value = '1';
+  });
   await pagina.click('#lot-iniciar');
   await pagina.waitForSelector('#buscar.ativo', { timeout: 30000 });
   await esperarSolucao();
@@ -344,6 +350,12 @@ try {
   for (const n of [1, 2, 4, 5, 7, 8, 10, 11, 13, 14, 16, 17, 19, 20, 22, 23, 24, 25]) {
     await pagina.click(`#lot-grade .numero[data-n="${n}"]`);
   }
+  // O estágio 0 roda em um segundo aqui: o que se testa é que ele acontece e
+  // entrega, não quanto ele consegue achar com tempo de verdade.
+  await pagina.evaluate(() => {
+    const campo = document.getElementById('segundos-construtor');
+    if (campo) campo.value = '1';
+  });
   await pagina.click('#lot-iniciar');
   await pagina.waitForSelector('#buscar.ativo', { timeout: 30000 });
   await pagina.waitForFunction(
@@ -418,6 +430,12 @@ try {
   await pagina.click('#lot-limpar');
   for (let n = 1; n <= 20; n++) await pagina.click(`#lot-grade .numero[data-n="${n}"]`);
   await pagina.click('#lot-jogo .opcao[data-jogo="17"]');
+  // O estágio 0 roda em um segundo aqui: o que se testa é que ele acontece e
+  // entrega, não quanto ele consegue achar com tempo de verdade.
+  await pagina.evaluate(() => {
+    const campo = document.getElementById('segundos-construtor');
+    if (campo) campo.value = '1';
+  });
   await pagina.click('#lot-iniciar');
   await pagina.waitForSelector('#buscar.ativo', { timeout: 30000 });
   await pagina.waitForFunction(
@@ -526,12 +544,15 @@ try {
     `${await numero('#melhor-cartelas')} contra ${dentro.sessao.melhor.length} no arquivo`
   );
 
-  await pagina.waitForTimeout(2500);
-  marcar(
-    (await numero('#iteracoes')) > aoRetomar,
-    'e o trabalho novo soma ao que veio no arquivo',
-    `${aoRetomar} → ${await numero('#iteracoes')}`
+  // Depois de importar há o estágio 0 antes da busca: esperar pelo número
+  // subindo, e não por um relógio fixo, é o que torna este teste independente de
+  // quanto o construtor demora.
+  await pagina.waitForFunction(
+    (antes) => Number(document.getElementById('iteracoes').textContent.replace(/\D/g, '')) > antes,
+    aoRetomar,
+    { timeout: 30000 }
   );
+  marcar(true, 'e o trabalho novo soma ao que veio no arquivo', `${aoRetomar} → ${await numero('#iteracoes')}`);
 
   await pagina.click('#encerrar');
   await pagina.waitForSelector('#lotinha.ativo', { timeout: 20000 });

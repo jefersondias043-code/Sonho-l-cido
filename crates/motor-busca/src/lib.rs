@@ -38,6 +38,7 @@ pub mod aceitacao;
 pub mod adaptativo;
 pub mod arquivo;
 pub mod construcao;
+pub mod construtor;
 pub mod controle;
 pub mod motor;
 pub mod oficina;

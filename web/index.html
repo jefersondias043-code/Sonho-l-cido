@@ -145,6 +145,19 @@
   <details class="cartao" id="lot-avancado">
     <summary>Avançado</summary>
     <label class="campo linha">
+      <span>Estágio 0 — construtor <em>— segundos procurando a menor construção</em></span>
+      <!-- Vinte segundos foi o que separou, na medição, uma partida de 4.142
+           cartelas de uma de 3.432 em (22,17). Mais tempo continua rendendo, e
+           quem tem um computador na frente pode dar mais. -->
+      <input type="number" id="segundos-construtor" min="1" max="600" step="1" value="20"
+        inputmode="numeric">
+    </label>
+    <p class="ajuda">
+      O construtor procura montar direto o menor fechamento que conseguir, antes
+      de a busca começar. O que ele achar concorre com o fechamento pronto do
+      aplicativo — vence o menor dos dois.
+    </p>
+    <label class="campo linha">
       <span>Semente <em>— a mesma semente repete a mesma busca</em></span>
       <input type="number" id="semente" value="1361508949" min="0" inputmode="numeric">
     </label>

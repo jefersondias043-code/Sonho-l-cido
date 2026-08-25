@@ -402,6 +402,50 @@ impl MotorBusca {
         self.consolidar_inicio();
     }
 
+    /// **Estágio 0** — constrói o melhor ponto de partida que conseguir.
+    ///
+    /// Roda antes de qualquer iteração da busca, e é o oposto dela: em vez de
+    /// partir de uma solução qualquer e ir tirando cartelas, procura construir
+    /// direto uma solução pequena. O que sai daqui é o que a busca recebe.
+    ///
+    /// Quanto isso vale, medido com vinte segundos de orçamento e comparado com
+    /// a partida que o motor montava antes:
+    ///
+    /// | pool, jogo | antes | estágio 0 |
+    /// |---|---:|---:|
+    /// | 20, 17 |   362 |   **300** |
+    /// | 21, 17 | 1.290 | **1.050** |
+    /// | 22, 17 | 4.142 | **3.432** |
+    ///
+    /// O resultado **concorre**, não se impõe: passa pela mesma comparação de
+    /// [`Self::escolher_partida`], então um fechamento já trazido que seja menor
+    /// continua vencendo. Acrescentar este estágio não pode piorar nenhum caso.
+    ///
+    /// `ao_melhorar` é chamado a cada construção que bate a anterior — é o que
+    /// permite à tela mostrar o estágio andando em vez de um tempo parado.
+    pub fn construir_partida(
+        &mut self,
+        orcamento: Duration,
+        ao_melhorar: &mut dyn FnMut(&crate::construtor::Achado),
+    ) {
+        let parada = self.parada_em_curso.clone();
+        let achado = crate::construtor::construir_o_menor(
+            &self.cobertura,
+            &self.problema,
+            orcamento,
+            self.config.semente,
+            &mut self.oficina,
+            ao_melhorar,
+            parada.as_ref(),
+        );
+        let Some(achado) = achado else { return };
+
+        let ja_havia_partida = self.comecou;
+        self.comecou = true;
+        self.escolher_partida(&achado.cartelas, ja_havia_partida, &achado.origem);
+        self.consolidar_inicio();
+    }
+
     /// Retoma de um estado salvo anteriormente (o CONTINUAR do §16).
     ///
     /// Diferente de [`Self::semear`], aqui as cartelas já são reconhecidas como

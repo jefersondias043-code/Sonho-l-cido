@@ -268,6 +268,10 @@ function duracao(ms) {
 const SITUACOES = {
   ocioso: { classe: '', texto: 'parado' },
   carregando: { classe: 'trabalhando', texto: 'carregando o motor…' },
+  construindo: {
+    classe: 'trabalhando',
+    texto: 'estágio 0 — construindo o menor fechamento que der…',
+  },
   preparando: { classe: 'trabalhando', texto: 'montando a primeira solução…' },
   buscando: { classe: 'trabalhando', texto: 'procurando soluções melhores' },
   pausado: { classe: 'pausada', texto: 'pausado' },
@@ -298,7 +302,7 @@ function definirFase(nova, textoExtra = null) {
   // O relógio corre enquanto há trabalho acontecendo — inclusive durante o
   // carregamento e a construção inicial, que é justamente quando o usuário
   // mais precisa ver que algo se move.
-  const trabalhando = ['carregando', 'preparando', 'buscando'].includes(nova);
+  const trabalhando = ['carregando', 'construindo', 'preparando', 'buscando'].includes(nova);
   if (trabalhando) iniciarCronometro();
   else pararCronometro();
 
@@ -306,7 +310,7 @@ function definirFase(nova, textoExtra = null) {
   // alguém quer dele ali: voltar ao trabalho antes da hora.
   $('pausar').textContent =
     nova === 'descansando' ? 'Voltar agora' : nova === 'pausado' ? 'Continuar' : 'Pausar';
-  $('pausar').disabled = ['ocioso', 'carregando', 'preparando', 'falhou'].includes(nova);
+  $('pausar').disabled = ['ocioso', 'carregando', 'construindo', 'preparando', 'falhou'].includes(nova);
 }
 
 /**
@@ -459,6 +463,23 @@ function garantirTrabalhador() {
       // vazia — e a partir daqui o número só pode cair.
       case 'preparado':
         aplicarMensagem(data);
+        // A partida já tem número na tela. O estágio 0 entra agora, por cima
+        // dela: procura construir algo menor, e o que achar concorre com o que
+        // já estava. A busca só começa quando ele termina.
+        definirFase('construindo');
+        break;
+
+      // O estágio 0 terminou. `passos` traz cada melhoria que ele encontrou, com
+      // a construção que a produziu — é a história do estágio, e vale mostrar
+      // porque foi trabalho de verdade e não espera.
+      case 'construido': {
+        aplicarMensagem(data);
+        const passos = data.passos ?? [];
+        const ultimo = passos[passos.length - 1];
+        if (ultimo) {
+          const caminho = passos.map((p) => milhares(p.cartelas)).join(' → ');
+          avisar(`Construtor: ${caminho} cartelas, por ${ultimo.origem}.`, true);
+        }
         // Sem ramo alternativo: existe primeira solução, então há busca a
         // fazer. Mesmo quando essa primeira solução já é comprovadamente a
         // melhor possível, quem decide encerrar é o usuário.
@@ -468,6 +489,7 @@ function garantirTrabalhador() {
         // que ele valha desde o primeiro minuto.
         ligarCicloAutomatico();
         break;
+      }
 
       case 'estado':
         aplicarMensagem(data);
@@ -1969,7 +1991,17 @@ function comecar(
   mostrarPainel('buscar');
   definirFase('carregando');
 
-  garantirTrabalhador().postMessage({ tipo: 'criar', configuracao, salvo, fechamento, doBanco });
+  garantirTrabalhador().postMessage({
+    tipo: 'criar',
+    configuracao,
+    salvo,
+    fechamento,
+    doBanco,
+    // Quanto o estágio 0 tem para procurar. Mora na tela porque é decisão de
+    // quem está esperando: num celular alguns segundos, num computador o tempo
+    // que a pessoa quiser dar.
+    segundosDoConstrutor: Number(document.getElementById('segundos-construtor')?.value) || 20,
+  });
   segurarTelaLigada();
 }
 
@@ -2958,7 +2990,7 @@ document.addEventListener('visibilitychange', () => {
  * acabar.
  */
 function trabalhoEmCurso() {
-  return ['carregando', 'preparando', 'buscando', 'descansando'].includes(fase);
+  return ['carregando', 'construindo', 'preparando', 'buscando', 'descansando'].includes(fase);
 }
 
 /* ─────────── o trabalho que ficou pela metade ─────────── */

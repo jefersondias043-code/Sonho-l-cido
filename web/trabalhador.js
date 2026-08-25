@@ -38,6 +38,16 @@ const LOTE_MAXIMO = 2_000_000;
  */
 const LOTE_INICIAL = 25;
 
+/**
+ * Quanto tempo o estágio 0 tem para construir, quando a tela não diz outro.
+ *
+ * Vinte segundos foi o que separou, na medição, uma partida de 4.142 cartelas de
+ * uma de 3.432 em `(22,17)`. Mais tempo continua rendendo — quem tem um
+ * computador na frente pode dar mais, pelo campo em Avançado.
+ */
+const SEGUNDOS_DO_CONSTRUTOR = 20;
+let segundosDoConstrutor = SEGUNDOS_DO_CONSTRUTOR;
+
 let motor = null;
 let rodando = false;
 
@@ -168,7 +178,8 @@ function tratar(mensagem) {
   }
 }
 
-function criar({ configuracao, fechamento, doBanco, salvo }) {
+function criar({ configuracao, fechamento, doBanco, salvo, segundosDoConstrutor: pedido }) {
+  segundosDoConstrutor = Math.max(1, Number(pedido) || SEGUNDOS_DO_CONSTRUTOR);
   descartarMotor();
 
   motor = new MotorWeb(JSON.stringify(configuracao));
@@ -206,8 +217,27 @@ function criar({ configuracao, fechamento, doBanco, salvo }) {
   setTimeout(() => {
     if (!motor) return;
     try {
+      // Primeiro a partida que já existe, para a tela ter um número em
+      // seguida ao toque. Vinte segundos de "montando…" sem número nenhum é
+      // indistinguível de um travamento, e o número existe desde já.
       const estado = JSON.parse(motor.preparar());
       postMessage({ tipo: 'preparado', estado, cartelas: JSON.parse(motor.melhor()) });
+
+      // Estágio 0: o Motor Construtor. Procura construir direto a menor solução
+      // que conseguir, em vez de deixar a busca reduzir uma qualquer. O que ele
+      // encontra **concorre** com a partida que já estava — um fechamento
+      // trazido que seja menor continua vencendo.
+      //
+      // Medido, com vinte segundos: em (22,17) a partida sai de 4.142 cartelas
+      // para 3.432. São setecentas que a busca não precisa mais tirar uma a uma,
+      // e cada uma custava uma rodada de destruir-reconstruir.
+      const passos = JSON.parse(motor.construir_partida(segundosDoConstrutor));
+      postMessage({
+        tipo: 'construido',
+        passos,
+        estado: lerEstado(),
+        cartelas: JSON.parse(motor.melhor()),
+      });
     } catch (erro) {
       postMessage({ tipo: 'erro', mensagem: String(erro?.message ?? erro) });
     }

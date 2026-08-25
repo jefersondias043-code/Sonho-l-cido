@@ -197,7 +197,13 @@ try {
     await pagina.click('#lot-pool .opcao[data-pool="18"]');
     for (let n = 1; n <= 18; n++) await pagina.click(`#lot-grade .numero[data-n="${n}"]`);
     await pagina.click('#lot-jogo .opcao[data-jogo="17"]');
-    await pagina.click('#lot-iniciar');
+    // O estágio 0 roda em um segundo aqui: o que se testa é que ele acontece e
+  // entrega, não quanto ele consegue achar com tempo de verdade.
+  await pagina.evaluate(() => {
+    const campo = document.getElementById('segundos-construtor');
+    if (campo) campo.value = '1';
+  });
+  await pagina.click('#lot-iniciar');
     await pagina.waitForFunction(
       () => {
         const t = document.getElementById('melhor-cartelas').textContent.trim();

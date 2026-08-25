@@ -181,6 +181,12 @@ async function carregarFechamento(pool, jogo, dezenas) {
   await pagina.click('#lot-limpar');
   for (const n of dezenas) await pagina.click(`#lot-grade .numero[data-n="${n}"]`);
   await pagina.click(`#lot-jogo .opcao[data-jogo="${jogo}"]`);
+  // O estágio 0 roda em um segundo aqui: o que se testa é que ele acontece e
+  // entrega, não quanto ele consegue achar com tempo de verdade.
+  await pagina.evaluate(() => {
+    const campo = document.getElementById('segundos-construtor');
+    if (campo) campo.value = '1';
+  });
   await pagina.click('#lot-iniciar');
   await pagina.waitForSelector('#buscar.ativo', { timeout: 30000 });
   await pagina.waitForFunction(

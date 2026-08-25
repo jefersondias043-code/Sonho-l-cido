@@ -99,6 +99,13 @@ pub struct Recorde {
     pub operador: String,
 }
 
+/// Uma melhoria encontrada pelo estágio 0, para a tela acompanhar.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PassoDaConstrucao {
+    pub cartelas: usize,
+    pub origem: String,
+}
+
 /// Retrato do motor devolvido a cada lote — alimenta o painel do §27.
 #[derive(Debug, Clone, Serialize)]
 pub struct Estado {
@@ -437,6 +444,29 @@ impl MotorWeb {
 
     pub fn retomar(&mut self, estado_json: &str) -> Result<(), JsValue> {
         self.retomar_com(estado_json).map_err(|e| JsValue::from_str(&e))
+    }
+
+    /// **Estágio 0** — o Motor Construtor.
+    ///
+    /// Procura construir direto a menor solução que conseguir, em vez de montar
+    /// uma qualquer para a busca reduzir depois. Devolve, a cada melhoria, uma
+    /// linha com quantas cartelas e de que construção veio — é o que a tela
+    /// mostra enquanto o estágio corre.
+    ///
+    /// O orçamento vem de fora porque quem o conhece é a tela: num celular
+    /// alguns segundos, num computador o tempo que a pessoa quiser dar.
+    pub fn construir_partida(&mut self, segundos: u32) -> String {
+        let mut passos: Vec<PassoDaConstrucao> = Vec::new();
+        self.interno.construir_partida(
+            std::time::Duration::from_secs(segundos.max(1) as u64),
+            &mut |achado| {
+                passos.push(PassoDaConstrucao {
+                    cartelas: achado.cartelas.len(),
+                    origem: achado.origem.clone(),
+                });
+            },
+        );
+        serde_json::to_string(&passos).unwrap_or_else(|_| "[]".to_string())
     }
 
     /// Constrói a solução inicial sem começar a busca.
@@ -782,6 +812,40 @@ mod testes {
             .retomar_com(&arquivo.to_string())
             .expect_err("sessão vazia tem de ser recusada");
         assert!(erro.contains("nenhuma cartela"), "erro pouco claro: {erro}");
+    }
+
+    #[test]
+    fn o_estagio_zero_roda_depois_de_uma_partida_ja_semeada() {
+        // A sequência exata do aplicativo: semeia o fechamento pronto, prepara
+        // para a tela ter um número, e só então roda o estágio 0 por cima. É o
+        // caminho em que o motor estourou no navegador.
+        // A forma exata do aplicativo: universo de 25, dezoito dezenas
+        // escolhidas **esparsas** entre elas, jogos de 17 cobrindo todo grupo de
+        // 15. O pool esparso é o que diferencia este caminho.
+        let escolhidas: Vec<u32> = vec![1, 2, 4, 5, 7, 8, 10, 11, 13, 14, 16, 17, 19, 20, 22, 23, 24, 25];
+        let config = serde_json::to_string(&ConfiguracaoEntrada {
+            universo: 25,
+            pool: escolhidas.clone(),
+            cartela: 17,
+            alvo: 15,
+            intersecao: 15,
+            premiadas: 1,
+            orcamento: None,
+            semente: 42,
+        })
+        .unwrap();
+        let mut motor = MotorWeb::construir(&config).unwrap();
+        // Pelo mesmo caminho do aplicativo: o fechamento pronto entra por
+        // `semear_do_banco`, não por `semear`.
+        let pronto = serde_json::to_string(&vec![escolhidas[1..].to_vec()]).unwrap();
+        motor.semear_do_banco_com(&pronto).unwrap();
+        motor.preparar();
+        let passos = motor.construir_partida(1);
+        let lidos: Vec<PassoDaConstrucao> = serde_json::from_str(&passos).unwrap();
+        assert!(!lidos.is_empty(), "o estágio 0 precisa registrar ao menos uma construção");
+
+        let estado = estado_de(&motor.estado());
+        assert!(estado["melhor_cartelas"].as_u64().unwrap() > 0);
     }
 
     #[test]
