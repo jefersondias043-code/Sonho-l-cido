@@ -51,7 +51,7 @@ pub use controle::{
     CondicoesDeParada, Coletor, Controle, Estatisticas, Evento, MotivoEncerramento, Observador,
     Silencioso,
 };
-pub use motor::{Configuracao, MotorBusca, PassoDaMeta};
+pub use motor::{Configuracao, MotorBusca, PassoDaMeta, RetratoDoMotor};
 pub use oficina::Oficina;
 pub use troca::descida_por_troca;
 pub use operadores::Operador;

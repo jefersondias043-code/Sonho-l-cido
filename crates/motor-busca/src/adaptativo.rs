@@ -126,6 +126,25 @@ impl SeletorAdaptativo {
         &self.pesos
     }
 
+    /// Devolve os pesos aprendidos ao lugar de onde vieram.
+    ///
+    /// Existe para a sessão exportada carregar o que o motor aprendeu sobre
+    /// quais operadores funcionam nesta configuração. Sem isto, retomar um
+    /// trabalho de dez horas começa de novo com todos os operadores empatados —
+    /// o resultado não se perde, mas o aprendizado sim, e ele custa milhares de
+    /// iterações para voltar.
+    ///
+    /// Uma lista de tamanho errado é ignorada: vem de um arquivo de outra
+    /// versão, com outro conjunto de operadores, e aplicá-la parcialmente daria
+    /// pesos trocados — pior que pesos zerados.
+    pub fn restaurar_pesos(&mut self, pesos: &[f64]) -> bool {
+        if pesos.len() != self.pesos.len() || pesos.iter().any(|p| !p.is_finite() || *p <= 0.0) {
+            return false;
+        }
+        self.pesos.copy_from_slice(pesos);
+        true
+    }
+
     pub fn segmentos_concluidos(&self) -> u64 {
         self.segmentos_concluidos
     }

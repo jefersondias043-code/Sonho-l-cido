@@ -90,7 +90,7 @@ impl ConfiguracaoEntrada {
 }
 
 /// Um recorde, no formato que a interface consome.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Recorde {
     pub cartelas: usize,
     pub cobertura: f64,
@@ -152,13 +152,76 @@ pub struct Estado {
     pub novos_recordes: Vec<Recorde>,
 }
 
-/// Tudo que é preciso para retomar a busca depois de fechar a página.
+/// Uma sessão de otimização inteira, em forma de arquivo.
+///
+/// ## O que este arquivo precisa ser
+///
+/// Não uma lista de cartelas. Se alguém deixou o motor trabalhando dez horas e
+/// mudou de aparelho, as dez horas têm de ir junto — o que significa carregar o
+/// recorde, a solução em curso, a meta que estava sendo perseguida, os
+/// contadores e o que o seletor aprendeu sobre quais operadores funcionam
+/// **nesta** configuração.
+///
+/// ## Por que quase tudo tem `default`
+///
+/// Para o arquivo de hoje abrir amanhã e o de amanhã abrir hoje. Um campo que
+/// falta assume o valor neutro em vez de derrubar a leitura, e um campo que
+/// sobra é ignorado — é assim que uma versão nova do aplicativo consegue ler uma
+/// sessão antiga sem perder o trabalho já feito, que é justamente o que não pode
+/// acontecer aqui.
+///
+/// O campo `iteracoes` na raiz é o formato anterior, que só guardava
+/// configuração, melhor e contagem. Ele continua sendo lido: quem tem um arquivo
+/// daquele tempo não fica de fora.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EstadoSalvo {
     pub configuracao: ConfiguracaoEntrada,
     /// Melhor solução, em rótulos do universo.
     pub melhor: Vec<Vec<u32>>,
+    /// Contagem do formato anterior. Vale quando `motor.iteracoes` é zero.
+    #[serde(default)]
     pub iteracoes: u64,
+    /// A solução que a busca estava mexendo. Pode ser pior que o recorde, e pode
+    /// nem cobrir tudo — é o ponto de exploração, e é o que separa "retomar" de
+    /// "voltar ao último recorde".
+    #[serde(default)]
+    pub atual: Vec<Vec<u32>>,
+    #[serde(default)]
+    pub motor: RetratoSalvo,
+    /// As melhorias encontradas, em ordem. Não volta para dentro do motor —
+    /// serve para a tela contar a história do trabalho a quem o recebeu.
+    #[serde(default)]
+    pub historico: Vec<Recorde>,
+}
+
+/// O estado interno do motor, em números.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct RetratoSalvo {
+    #[serde(default)]
+    pub iteracoes: u64,
+    #[serde(default)]
+    pub aceitas: u64,
+    #[serde(default)]
+    pub recordes: u64,
+    #[serde(default)]
+    pub diversificacoes: u64,
+    #[serde(default)]
+    pub duplicadas_evitadas: u64,
+    #[serde(default)]
+    pub segundos: f64,
+    #[serde(default)]
+    pub alvo_cartelas: usize,
+    #[serde(default)]
+    pub passo_atual: usize,
+    #[serde(default)]
+    pub iteracao_da_meta: u64,
+    #[serde(default)]
+    pub melhor_iteracao: u64,
+    /// Pesos do seletor, na ordem dos operadores. Uma lista de outro tamanho é
+    /// recusada inteira pelo motor — vem de uma versão com outros operadores, e
+    /// aplicá-la em parte daria pesos trocados.
+    #[serde(default)]
+    pub pesos_dos_operadores: Vec<f64>,
 }
 
 /// Observador que apenas recolhe os recordes do lote.
@@ -254,13 +317,84 @@ impl MotorWeb {
         Ok(())
     }
 
-    /// Retoma uma busca salva anteriormente (§16).
+    /// Retoma uma sessão salva anteriormente (§16).
+    ///
+    /// O que chega aqui já passou pela validação da tela, mas a checagem é
+    /// refeita: um arquivo que promete cartelas de 17 dezenas e traz uma de 16
+    /// viraria um fechamento furado, e um fechamento furado é uma garantia falsa
+    /// na mão de quem apostou.
     pub fn retomar_com(&mut self, estado_json: &str) -> Result<(), String> {
         let salvo: EstadoSalvo = serde_json::from_str(estado_json)
             .map_err(|e| format!("estado salvo ilegível: {e}"))?;
-        let cartelas = self.converter(&salvo.melhor)?;
-        self.interno.retomar_de(&cartelas, salvo.iteracoes);
+
+        if salvo.melhor.is_empty() {
+            return Err("a sessão não traz nenhuma cartela".to_string());
+        }
+        let tamanho = self.configuracao.cartela;
+        if let Some(fora) = salvo.melhor.iter().find(|c| c.len() != tamanho) {
+            return Err(format!(
+                "a sessão promete cartelas de {tamanho} dezenas e traz uma de {}",
+                fora.len()
+            ));
+        }
+        let melhor = self.converter(&salvo.melhor)?;
+        // A solução em curso pode faltar, ou vir de uma configuração que não é
+        // esta. Nos dois casos a busca continua pelo recorde, que é o que
+        // carrega o trabalho — não vale recusar o arquivo inteiro por causa dela.
+        let atual = if salvo.atual.iter().all(|c| c.len() == tamanho) {
+            self.converter(&salvo.atual).unwrap_or_default()
+        } else {
+            Vec::new()
+        };
+
+        // O formato anterior guardava a contagem na raiz. Quem tem um arquivo
+        // daquele tempo continua retomando com as iterações certas.
+        let mut retrato = motor_busca::RetratoDoMotor {
+            iteracoes: salvo.motor.iteracoes.max(salvo.iteracoes),
+            aceitas: salvo.motor.aceitas,
+            recordes: salvo.motor.recordes,
+            diversificacoes: salvo.motor.diversificacoes,
+            duplicadas_evitadas: salvo.motor.duplicadas_evitadas,
+            segundos: salvo.motor.segundos,
+            alvo_cartelas: salvo.motor.alvo_cartelas,
+            passo_atual: salvo.motor.passo_atual,
+            iteracao_da_meta: salvo.motor.iteracao_da_meta,
+            melhor_iteracao: salvo.motor.melhor_iteracao,
+            pesos_dos_operadores: salvo.motor.pesos_dos_operadores.clone(),
+        };
+        if !retrato.segundos.is_finite() || retrato.segundos < 0.0 {
+            retrato.segundos = 0.0;
+        }
+
+        self.interno.retomar_sessao(&melhor, &atual, &retrato);
         Ok(())
+    }
+
+    /// Empacota a sessão inteira, para gravar num arquivo.
+    fn exportar_sessao(&self, historico: Vec<Recorde>) -> String {
+        let pool = self.interno.problema().pool();
+        let retrato = self.interno.retrato();
+        let salvo = EstadoSalvo {
+            configuracao: self.configuracao.clone(),
+            melhor: self.melhor_em_rotulos(),
+            iteracoes: retrato.iteracoes,
+            atual: self.interno.cartelas_atuais().iter().map(|c| c.rotulos(pool)).collect(),
+            motor: RetratoSalvo {
+                iteracoes: retrato.iteracoes,
+                aceitas: retrato.aceitas,
+                recordes: retrato.recordes,
+                diversificacoes: retrato.diversificacoes,
+                duplicadas_evitadas: retrato.duplicadas_evitadas,
+                segundos: retrato.segundos,
+                alvo_cartelas: retrato.alvo_cartelas,
+                passo_atual: retrato.passo_atual,
+                iteracao_da_meta: retrato.iteracao_da_meta,
+                melhor_iteracao: retrato.melhor_iteracao,
+                pesos_dos_operadores: retrato.pesos_dos_operadores,
+            },
+            historico,
+        };
+        serde_json::to_string(&salvo).unwrap_or_else(|_| "{}".to_string())
     }
 }
 
@@ -380,14 +514,10 @@ impl MotorWeb {
         serde_json::to_string(&rotulos).unwrap_or_else(|_| "[]".to_string())
     }
 
-    /// Empacota o que é preciso para continuar depois (§15).
+    /// Empacota a sessão inteira, para continuar depois — aqui ou noutro
+    /// aparelho (§15).
     pub fn exportar(&self) -> String {
-        let salvo = EstadoSalvo {
-            configuracao: self.configuracao.clone(),
-            melhor: self.melhor_em_rotulos(),
-            iteracoes: self.interno.estatisticas().iteracoes,
-        };
-        serde_json::to_string(&salvo).unwrap_or_else(|_| "{}".to_string())
+        self.exportar_sessao(Vec::new())
     }
 
     /// Pesos aprendidos por cada operador, para a interface mostrar o que o
@@ -521,6 +651,110 @@ mod testes {
             Ok(_) => panic!("esperava um erro, veio um motor válido"),
             Err(erro) => erro,
         }
+    }
+
+    #[test]
+    fn a_sessao_exportada_atravessa_o_json_inteira() {
+        // A promessa do arquivo: dez horas de trabalho num aparelho continuam
+        // sendo dez horas no outro. Aqui a travessia é curta, mas é a mesma —
+        // exportar, jogar fora o motor, ler o arquivo num motor novo.
+        let mut original = MotorWeb::construir(&configuracao_para_buscar()).unwrap();
+        original.preparar();
+        for _ in 0..6 {
+            original.avancar(4_000, 60_000);
+        }
+        let arquivo = original.exportar();
+        let antes = estado_de(&original.estado());
+
+        let bruto: serde_json::Value = serde_json::from_str(&arquivo).unwrap();
+        assert!(bruto["atual"].as_array().is_some_and(|c| !c.is_empty()), "falta a solução em curso");
+        assert!(bruto["motor"]["iteracoes"].as_u64().unwrap() > 0, "faltam as iterações");
+        assert!(
+            bruto["motor"]["pesos_dos_operadores"].as_array().unwrap().len() > 1,
+            "faltam os pesos aprendidos"
+        );
+
+        let mut outro = MotorWeb::construir(&configuracao_para_buscar()).unwrap();
+        outro.retomar_com(&arquivo).expect("a sessão precisa ser aceita");
+        let depois = estado_de(&outro.estado());
+
+        assert_eq!(depois["melhor_cartelas"], antes["melhor_cartelas"], "o recorde tem de vir junto");
+        assert_eq!(depois["iteracoes"], antes["iteracoes"], "as iterações têm de vir junto");
+        assert_eq!(depois["recordes"], antes["recordes"]);
+    }
+
+    #[test]
+    fn a_sessao_retomada_soma_trabalho_em_vez_de_recomecar() {
+        let mut original = MotorWeb::construir(&configuracao_para_buscar()).unwrap();
+        original.preparar();
+        for _ in 0..6 {
+            original.avancar(4_000, 60_000);
+        }
+        let arquivo = original.exportar();
+        let iteracoes_gravadas =
+            estado_de(&original.estado())["iteracoes"].as_u64().unwrap();
+
+        let mut outro = MotorWeb::construir(&configuracao_para_buscar()).unwrap();
+        outro.retomar_com(&arquivo).unwrap();
+        outro.preparar();
+        outro.avancar(2_000, 60_000);
+
+        let agora = estado_de(&outro.estado())["iteracoes"].as_u64().unwrap();
+        assert!(
+            agora > iteracoes_gravadas,
+            "retomar tem de somar às {iteracoes_gravadas} anteriores, e ficou em {agora}"
+        );
+    }
+
+    #[test]
+    fn um_arquivo_do_formato_anterior_continua_sendo_lido() {
+        // Só configuração, melhor e a contagem na raiz — como o aplicativo
+        // gravava antes de a sessão inteira existir. Quem tem um desses não pode
+        // ficar sem poder retomar.
+        let mut original = MotorWeb::construir(&configuracao_para_buscar()).unwrap();
+        original.preparar();
+        original.avancar(3_000, 60_000);
+        let completo: serde_json::Value = serde_json::from_str(&original.exportar()).unwrap();
+
+        let antigo = serde_json::json!({
+            "configuracao": completo["configuracao"],
+            "melhor": completo["melhor"],
+            "iteracoes": 1234,
+        });
+
+        let mut outro = MotorWeb::construir(&configuracao_para_buscar()).unwrap();
+        outro.retomar_com(&antigo.to_string()).expect("o formato anterior precisa ser aceito");
+        assert_eq!(estado_de(&outro.estado())["iteracoes"].as_u64().unwrap(), 1234);
+    }
+
+    #[test]
+    fn uma_sessao_com_cartelas_do_tamanho_errado_e_recusada() {
+        // Um fechamento furado gravado aqui vira garantia falsa na mão de quem
+        // apostou. A recusa precisa dizer o que está errado, não só falhar.
+        let mut motor = MotorWeb::construir(&configuracao(12, 5, 3)).unwrap();
+        motor.preparar();
+        let mut arquivo: serde_json::Value =
+            serde_json::from_str(&motor.exportar()).unwrap();
+        arquivo["melhor"][0] = serde_json::json!([1, 2, 3, 4]);
+
+        let erro = MotorWeb::construir(&configuracao(12, 5, 3))
+            .unwrap()
+            .retomar_com(&arquivo.to_string())
+            .expect_err("cartela de tamanho errado tem de ser recusada");
+        assert!(erro.contains("5 dezenas") && erro.contains("4"), "erro pouco claro: {erro}");
+    }
+
+    #[test]
+    fn uma_sessao_sem_cartelas_e_recusada() {
+        let arquivo = serde_json::json!({
+            "configuracao": serde_json::from_str::<serde_json::Value>(&configuracao(12, 5, 3)).unwrap(),
+            "melhor": [],
+        });
+        let erro = MotorWeb::construir(&configuracao(12, 5, 3))
+            .unwrap()
+            .retomar_com(&arquivo.to_string())
+            .expect_err("sessão vazia tem de ser recusada");
+        assert!(erro.contains("nenhuma cartela"), "erro pouco claro: {erro}");
     }
 
     #[test]

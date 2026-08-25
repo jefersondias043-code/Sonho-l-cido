@@ -194,6 +194,48 @@ impl Default for Configuracao {
     }
 }
 
+/// O estado do motor que sobrevive a uma exportação.
+///
+/// ## O que carrega, e o que não
+///
+/// Carrega o que é **caro de reconquistar e barato de guardar**: os contadores,
+/// a meta em curso, o passo da meta e os pesos que o seletor aprendeu sobre
+/// quais operadores funcionam nesta configuração. Um trabalho de dez horas
+/// aprendeu isso, e sem estes números quem retoma recomeça com todos os
+/// operadores empatados.
+///
+/// **Não** carrega o arquivo de elites. É a decisão que mais pesa aqui, e é de
+/// tamanho: o arquivo guarda até 96 soluções inteiras, e num fechamento de
+/// 10.051 cartelas isso são quase um milhão de cartelas — dezessete megabytes
+/// num arquivo que a pessoa vai mandar por mensagem. O que as dez horas
+/// produziram é o **melhor fechamento**, e esse vai inteiro; o arquivo de elites
+/// é andaime da busca, e o motor o reconstrói em minutos.
+///
+/// Também não carrega o estado do gerador de números aleatórios. Ele é semeado
+/// de novo na retomada, o que muda quais caminhos a busca tenta a seguir — e não
+/// há nada a preservar aí, porque nenhum caminho é melhor que outro antes de ser
+/// tentado.
+#[derive(Debug, Clone, PartialEq)]
+pub struct RetratoDoMotor {
+    pub iteracoes: u64,
+    pub aceitas: u64,
+    pub recordes: u64,
+    pub diversificacoes: u64,
+    pub duplicadas_evitadas: u64,
+    /// Tempo já gasto na busca, em segundos.
+    pub segundos: f64,
+    /// A cardinalidade que a busca perseguia quando parou.
+    pub alvo_cartelas: usize,
+    /// Quantas cartelas a última meta desceu de uma vez.
+    pub passo_atual: usize,
+    /// Em que iteração a meta em curso foi fixada.
+    pub iteracao_da_meta: u64,
+    /// Em que iteração o recorde atual apareceu.
+    pub melhor_iteracao: u64,
+    /// Pesos do seletor, na ordem de [`Operador::TODOS`].
+    pub pesos_dos_operadores: Vec<f64>,
+}
+
 pub struct MotorBusca {
     problema: Problema,
     cobertura: MotorCobertura,
@@ -1078,6 +1120,84 @@ impl MotorBusca {
             .map(|(op, &peso)| (op.nome(), peso))
             .collect()
     }
+
+    /// As cartelas da solução em curso — a que a busca está mexendo agora.
+    ///
+    /// Diferente do recorde: esta pode estar pior, e pode nem cobrir tudo. É
+    /// deliberado, e é o que faz a busca funcionar (§35). Quem exporta uma
+    /// sessão leva as duas, para retomar do ponto exato em vez de voltar ao
+    /// último recorde.
+    pub fn cartelas_atuais(&self) -> &[Cartela] {
+        self.atual.cartelas()
+    }
+
+    /// O retrato do estado interno, para gravar num arquivo.
+    pub fn retrato(&self) -> RetratoDoMotor {
+        RetratoDoMotor {
+            iteracoes: self.estatisticas.iteracoes,
+            aceitas: self.estatisticas.aceitas,
+            recordes: self.estatisticas.recordes,
+            diversificacoes: self.estatisticas.diversificacoes,
+            duplicadas_evitadas: self.estatisticas.duplicadas_evitadas,
+            segundos: self.duracao_acumulada.as_secs_f64(),
+            alvo_cartelas: self.alvo_cartelas,
+            passo_atual: self.passo_atual,
+            iteracao_da_meta: self.iteracao_da_meta,
+            melhor_iteracao: self.melhor_iteracao,
+            pesos_dos_operadores: self.seletor.pesos().to_vec(),
+        }
+    }
+
+    /// Retoma uma sessão inteira: o recorde, a solução em curso e o retrato.
+    ///
+    /// A ordem importa. O recorde entra primeiro, por `retomar_de`, que é o
+    /// caminho já existente e que faz a comparação de partida. Só então a
+    /// solução em curso é restaurada por cima — se ela vier — e por último os
+    /// contadores, porque `retomar_de` mexe neles.
+    ///
+    /// Uma solução em curso vazia, ou que não caiba nesta configuração, é
+    /// ignorada em silêncio: a busca continua do recorde, que é o que importa.
+    /// Não é caso de erro — é um arquivo de uma versão que não guardava isso.
+    pub fn retomar_sessao(
+        &mut self,
+        melhor: &[Cartela],
+        atual: &[Cartela],
+        retrato: &RetratoDoMotor,
+    ) {
+        self.retomar_de(melhor, retrato.iteracoes);
+
+        if !atual.is_empty() {
+            self.atual.restaurar_de(
+                &self.cobertura,
+                atual,
+                &mut self.oficina.restaurador,
+                &mut self.oficina.rascunho,
+            );
+        }
+
+        self.estatisticas.iteracoes = retrato.iteracoes;
+        self.estatisticas.aceitas = retrato.aceitas;
+        self.estatisticas.recordes = retrato.recordes;
+        self.estatisticas.diversificacoes = retrato.diversificacoes;
+        self.estatisticas.duplicadas_evitadas = retrato.duplicadas_evitadas;
+        if retrato.segundos.is_finite() && retrato.segundos >= 0.0 {
+            self.duracao_acumulada = Duration::from_secs_f64(retrato.segundos);
+        }
+        self.melhor_iteracao = retrato.melhor_iteracao;
+        self.iteracao_da_meta = retrato.iteracao_da_meta;
+        // A meta é recalculada por `definir_meta` no arranque, e chegaria ao
+        // mesmo número. Restaurá-la mesmo assim é o que faz o arquivo descrever
+        // a sessão inteira: quem o lê vê a meta que estava sendo perseguida, e
+        // não uma que se deduz.
+        if retrato.alvo_cartelas > 0 {
+            self.alvo_cartelas = retrato.alvo_cartelas;
+        }
+        if retrato.passo_atual > 0 {
+            self.passo_atual = retrato.passo_atual;
+        }
+        self.seletor.restaurar_pesos(&retrato.pesos_dos_operadores);
+        self.origem_do_inicio = "sessão importada".to_string();
+    }
 }
 
 /// Custo usado pela busca local, dentro da cardinalidade perseguida.
@@ -1512,6 +1632,100 @@ mod testes {
             motor.alvo_cartelas < motor.melhor_avaliacao().cartelas,
             "afrouxar não é desistir: a meta continua abaixo do recorde"
         );
+    }
+
+    #[test]
+    fn uma_sessao_retomada_continua_de_onde_parou() {
+        // O que este teste protege é a promessa inteira do arquivo de sessão: se
+        // alguém trabalhou dez horas e mudou de aparelho, as dez horas seguem
+        // junto. Provar isso é mostrar que o motor retomado **não recomeça** —
+        // que os contadores partem de onde estavam, que o recorde é o mesmo, e
+        // que a próxima iteração soma em cima em vez de somar do zero.
+        let mut original = MotorBusca::novo(problema(14, 5, 3), config_rapida(5)).unwrap();
+        original.executar(
+            &Controle::novo(),
+            &CondicoesDeParada::por_iteracoes(30_000),
+            &mut Silencioso,
+        );
+
+        let melhor: Vec<Cartela> = original.melhor_cartelas().to_vec();
+        let atuais: Vec<Cartela> = original.cartelas_atuais().to_vec();
+        let retrato = original.retrato();
+        assert!(retrato.iteracoes >= 30_000, "a busca precisa ter trabalhado antes de exportar");
+        assert!(
+            retrato.pesos_dos_operadores.iter().any(|&p| (p - 1.0).abs() > 1e-9),
+            "os pesos precisam ter aprendido algo, senão não há o que transportar"
+        );
+
+        // Um motor novo, como o do outro aparelho: nada em comum além do arquivo.
+        let mut retomado = MotorBusca::novo(problema(14, 5, 3), config_rapida(99)).unwrap();
+        retomado.retomar_sessao(&melhor, &atuais, &retrato);
+
+        assert_eq!(
+            retomado.melhor_avaliacao().cartelas,
+            original.melhor_avaliacao().cartelas,
+            "o recorde precisa atravessar a exportação intacto"
+        );
+        assert_eq!(retomado.estatisticas().iteracoes, retrato.iteracoes);
+        assert_eq!(retomado.estatisticas().recordes, retrato.recordes);
+        assert_eq!(retomado.alvo_cartelas(), retrato.alvo_cartelas);
+        assert_eq!(
+            retomado.pesos_dos_operadores(),
+            original.pesos_dos_operadores(),
+            "o que o seletor aprendeu é parte do trabalho, e vai junto"
+        );
+
+        // E o teste que separa "retomou" de "recomeçou": mais trabalho soma em
+        // cima do que já havia.
+        retomado.executar(
+            &Controle::novo(),
+            &CondicoesDeParada::por_iteracoes(retrato.iteracoes + 5_000),
+            &mut Silencioso,
+        );
+        assert!(
+            retomado.estatisticas().iteracoes > retrato.iteracoes,
+            "as iterações precisam somar às antigas, não recomeçar"
+        );
+        assert!(
+            retomado.melhor_avaliacao().cartelas <= original.melhor_avaliacao().cartelas,
+            "continuar não pode piorar o recorde"
+        );
+    }
+
+    #[test]
+    fn uma_sessao_sem_solucao_em_curso_ainda_retoma_pelo_recorde() {
+        // Arquivo de uma versão que não guardava a solução em curso. Perder o
+        // ponto de exploração é aceitável; perder o recorde não seria.
+        let mut original = MotorBusca::novo(problema(14, 5, 3), config_rapida(5)).unwrap();
+        original.executar(
+            &Controle::novo(),
+            &CondicoesDeParada::por_iteracoes(20_000),
+            &mut Silencioso,
+        );
+        let melhor: Vec<Cartela> = original.melhor_cartelas().to_vec();
+        let retrato = original.retrato();
+
+        let mut retomado = MotorBusca::novo(problema(14, 5, 3), config_rapida(99)).unwrap();
+        retomado.retomar_sessao(&melhor, &[], &retrato);
+
+        assert_eq!(retomado.melhor_avaliacao().cartelas, original.melhor_avaliacao().cartelas);
+        assert_eq!(retomado.estatisticas().iteracoes, retrato.iteracoes);
+    }
+
+    #[test]
+    fn pesos_de_outro_tamanho_sao_recusados_inteiros() {
+        // Um arquivo de uma versão com outro conjunto de operadores. Aplicar
+        // parcialmente daria pesos trocados — pior que pesos zerados.
+        let mut motor = MotorBusca::novo(problema(14, 5, 3), config_rapida(5)).unwrap();
+        motor.executar(&Controle::novo(), &CondicoesDeParada::por_iteracoes(5_000), &mut Silencioso);
+        let antes = motor.pesos_dos_operadores();
+
+        let mut retrato = motor.retrato();
+        retrato.pesos_dos_operadores = vec![1.0, 2.0];
+        let melhor: Vec<Cartela> = motor.melhor_cartelas().to_vec();
+        motor.retomar_sessao(&melhor, &[], &retrato);
+
+        assert_eq!(motor.pesos_dos_operadores(), antes, "pesos de tamanho errado não entram");
     }
 
     #[test]
