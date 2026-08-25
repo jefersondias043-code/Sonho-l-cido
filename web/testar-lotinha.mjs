@@ -266,7 +266,7 @@ try {
 
   const doBanco = await distancia(23, 17);
   marcar(
-    /10\.122/.test(doBanco.explicacao) &&
+    /10\.051/.test(doBanco.explicacao) &&
       /3\.996/.test(doBanco.explicacao) &&
       /buscar mais rende pouco/.test(doBanco.explicacao),
     'num caso já buscado, a tela mostra entrega, piso e que buscar mais rende pouco',

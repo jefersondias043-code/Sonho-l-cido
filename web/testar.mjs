@@ -521,13 +521,17 @@ try {
 
   // ─── 8. um fechamento grande não trava a tela ───
   //
-  // 22 dezenas com jogos de 17 são 3.495 cartelas, quase 11.000 elementos na
-  // página. Desenhar todas de uma vez custava 430 ms de tela parada a cada
+  // 22 dezenas com jogos de 17 são milhares de cartelas — quase 11.000 elementos
+  // na página. Desenhar todas de uma vez custava 430 ms de tela parada a cada
   // repintura e 130 ms toda vez que a aba Resultado abria. As cartelas agora vão
   // em levas de 60 que o navegador só desenha quando chegam perto da janela —
   // sem que nenhuma saia do documento, o que é o que este bloco confere.
   const VINTE_E_DUAS = Array.from({ length: 22 }, (_, i) => i + 1);
   await carregarFechamento(22, 17, VINTE_E_DUAS);
+  // O tamanho vem da tela, não escrito aqui: o banco melhora, e um número fixo
+  // faria uma melhoria do fechamento parecer defeito do teste. O que precisa
+  // ficar provado é que **todas** as cartelas anunciadas estão no documento.
+  const anunciadas = await numero('#melhor-cartelas');
   await pagina.click('.aba[data-painel="historico"]');
   await pagina.waitForSelector('#historico.ativo');
 
@@ -550,14 +554,14 @@ try {
     };
   });
   marcar(
-    lista.cartelas === 3495,
-    'as 3.495 cartelas do fechamento de 22 dezenas estão todas no documento',
-    `${lista.cartelas} cartelas em ${lista.levas} levas`
+    lista.cartelas === anunciadas && anunciadas > 3000,
+    'todas as cartelas do fechamento de 22 dezenas estão no documento',
+    `${anunciadas} anunciadas, ${lista.cartelas} no documento, em ${lista.levas} levas`
   );
   marcar(
-    lista.levas === Math.ceil(3495 / 60),
+    lista.levas === Math.ceil(anunciadas / 60),
     'repartidas em levas de 60, que é o que o navegador desenha por vez',
-    `${lista.levas} levas`
+    `${lista.levas} levas para ${anunciadas} cartelas`
   );
   marcar(
     Math.abs(parseFloat(lista.reserva) - lista.alturaDaPrimeira) <= 4,
