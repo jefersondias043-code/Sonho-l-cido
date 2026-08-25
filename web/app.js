@@ -403,6 +403,7 @@ function mostrarPainel(nome) {
   // histórico. Atualizar ao abrir a aba é o único momento em que isso importa,
   // e evita espalhar chamadas por toda parte.
   if (nome === 'checar') chkAtualizarFontes();
+  if (nome === 'historico') mostrarTrabalhoInterrompido();
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
@@ -470,6 +471,12 @@ function garantirTrabalhador() {
 
       case 'estado':
         aplicarMensagem(data);
+        if (data.estado?.novos_recordes?.length) {
+          anunciar(
+            'recorde',
+            `Fechamento novo: ${milhares(data.estado.melhor_cartelas)} cartelas.`
+          );
+        }
         if (fase === 'buscando') $('texto-situacao').textContent = textoDaProcura(data.estado);
         break;
 
@@ -485,6 +492,17 @@ function garantirTrabalhador() {
         break;
       }
 
+      // O motor trocou de etapa do ciclo. A tela é avisada, não consultada.
+      case 'ciclo':
+        anotarEtapaDoCiclo(data);
+        break;
+
+      // O motor pede que o estado seja gravado. Vem de tempos em tempos, para
+      // que um encerramento do sistema não leve mais que o último intervalo.
+      case 'salvar':
+        salvarNoHistorico(data.estado);
+        break;
+
       case 'pausado':
         aplicarMensagem(data);
         // O descanso do modo automático usa a mesma mensagem `pausar` do botão,
@@ -497,6 +515,10 @@ function garantirTrabalhador() {
       // memória; aqui só resta desmontá-lo e voltar à Lotinha.
       case 'encerrado':
         aplicarMensagem(data);
+        // Quem mandou parar foi o usuário: a sessão deixa de estar em andamento,
+        // e não aparece como interrompida na próxima abertura.
+        if (sessaoAtual) historico.encerrar(sessaoAtual);
+        anunciar('encerrado', 'Busca encerrada. O resultado ficou salvo.');
         desligarCicloAutomatico();
         desmontarTrabalhador();
         definirFase('ocioso');
@@ -558,6 +580,9 @@ function salvarNoHistorico(estado) {
     // motor retoma bem sem elas. Elas só entram no arquivo exportado.
     motor: estado.retrato ?? {},
     iteracoes: estado.iteracoes ?? 0,
+    // Gravado junto: quem abrir o aplicativo depois de o sistema encerrar a
+    // página descobre por aqui que havia trabalho em andamento.
+    emCurso: ['buscando', 'descansando', 'pausado'].includes(fase),
     avaliacao: {
       cartelas: estado.melhor_cartelas,
       cobertura: estado.melhor_cobertura,
@@ -1951,24 +1976,19 @@ function comecar(
 ligar('pausar', 'click', () => {
   if (!trabalhador) return;
 
-  if (fase === 'descansando') {
-    // "Voltar agora": encurta o descanso e recomeça o período de trabalho
-    // inteiro. O ciclo continua ligado — quem quer sair dele desmarca a opção.
-    voltarAoTrabalho();
+  // "Voltar agora" durante o descanso e "Continuar" depois de uma pausa manual
+  // são a mesma mensagem: quem sabe o que fazer com ela é o motor, que é o dono
+  // do ciclo. Ele desfaz a suspensão e recomeça o período de trabalho.
+  if (fase === 'descansando' || fase === 'pausado') {
+    trabalhador.postMessage({ tipo: 'rodar' });
+    definirFase('buscando');
+    segurarTelaLigada();
     return;
   }
 
   if (fase === 'buscando') {
     trabalhador.postMessage({ tipo: 'pausar' });
     soltarTelaLigada();
-  } else if (fase === 'pausado') {
-    trabalhador.postMessage({ tipo: 'rodar' });
-    definirFase('buscando');
-    segurarTelaLigada();
-    // Uma pausa manual suspende o ciclo; continuar recomeça o período de
-    // trabalho do zero, em vez de cair num descanso que venceu enquanto o motor
-    // estava parado pela mão do usuário.
-    if ($('modo-automatico').checked) comecarEtapa('trabalho');
   }
 });
 
@@ -2919,10 +2939,10 @@ ligar('manter-tela', 'change', () => {
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState !== 'visible') return;
   if (trabalhoEmCurso()) segurarTelaLigada();
-  // A aba ao fundo estrangula os temporizadores: o tique do ciclo pode ter
-  // ficado minutos sem rodar. Conferir o prazo ao voltar recupera o atraso de
-  // uma vez, em vez de deixar o descanso se esticar sozinho.
-  conferirOCiclo();
+  // A contagem na tela pode ter ficado minutos parada com a aba ao fundo. Nada
+  // se desregula por isso: o ciclo é do motor e anda pelo relógio de parede.
+  // Aqui só se redesenha o número.
+  pintarOCiclo();
 });
 
 /*
@@ -2941,44 +2961,132 @@ function trabalhoEmCurso() {
   return ['carregando', 'preparando', 'buscando', 'descansando'].includes(fase);
 }
 
-/* ─────────── modo automático: trabalha, descansa, repete ─────────── */
+/* ─────────── o trabalho que ficou pela metade ─────────── */
 
-/**
- * Liga o ciclo, começando por um período de trabalho.
+/*
+ * Ao reabrir, descobrir se havia um motor rodando.
  *
- * Chamado ao marcar a opção e também ao começar uma busca com ela já marcada —
- * quem liga o modo antes de carregar o fechamento espera que ele valha desde o
- * primeiro minuto.
+ * É o que fecha o ciclo do trabalho longo. O sistema pode encerrar a página a
+ * qualquer momento — bateria, memória, ou só o tempo que se passou noutro
+ * aplicativo — e quando isso acontece o aplicativo não tem chance de anotar que
+ * parou. Fica gravado que estava em andamento, e é isso que se lê aqui.
+ *
+ * O que se oferece é retomar, nunca retomar sozinho. Voltar ao aplicativo não é
+ * pedir para gastar bateria: quem decide é quem está com o aparelho na mão.
  */
-function ligarCicloAutomatico() {
-  if (!document.getElementById('modo-automatico')?.checked) return;
-  if (!trabalhador || !['buscando', 'descansando', 'pausado'].includes(fase)) return;
-
-  if (fase !== 'buscando') {
-    trabalhador.postMessage({ tipo: 'rodar' });
-    definirFase('buscando');
-    segurarTelaLigada();
+function mostrarTrabalhoInterrompido() {
+  const cartao = document.getElementById('cartao-interrompido');
+  if (!cartao) return;
+  const sessao = historico.interrompida();
+  if (!sessao || fase !== 'ocioso') {
+    cartao.hidden = true;
+    return;
   }
-  comecarEtapa('trabalho');
+
+  const m = sessao.motor ?? {};
+  const quando = sessao.atualizadaEm
+    ? new Date(sessao.atualizadaEm).toLocaleString('pt-BR')
+    : 'momento desconhecido';
+  const tempo = Number(m.segundos) > 0 ? duracao(Number(m.segundos) * 1000) : '—';
+  const linhas = [
+    ['Fechamento', `${milhares(sessao.melhor.length)} cartelas`],
+    ['Trabalho do motor', `${milhares(Number(m.iteracoes) || sessao.iteracoes || 0)} iterações · ${tempo}`],
+    ['Meta em curso', Number(m.alvo_cartelas) > 0 ? `${milhares(m.alvo_cartelas)} cartelas` : '—'],
+    ['Última gravação', quando],
+  ];
+  document.getElementById('resumo-interrompido').innerHTML =
+    `<p class="ajuda">${escapar(historico.descrever(sessao.configuracao))} — o motor estava ` +
+    'trabalhando quando o aplicativo fechou.</p><div class="ficha">' +
+    linhas.map(([a, b]) => `<div><span>${a}</span><b>${escapar(String(b))}</b></div>`).join('') +
+    '</div>';
+  cartao.dataset.sessao = sessao.id;
+  cartao.hidden = false;
 }
 
-/** Desliga o ciclo sem tocar no motor: quem estava rodando continua rodando. */
-function desligarCicloAutomatico() {
-  cicloAutomatico = null;
-  clearInterval(relogioDoCiclo);
-  relogioDoCiclo = null;
-  const destino = document.getElementById('proxima-etapa');
-  if (destino) destino.textContent = '';
+ligar('retomar-interrompido', 'click', () => {
+  const id = document.getElementById('cartao-interrompido')?.dataset?.sessao;
+  if (!id) return;
+  document.getElementById('cartao-interrompido').hidden = true;
+  continuarSessao(id);
+});
+
+ligar('dispensar-interrompido', 'click', () => {
+  const cartao = document.getElementById('cartao-interrompido');
+  const id = cartao?.dataset?.sessao;
+  if (id) historico.encerrar(id);
+  if (cartao) cartao.hidden = true;
+  pintarHistorico();
+});
+
+/* ─────────── avisos do sistema ─────────── */
+
+/*
+ * O que o aplicativo consegue avisar, e quando.
+ *
+ * Enquanto a página está viva, um aviso do sistema alcança quem está noutro
+ * aplicativo. Quando o sistema congela a página — que é o que o iPhone faz ao
+ * apagar a tela —, nada é disparado, porque não há código rodando para disparar.
+ * A web não oferece aviso agendado: não existe API para pedir "me avise em dez
+ * minutos" e o navegador cumprir sozinho.
+ *
+ * Então o que há aqui é honesto no limite do que existe: avisa o que dá, no
+ * momento em que acontece, e não promete o que a plataforma não entrega.
+ *
+ * Os avisos são represados por tipo. Um recorde novo a cada poucos segundos
+ * viraria uma fila de avisos que ninguém lê, e o efeito seria a pessoa desligar
+ * todos.
+ */
+const ESPERA_ENTRE_AVISOS = {
+  recorde: 120_000,
+  descanso: 0,
+  trabalho: 0,
+  encerrado: 0,
+};
+const ultimoAvisoDe = new Map();
+
+async function pedirPermissaoDeAviso() {
+  if (!('Notification' in globalThis)) return false;
+  if (Notification.permission === 'granted') return true;
+  if (Notification.permission === 'denied') return false;
+  try {
+    return (await Notification.requestPermission()) === 'granted';
+  } catch {
+    return false;
+  }
 }
 
 /**
- * Quantos segundos dura cada etapa.
+ * Manda um aviso do sistema, se houver permissão e se não for repetição.
  *
- * O número vem do atributo no HTML, com o valor do código como rede de
- * segurança. Fica lá em cima porque é uma decisão de produto — quinze minutos de
- * motor e dez de descanso — e porque assim o teste de ponta a ponta consegue
- * rodar o ciclo inteiro em segundos, medindo o motor de verdade em vez de
- * confiar na palavra do temporizador.
+ * Nunca estoura e nunca bloqueia: um aviso é conveniência, e uma falha ao
+ * mostrá-lo não pode atrapalhar a busca.
+ */
+function anunciar(tipo, texto) {
+  if (!('Notification' in globalThis) || Notification.permission !== 'granted') return;
+  const espera = ESPERA_ENTRE_AVISOS[tipo] ?? 60_000;
+  const agora = Date.now();
+  if (agora - (ultimoAvisoDe.get(tipo) ?? 0) < espera) return;
+  ultimoAvisoDe.set(tipo, agora);
+  try {
+    new Notification('Sonho Lúcido', { body: texto, tag: tipo, icon: 'icone-192.png' });
+  } catch {
+    /* alguns navegadores só permitem avisos vindos do service worker */
+  }
+}
+
+/* ─────────── modo automático: o motor trabalha, a tela acompanha ─────────── */
+
+/*
+ * O ciclo é do motor. Aqui só se liga, se desliga e se mostra.
+ *
+ * Ele já esteve deste lado, num `setInterval` da página, e o lugar era errado
+ * por dois motivos. O primeiro é de desenho: quem decide quando o motor
+ * trabalha é o motor. O segundo é prático: um temporizador de página é
+ * estrangulado quando a aba vai ao fundo, e um ciclo de quinze minutos vira um
+ * disparo que chega tarde ou não chega.
+ *
+ * O que sobrou aqui é a contagem na tela, que é enfeite honesto: se ela parar
+ * porque a aba foi ao fundo, o ciclo lá dentro continua pelo relógio de parede.
  */
 function duracaoDaEtapa(etapa) {
   const controle = document.getElementById('modo-automatico');
@@ -2991,56 +3099,55 @@ function duracaoDaEtapa(etapa) {
   return etapa === 'trabalho' ? SEGUNDOS_TRABALHANDO : SEGUNDOS_DESCANSANDO;
 }
 
-/** Marca o início de uma etapa e o instante em que ela vence. */
-function comecarEtapa(etapa) {
-  cicloAutomatico = { etapa, venceEm: Date.now() + duracaoDaEtapa(etapa) * 1000 };
+/** Manda o motor ligar ou desligar o ciclo. */
+function mandarCicloAoMotor(ligado) {
+  if (!trabalhador) return;
+  trabalhador.postMessage({
+    tipo: 'automatico',
+    ligado,
+    segundosTrabalho: duracaoDaEtapa('trabalho'),
+    segundosDescanso: duracaoDaEtapa('descanso'),
+  });
+}
 
+/** Liga o ciclo se a opção estiver marcada — ao começar uma busca, por exemplo. */
+function ligarCicloAutomatico() {
+  if (!document.getElementById('modo-automatico')?.checked) return;
+  mandarCicloAoMotor(true);
+}
+
+function desligarCicloAutomatico() {
+  cicloAutomatico = null;
   clearInterval(relogioDoCiclo);
-  // Um tique por segundo custa nada e é o que mantém a contagem honesta na
-  // tela; a troca de etapa não depende dele, e sim do instante gravado acima.
-  relogioDoCiclo = setInterval(conferirOCiclo, 1000);
-  pintarOCiclo();
+  relogioDoCiclo = null;
+  const destino = document.getElementById('proxima-etapa');
+  if (destino) destino.textContent = '';
 }
 
 /**
- * Um tique do ciclo: atualiza a contagem e troca de etapa quando o prazo vence.
+ * Recebe do motor o começo de uma etapa, e passa a contar até ela vencer.
  *
- * Chamado pelo relógio de um em um segundo e também ao voltar para a aba, onde
- * pode encontrar um prazo vencido há minutos. Nos dois casos a resposta é a
- * mesma, porque a decisão é sobre o instante e não sobre quantos tiques
- * passaram.
+ * A contagem é local e é só visual; a troca de etapa quem faz é o motor. Se esta
+ * contagem atrasar — aba ao fundo, temporizador estrangulado — nada se
+ * desregula: a próxima mensagem do motor traz o instante certo de novo.
  */
-function conferirOCiclo() {
-  if (!cicloAutomatico || !trabalhador) return;
-
-  // Uma pausa manual suspende o ciclo: quem tocou em Pausar quer o motor
-  // parado, e não parado por quinze minutos e depois ligado sozinho.
-  if (fase === 'pausado') return;
-
-  if (Date.now() >= cicloAutomatico.venceEm) {
-    if (cicloAutomatico.etapa === 'trabalho') descansar();
-    else voltarAoTrabalho();
+function anotarEtapaDoCiclo({ etapa, venceEm }) {
+  if (!etapa) {
+    desligarCicloAutomatico();
     return;
   }
+  cicloAutomatico = { etapa, venceEm };
+  clearInterval(relogioDoCiclo);
+  relogioDoCiclo = setInterval(pintarOCiclo, 1000);
   pintarOCiclo();
-}
-
-/** Fim do período de trabalho: o motor para de verdade. */
-function descansar() {
-  // A mesma mensagem do botão Pausar. O laço do worker termina, nenhum lote novo
-  // é agendado, e o processador volta a zero — o motor continua na memória com o
-  // estado inteiro, que é o que faz `rodar` retomar sem perder nada.
-  trabalhador.postMessage({ tipo: 'pausar' });
-  definirFase('descansando');
-  comecarEtapa('descanso');
-}
-
-/** Fim do descanso: retoma do ponto exato em que parou. */
-function voltarAoTrabalho() {
-  trabalhador.postMessage({ tipo: 'rodar' });
-  definirFase('buscando');
-  segurarTelaLigada();
-  comecarEtapa('trabalho');
+  definirFase(etapa === 'descanso' ? 'descansando' : 'buscando');
+  if (etapa === 'trabalho') segurarTelaLigada();
+  anunciar(
+    etapa === 'descanso' ? 'descanso' : 'trabalho',
+    etapa === 'descanso'
+      ? 'Descansando para o aparelho esfriar. O motor volta sozinho.'
+      : 'De volta ao trabalho, do ponto exato em que parou.'
+  );
 }
 
 /** A contagem regressiva da etapa atual, em minutos e segundos. */
@@ -3059,31 +3166,23 @@ function pintarOCiclo() {
       : `Volta a trabalhar em ${relogio}`;
 }
 
-ligar('modo-automatico', 'change', () => {
+ligar('modo-automatico', 'change', async () => {
   if ($('modo-automatico').checked) {
-    // Sem a tela ligada o modo automático não cumpre o que promete: o iPhone
-    // apaga a tela, o Safari congela a página, e as horas de trabalho sozinho
-    // viram um sono. Marcar por conta própria seria mexer numa escolha de quem
-    // usa — então marca e diz que marcou, e a opção continua ali para
-    // desmarcar.
+    // Sem a tela ligada o modo automático não cumpre o que promete enquanto a
+    // plataforma não oferecer segundo plano de verdade. Marcar por conta própria
+    // seria mexer numa escolha de quem usa — então marca e diz que marcou.
     const manter = $('manter-tela');
     if (!manter.checked) {
       manter.checked = true;
       avisar('A tela fica ligada junto: sem isso o aparelho congela a busca ao apagar.');
     }
     segurarTelaLigada();
-    ligarCicloAutomatico();
+    await pedirPermissaoDeAviso();
+    mandarCicloAoMotor(true);
     return;
   }
-  // Desmarcar durante o descanso devolve o motor ao trabalho: ninguém desliga o
-  // modo automático querendo ficar parado.
-  const descansando = fase === 'descansando';
+  mandarCicloAoMotor(false);
   desligarCicloAutomatico();
-  if (descansando) {
-    trabalhador?.postMessage({ tipo: 'rodar' });
-    definirFase('buscando');
-    segurarTelaLigada();
-  }
 });
 
 if (!('wakeLock' in navigator)) {
@@ -3141,6 +3240,9 @@ historico.quandoFaltarEspaco(({ descartadas, guardou }) => {
 // já usava o aplicativo não perder o trabalho em andamento na atualização.
 historico.migrarDaVersaoAntiga();
 pintarHistorico();
+
+// Se o motor estava rodando quando o aplicativo fechou, é agora que se descobre.
+aoIniciar('o trabalho interrompido', mostrarTrabalhoInterrompido);
 
 /* ─────────── atualização do aplicativo ─────────── */
 

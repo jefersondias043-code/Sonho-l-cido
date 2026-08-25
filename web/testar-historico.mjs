@@ -329,6 +329,84 @@ try {
   const numero = async (seletor) =>
     Number((await pagina.locator(seletor).textContent()).replace(/\D/g, ''));
 
+  // ─── o sistema encerra a página, e o trabalho não se perde ───
+  //
+  // É o caso que o modo automático de horas existe para sobreviver: o iPhone
+  // encerra a página por bateria, memória ou tempo em segundo plano, e o
+  // aplicativo não tem chance nenhuma de anotar que parou. O que sobra é o que
+  // ficou gravado — e é isso que precisa bastar.
+  await pagina.evaluate(() => localStorage.clear());
+  await pagina.reload({ waitUntil: 'networkidle' });
+  await pagina.click('.aba[data-painel="lotinha"]');
+  await pagina.waitForSelector('#lotinha.ativo');
+  await pagina.click('#lot-pool .opcao[data-pool="18"]');
+  await pagina.click('#lot-limpar');
+  for (const n of [1, 2, 4, 5, 7, 8, 10, 11, 13, 14, 16, 17, 19, 20, 22, 23, 24, 25]) {
+    await pagina.click(`#lot-grade .numero[data-n="${n}"]`);
+  }
+  await pagina.click('#lot-iniciar');
+  await pagina.waitForSelector('#buscar.ativo', { timeout: 30000 });
+  await pagina.waitForFunction(
+    () => {
+      const t = document.getElementById('melhor-cartelas').textContent.trim();
+      return t !== '' && t !== '—';
+    },
+    undefined,
+    { timeout: 30000 }
+  );
+  await pagina.waitForTimeout(1500);
+
+  const gravado = await pagina.evaluate(() => {
+    const bruto = JSON.parse(localStorage.getItem('sonho-lucido:historico') ?? '[]');
+    return bruto[0] ?? null;
+  });
+  marcar(
+    gravado?.emCurso === true,
+    'enquanto o motor roda, fica gravado que há trabalho em andamento',
+    `emCurso: ${gravado?.emCurso}`
+  );
+  marcar(
+    Number(gravado?.motor?.iteracoes) > 0 && Number(gravado?.motor?.alvo_cartelas) > 0,
+    'e o estado do motor é gravado junto, não só as cartelas',
+    `${gravado?.motor?.iteracoes} iterações · meta ${gravado?.motor?.alvo_cartelas}`
+  );
+
+  // O encerramento pelo sistema: a página some sem despedida.
+  await pagina.reload({ waitUntil: 'networkidle' });
+  await pagina.click('.aba[data-painel="historico"]');
+  await pagina.waitForSelector('#historico.ativo');
+  await pagina.waitForSelector('#cartao-interrompido:not([hidden])', { timeout: 10000 });
+  const resumo = (await pagina.locator('#resumo-interrompido').textContent()).replace(/\s+/g, ' ');
+  marcar(
+    /o motor estava trabalhando quando o aplicativo fechou/.test(resumo) &&
+      /iterações/.test(resumo),
+    'ao reabrir, o aplicativo reconhece o trabalho interrompido e mostra onde parou',
+    resumo.slice(0, 90)
+  );
+
+  await pagina.click('#retomar-interrompido');
+  await pagina.waitForSelector('#buscar.ativo', { timeout: 30000 });
+  await pagina.waitForFunction(
+    () => Number(document.getElementById('iteracoes').textContent.replace(/\D/g, '')) > 0,
+    undefined,
+    { timeout: 30000 }
+  );
+  marcar(
+    (await numero('#iteracoes')) >= Number(gravado.motor.iteracoes),
+    'e retomar continua das iterações gravadas, em vez de recomeçar',
+    `gravadas ${gravado.motor.iteracoes}, retomadas ${await numero('#iteracoes')}`
+  );
+
+  await pagina.click('#encerrar');
+  await pagina.waitForSelector('#lotinha.ativo', { timeout: 20000 });
+  await pagina.click('.aba[data-painel="historico"]');
+  await pagina.waitForTimeout(400);
+  marcar(
+    await pagina.locator('#cartao-interrompido').isHidden(),
+    'e encerrar de propósito não deixa o aviso de interrupção para trás',
+    'cartão escondido'
+  );
+
   // ─── a sessão atravessa para outro aparelho ───
   //
   // A promessa inteira do arquivo: dez horas de motor num aparelho continuam

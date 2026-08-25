@@ -40,6 +40,27 @@ const LOTE_INICIAL = 25;
 
 let motor = null;
 let rodando = false;
+
+/*
+ * O ciclo de trabalho e descanso mora aqui, e não na interface.
+ *
+ * Estava do outro lado, num `setInterval` da página. Funcionava, e era o lugar
+ * errado: quem decide quando o motor trabalha é o motor. Do lado da página o
+ * temporizador é estrangulado quando a aba vai ao fundo, e um ciclo de quinze
+ * minutos vira um disparo que chega tarde — ou não chega.
+ *
+ * O prazo é um instante do relógio de parede, não uma contagem. Enquanto
+ * trabalha, o próprio laço confere o prazo entre um lote e outro, sem
+ * temporizador nenhum. Enquanto descansa, um tique por segundo confere o mesmo
+ * instante — e é por ser instante, e não contagem, que uma suspensão do sistema
+ * não desregula o ciclo: ao voltar, o prazo já venceu e a troca acontece na hora.
+ */
+let ciclo = null;
+let relogioDoDescanso = null;
+
+/** De quanto em quanto tempo o estado é oferecido à interface para gravar. */
+const SEGUNDOS_ENTRE_SALVAMENTOS = 30;
+let salvoEm = 0;
 let lote = LOTE_INICIAL;
 let iniciadoEm = 0;
 let iteracoesNoInicio = 0;
@@ -85,17 +106,29 @@ function tratar(mensagem) {
         break;
 
       case 'rodar':
-        if (motor && !rodando) {
-          rodando = true;
-          iniciadoEm = performance.now();
-          iteracoesNoInicio = lerEstado().iteracoes;
-          laco();
+        // Um `rodar` vindo do botão desfaz a pausa manual e devolve o ciclo ao
+        // trabalho: quem tocou em Continuar quer o motor andando agora, não
+        // esperando o fim de um descanso que começou enquanto estava parado.
+        if (ciclo) {
+          ciclo.suspenso = false;
+          comecarEtapa('trabalho');
         }
+        ligarLaco();
         break;
 
       case 'pausar':
+        // Pausa manual suspende o ciclo. Quem tocou em Pausar quer o motor
+        // parado, e não parado por quinze minutos e religado sozinho.
+        if (ciclo) ciclo.suspenso = true;
+        pararDescanso();
         rodando = false;
         postMessage({ tipo: 'pausado', estado: lerEstado(), cartelas: JSON.parse(motor.melhor()) });
+        break;
+
+      // Liga e desliga o ciclo automático. Quem manda é a interface; quem
+      // executa, daqui em diante, é o motor.
+      case 'automatico':
+        configurarCiclo(mensagem);
         break;
 
       // A sessão inteira, para gravar num arquivo e continuar noutro aparelho.
@@ -225,6 +258,101 @@ function cartelasSeMudaram(estado) {
   return JSON.parse(motor.melhor());
 }
 
+/**
+ * Liga, desliga ou reconfigura o ciclo automático.
+ *
+ * Ligar com o motor parado o põe a trabalhar: quem marca a opção espera que ela
+ * valha desde já, e não a partir do próximo toque em Continuar.
+ */
+function configurarCiclo({ ligado, segundosTrabalho, segundosDescanso }) {
+  if (!ligado) {
+    const estavaDescansando = ciclo?.etapa === 'descanso';
+    ciclo = null;
+    pararDescanso();
+    // Desligar durante o descanso devolve o motor ao trabalho: ninguém desliga o
+    // modo automático querendo ficar parado.
+    if (estavaDescansando) ligarLaco();
+    postMessage({ tipo: 'ciclo', etapa: null, venceEm: 0 });
+    return;
+  }
+
+  ciclo = {
+    trabalho: Math.max(1, Number(segundosTrabalho) || 900),
+    descanso: Math.max(1, Number(segundosDescanso) || 600),
+    etapa: 'trabalho',
+    venceEm: 0,
+    suspenso: false,
+  };
+  comecarEtapa('trabalho');
+}
+
+/** Começa uma etapa e anuncia quando ela vence. */
+function comecarEtapa(etapa) {
+  if (!ciclo) return;
+  const segundos = etapa === 'trabalho' ? ciclo.trabalho : ciclo.descanso;
+  ciclo.etapa = etapa;
+  ciclo.venceEm = Date.now() + segundos * 1000;
+
+  if (etapa === 'trabalho') {
+    pararDescanso();
+    ligarLaco();
+  } else {
+    rodando = false;
+    // Um tique por segundo custa nada e é o que traz o motor de volta. O laço
+    // pesado não roda: é aqui que o aparelho esfria.
+    pararDescanso();
+    relogioDoDescanso = setInterval(conferirCiclo, 1000);
+    postMessage({ tipo: 'pausado', estado: lerEstado(), cartelas: JSON.parse(motor.melhor()) });
+  }
+  postMessage({ tipo: 'ciclo', etapa: ciclo.etapa, venceEm: ciclo.venceEm });
+}
+
+function pararDescanso() {
+  clearInterval(relogioDoDescanso);
+  relogioDoDescanso = null;
+}
+
+/**
+ * Confere se a etapa venceu.
+ *
+ * Chamado entre os lotes enquanto o motor trabalha, e de segundo em segundo
+ * enquanto descansa. Nos dois casos a decisão é sobre o **instante**, e não
+ * sobre quantos tiques passaram — é o que faz um prazo vencido há minutos, por
+ * conta de uma suspensão do sistema, resolver-se de uma vez na volta.
+ */
+function conferirCiclo() {
+  if (!ciclo || ciclo.suspenso || !motor) return;
+  if (Date.now() < ciclo.venceEm) return;
+  comecarEtapa(ciclo.etapa === 'trabalho' ? 'descanso' : 'trabalho');
+}
+
+/** Liga o laço, se já não estiver ligado. */
+function ligarLaco() {
+  if (!motor || rodando) return;
+  rodando = true;
+  iniciadoEm = performance.now();
+  iteracoesNoInicio = lerEstado().iteracoes;
+  laco();
+}
+
+/**
+ * Oferece o estado à interface para gravar, de tempos em tempos.
+ *
+ * O sistema pode encerrar a página a qualquer momento — bateria, memória, ou só
+ * porque o usuário ficou tempo demais noutro aplicativo. O que estiver gravado
+ * até ali sobrevive; o resto não. Trinta segundos é o tamanho da pior perda
+ * possível, e custa uma mensagem com alguns números.
+ *
+ * As cartelas não vão junto: só o retrato do motor. As cartelas a interface já
+ * tem, porque viajam com cada recorde.
+ */
+function talvezSalvar(estado) {
+  const agora = Date.now();
+  if (agora - salvoEm < SEGUNDOS_ENTRE_SALVAMENTOS * 1000) return;
+  salvoEm = agora;
+  postMessage({ tipo: 'salvar', estado });
+}
+
 function laco() {
   if (!rodando || !motor) return;
 
@@ -251,6 +379,13 @@ function laco() {
     segundos > 0 ? (estado.iteracoes - iteracoesNoInicio) / segundos : 0;
 
   postMessage({ tipo: 'estado', estado, cartelas: cartelasSeMudaram(estado) });
+  talvezSalvar(estado);
+
+  // O fim do período de trabalho é conferido aqui, entre um lote e outro. É a
+  // fresta natural: sem temporizador, sem interromper cálculo pela metade, e
+  // com o motor num estado consistente.
+  conferirCiclo();
+  if (!rodando) return;
 
   // Não existe condição aqui que encerre o laço sozinha, e é de propósito.
   //

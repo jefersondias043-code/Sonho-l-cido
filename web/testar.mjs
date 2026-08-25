@@ -621,11 +621,14 @@ try {
   });
   const telaAntes = await pagina.locator('#manter-tela').isChecked();
   await pagina.click('#modo-automatico');
-  marcar(
-    /Descansa em/.test(await texto('#proxima-etapa')),
-    'ligar o modo automático anuncia quando vem o descanso',
-    await texto('#proxima-etapa')
+  // A contagem não aparece no toque: quem começa a etapa é o motor, e a tela só
+  // a exibe quando ele confirma. A ida e volta é a prova de que o ciclo é dele.
+  await pagina.waitForFunction(
+    () => /Descansa em/.test(document.getElementById('proxima-etapa').textContent),
+    undefined,
+    { timeout: 10000 }
   );
+  marcar(true, 'ligar o modo automático faz o motor anunciar quando vem o descanso', await texto('#proxima-etapa'));
   marcar(
     (await pagina.locator('#manter-tela').isChecked()) === true,
     'e liga a tela junto, porque sem ela o aparelho congela a busca ao apagar',

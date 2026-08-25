@@ -228,6 +228,14 @@ export function criar(configuracao, dados = {}) {
     segundos: dados.segundos ?? 0,
     atual: dados.atual ?? [],
     motor: dados.motor ?? {},
+    // Se o motor estava rodando quando esta linha foi gravada.
+    //
+    // Fica gravado, e não só na memória da página, porque é isso que permite
+    // descobrir na abertura seguinte que uma busca foi interrompida sem ninguém
+    // mandar parar — o sistema encerrou a página, a bateria acabou, o navegador
+    // foi fechado. Quem lê depois vê "estava trabalhando" e pode oferecer a
+    // retomada em vez de deixar horas de trabalho paradas sem aviso.
+    emCurso: dados.emCurso ?? false,
   };
 
   gravar([sessao, ...ler()]);
@@ -294,6 +302,30 @@ export function paraRetomada(sessao) {
     atual: sessao.atual ?? [],
     motor: sessao.motor ?? {},
   });
+}
+
+/**
+ * O trabalho que ficou em andamento quando o aplicativo fechou, se houver.
+ *
+ * Existe para responder à pergunta que aparece ao reabrir depois de uma noite: o
+ * motor estava rodando? O sistema pode ter encerrado a página por bateria, por
+ * memória, ou porque o usuário passou tempo demais noutro aplicativo — e em
+ * nenhum desses casos o aplicativo teve a chance de anotar que parou.
+ *
+ * Devolve a mais recente, porque só uma busca roda por vez.
+ */
+export function interrompida() {
+  return ler().find((s) => s.emCurso === true) ?? null;
+}
+
+/** Anota que um trabalho não está mais em andamento, sem tocar no resto dele. */
+export function encerrar(id) {
+  const sessoes = ler();
+  const alvo = sessoes.find((s) => s.id === id);
+  if (!alvo || !alvo.emCurso) return false;
+  alvo.emCurso = false;
+  gravar(sessoes);
+  return true;
 }
 
 /** Descrição curta da configuração, para a lista. */
