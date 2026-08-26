@@ -507,7 +507,7 @@ try {
       typeof m.gerador === 'string' &&
       Number.isFinite(m.iteracoes_sem_recorde) &&
       Array.isArray(dentro.sessao?.elites),
-    'e o estado da busca: memória da aceitação, gerador, relógio da diversificação e elites',
+    'e o estado da busca: memória da aceitação, gerador, relógio da diversificação',
     `${(m.memoria_aceitacao ?? []).length / 3} custos · parada há ${
       m.iteracoes_sem_recorde
     } · ${(dentro.sessao?.elites ?? []).length} elites`
@@ -597,7 +597,11 @@ try {
     const sessoes = bruto ? JSON.parse(bruto) : [];
     const comMotor = sessoes.find((s) => Array.isArray(s.motor?.memoria_aceitacao))
       ?? sessoes.find((s) => s.motor && Object.keys(s.motor).length > 3);
-    return { motor: comMotor?.motor ?? null, chaves: Object.keys(comMotor?.motor ?? {}) };
+    return {
+      motor: comMotor?.motor ?? null,
+      elites: comMotor?.elites ?? null,
+      chaves: Object.keys(comMotor?.motor ?? {}),
+    };
   });
   console.log('    chaves gravadas:', oMotorGravado.chaves.join(', '));
 
@@ -823,6 +827,41 @@ try {
     iteracoes60 >= 12345,
     'com as iterações do arquivo somando, e não recomeçando do zero',
     `12.345 no arquivo, ${iteracoes60} na tela`
+  );
+
+  // ─── o arquivo de elites também é gravado ───
+  //
+  // Aqui a busca já reduziu de 60 para 40, então juntou elites de verdade — é o
+  // ponto do teste em que elas existem. Pausar força uma gravação na hora, sem
+  // esperar os trinta segundos.
+  //
+  // Sem elas a diversificação reinicia do zero em vez de partir de algo que já
+  // funcionou. Medido: retomar sem o arquivo de elites gastou doze mil
+  // iterações sem achar nada, onde a corrida contínua caiu de 307 para 263.
+  await pagina.waitForFunction(
+    () => Number(document.getElementById('elites').textContent.replace(/\D/g, '')) > 0,
+    undefined,
+    { timeout: 60000 }
+  );
+  const elitesNaTela = await numero('#elites');
+  await pagina.click('#pausar');
+  await pagina.waitForTimeout(600);
+
+  const gravacao = await pagina.evaluate(() => {
+    const bruto = localStorage.getItem('sonho-lucido:historico');
+    const sessoes = bruto ? JSON.parse(bruto) : [];
+    const s = sessoes.find((x) => Array.isArray(x.elites) && x.elites.length > 0) ?? sessoes[0];
+    return {
+      elites: s?.elites ?? [],
+      cartelas: (s?.elites ?? []).reduce((t, e) => t + e.length, 0),
+    };
+  });
+  marcar(
+    gravacao.elites.length > 0 &&
+      gravacao.elites.every((e) => Array.isArray(e) && e.length > 0) &&
+      gravacao.cartelas <= 2000,
+    'o arquivo de elites é gravado junto, dentro do orçamento de 2.000 cartelas',
+    `${elitesNaTela} na tela · ${gravacao.elites.length} gravadas · ${gravacao.cartelas} cartelas`
   );
 
   await pagina.click('#encerrar');

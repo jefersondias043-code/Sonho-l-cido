@@ -536,9 +536,9 @@ function garantirTrabalhador() {
       // O motor pede que o estado seja gravado. Vem de tempos em tempos, para
       // que um encerramento do sistema não leve mais que o último intervalo.
       case 'salvar':
-        // O retrato inteiro vem à parte do estado do lote: é ele que carrega o
-        // trabalho do motor, e não só os números que a tela mostra.
-        salvarNoHistorico(data.estado, data.retrato);
+        // O retrato inteiro e as elites vêm à parte do estado do lote: são eles
+        // que carregam o trabalho do motor, e não os números que a tela mostra.
+        salvarNoHistorico(data.estado, data.retrato, data.elites);
         break;
 
       case 'pausado':
@@ -623,7 +623,7 @@ function desmontarTrabalhador() {
  * As cartelas da solução em curso ficam de fora — seriam meio megabyte a cada
  * gravação, e o motor retoma bem sem elas. Elas só entram no arquivo exportado.
  */
-function salvarNoHistorico(estado, retrato = null) {
+function salvarNoHistorico(estado, retrato = null, elites = null) {
   if (!melhorCartelas.length || !estado) return;
 
   const dados = {
@@ -642,6 +642,7 @@ function salvarNoHistorico(estado, retrato = null) {
   };
 
   if (retrato) dados.motor = retrato;
+  if (Array.isArray(elites)) dados.elites = elites;
 
   // Uma sessão nova precisa nascer com algum retrato, nem que seja o leve; a
   // partir daí, gravação com retrato inteiro substitui, gravação sem retrato

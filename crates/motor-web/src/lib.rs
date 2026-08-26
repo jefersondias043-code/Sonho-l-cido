@@ -724,6 +724,30 @@ impl MotorWeb {
         serde_json::to_string(&salvo).unwrap_or_else(|_| "{}".to_string())
     }
 
+    /// As elites que cabem num orçamento de cartelas, para o histórico gravar.
+    ///
+    /// Separadas do retrato porque são a única parte grande — cada elite tem o
+    /// tamanho de um fechamento — e porque os dois destinos têm orçamentos
+    /// diferentes. O arquivo exportado sai uma vez e vai por mensagem; o
+    /// histórico mora no armazenamento do navegador, que é de alguns megabytes
+    /// e guarda vários trabalhos. Quem conhece o próprio limite é quem chama.
+    ///
+    /// Vale a pena mesmo apertado: medido, retomar sem o arquivo de elites
+    /// gastava doze mil iterações sem achar nada, onde a corrida contínua caiu
+    /// de 307 para 263 cartelas no mesmo intervalo. A diversificação reinicia de
+    /// uma elite metade das vezes, e sem arquivo essa metade vira reconstrução
+    /// do zero — que é ir para longe sem levar nada.
+    pub fn elites_para_gravar(&self, teto_de_cartelas: u32) -> String {
+        let pool = self.interno.problema().pool();
+        let elites: Vec<Vec<Vec<u32>>> = self
+            .interno
+            .elites_ate(teto_de_cartelas as usize)
+            .iter()
+            .map(|e| e.iter().map(|c| c.rotulos(pool)).collect())
+            .collect();
+        serde_json::to_string(&elites).unwrap_or_else(|_| "[]".to_string())
+    }
+
     /// A melhor solução em rótulos do universo, pronta para exibir ou exportar.
     pub fn melhor(&self) -> String {
         let rotulos = self.melhor_em_rotulos();

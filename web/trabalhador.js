@@ -70,6 +70,23 @@ let relogioDoDescanso = null;
 
 /** De quanto em quanto tempo o estado é oferecido à interface para gravar. */
 const SEGUNDOS_ENTRE_SALVAMENTOS = 30;
+
+/**
+ * Quantas cartelas o histórico gasta com o arquivo de elites, por trabalho.
+ *
+ * As elites são soluções boas e estruturalmente diferentes entre si, e é delas
+ * que sai o material da recombinação e o ponto de reinício da diversificação.
+ * Medido: retomar sem elas gastava doze mil iterações sem achar nada, onde a
+ * corrida contínua caiu de 307 para 263 cartelas.
+ *
+ * Duas mil, e não as vinte mil do arquivo exportado, porque o destino é outro.
+ * O arquivo sai uma vez e vai por mensagem; o histórico mora no armazenamento
+ * do navegador, que é de alguns megabytes e guarda vários trabalhos. Duas mil
+ * cartelas são cerca de cem quilobytes — o arquivo de elites inteiro num
+ * fechamento de duzentas e poucas, e nenhuma num de dez mil, onde uma só já
+ * ocuparia meio megabyte por gravação.
+ */
+const TETO_DE_ELITES_NO_HISTORICO = 2_000;
 let salvoEm = 0;
 let lote = LOTE_INICIAL;
 let iniciadoEm = 0;
@@ -421,7 +438,12 @@ function talvezSalvar(estado, agora = false) {
   if (!agora && momento - salvoEm < SEGUNDOS_ENTRE_SALVAMENTOS * 1000) return;
   if (!motor) return;
   salvoEm = momento;
-  postMessage({ tipo: 'salvar', estado, retrato: JSON.parse(motor.retrato_de_sessao()) });
+  postMessage({
+    tipo: 'salvar',
+    estado,
+    retrato: JSON.parse(motor.retrato_de_sessao()),
+    elites: JSON.parse(motor.elites_para_gravar(TETO_DE_ELITES_NO_HISTORICO)),
+  });
 }
 
 function laco() {

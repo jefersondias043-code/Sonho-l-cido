@@ -228,6 +228,7 @@ export function criar(configuracao, dados = {}) {
     segundos: dados.segundos ?? 0,
     atual: dados.atual ?? [],
     motor: dados.motor ?? {},
+    elites: dados.elites ?? [],
     // Se o motor estava rodando quando esta linha foi gravada.
     //
     // Fica gravado, e não só na memória da página, porque é isso que permite
@@ -301,6 +302,10 @@ export function paraRetomada(sessao) {
     // e leva milhares de iterações para reaprender o que já sabia.
     atual: sessao.atual ?? [],
     motor: sessao.motor ?? {},
+    // O arquivo de elites: as soluções boas e diferentes que a busca juntou.
+    // Sem elas a diversificação reinicia do zero em vez de partir de algo que
+    // já funcionou, e medindo isso custou doze mil iterações sem uma melhoria.
+    elites: sessao.elites ?? [],
   });
 }
 
