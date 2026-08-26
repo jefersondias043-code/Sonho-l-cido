@@ -255,23 +255,6 @@ pub struct Configuracao {
     /// ferramenta de acabamento de onde ela serve. Duzentas quase dobraram o
     /// que saiu.
     pub teto_de_trocas_por_iteracao: u64,
-    /// Iterações com a cobertura aberta antes de o motor afrouxar a meta.
-    ///
-    /// A meta é um teto de cartelas, e ela só é recalculada quando aparece um
-    /// recorde. Isso cria um estado sem saída: se a solução em curso ficar com
-    /// um buraco que não fecha dentro do teto, não haverá recorde — e sem
-    /// recorde a meta não se move. O motor gira para sempre num teto que não
-    /// serve.
-    ///
-    /// Não é hipótese: o perfil de `(20,17)` pegou o motor assim por quarenta
-    /// mil iterações, com cento e dois sorteios descobertos e nenhum recorde,
-    /// depois de uma diversificação cortar uma construção de 364 cartelas até a
-    /// meta de 244.
-    ///
-    /// Esta válvula sobe a meta uma cartela de cada vez enquanto a cobertura não
-    /// fechar. Não é uma heurística nova: é a saída de um estado em que o motor
-    /// não tinha nenhuma. Zero desliga.
-    pub iteracoes_ate_afrouxar_a_meta: u64,
     /// De onde a diversificação parte quando não reaproveita uma elite.
     pub reinicio_da_diversificacao: ReinicioDaDiversificacao,
     /// Teto de operações sobre alvos gasto na descida por troca de ponto.
@@ -303,7 +286,6 @@ impl Default for Configuracao {
             fator_reacao: 0.20,
             recompensas: Recompensas::default(),
             teto_de_trocas_por_iteracao: 200,
-            iteracoes_ate_afrouxar_a_meta: 2_000,
             // Medido e recusado: arruinar o recorde perdeu para construir do zero
             // em `(20,17)`, com quatro sementes de cinco minutos cada — média de
             // 261,8 cartelas contra 258,0, e derrota em duas das quatro. A
@@ -507,9 +489,6 @@ pub struct MotorBusca {
     /// Uso e rendimento de cada operador, na ordem de [`Operador::TODOS`].
     uso_dos_operadores: Vec<UsoDoOperador>,
 
-    /// Há quantas iterações a solução em curso está com a cobertura aberta.
-    iteracoes_sem_fechar: u64,
-
     /// Verdadeiro quando este motor foi carregado de uma sessão salva.
     ///
     /// Existe para uma regra só, e é uma regra de confiança: **uma sessão
@@ -589,7 +568,6 @@ impl MotorBusca {
             duracao_acumulada: Duration::ZERO,
             iteracoes_sem_recorde: 0,
             uso_dos_operadores: vec![UsoDoOperador::default(); Operador::TODOS.len()],
-            iteracoes_sem_fechar: 0,
             comecou: false,
             retomada: false,
         })
@@ -1083,19 +1061,6 @@ impl MotorBusca {
             self.uso_dos_operadores[indice_operador].sem_efeito += 1;
         }
 
-        // A válvula da meta. Contada sobre a solução em curso, e não sobre o
-        // recorde: o que trava o motor é a cobertura que não fecha dentro do
-        // teto, e é esse estado que precisa de saída.
-        if self.atual.cobertura_total() {
-            self.iteracoes_sem_fechar = 0;
-        } else {
-            self.iteracoes_sem_fechar += 1;
-            let limite = self.config.iteracoes_ate_afrouxar_a_meta;
-            if limite > 0 && self.iteracoes_sem_fechar >= limite {
-                self.afrouxar_a_meta();
-            }
-        }
-
         if e_recorde {
             self.iteracoes_sem_recorde = 0;
         } else {
@@ -1241,27 +1206,6 @@ impl MotorBusca {
         }
         self.alvo_cartelas = nova_meta;
         self.iteracao_da_meta = self.estatisticas.iteracoes;
-        self.aceitacao.reiniciar(chave_local(&self.atual.avaliacao()));
-    }
-
-    /// Sobe a meta uma cartela, para a busca ter onde fechar a cobertura.
-    ///
-    /// Só age quando a cobertura está aberta há tempo demais, e nunca sobe acima
-    /// do recorde: o objetivo é dar espaço para fechar, não desfazer o que já
-    /// foi conquistado. Quando a cobertura fechar, um recorde recalcula a meta
-    /// pelo caminho normal e a válvula some do caminho.
-    fn afrouxar_a_meta(&mut self) {
-        if !matches!(self.problema.objetivo(), Objetivo::MinimizarCartelas) {
-            return;
-        }
-        let teto = self.melhor_avaliacao.cartelas;
-        if teto == 0 || self.alvo_cartelas >= teto {
-            return;
-        }
-
-        self.alvo_cartelas += 1;
-        self.iteracao_da_meta = self.estatisticas.iteracoes;
-        self.iteracoes_sem_fechar = 0;
         self.aceitacao.reiniciar(chave_local(&self.atual.avaliacao()));
     }
 
@@ -2316,6 +2260,46 @@ mod testes {
             motor.alvo_cartelas < motor.melhor_avaliacao().cartelas,
             "afrouxar não é desistir: a meta continua abaixo do recorde"
         );
+    }
+
+    /// A meta é sempre **abaixo** do recorde. É o que faz a busca empurrar.
+    #[test]
+    fn a_meta_nunca_alcanca_o_recorde() {
+        // O defeito que este teste guarda foi visto por quem usa: depois de
+        // importar um fechamento, a tela mostrava "meta perseguida" igual ao
+        // número de cartelas já conquistadas. Perseguir o que já se tem não é
+        // perseguir nada — e, medindo, isso acontecia em 93 de 120 lotes.
+        //
+        // A causa era uma válvula que subia a meta quando a cobertura ficava
+        // aberta por muitas iterações. O engano estava na premissa: cobertura
+        // aberta é o estado **normal** de quem está empurrando a cardinalidade
+        // para baixo, e não sinal de travamento. A válvula tomava trabalho
+        // legítimo por problema e desfazia a pressão que faz o motor render.
+        //
+        // A única igualdade legítima é no ótimo provado, onde não existe nada
+        // abaixo para perseguir.
+        let mut motor = MotorBusca::novo(problema_para_buscar(), config_rapida(7)).unwrap();
+
+        for _ in 0..40 {
+            motor.executar(
+                &Controle::novo(),
+                &CondicoesDeParada {
+                    max_iteracoes: Some(motor.estatisticas().iteracoes + 1_000),
+                    max_duracao: None,
+                    parar_em_optimalidade: false,
+                },
+                &mut Silencioso,
+            );
+
+            let recorde = motor.melhor_avaliacao().cartelas;
+            let meta = motor.alvo_cartelas();
+            let piso = motor.limite_inferior().valor as usize;
+
+            assert!(
+                meta < recorde || recorde <= piso,
+                "meta {meta} não está abaixo do recorde {recorde}, e o piso é {piso}"
+            );
+        }
     }
 
     #[test]

@@ -70,7 +70,6 @@ fn ate_travar(pool: u32, cartela: usize, semente: u64, parar_apos: u64, teto: Du
         semente,
         intervalo_progresso: 0,
         teto_de_trocas_por_iteracao: u64::MAX,
-        iteracoes_ate_afrouxar_a_meta: 0,
         iteracoes_ate_diversificar: 50_000,
         ..Default::default()
     };
