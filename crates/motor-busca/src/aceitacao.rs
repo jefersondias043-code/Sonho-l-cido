@@ -62,6 +62,30 @@ impl AceitacaoTardia {
     pub fn tamanho(&self) -> usize {
         self.historico.len()
     }
+
+    /// A memória inteira, para gravar num arquivo de sessão.
+    ///
+    /// Sem ela, retomar devolve uma régua chapada no custo da solução salva, e
+    /// a busca passa as próximas `L` iterações num regime que ela não estava —
+    /// nem o apertado que tinha conquistado, nem o frouxo do começo. É o
+    /// critério de aceitação inteiro, e ele é o que decide cada iteração.
+    pub fn memoria(&self) -> (&[ChaveCusto], u64) {
+        (&self.historico, self.passo)
+    }
+
+    /// Restaura uma memória gravada. Devolve `false` se não servir.
+    ///
+    /// Um histórico de outro tamanho vem de uma configuração diferente e não
+    /// descreve esta busca; recusar é melhor que remendar, porque quem recusa
+    /// cai no `reiniciar`, que ao menos é coerente.
+    pub fn restaurar(&mut self, historico: &[ChaveCusto], passo: u64) -> bool {
+        if historico.len() != self.historico.len() {
+            return false;
+        }
+        self.historico.copy_from_slice(historico);
+        self.passo = passo;
+        true
+    }
 }
 
 #[cfg(test)]
@@ -129,6 +153,31 @@ mod testes {
 
         criterio.reiniciar(custo(100));
         assert!(criterio.decidir(custo(50), custo(10)), "após reiniciar, 50 volta a caber");
+    }
+
+    #[test]
+    fn a_memoria_atravessa_uma_gravacao_inteira() {
+        let mut criterio = AceitacaoTardia::nova(4, custo(100));
+        criterio.decidir(custo(30), custo(40));
+        criterio.decidir(custo(20), custo(30));
+        let (historico, passo) = criterio.memoria();
+        let (historico, passo) = (historico.to_vec(), passo);
+
+        // Um critério novo, como o do outro aparelho.
+        let mut outro = AceitacaoTardia::nova(4, custo(999));
+        assert!(outro.restaurar(&historico, passo));
+        assert_eq!(outro.memoria().0, historico.as_slice());
+        assert_eq!(outro.memoria().1, passo);
+
+        // E os dois passam a decidir igual, que é o que importa.
+        assert_eq!(criterio.decidir(custo(50), custo(40)), outro.decidir(custo(50), custo(40)));
+    }
+
+    #[test]
+    fn uma_memoria_de_outro_tamanho_e_recusada() {
+        let mut criterio = AceitacaoTardia::nova(4, custo(10));
+        assert!(!criterio.restaurar(&[custo(1), custo(2)], 0), "tamanho diferente não descreve esta busca");
+        assert_eq!(criterio.tamanho(), 4, "e a memória em uso fica intacta");
     }
 
     #[test]

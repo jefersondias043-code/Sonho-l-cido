@@ -198,23 +198,44 @@ impl Default for Configuracao {
 ///
 /// ## O que carrega, e o que não
 ///
-/// Carrega o que é **caro de reconquistar e barato de guardar**: os contadores,
-/// a meta em curso, o passo da meta e os pesos que o seletor aprendeu sobre
-/// quais operadores funcionam nesta configuração. Um trabalho de dez horas
-/// aprendeu isso, e sem estes números quem retoma recomeça com todos os
-/// operadores empatados.
+/// A regra é uma só: **o que a busca demorou a conquistar viaja junto**.
 ///
-/// **Não** carrega o arquivo de elites. É a decisão que mais pesa aqui, e é de
-/// tamanho: o arquivo guarda até 96 soluções inteiras, e num fechamento de
-/// 10.051 cartelas isso são quase um milhão de cartelas — dezessete megabytes
-/// num arquivo que a pessoa vai mandar por mensagem. O que as dez horas
-/// produziram é o **melhor fechamento**, e esse vai inteiro; o arquivo de elites
-/// é andaime da busca, e o motor o reconstrói em minutos.
+/// A versão anterior guardava os contadores, a meta e os pesos dos operadores, e
+/// achava que isso bastava porque o resultado — o fechamento — ia inteiro. Não
+/// bastava. Um motor que recebe as cartelas certas e o resto zerado é um motor
+/// novo segurando um bom fechamento, e foi exatamente o que se mediu: retomando
+/// uma sessão, o motor divergia da corrida contínua em menos de duzentas
+/// iterações, e a divergência era ele decidindo diferente porque não sabia mais
+/// o que sabia.
 ///
-/// Também não carrega o estado do gerador de números aleatórios. Ele é semeado
-/// de novo na retomada, o que muda quais caminhos a busca tenta a seguir — e não
-/// há nada a preservar aí, porque nenhum caminho é melhor que outro antes de ser
-/// tentado.
+/// O que se perdia, e por que cada peça importa:
+///
+/// - **`iteracoes_sem_recorde`** voltava a zero. É o contador que dispara a
+///   diversificação, e o gatilho está em 50.000 iterações. Uma busca que estava
+///   a quarenta e nove mil de estacionada — prestes a saltar para outra região —
+///   voltava com o relógio zerado e precisava de mais cinquenta mil para chegar
+///   ao mesmo ponto. É a explicação mais direta de "retomar demora muito para
+///   voltar a achar melhorias".
+/// - **A memória do critério de aceitação** era chapada no custo da solução
+///   salva. São 500 custos que descrevem por onde a busca andou, e é com eles
+///   que ela decide aceitar ou recusar cada iteração.
+/// - **O gerador de aleatórios** era semeado de novo com a semente inicial. A
+///   retomada não seguia caminho novo: repetia os sorteios que a corrida já
+///   tinha feito nos primeiros minutos.
+/// - **O arquivo de elites** ficava vazio. É dele que sai o material da
+///   recombinação e o ponto de reinício da diversificação.
+/// - **O segmento em formação do seletor** — pontos e usos ainda não convertidos
+///   em peso — era descartado, adiando o próximo reajuste.
+///
+/// ## E o tamanho?
+///
+/// A objeção contra guardar as elites era de tamanho: o arquivo comporta até 96
+/// soluções, e num fechamento de 10.051 cartelas isso seriam dezessete
+/// megabytes. A objeção estava certa no teto e errada na prática — medindo, o
+/// arquivo tem de uma a oito elites no regime em que o usuário está, porque a
+/// exigência de distância mínima entre elas é difícil de satisfazer quando a
+/// busca já convergiu. Elas vão num orçamento de cartelas ([`TETO_DE_ELITES`]);
+/// o que não couber fica de fora, começando pelas piores.
 #[derive(Debug, Clone, PartialEq)]
 pub struct RetratoDoMotor {
     pub iteracoes: u64,
@@ -234,7 +255,34 @@ pub struct RetratoDoMotor {
     pub melhor_iteracao: u64,
     /// Pesos do seletor, na ordem de [`Operador::TODOS`].
     pub pesos_dos_operadores: Vec<f64>,
+
+    /// Iterações desde o último recorde — o relógio da diversificação.
+    pub iteracoes_sem_recorde: u64,
+    /// Identidade estrutural do recorde, que as elites citam como ancestral.
+    pub melhor_assinatura: u64,
+    /// A memória do critério de aceitação tardia, e onde ela está.
+    pub memoria_aceitacao: Vec<ChaveCusto>,
+    pub passo_da_aceitacao: u64,
+    /// Pontos e usos do segmento que o seletor ainda não fechou.
+    pub pontos_do_segmento: Vec<f64>,
+    pub usos_do_segmento: Vec<u32>,
+    pub passo_no_segmento: u64,
+    /// O gerador de aleatórios, no ponto exato em que parou.
+    ///
+    /// Opcional porque um arquivo gravado antes desta versão não o traz, e o
+    /// neutro nesse caso é ficar com o gerador recém-semeado — que é o
+    /// comportamento antigo, e continua correto, só que sem continuidade.
+    pub gerador: Option<Pcg64Mcg>,
 }
+
+/// Quantas cartelas o arquivo de sessão gasta com elites, no máximo.
+///
+/// Vinte mil cartelas são cerca de um megabyte de JSON — muito ao lado de um
+/// fechamento pequeno, nada ao lado de um grande, e em ambos os casos um teto
+/// que o aparelho aguenta. Medido, o arquivo de elites tem de uma a oito
+/// soluções no regime convergido, então este teto quase nunca corta; ele existe
+/// para o caso em que corta.
+pub const TETO_DE_ELITES: usize = 20_000;
 
 pub struct MotorBusca {
     problema: Problema,
@@ -1244,7 +1292,63 @@ impl MotorBusca {
             iteracao_da_meta: self.iteracao_da_meta,
             melhor_iteracao: self.melhor_iteracao,
             pesos_dos_operadores: self.seletor.pesos().to_vec(),
+
+            iteracoes_sem_recorde: self.iteracoes_sem_recorde,
+            melhor_assinatura: self.melhor_assinatura,
+            memoria_aceitacao: self.aceitacao.memoria().0.to_vec(),
+            passo_da_aceitacao: self.aceitacao.memoria().1,
+            pontos_do_segmento: self.seletor.segmento_em_curso().0.to_vec(),
+            usos_do_segmento: self.seletor.segmento_em_curso().1.to_vec(),
+            passo_no_segmento: self.seletor.segmento_em_curso().2,
+            gerador: Some(self.rng.clone()),
         }
+    }
+
+    /// As elites que cabem num orçamento de cartelas, das melhores para as piores.
+    ///
+    /// O orçamento existe porque uma elite custa o tamanho de um fechamento
+    /// inteiro, e o arquivo de sessão vai por mensagem. Cortar pelas piores é o
+    /// certo: as faixas estão ordenadas da menor cardinalidade para a maior, e é
+    /// a menor que serve de material para a próxima recombinação.
+    pub fn elites_ate(&self, orcamento_de_cartelas: usize) -> Vec<Vec<Cartela>> {
+        let mut gastas = 0;
+        let mut saida = Vec::new();
+        for elite in self.arquivo.elites() {
+            if gastas + elite.cartelas.len() > orcamento_de_cartelas {
+                break;
+            }
+            gastas += elite.cartelas.len();
+            saida.push(elite.cartelas.clone());
+        }
+        saida
+    }
+
+    /// Repõe elites vindas de um arquivo de sessão.
+    ///
+    /// Cada uma é reavaliada aqui, e não lida do arquivo: avaliação e assinatura
+    /// se calculam das cartelas em microssegundos, e recalcular é a única forma
+    /// de garantir que um arquivo adulterado não entre com números que não
+    /// batem com as cartelas que traz.
+    pub fn repor_elites(&mut self, elites: &[Vec<Cartela>]) {
+        let repostas: Vec<Elite> = elites
+            .iter()
+            .filter(|cartelas| !cartelas.is_empty())
+            .map(|cartelas| {
+                let mut solucao = Solucao::vazia(&self.cobertura);
+                for &cartela in cartelas {
+                    solucao.adicionar(&self.cobertura, cartela, &mut self.oficina.rascunho);
+                }
+                Elite {
+                    cartelas: cartelas.clone(),
+                    avaliacao: solucao.avaliacao(),
+                    assinatura: solucao.assinatura(),
+                    iteracao: self.estatisticas.iteracoes,
+                    ancestral: Some(self.melhor_assinatura),
+                    operador: "sessão retomada",
+                }
+            })
+            .collect();
+        self.arquivo.repor(repostas);
     }
 
     /// Retoma uma sessão inteira: o recorde, a solução em curso e o retrato.
@@ -1295,6 +1399,34 @@ impl MotorBusca {
             self.passo_atual = retrato.passo_atual;
         }
         self.seletor.restaurar_pesos(&retrato.pesos_dos_operadores);
+        self.seletor.restaurar_segmento(
+            &retrato.pontos_do_segmento,
+            &retrato.usos_do_segmento,
+            retrato.passo_no_segmento,
+        );
+
+        // O relógio da diversificação. Zerá-lo era o defeito mais caro: uma
+        // busca a quarenta e nove mil iterações de estacionada voltava
+        // precisando de mais cinquenta mil para chegar ao mesmo ponto.
+        self.iteracoes_sem_recorde = retrato.iteracoes_sem_recorde;
+        if retrato.melhor_assinatura != 0 {
+            self.melhor_assinatura = retrato.melhor_assinatura;
+        }
+
+        // A memória da aceitação, se o arquivo trouxer uma que sirva. Quando
+        // não trouxer — arquivo antigo, ou outra configuração — fica a que
+        // `consolidar_inicio` já chapou no custo atual, que é o comportamento
+        // de antes e continua sendo coerente.
+        if !retrato.memoria_aceitacao.is_empty() {
+            self.aceitacao.restaurar(&retrato.memoria_aceitacao, retrato.passo_da_aceitacao);
+        }
+
+        // O gerador. Sem isto a retomada re-semeava da semente inicial e
+        // repetia os sorteios que a corrida já tinha feito.
+        if let Some(gerador) = retrato.gerador.clone() {
+            self.rng = gerador;
+        }
+
         self.origem_do_inicio = "sessão importada".to_string();
     }
 }
@@ -1447,6 +1579,83 @@ mod testes {
         // E o piso nunca pode cair abaixo do de uma cobertura simples: toda
         // solução que atende cada alvo três vezes atende cada um ao menos uma.
         assert!(triplo.limite_inferior().valor >= simples.limite_inferior().valor);
+    }
+
+    /// Retomar devolve o estado da busca, e não só as cartelas dela.
+    #[test]
+    fn retomar_uma_sessao_devolve_o_motor_ao_ponto_em_que_estava() {
+        // O defeito: um motor que recebia as cartelas certas e o resto zerado.
+        // O caso mais caro era o relógio da diversificação — uma busca a
+        // quarenta e nove mil iterações de estacionada voltava com ele em zero
+        // e precisava de mais cinquenta mil para chegar ao mesmo ponto.
+        let mut original = MotorBusca::novo(problema_para_buscar(), config_rapida(3)).unwrap();
+        original.executar(
+            &Controle::novo(),
+            &CondicoesDeParada {
+                max_iteracoes: Some(20_000),
+                max_duracao: None,
+                parar_em_optimalidade: false,
+            },
+            &mut Silencioso,
+        );
+
+        let retrato = original.retrato();
+        assert!(retrato.iteracoes_sem_recorde > 0, "sem isto o teste não observa nada");
+        assert!(!retrato.memoria_aceitacao.is_empty(), "a memória da aceitação tem de sair");
+        assert!(retrato.gerador.is_some(), "o gerador tem de sair");
+
+        let elites = original.elites_ate(TETO_DE_ELITES);
+        let melhor = original.melhor_cartelas().to_vec();
+        let atual = original.cartelas_atuais().to_vec();
+
+        // Um motor novo, como o do outro aparelho.
+        let mut outro = MotorBusca::novo(problema_para_buscar(), config_rapida(3)).unwrap();
+        outro.retomar_sessao(&melhor, &atual, &retrato);
+        outro.repor_elites(&elites);
+
+        let depois = outro.retrato();
+        assert_eq!(depois.iteracoes_sem_recorde, retrato.iteracoes_sem_recorde);
+        assert_eq!(depois.memoria_aceitacao, retrato.memoria_aceitacao, "a régua de aceitação");
+        assert_eq!(depois.passo_da_aceitacao, retrato.passo_da_aceitacao);
+        assert_eq!(depois.melhor_assinatura, retrato.melhor_assinatura);
+        assert_eq!(depois.gerador, retrato.gerador, "o gerador tem de continuar de onde parou");
+        assert_eq!(depois.usos_do_segmento, retrato.usos_do_segmento);
+        assert_eq!(depois.passo_no_segmento, retrato.passo_no_segmento);
+        assert_eq!(
+            outro.arquivo().quantidade(),
+            original.arquivo().quantidade(),
+            "o arquivo de elites tem de chegar inteiro"
+        );
+    }
+
+    /// O orçamento das elites corta pelas piores, e nunca estoura.
+    #[test]
+    fn as_elites_cabem_no_orcamento_ou_ficam_de_fora() {
+        let mut motor = MotorBusca::novo(problema_para_buscar(), config_rapida(5)).unwrap();
+        motor.executar(
+            &Controle::novo(),
+            &CondicoesDeParada {
+                max_iteracoes: Some(20_000),
+                max_duracao: None,
+                parar_em_optimalidade: false,
+            },
+            &mut Silencioso,
+        );
+        assert!(motor.arquivo().quantidade() > 1, "sem elites não há o que cortar");
+
+        let todas = motor.elites_ate(TETO_DE_ELITES);
+        assert_eq!(todas.len(), motor.arquivo().quantidade(), "o teto folgado leva todas");
+
+        // Um orçamento apertado leva as primeiras, que são as das faixas de
+        // menor cardinalidade — as que servem de material para a recombinação.
+        let uma = todas[0].len();
+        let poucas = motor.elites_ate(uma);
+        assert_eq!(poucas.len(), 1, "cabe uma, entra uma");
+        assert!(motor.elites_ate(uma - 1).is_empty(), "não cabendo nenhuma, nenhuma entra");
+        assert!(
+            poucas.iter().map(|e| e.len()).sum::<usize>() <= uma,
+            "o orçamento é um teto, não uma sugestão"
+        );
     }
 
     /// Retomar não é semear: o que veio no arquivo entra exatamente como saiu.

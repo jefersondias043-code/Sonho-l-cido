@@ -29,6 +29,7 @@ use motor_busca::{
     CondicoesDeParada, Configuracao, Controle, Evento, MotorBusca, Observador,
 };
 use motor_core::{interpretar_fechamento, Cartela, Objetivo, Problema, RegraCobertura};
+use rand_pcg::Pcg64Mcg;
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
 
@@ -214,6 +215,13 @@ pub struct EstadoSalvo {
     pub atual: Vec<Vec<u32>>,
     #[serde(default)]
     pub motor: RetratoSalvo,
+    /// O arquivo de elites: soluções boas e estruturalmente diferentes entre si.
+    ///
+    /// Fica fora do retrato porque é a única parte grande — cada elite tem o
+    /// tamanho de um fechamento. Vai num orçamento de cartelas, e o que não
+    /// couber fica de fora começando pelas piores.
+    #[serde(default)]
+    pub elites: Vec<Vec<Vec<u32>>>,
     /// As melhorias encontradas, em ordem. Não volta para dentro do motor —
     /// serve para a tela contar a história do trabalho a quem o recebeu.
     #[serde(default)]
@@ -248,6 +256,55 @@ pub struct RetratoSalvo {
     /// aplicá-la em parte daria pesos trocados.
     #[serde(default)]
     pub pesos_dos_operadores: Vec<f64>,
+
+    /// Iterações desde o último recorde — o relógio da diversificação.
+    #[serde(default)]
+    pub iteracoes_sem_recorde: u64,
+    /// Identidade estrutural do recorde.
+    #[serde(default)]
+    pub melhor_assinatura: u64,
+    /// A memória do critério de aceitação, achatada: cada custo são três
+    /// números em sequência. Uma lista, e não uma de objetos, porque são 500
+    /// custos e os nomes dos campos repetidos custariam mais que os números.
+    #[serde(default)]
+    pub memoria_aceitacao: Vec<u64>,
+    #[serde(default)]
+    pub passo_da_aceitacao: u64,
+    /// O segmento que o seletor ainda não fechou.
+    #[serde(default)]
+    pub pontos_do_segmento: Vec<f64>,
+    #[serde(default)]
+    pub usos_do_segmento: Vec<u32>,
+    #[serde(default)]
+    pub passo_no_segmento: u64,
+    /// O gerador de aleatórios, no ponto em que parou — em **texto**, e não em
+    /// número. Ausente num arquivo antigo, e aí a retomada semeia de novo.
+    ///
+    /// O estado tem 128 bits e o JavaScript guarda números em ponto flutuante
+    /// de 64. Medido: gravado como número, o estado atravessava o `JSON.parse`
+    /// da interface como `3.221040305871867e+38` e o que voltava não era o que
+    /// tinha saído — um gerador restaurado errado é pior que um gerador novo,
+    /// porque parece continuidade e não é.
+    #[serde(default)]
+    pub gerador: Option<String>,
+}
+
+/// O estado do gerador, em texto decimal.
+///
+/// `rand_pcg` não expõe o estado, só o serializa. A volta é direta, porque
+/// `Pcg64Mcg::new` recebe o estado; a ida passa por aqui.
+fn gerador_para_texto(rng: &Pcg64Mcg) -> Option<String> {
+    let bruto = serde_json::to_string(rng).ok()?;
+    let inicio = bruto.find(':')? + 1;
+    let fim = bruto.rfind('}')?;
+    let numero = bruto.get(inicio..fim)?.trim();
+    numero.parse::<u128>().ok().map(|n| n.to_string())
+}
+
+/// O caminho de volta. Texto que não seja um estado válido devolve `None`, e a
+/// retomada segue com o gerador recém-semeado.
+fn texto_para_gerador(texto: &str) -> Option<Pcg64Mcg> {
+    texto.trim().parse::<u128>().ok().map(Pcg64Mcg::new)
 }
 
 /// Observador que apenas recolhe os recordes do lote.
@@ -387,12 +444,44 @@ impl MotorWeb {
             iteracao_da_meta: salvo.motor.iteracao_da_meta,
             melhor_iteracao: salvo.motor.melhor_iteracao,
             pesos_dos_operadores: salvo.motor.pesos_dos_operadores.clone(),
+
+            iteracoes_sem_recorde: salvo.motor.iteracoes_sem_recorde,
+            melhor_assinatura: salvo.motor.melhor_assinatura,
+            // A memória chega achatada, três números por custo. Um resto
+            // diferente de zero é arquivo truncado: o motor recusa uma memória
+            // de tamanho errado, então mandar o pedaço não estragaria nada —
+            // mas descartar aqui diz a verdade sobre o que se tem.
+            memoria_aceitacao: salvo
+                .motor
+                .memoria_aceitacao
+                .chunks_exact(3)
+                .map(|c| motor_core::ChaveCusto { primario: c[0], secundario: c[1], terciario: c[2] })
+                .collect(),
+            passo_da_aceitacao: salvo.motor.passo_da_aceitacao,
+            pontos_do_segmento: salvo.motor.pontos_do_segmento.clone(),
+            usos_do_segmento: salvo.motor.usos_do_segmento.clone(),
+            passo_no_segmento: salvo.motor.passo_no_segmento,
+            gerador: salvo.motor.gerador.as_deref().and_then(texto_para_gerador),
         };
         if !retrato.segundos.is_finite() || retrato.segundos < 0.0 {
             retrato.segundos = 0.0;
         }
 
+        // As elites entram depois da sessão, e não antes: `repor_elites` cita o
+        // recorde como ancestral de cada uma, e o recorde só existe depois de
+        // `retomar_sessao`. Uma elite que não caiba nesta configuração é
+        // descartada em silêncio, como a solução em curso — o arquivo continua
+        // valendo pelo que traz de certo.
         self.interno.retomar_sessao(&melhor, &atual, &retrato);
+
+        let elites: Vec<Vec<Cartela>> = salvo
+            .elites
+            .iter()
+            .filter(|e| e.iter().all(|c| c.len() == tamanho))
+            .filter_map(|e| self.converter(e).ok())
+            .collect();
+        self.interno.repor_elites(&elites);
+
         Ok(())
     }
 
@@ -417,7 +506,26 @@ impl MotorWeb {
                 iteracao_da_meta: retrato.iteracao_da_meta,
                 melhor_iteracao: retrato.melhor_iteracao,
                 pesos_dos_operadores: retrato.pesos_dos_operadores,
+
+                iteracoes_sem_recorde: retrato.iteracoes_sem_recorde,
+                melhor_assinatura: retrato.melhor_assinatura,
+                memoria_aceitacao: retrato
+                    .memoria_aceitacao
+                    .iter()
+                    .flat_map(|c| [c.primario, c.secundario, c.terciario])
+                    .collect(),
+                passo_da_aceitacao: retrato.passo_da_aceitacao,
+                pontos_do_segmento: retrato.pontos_do_segmento,
+                usos_do_segmento: retrato.usos_do_segmento,
+                passo_no_segmento: retrato.passo_no_segmento,
+                gerador: retrato.gerador.as_ref().and_then(gerador_para_texto),
             },
+            elites: self
+                .interno
+                .elites_ate(motor_busca::TETO_DE_ELITES)
+                .iter()
+                .map(|e| e.iter().map(|c| c.rotulos(pool)).collect())
+                .collect(),
             historico,
         };
         serde_json::to_string(&salvo).unwrap_or_else(|_| "{}".to_string())
@@ -576,6 +684,46 @@ impl MotorWeb {
         self.montar_estado(Vec::new())
     }
 
+    /// O retrato **inteiro** do motor, para o histórico gravar.
+    ///
+    /// Separado do estado que vai em cada lote por uma questão de peso: a
+    /// memória do critério de aceitação são 500 custos, e mandá-la cinco vezes
+    /// por segundo seria quinze quilobytes por lote atravessando a fronteira
+    /// para nada. Quem grava chama isto — uma vez a cada trinta segundos, e a
+    /// cada recorde novo.
+    ///
+    /// Sem as cartelas: nem as do recorde, que a interface já tem, nem as das
+    /// elites, que só cabem no arquivo exportado.
+    pub fn retrato_de_sessao(&self) -> String {
+        let r = self.interno.retrato();
+        let salvo = RetratoSalvo {
+            iteracoes: r.iteracoes,
+            aceitas: r.aceitas,
+            recordes: r.recordes,
+            diversificacoes: r.diversificacoes,
+            duplicadas_evitadas: r.duplicadas_evitadas,
+            segundos: r.segundos,
+            alvo_cartelas: r.alvo_cartelas,
+            passo_atual: r.passo_atual,
+            iteracao_da_meta: r.iteracao_da_meta,
+            melhor_iteracao: r.melhor_iteracao,
+            pesos_dos_operadores: r.pesos_dos_operadores,
+            iteracoes_sem_recorde: r.iteracoes_sem_recorde,
+            melhor_assinatura: r.melhor_assinatura,
+            memoria_aceitacao: r
+                .memoria_aceitacao
+                .iter()
+                .flat_map(|c| [c.primario, c.secundario, c.terciario])
+                .collect(),
+            passo_da_aceitacao: r.passo_da_aceitacao,
+            pontos_do_segmento: r.pontos_do_segmento,
+            usos_do_segmento: r.usos_do_segmento,
+            passo_no_segmento: r.passo_no_segmento,
+            gerador: r.gerador.as_ref().and_then(gerador_para_texto),
+        };
+        serde_json::to_string(&salvo).unwrap_or_else(|_| "{}".to_string())
+    }
+
     /// A melhor solução em rótulos do universo, pronta para exibir ou exportar.
     pub fn melhor(&self) -> String {
         let rotulos = self.melhor_em_rotulos();
@@ -650,6 +798,13 @@ impl MotorWeb {
                 iteracao_da_meta: retrato_interno.iteracao_da_meta,
                 melhor_iteracao: retrato_interno.melhor_iteracao,
                 pesos_dos_operadores: retrato_interno.pesos_dos_operadores,
+                // O estado pesado da busca — a memória da aceitação, o gerador,
+                // o segmento do seletor — fica de fora **deste** retrato, que
+                // atravessa a fronteira cinco vezes por segundo. Ele sai por
+                // [`Self::retrato_de_sessao`], que quem grava chama uma vez a
+                // cada trinta segundos. São quinze quilobytes: desprezíveis uma
+                // vez, caros trezentas.
+                ..Default::default()
             },
             iteracoes: estatisticas.iteracoes,
             aceitas: estatisticas.aceitas,
@@ -843,6 +998,171 @@ mod testes {
             serde_json::from_str(&motor.construir_partida(1)).unwrap();
         assert!(!passos.is_empty(), "o estágio 0 tem de rodar numa otimização nova");
         assert!(passos.last().unwrap()["origem"].as_str().is_some_and(|o| !o.is_empty()));
+    }
+
+    /// O gerador atravessa o arquivo **em texto**, e é por isso que ele volta.
+    #[test]
+    fn o_gerador_atravessa_sem_perder_bit() {
+        let mut original = MotorWeb::construir(&configuracao_para_buscar()).unwrap();
+        original.preparar();
+        original.avancar(2_000, 60_000);
+
+        let arquivo = original.exportar();
+        // A prova de que precisa ser texto: passar por `Value`, que é o que a
+        // interface faz com `JSON.parse`, tem de deixar o campo intacto.
+        let como_a_tela_ve: serde_json::Value = serde_json::from_str(&arquivo).unwrap();
+        let texto = como_a_tela_ve["motor"]["gerador"].as_str().expect("o gerador vai em texto");
+        assert!(
+            texto.chars().all(|c| c.is_ascii_digit()),
+            "o estado tem de ser um inteiro em decimal, e veio {texto}"
+        );
+
+        let voltou = super::texto_para_gerador(texto).expect("o texto tem de virar gerador");
+        assert_eq!(
+            super::gerador_para_texto(&voltou).as_deref(),
+            Some(texto),
+            "a ida e a volta têm de fechar no mesmo estado, dígito por dígito"
+        );
+        assert_eq!(super::texto_para_gerador("nem número"), None, "lixo não vira gerador");
+
+        // E o arquivo reescrito pela interface continua sendo aceito, com o
+        // estado inteiro do outro lado.
+        let mut outro = MotorWeb::construir(&configuracao_para_buscar()).unwrap();
+        outro.retomar_com(&como_a_tela_ve.to_string()).expect("a ida e volta pela tela vale");
+
+        let antes = estado_de(&original.retrato_de_sessao());
+        let depois = estado_de(&outro.retrato_de_sessao());
+        // Tudo que é inteiro tem de bater dígito por dígito. Os pesos dos
+        // operadores ficam de fora desta comparação de propósito: são `f64`, e
+        // atravessar o `JSON.parse` da interface pode mexer no último bit —
+        // diferença que não muda decisão nenhuma, e que exigir seria exigir do
+        // teste uma precisão que o formato não promete.
+        for campo in [
+            "iteracoes", "aceitas", "recordes", "diversificacoes", "duplicadas_evitadas",
+            "alvo_cartelas", "passo_atual", "iteracao_da_meta", "melhor_iteracao",
+            "iteracoes_sem_recorde", "melhor_assinatura", "memoria_aceitacao",
+            "passo_da_aceitacao", "usos_do_segmento", "passo_no_segmento", "gerador",
+        ] {
+            assert_eq!(depois[campo], antes[campo], "o campo {campo} não atravessou o arquivo");
+        }
+    }
+
+    /// O arquivo carrega o estado da busca, e não só o resultado dela.
+    #[test]
+    fn a_sessao_leva_o_trabalho_do_motor_e_nao_so_as_cartelas() {
+        // A diferença que este teste guarda: um motor que recebe as cartelas
+        // certas e o resto zerado é um motor novo segurando um bom fechamento.
+        // Foi o que se mediu antes desta versão — a retomada divergia da
+        // corrida contínua em menos de duzentas iterações, decidindo diferente
+        // porque não sabia mais o que sabia.
+        let mut original = MotorWeb::construir(&configuracao_para_buscar()).unwrap();
+        original.preparar();
+        for _ in 0..12 {
+            original.avancar(4_000, 60_000);
+        }
+
+        let arquivo = original.exportar();
+        let bruto: serde_json::Value = serde_json::from_str(&arquivo).unwrap();
+        let m = &bruto["motor"];
+
+        assert!(
+            m["memoria_aceitacao"].as_array().unwrap().len() >= 3,
+            "falta a memória do critério de aceitação, que decide cada iteração"
+        );
+        assert_eq!(
+            m["memoria_aceitacao"].as_array().unwrap().len() % 3,
+            0,
+            "a memória vai achatada, três números por custo"
+        );
+        assert!(!m["gerador"].is_null(), "falta o estado do gerador de aleatórios");
+        assert!(
+            m["pontos_do_segmento"].as_array().unwrap().len() > 1,
+            "falta o segmento em formação do seletor"
+        );
+        assert!(
+            m["melhor_assinatura"].as_u64().unwrap() > 0,
+            "falta a identidade estrutural do recorde"
+        );
+
+        // Agora o outro aparelho: tudo tem de chegar.
+        let antes = original.retrato_de_sessao();
+        let mut outro = MotorWeb::construir(&configuracao_para_buscar()).unwrap();
+        outro.retomar_com(&arquivo).expect("a sessão precisa ser aceita");
+        let depois = outro.retrato_de_sessao();
+
+        assert_eq!(depois, antes, "o retrato do motor tem de atravessar o arquivo inteiro");
+    }
+
+    /// As elites viajam: é delas que sai o material da recombinação.
+    #[test]
+    fn o_arquivo_de_elites_atravessa_a_sessao() {
+        let mut original = MotorWeb::construir(&configuracao_para_buscar()).unwrap();
+        original.preparar();
+        for _ in 0..12 {
+            original.avancar(4_000, 60_000);
+        }
+        let quantas = estado_de(&original.estado())["elites"].as_u64().unwrap();
+        assert!(quantas > 0, "sem elites no original não há o que este teste observe");
+
+        let arquivo = original.exportar();
+        let mut outro = MotorWeb::construir(&configuracao_para_buscar()).unwrap();
+        outro.retomar_com(&arquivo).unwrap();
+
+        assert_eq!(
+            estado_de(&outro.estado())["elites"].as_u64().unwrap(),
+            quantas,
+            "o arquivo de elites tem de chegar inteiro do outro lado"
+        );
+    }
+
+    /// Um arquivo sem os campos novos continua abrindo, como o de antes.
+    #[test]
+    fn um_arquivo_sem_o_estado_da_busca_ainda_e_aceito() {
+        let mut original = MotorWeb::construir(&configuracao_para_buscar()).unwrap();
+        original.preparar();
+        for _ in 0..6 {
+            original.avancar(4_000, 60_000);
+        }
+        let mut bruto: serde_json::Value = serde_json::from_str(&original.exportar()).unwrap();
+        let motor = bruto["motor"].as_object_mut().unwrap();
+        for campo in [
+            "memoria_aceitacao", "passo_da_aceitacao", "gerador", "iteracoes_sem_recorde",
+            "melhor_assinatura", "pontos_do_segmento", "usos_do_segmento", "passo_no_segmento",
+        ] {
+            motor.remove(campo);
+        }
+        bruto.as_object_mut().unwrap().remove("elites");
+
+        let mut outro = MotorWeb::construir(&configuracao_para_buscar()).unwrap();
+        outro
+            .retomar_com(&bruto.to_string())
+            .expect("um arquivo de antes destes campos continua valendo");
+
+        let estado = estado_de(&outro.estado());
+        assert!(
+            estado["melhor_cartelas"].as_u64().unwrap() > 0,
+            "e continua retomando o fechamento, que é o que ele traz"
+        );
+        assert_eq!(estado["elites"].as_u64().unwrap(), 0, "sem elites no arquivo, sem elites aqui");
+    }
+
+    /// Uma memória do tamanho errado não pode entrar pela metade.
+    #[test]
+    fn uma_memoria_de_aceitacao_truncada_e_recusada_sem_derrubar_o_arquivo() {
+        let mut original = MotorWeb::construir(&configuracao_para_buscar()).unwrap();
+        original.preparar();
+        original.avancar(4_000, 60_000);
+        let mut bruto: serde_json::Value = serde_json::from_str(&original.exportar()).unwrap();
+
+        // Metade da memória: descreve outra busca, e aplicá-la seria pior que
+        // não aplicar nada.
+        let memoria = bruto["motor"]["memoria_aceitacao"].as_array().unwrap().clone();
+        bruto["motor"]["memoria_aceitacao"] =
+            serde_json::Value::Array(memoria[..memoria.len() / 2].to_vec());
+
+        let mut outro = MotorWeb::construir(&configuracao_para_buscar()).unwrap();
+        outro.retomar_com(&bruto.to_string()).expect("o arquivo continua valendo pelo resto");
+        assert!(estado_de(&outro.estado())["melhor_cartelas"].as_u64().unwrap() > 0);
     }
 
     #[test]

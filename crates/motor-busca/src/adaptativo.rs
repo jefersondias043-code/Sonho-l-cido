@@ -148,6 +148,29 @@ impl SeletorAdaptativo {
     pub fn segmentos_concluidos(&self) -> u64 {
         self.segmentos_concluidos
     }
+
+    /// O segmento em curso: pontos e usos ainda não convertidos em peso.
+    ///
+    /// Os pesos sozinhos descrevem o que o motor já converteu em decisão. O que
+    /// está no meio do segmento é aprendizado em formação, e jogá-lo fora ao
+    /// retomar atrasa o próximo reajuste em até um segmento inteiro.
+    pub fn segmento_em_curso(&self) -> (&[f64], &[u32], u64) {
+        (&self.pontos, &self.usos, self.passo_no_segmento)
+    }
+
+    /// Repõe um segmento em formação. Tamanhos errados são ignorados.
+    pub fn restaurar_segmento(&mut self, pontos: &[f64], usos: &[u32], passo: u64) -> bool {
+        if pontos.len() != self.pontos.len() || usos.len() != self.usos.len() {
+            return false;
+        }
+        if pontos.iter().any(|p| !p.is_finite() || *p < 0.0) {
+            return false;
+        }
+        self.pontos.copy_from_slice(pontos);
+        self.usos.copy_from_slice(usos);
+        self.passo_no_segmento = passo.min(self.tamanho_segmento.saturating_sub(1));
+        true
+    }
 }
 
 #[cfg(test)]

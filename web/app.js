@@ -536,7 +536,9 @@ function garantirTrabalhador() {
       // O motor pede que o estado seja gravado. Vem de tempos em tempos, para
       // que um encerramento do sistema não leve mais que o último intervalo.
       case 'salvar':
-        salvarNoHistorico(data.estado);
+        // O retrato inteiro vem à parte do estado do lote: é ele que carrega o
+        // trabalho do motor, e não só os números que a tela mostra.
+        salvarNoHistorico(data.estado, data.retrato);
         break;
 
       case 'pausado':
@@ -604,17 +606,28 @@ function desmontarTrabalhador() {
  * um trabalho aprimorar o registro existente, em vez de espalhar cópias quase
  * idênticas pelo histórico.
  */
-function salvarNoHistorico(estado) {
+/**
+ * Grava o trabalho em curso no histórico.
+ *
+ * `retrato` é o do motor **inteiro** — a memória do critério de aceitação, o
+ * gerador, o segmento do seletor — e chega pelas mensagens de `salvar`, que o
+ * worker manda a cada trinta segundos, a cada recorde, ao pausar e ao entrar em
+ * descanso.
+ *
+ * Chamada sem ele, esta função **não encosta no retrato já gravado**. É uma
+ * regra de não-perda: o retrato que viaja no estado de cada lote é o leve, e
+ * escrevê-lo por cima do inteiro trocaria o trabalho do motor pelos números que
+ * a tela mostra. Foi assim que a gravação por recorde apagava, a cada melhoria,
+ * exatamente o estado de que a retomada precisava.
+ *
+ * As cartelas da solução em curso ficam de fora — seriam meio megabyte a cada
+ * gravação, e o motor retoma bem sem elas. Elas só entram no arquivo exportado.
+ */
+function salvarNoHistorico(estado, retrato = null) {
   if (!melhorCartelas.length || !estado) return;
 
   const dados = {
     melhor: melhorCartelas,
-    // O estado interno do motor viaja junto do recorde, e não numa gravação
-    // separada: é o que faz "continuar um trabalho salvo" retomar a meta e os
-    // pesos aprendidos, em vez de só devolver as cartelas. As cartelas da
-    // solução em curso ficam de fora — seriam meio megabyte a cada gravação, e o
-    // motor retoma bem sem elas. Elas só entram no arquivo exportado.
-    motor: estado.retrato ?? {},
     iteracoes: estado.iteracoes ?? 0,
     // Gravado junto: quem abrir o aplicativo depois de o sistema encerrar a
     // página descobre por aqui que havia trabalho em andamento.
@@ -628,13 +641,21 @@ function salvarNoHistorico(estado) {
     },
   };
 
+  if (retrato) dados.motor = retrato;
+
+  // Uma sessão nova precisa nascer com algum retrato, nem que seja o leve; a
+  // partir daí, gravação com retrato inteiro substitui, gravação sem retrato
+  // deixa como está — `atualizar` mescla, então o que não vem em `dados`
+  // sobrevive.
+  const paraCriar = dados.motor ? dados : { ...dados, motor: estado.retrato ?? {} };
+
   if (sessaoAtual) {
     // A sessão pode ter sido excluída pelo usuário enquanto a busca corria.
     // Nesse caso o trabalho continua, mas passa a registrar-se numa nova.
     const atualizada = historico.atualizar(sessaoAtual, dados);
-    if (!atualizada) sessaoAtual = historico.criar(configuracaoDaBusca, dados).id;
+    if (!atualizada) sessaoAtual = historico.criar(configuracaoDaBusca, paraCriar).id;
   } else {
-    sessaoAtual = historico.criar(configuracaoDaBusca, dados).id;
+    sessaoAtual = historico.criar(configuracaoDaBusca, paraCriar).id;
   }
 
   pintarHistorico();
@@ -656,6 +677,10 @@ function aplicarMensagem({ estado, cartelas }) {
   if (estado) aplicarEstado(estado);
   // Grava logo após pintar: o que está na tela e o que está no histórico saem
   // do mesmo dado, no mesmo instante.
+  //
+  // Sem retrato de propósito: esta gravação existe pelas **cartelas**, e o
+  // retrato que viaja no estado de cada lote é o leve. Quem grava o retrato
+  // inteiro é a mensagem `salvar`, que o worker manda logo em seguida.
   if (mudou) salvarNoHistorico(estado);
 }
 

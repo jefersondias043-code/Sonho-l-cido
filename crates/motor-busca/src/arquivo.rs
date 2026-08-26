@@ -179,6 +179,42 @@ impl ArquivoElites {
     pub fn ja_visitada(&self, assinatura: u64) -> bool {
         self.assinaturas.contains(&assinatura)
     }
+
+    /// Repõe elites vindas de um arquivo de sessão, sem julgá-las de novo.
+    ///
+    /// Deliberadamente **não** passa por [`Self::registrar`]. O que chega aqui já
+    /// foi um arquivo válido: cada elite entrou passando pela distância mínima
+    /// contra as que estavam guardadas naquele momento. Reaplicar a regra agora,
+    /// numa ordem que não é a de então, só pode recusar quem já tinha entrado —
+    /// medido, uma em quarenta e uma se perdia a cada retomada, e um arquivo que
+    /// encolhe a cada ida e volta acabaria vazio.
+    ///
+    /// A capacidade continua valendo: um arquivo adulterado não enche a memória.
+    pub fn repor(&mut self, elites: Vec<Elite>) {
+        for elite in elites {
+            if self.assinaturas.contains(&elite.assinatura) {
+                continue;
+            }
+            let faixa = self.faixas.entry(elite.avaliacao.cartelas).or_default();
+            if faixa.len() >= self.capacidade_por_faixa {
+                continue;
+            }
+            self.assinaturas.insert(elite.assinatura);
+            faixa.push(elite);
+        }
+        self.aparar_faixas();
+    }
+
+    /// As elites guardadas, da faixa mais enxuta para a mais gorda.
+    ///
+    /// Existe para o arquivo de sessão. O que a busca acumulou aqui é material
+    /// bruto — soluções boas e estruturalmente diferentes entre si — e é o que
+    /// alimenta a recombinação e os reinícios da diversificação. Retomar sem
+    /// elas devolve ao motor um arquivo vazio, e os dois mecanismos que
+    /// dependem dele passam a não ter com o que trabalhar.
+    pub fn elites(&self) -> impl Iterator<Item = &Elite> {
+        self.faixas.values().flatten()
+    }
 }
 
 /// Distância estrutural entre duas soluções: Jaccard sobre o conjunto de

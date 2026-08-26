@@ -132,7 +132,11 @@ function tratar(mensagem) {
         if (ciclo) ciclo.suspenso = true;
         pararDescanso();
         rodando = false;
-        postMessage({ tipo: 'pausado', estado: lerEstado(), cartelas: JSON.parse(motor.melhor()) });
+        {
+          const estado = lerEstado();
+          talvezSalvar(estado, true);
+          postMessage({ tipo: 'pausado', estado, cartelas: JSON.parse(motor.melhor()) });
+        }
         break;
 
       // Liga e desliga o ciclo automático. Quem manda é a interface; quem
@@ -357,7 +361,12 @@ function comecarEtapa(etapa) {
     // pesado não roda: é aqui que o aparelho esfria.
     pararDescanso();
     relogioDoDescanso = setInterval(conferirCiclo, 1000);
-    postMessage({ tipo: 'pausado', estado: lerEstado(), cartelas: JSON.parse(motor.melhor()) });
+    const estado = lerEstado();
+    // Entrar em descanso é o instante mais provável de o sistema encerrar a
+    // página: o aparelho vai para o bolso e o aplicativo sai de vista. Gravar
+    // aqui, e não no próximo intervalo, é o que faz o descanso não custar nada.
+    talvezSalvar(estado, true);
+    postMessage({ tipo: 'pausado', estado, cartelas: JSON.parse(motor.melhor()) });
   }
   postMessage({ tipo: 'ciclo', etapa: ciclo.etapa, venceEm: ciclo.venceEm });
 }
@@ -400,12 +409,19 @@ function ligarLaco() {
  *
  * As cartelas não vão junto: só o retrato do motor. As cartelas a interface já
  * tem, porque viajam com cada recorde.
+ *
+ * O retrato pedido aqui é o **inteiro** — a memória do critério de aceitação, o
+ * estado do gerador, o segmento do seletor. Ele não vem no estado de cada lote
+ * de propósito: são quinze quilobytes, desprezíveis uma vez a cada trinta
+ * segundos e caros trezentas vezes por minuto. É a diferença entre gravar o
+ * resultado e gravar o trabalho que levou até ele.
  */
-function talvezSalvar(estado) {
-  const agora = Date.now();
-  if (agora - salvoEm < SEGUNDOS_ENTRE_SALVAMENTOS * 1000) return;
-  salvoEm = agora;
-  postMessage({ tipo: 'salvar', estado });
+function talvezSalvar(estado, agora = false) {
+  const momento = Date.now();
+  if (!agora && momento - salvoEm < SEGUNDOS_ENTRE_SALVAMENTOS * 1000) return;
+  if (!motor) return;
+  salvoEm = momento;
+  postMessage({ tipo: 'salvar', estado, retrato: JSON.parse(motor.retrato_de_sessao()) });
 }
 
 function laco() {
@@ -434,7 +450,11 @@ function laco() {
     segundos > 0 ? (estado.iteracoes - iteracoesNoInicio) / segundos : 0;
 
   postMessage({ tipo: 'estado', estado, cartelas: cartelasSeMudaram(estado) });
-  talvezSalvar(estado);
+
+  // Um recorde novo grava na hora, sem esperar os trinta segundos. É o momento
+  // em que há mais a perder: se o sistema encerrar a página no minuto seguinte,
+  // o que se perde é a melhoria que acabou de acontecer.
+  talvezSalvar(estado, (estado.novos_recordes ?? []).length > 0);
 
   // O fim do período de trabalho é conferido aqui, entre um lote e outro. É a
   // fresta natural: sem temporizador, sem interromper cálculo pela metade, e

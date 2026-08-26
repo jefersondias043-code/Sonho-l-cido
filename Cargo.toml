@@ -23,7 +23,10 @@ motor-persistencia = { path = "crates/motor-persistencia" }
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }
 rand = "0.8"
-rand_pcg = "0.3"
+# `serde1` deixa o estado do gerador atravessar um arquivo de sessão. Sem ele,
+# retomar re-semeia da semente inicial e a busca repete as decisões que já
+# tinha tomado — o oposto de continuar de onde parou.
+rand_pcg = { version = "0.3", features = ["serde1"] }
 rusqlite = { version = "0.32", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

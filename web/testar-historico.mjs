@@ -498,6 +498,20 @@ try {
       (m.pesos_dos_operadores ?? []).length
     } pesos`
   );
+  // O que separa "gravar o resultado" de "gravar a busca". Medido: sem o
+  // relógio da diversificação e sem o estado do gerador, retomar não achava
+  // **nenhuma** melhoria em quinze mil iterações, enquanto a corrida contínua
+  // caía de 307 para 263 cartelas no mesmo intervalo.
+  marcar(
+    (m.memoria_aceitacao ?? []).length > 3 &&
+      typeof m.gerador === 'string' &&
+      Number.isFinite(m.iteracoes_sem_recorde) &&
+      Array.isArray(dentro.sessao?.elites),
+    'e o estado da busca: memória da aceitação, gerador, relógio da diversificação e elites',
+    `${(m.memoria_aceitacao ?? []).length / 3} custos · parada há ${
+      m.iteracoes_sem_recorde
+    } · ${(dentro.sessao?.elites ?? []).length} elites`
+  );
 
   await pagina.click('#encerrar');
   await pagina.waitForSelector('#lotinha.ativo', { timeout: 20000 });
@@ -561,6 +575,55 @@ try {
     (await pagina.locator('.sessao').count()) === antesDeImportar + 1,
     'a sessão importada entra como trabalho novo, sem encostar no que já existia',
     `${antesDeImportar} antes, ${await pagina.locator('.sessao').count()} depois`
+  );
+
+  // ─── o que fica gravado é o trabalho do motor, não só o resultado ───
+  //
+  // A queixa: retomar uma otimização já avançada demorava muito para voltar a
+  // achar melhorias, às vezes mais do que começar outra do zero. A causa não era
+  // lentidão do algoritmo — era o que a gravação deixava de fora. Um motor que
+  // recebe as cartelas certas e o resto zerado é um motor novo segurando um bom
+  // fechamento.
+  //
+  // O que precisa estar gravado, e o que cada peça faz:
+  //
+  //   iteracoes_sem_recorde  o relógio da diversificação, que dispara em 50.000
+  //                          iterações sem recorde. Zerá-lo era o mais caro.
+  //   memoria_aceitacao      os 500 custos com que a busca decide cada iteração
+  //   gerador                o ponto do gerador de aleatórios, em texto
+  //   pontos/usos do segmento  o aprendizado do seletor ainda não convertido
+  const oMotorGravado = await pagina.evaluate(() => {
+    const bruto = localStorage.getItem('sonho-lucido:historico');
+    const sessoes = bruto ? JSON.parse(bruto) : [];
+    const comMotor = sessoes.find((s) => Array.isArray(s.motor?.memoria_aceitacao))
+      ?? sessoes.find((s) => s.motor && Object.keys(s.motor).length > 3);
+    return { motor: comMotor?.motor ?? null, chaves: Object.keys(comMotor?.motor ?? {}) };
+  });
+  console.log('    chaves gravadas:', oMotorGravado.chaves.join(', '));
+
+  marcar(
+    oMotorGravado.motor !== null && Number(oMotorGravado.motor.iteracoes) > 0,
+    'o histórico grava o retrato do motor junto das cartelas',
+    oMotorGravado.motor ? `${oMotorGravado.motor.iteracoes} iterações · meta ${oMotorGravado.motor.alvo_cartelas}` : '(nada oMotorGravado)'
+  );
+  marcar(
+    Array.isArray(oMotorGravado.motor?.memoria_aceitacao) &&
+      oMotorGravado.motor.memoria_aceitacao.length > 3 &&
+      oMotorGravado.motor.memoria_aceitacao.length % 3 === 0,
+    'e grava a memória do critério de aceitação, que decide cada iteração',
+    `${(oMotorGravado.motor?.memoria_aceitacao?.length ?? 0) / 3} custos`
+  );
+  marcar(
+    typeof oMotorGravado.motor?.gerador === 'string' && /^\d+$/.test(oMotorGravado.motor.gerador),
+    'e o estado do gerador, em texto — 128 bits não cabem num número do JavaScript',
+    String(oMotorGravado.motor?.gerador ?? '(ausente)').slice(0, 44)
+  );
+  marcar(
+    typeof oMotorGravado.motor?.iteracoes_sem_recorde === 'number' &&
+      Array.isArray(oMotorGravado.motor?.pontos_do_segmento) &&
+      oMotorGravado.motor.pontos_do_segmento.length > 1,
+    'e o relógio da diversificação e o segmento em formação do seletor',
+    `parada há ${oMotorGravado.motor?.iteracoes_sem_recorde} · ${oMotorGravado.motor?.pontos_do_segmento?.length} operadores`
   );
 
   // ─── uma sessão retomada tem prioridade sobre o Motor Construtor ───
