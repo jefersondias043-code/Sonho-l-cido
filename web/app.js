@@ -463,10 +463,17 @@ function garantirTrabalhador() {
       // vazia — e a partir daqui o número só pode cair.
       case 'preparado':
         aplicarMensagem(data);
-        // A partida já tem número na tela. O estágio 0 entra agora, por cima
-        // dela: procura construir algo menor, e o que achar concorre com o que
-        // já estava. A busca só começa quando ele termina.
-        definirFase('construindo');
+        // Dois caminhos, e é aqui que eles se separam.
+        //
+        // Uma sessão retomada vai direto para a busca: o fechamento que veio no
+        // arquivo **é** o ponto de partida, e o estágio 0 não roda por cima
+        // dele. Anunciar "construindo" nem por um instante importa — quem
+        // acompanha a tela precisa ver qual estágio está mesmo acontecendo.
+        //
+        // Uma otimização nova passa pelo estágio 0: a partida já tem número na
+        // tela, e o construtor entra agora por cima dela para procurar algo
+        // menor. A busca só começa quando ele termina.
+        if (!data.retomada) definirFase('construindo');
         break;
 
       // O estágio 0 terminou. `passos` traz cada melhoria que ele encontrou, com
@@ -476,7 +483,14 @@ function garantirTrabalhador() {
         aplicarMensagem(data);
         const passos = data.passos ?? [];
         const ultimo = passos[passos.length - 1];
-        if (ultimo) {
+        if (data.retomada) {
+          // Dizer que o construtor **não** rodou é tão importante quanto dizer
+          // que rodou. Foi exatamente a confusão do bug: a tela anunciava uma
+          // construção nova e quem tinha acabado de importar 160 cartelas via
+          // 198 aparecerem sem entender de onde.
+          const quantas = milhares(data.estado?.melhor_cartelas ?? 0);
+          avisar(`Sessão retomada: ${quantas} cartelas, de onde você parou.`, true);
+        } else if (ultimo) {
           const caminho = passos.map((p) => milhares(p.cartelas)).join(' → ');
           avisar(`Construtor: ${caminho} cartelas, por ${ultimo.origem}.`, true);
         }

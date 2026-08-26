@@ -563,6 +563,210 @@ try {
     `${antesDeImportar} antes, ${await pagina.locator('.sessao').count()} depois`
   );
 
+  // ─── uma sessão retomada tem prioridade sobre o Motor Construtor ───
+  //
+  // O defeito relatado: importar um fechamento de 160 cartelas e ver o estágio 0
+  // montar 198 do zero, anunciar "partiu de construção gulosa", e a otimização
+  // recomeçar de 198. O recorde de 160 sobrevivia, mas o trabalho em curso —
+  // que é de onde a busca continua — tinha sido trocado por um pior.
+  //
+  // O caso escolhido é o mais duro que existe para a regra: sessenta cartelas
+  // para 20 dezenas com jogos de 18, numa configuração que o aplicativo fecha
+  // com quarenta. O construtor bateria as sessenta com folga. Não importa: um
+  // fechamento retomado não é um candidato a ser batido, é o pedido do usuário.
+  //
+  // As sessenta são um fechamento de verdade — as quarenta do banco mais vinte
+  // cartelas válidas por cima. Acrescentar cartela nunca descobre um sorteio,
+  // então a garantia continua inteira; o que sobra é gordura, e tirá-la é
+  // trabalho da busca, na frente de quem está olhando.
+  const arquivo60 = await pagina.evaluate(async () => {
+    const lotinha = await import('./lotinha.js');
+    const dezenas = Array.from({ length: 20 }, (_, i) => i + 1);
+    const base = await lotinha.fechamentoPara(20, 18, dezenas);
+
+    const jaTem = new Set(base.map((c) => [...c].sort((x, y) => x - y).join(',')));
+    const extras = [];
+    for (let a = 0; a < 20 && extras.length < 60 - base.length; a++) {
+      for (let b = a + 1; b < 20 && extras.length < 60 - base.length; b++) {
+        const cartela = dezenas.filter((_, i) => i !== a && i !== b);
+        const chave = cartela.join(',');
+        if (jaTem.has(chave)) continue;
+        jaTem.add(chave);
+        extras.push(cartela);
+      }
+    }
+    const melhor = [...base.map((c) => [...c]), ...extras];
+
+    return {
+      aplicativo: 'sonho-lucido/sessao',
+      formato: 1,
+      criadoEm: new Date().toISOString(),
+      versao: 'teste',
+      rotulo: 'fechamento de 60 cartelas',
+      sessao: {
+        configuracao: {
+          universo: lotinha.UNIVERSO,
+          pool: dezenas,
+          cartela: 18,
+          alvo: lotinha.SORTEIO,
+          intersecao: lotinha.SORTEIO,
+          premiadas: 1,
+          orcamento: null,
+          semente: 1,
+        },
+        melhor,
+        atual: melhor,
+        iteracoes: 12345,
+        motor: {
+          iteracoes: 12345,
+          aceitas: 900,
+          recordes: 4,
+          diversificacoes: 2,
+          duplicadas_evitadas: 7,
+          segundos: 61.5,
+          alvo_cartelas: 59,
+          passo_atual: 1,
+          iteracao_da_meta: 12000,
+          melhor_iteracao: 11800,
+          pesos_dos_operadores: [1, 1, 1, 1],
+        },
+        historico: [],
+      },
+    };
+  });
+
+  marcar(
+    arquivo60.sessao.melhor.length === 60 &&
+      new Set(arquivo60.sessao.melhor.map((c) => c.join(','))).size === 60 &&
+      arquivo60.sessao.melhor.every((c) => c.length === 18),
+    'o fechamento de teste tem 60 cartelas distintas de 18 dezenas',
+    `${arquivo60.sessao.melhor.length} cartelas`
+  );
+
+  // O outro aparelho de novo: nada em comum com a sessão além do arquivo.
+  await pagina.evaluate(() => localStorage.clear());
+  await pagina.reload({ waitUntil: 'networkidle' });
+  await pagina.click('.aba[data-painel="historico"]');
+  await pagina.waitForSelector('#historico.ativo');
+
+  await pagina.setInputFiles('#arquivo-sessao', {
+    name: 'sessao-60.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify(arquivo60)),
+  });
+  await pagina.waitForSelector('#confirmar-importacao', { timeout: 10000 });
+  const previa60 = (await pagina.locator('#previa-importacao').textContent()).replace(/\s+/g, ' ');
+  marcar(
+    // Sem `\b` antes do 60: o texto sai colado ao rótulo ("Fechamento60
+    // cartelas"), porque cada campo do resumo é um elemento e a leitura junta
+    // tudo. O que interessa é o número na frente do que ele conta.
+    /60 cartelas de 18 dezenas/.test(previa60),
+    'as 60 cartelas são identificadas antes de abrir',
+    previa60.slice(0, 90)
+  );
+
+  // O observador entra ANTES do clique. O que se quer provar é o **primeiro**
+  // estado que a tela pinta, e ele dura o tempo de um lote: perguntar depois
+  // pegaria a busca já trabalhando, que é outra coisa.
+  await pagina.evaluate(() => {
+    window.__vistos = { melhor: null, atual: null, cartelas: null, avisos: [], partidas: [] };
+    const digitos = (id) => document.getElementById(id).textContent.replace(/\D/g, '');
+    window.__olho = setInterval(() => {
+      const v = window.__vistos;
+      const m = digitos('melhor-cartelas');
+      if (m && v.melhor === null) {
+        v.melhor = Number(m);
+        // As cartelas do primeiro estado, antes de a busca encostar nelas.
+        v.cartelas = document.getElementById('lista-cartelas').textContent;
+      }
+      const a = digitos('atual-cartelas');
+      if (a && v.atual === null) v.atual = Number(a);
+
+      const aviso = document.getElementById('aviso');
+      if (!aviso.hidden && aviso.textContent.trim()) {
+        const t = aviso.textContent.trim();
+        if (v.avisos[v.avisos.length - 1] !== t) v.avisos.push(t);
+      }
+      const partida = document.getElementById('partida');
+      if (!partida.hidden && partida.textContent.trim()) {
+        const t = partida.textContent.trim();
+        if (v.partidas[v.partidas.length - 1] !== t) v.partidas.push(t);
+      }
+    }, 20);
+  });
+
+  await pagina.click('#confirmar-importacao');
+  await pagina.waitForSelector('#buscar.ativo', { timeout: 30000 });
+  await esperarSolucao();
+  await pagina.waitForTimeout(1200);
+
+  const vistos = await pagina.evaluate(() => {
+    clearInterval(window.__olho);
+    return window.__vistos;
+  });
+
+  marcar(
+    vistos.melhor === 60,
+    'o primeiro estado da otimização é o fechamento de 60, e não uma construção nova',
+    `primeiro recorde pintado: ${vistos.melhor}`
+  );
+  marcar(
+    vistos.atual === 60,
+    'e os motores de otimização recebem diretamente as 60 cartelas importadas',
+    `primeira solução em curso: ${vistos.atual}`
+  );
+
+  const veioDoConstrutor = vistos.avisos.some((a) => /^Construtor:/.test(a));
+  marcar(
+    !veioDoConstrutor && vistos.avisos.some((a) => /Sessão retomada/.test(a)),
+    'o Motor Construtor não é executado, e a tela diz que retomou',
+    vistos.avisos.join(' | ').slice(0, 100) || '(nenhum aviso)'
+  );
+  marcar(
+    vistos.partidas.every((t) => !/construção gulosa/.test(t)) &&
+      vistos.partidas.some((t) => /sessão importada/.test(t)),
+    'e a origem anunciada é a sessão importada, nunca uma construção gulosa',
+    vistos.partidas.join(' | ').slice(0, 100) || '(nada anunciado)'
+  );
+
+  // Nenhuma cartela do fechamento original foi trocada por uma construída.
+  const enviadas = new Set(
+    arquivo60.sessao.melhor.map((c) =>
+      [...c].sort((x, y) => x - y).map((n) => String(n).padStart(2, '0')).join(' ')
+    )
+  );
+  const pintadas = (vistos.cartelas ?? '').match(/(?:\d{2} ){17}\d{2}/g) ?? [];
+  marcar(
+    pintadas.length === 60 && pintadas.every((c) => enviadas.has(c)),
+    'nenhuma cartela do fechamento original foi substituída por uma construção nova',
+    `${pintadas.filter((c) => enviadas.has(c)).length} das ${pintadas.length} na tela vieram do arquivo`
+  );
+
+  // E a redução funciona normalmente a partir dali: as vinte cartelas de
+  // gordura saem pela busca, que é quem tem de tirá-las.
+  await pagina.waitForFunction(
+    () => Number(document.getElementById('melhor-cartelas').textContent.replace(/\D/g, '')) < 60,
+    undefined,
+    { timeout: 60000 }
+  );
+  marcar(
+    (await numero('#melhor-cartelas')) < 60,
+    'e a redução continua normal a partir das 60 importadas',
+    `60 → ${await numero('#melhor-cartelas')}`
+  );
+
+  const iteracoes60 = await numero('#iteracoes');
+  marcar(
+    iteracoes60 >= 12345,
+    'com as iterações do arquivo somando, e não recomeçando do zero',
+    `12.345 no arquivo, ${iteracoes60} na tela`
+  );
+
+  await pagina.click('#encerrar');
+  await pagina.waitForSelector('#lotinha.ativo', { timeout: 20000 });
+  await pagina.click('.aba[data-painel="historico"]');
+  await pagina.waitForSelector('#historico.ativo');
+
   // Um arquivo estragado não pode desmontar nada.
   await pagina.setInputFiles('#arquivo-sessao', {
     name: 'quebrado.json',

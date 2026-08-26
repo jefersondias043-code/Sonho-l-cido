@@ -148,6 +148,12 @@ pub struct Estado {
     pub referencia_resolvida: bool,
     /// Como o ponto de partida foi construído.
     pub origem_do_inicio: String,
+    /// Verdadeiro quando esta busca continua uma sessão salva.
+    ///
+    /// A tela usa isto para dois fins: dizer que retomou em vez de anunciar um
+    /// estágio 0 que não vai acontecer, e provar — nos testes e a olho — que o
+    /// Motor Construtor não rodou por cima do fechamento trazido de volta.
+    pub sessao_retomada: bool,
     /// Quantas cartelas o usuário trouxe, ou zero se começou sem fechamento.
     ///
     /// A tela precisa dos dois números para ser honesta: "você trouxe 26, o
@@ -446,6 +452,16 @@ impl MotorWeb {
         self.retomar_com(estado_json).map_err(|e| JsValue::from_str(&e))
     }
 
+    /// Verdadeiro quando este motor foi carregado de uma sessão salva.
+    ///
+    /// É por aqui que a tela decide entre os dois caminhos: sessão retomada vai
+    /// direto para a busca, otimização nova passa pelo estágio 0. Perguntar ao
+    /// motor, e não guardar a resposta do lado do JavaScript, é o que faz os
+    /// dois lados concordarem sempre.
+    pub fn sessao_retomada(&self) -> bool {
+        self.interno.sessao_retomada()
+    }
+
     /// **Estágio 0** — o Motor Construtor.
     ///
     /// Procura construir direto a menor solução que conseguir, em vez de montar
@@ -455,7 +471,16 @@ impl MotorWeb {
     ///
     /// O orçamento vem de fora porque quem o conhece é a tela: num celular
     /// alguns segundos, num computador o tempo que a pessoa quiser dar.
+    ///
+    /// Numa sessão retomada este estágio não roda: devolve a lista vazia sem
+    /// gastar um segundo do orçamento. O fechamento salvo é o ponto de partida,
+    /// e construir outro por cima dele seria trocar o trabalho do usuário por
+    /// trabalho novo.
     pub fn construir_partida(&mut self, segundos: u32) -> String {
+        if self.interno.sessao_retomada() {
+            return "[]".to_string();
+        }
+
         let mut passos: Vec<PassoDaConstrucao> = Vec::new();
         self.interno.construir_partida(
             std::time::Duration::from_secs(segundos.max(1) as u64),
@@ -658,6 +683,7 @@ impl MotorWeb {
                 .referencia()
                 .is_some_and(|c| c.aplicacao == motor_core::Aplicacao::Exata && c.referencia.resolvido()),
             origem_do_inicio: self.interno.origem_do_inicio().to_string(),
+            sessao_retomada: self.interno.sessao_retomada(),
             cartelas_trazidas: self.interno.cartelas_trazidas(),
 
             novos_recordes,
@@ -738,6 +764,85 @@ mod testes {
         assert_eq!(depois["melhor_cartelas"], antes["melhor_cartelas"], "o recorde tem de vir junto");
         assert_eq!(depois["iteracoes"], antes["iteracoes"], "as iterações têm de vir junto");
         assert_eq!(depois["recordes"], antes["recordes"]);
+    }
+
+    /// Uma sessão retomada tem prioridade sobre o Motor Construtor.
+    #[test]
+    fn uma_sessao_retomada_atravessa_o_estagio_zero_sem_perder_uma_cartela() {
+        // A viagem inteira, em miniatura: trabalhar um pouco, exportar, jogar
+        // fora o motor, e voltar num motor novo — que é exatamente o que
+        // acontece ao trocar de aparelho.
+        let mut original = MotorWeb::construir(&configuracao_para_buscar()).unwrap();
+        original.preparar();
+        for _ in 0..6 {
+            original.avancar(4_000, 60_000);
+        }
+        let arquivo = original.exportar();
+        let salvas: Vec<Vec<u32>> =
+            serde_json::from_value(serde_json::from_str::<serde_json::Value>(&arquivo).unwrap()["melhor"].clone())
+                .unwrap();
+        let antes = estado_de(&original.estado());
+
+        let mut outro = MotorWeb::construir(&configuracao_para_buscar()).unwrap();
+        outro.retomar_com(&arquivo).expect("a sessão precisa ser aceita");
+
+        assert!(outro.sessao_retomada(), "o motor tem de saber que veio de um arquivo");
+
+        // O estágio 0 não roda, e não gasta nem um segundo do orçamento.
+        let passos = outro.construir_partida(1);
+        assert_eq!(passos, "[]", "o Motor Construtor não pode rodar sobre uma sessão retomada");
+
+        let depois = estado_de(&outro.estado());
+        assert_eq!(
+            depois["melhor_cartelas"], antes["melhor_cartelas"],
+            "o recorde importado tem de continuar sendo o recorde"
+        );
+        assert_eq!(
+            depois["atual_cartelas"], antes["atual_cartelas"],
+            "a solução em curso tem de ser a que veio no arquivo, e não uma construída"
+        );
+        assert_eq!(depois["sessao_retomada"], serde_json::json!(true));
+        assert_eq!(
+            depois["origem_do_inicio"], serde_json::json!("sessão importada"),
+            "a tela não pode anunciar uma construção gulosa que não houve"
+        );
+
+        // E cartela por cartela: nenhuma foi trocada por uma construção nova.
+        let voltaram: Vec<Vec<u32>> = serde_json::from_str(&outro.melhor()).unwrap();
+        assert_eq!(voltaram, salvas, "o fechamento tem de voltar idêntico");
+
+        // A partir daqui a redução continua normal, e a partir do número
+        // importado — não de um pior.
+        for _ in 0..6 {
+            outro.avancar(4_000, 60_000);
+        }
+        let reduzindo = estado_de(&outro.estado());
+        assert!(
+            reduzindo["melhor_cartelas"].as_u64().unwrap()
+                <= antes["melhor_cartelas"].as_u64().unwrap(),
+            "o recorde só pode cair a partir do que foi importado"
+        );
+        assert!(
+            reduzindo["iteracoes"].as_u64().unwrap() > antes["iteracoes"].as_u64().unwrap(),
+            "e a busca tem de continuar somando trabalho ao que já havia"
+        );
+    }
+
+    /// A outra metade da regra: sem sessão retomada, o estágio 0 roda.
+    ///
+    /// Sem este teste, desligar o construtor para todo mundo passaria pelo teste
+    /// acima sem nenhum sinal.
+    #[test]
+    fn uma_otimizacao_nova_continua_passando_pelo_estagio_zero() {
+        let mut motor = MotorWeb::construir(&configuracao_para_buscar()).unwrap();
+        motor.preparar();
+
+        assert!(!motor.sessao_retomada(), "não veio de arquivo nenhum");
+
+        let passos: Vec<serde_json::Value> =
+            serde_json::from_str(&motor.construir_partida(1)).unwrap();
+        assert!(!passos.is_empty(), "o estágio 0 tem de rodar numa otimização nova");
+        assert!(passos.last().unwrap()["origem"].as_str().is_some_and(|o| !o.is_empty()));
     }
 
     #[test]

@@ -221,12 +221,37 @@ function criar({ configuracao, fechamento, doBanco, salvo, segundosDoConstrutor:
       // seguida ao toque. Vinte segundos de "montando…" sem número nenhum é
       // indistinguível de um travamento, e o número existe desde já.
       const estado = JSON.parse(motor.preparar());
-      postMessage({ tipo: 'preparado', estado, cartelas: JSON.parse(motor.melhor()) });
+      const retomada = motor.sessao_retomada();
+      postMessage({
+        tipo: 'preparado',
+        estado,
+        cartelas: JSON.parse(motor.melhor()),
+        retomada,
+      });
 
-      // Estágio 0: o Motor Construtor. Procura construir direto a menor solução
-      // que conseguir, em vez de deixar a busca reduzir uma qualquer. O que ele
-      // encontra **concorre** com a partida que já estava — um fechamento
-      // trazido que seja menor continua vencendo.
+      // Caminho 1 — sessão retomada. O estágio 0 não roda, e a busca começa
+      // direto do fechamento que veio no arquivo.
+      //
+      // A pergunta é feita ao motor, e não à variável `salvo` que está logo
+      // acima, de propósito: quem garante a regra é o Rust, e perguntar a ele é
+      // o que impede os dois lados de discordarem se um dia algum caminho novo
+      // aparecer aqui.
+      if (retomada) {
+        postMessage({
+          tipo: 'construido',
+          passos: [],
+          retomada: true,
+          estado: lerEstado(),
+          cartelas: JSON.parse(motor.melhor()),
+        });
+        return;
+      }
+
+      // Caminho 2 — otimização nova. Estágio 0: o Motor Construtor. Procura
+      // construir direto a menor solução que conseguir, em vez de deixar a
+      // busca reduzir uma qualquer. O que ele encontra **concorre** com a
+      // partida que já estava — um fechamento trazido que seja menor continua
+      // vencendo.
       //
       // Medido, com vinte segundos: em (22,17) a partida sai de 4.142 cartelas
       // para 3.432. São setecentas que a busca não precisa mais tirar uma a uma,

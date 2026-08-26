@@ -305,6 +305,17 @@ pub struct MotorBusca {
     duracao_acumulada: Duration,
     iteracoes_sem_recorde: u64,
     comecou: bool,
+
+    /// Verdadeiro quando este motor foi carregado de uma sessão salva.
+    ///
+    /// Existe para uma regra só, e é uma regra de confiança: **uma sessão
+    /// retomada tem prioridade sobre qualquer construção**. Quem exportou um
+    /// fechamento de 160 cartelas e o trouxe de volta espera continuar de 160 —
+    /// não ver o estágio 0 montar 198 por cima e a otimização recomeçar dali.
+    ///
+    /// A marca fica no motor, e não em quem o chama, porque é o motor que
+    /// precisa garantir isso mesmo quando alguém esquecer.
+    retomada: bool,
 }
 
 impl MotorBusca {
@@ -374,6 +385,7 @@ impl MotorBusca {
             duracao_acumulada: Duration::ZERO,
             iteracoes_sem_recorde: 0,
             comecou: false,
+            retomada: false,
         })
     }
 
@@ -427,7 +439,24 @@ impl MotorBusca {
         &mut self,
         orcamento: Duration,
         ao_melhorar: &mut dyn FnMut(&crate::construtor::Achado),
-    ) {
+    ) -> bool {
+        // Uma sessão retomada tem prioridade sobre o estágio 0, e a recusa é
+        // aqui dentro para valer para todo mundo que chamar.
+        //
+        // O que acontecia sem esta guarda: quem importava uma sessão de 160
+        // cartelas via o construtor montar 198 do zero, anunciar "partiu de
+        // construção gulosa", e a otimização recomeçar de 198. O recorde de 160
+        // sobrevivia — a comparação o preserva — mas o trabalho em curso, que é
+        // de onde a busca continua, tinha sido trocado por um pior.
+        //
+        // Não é caso de comparar e deixar o melhor vencer: o fechamento
+        // retomado é o pedido do usuário, não um candidato. E gastar o
+        // orçamento do construtor para depois descartá-lo seriam vinte segundos
+        // de espera sem nenhum resultado possível.
+        if self.retomada {
+            return false;
+        }
+
         let parada = self.parada_em_curso.clone();
         let achado = crate::construtor::construir_o_menor(
             &self.cobertura,
@@ -438,25 +467,51 @@ impl MotorBusca {
             ao_melhorar,
             parada.as_ref(),
         );
-        let Some(achado) = achado else { return };
+        let Some(achado) = achado else { return false };
 
         let ja_havia_partida = self.comecou;
         self.comecou = true;
         self.escolher_partida(&achado.cartelas, ja_havia_partida, &achado.origem);
         self.consolidar_inicio();
+        true
+    }
+
+    /// Verdadeiro quando este motor veio de uma sessão salva.
+    ///
+    /// Quem chama usa isto para não nem chegar a pedir o estágio 0 — a guarda
+    /// de [`Self::construir_partida`] já bastaria, mas perguntar antes permite à
+    /// tela dizer "sessão retomada" em vez de exibir um estágio que não vai
+    /// acontecer.
+    pub fn sessao_retomada(&self) -> bool {
+        self.retomada
     }
 
     /// Retoma de um estado salvo anteriormente (o CONTINUAR do §16).
     ///
-    /// Diferente de [`Self::semear`], aqui as cartelas já são reconhecidas como
-    /// recorde: a busca continua de onde parou em vez de recomeçar.
+    /// Diferente de [`Self::semear`], aqui as cartelas **não concorrem com nada**
+    /// — elas são instaladas exatamente como estavam.
+    ///
+    /// Semear compara: o fechamento trazido disputa com a construção algébrica e
+    /// com o guloso, e vence o menor. É o certo para quem cola cartelas de fora,
+    /// porque ali o fechamento é um candidato. Retomar é outra coisa. Quem
+    /// exportou 60 cartelas e as trouxe de volta está pedindo para continuar
+    /// daquelas 60, e uma construção que por acaso saísse menor apagaria horas
+    /// de trabalho que a pessoa achava que estava guardando. Se sobrar cartela
+    /// redundante entre elas, quem tira é a busca — na frente do usuário, como
+    /// progresso, e não em silêncio antes de começar.
     pub fn retomar_de(&mut self, melhor: &[Cartela], iteracoes_anteriores: u64) {
-        self.semear(melhor);
+        self.comecou = true;
+        self.retomada = true;
         self.cartelas_trazidas = 0;
-        self.estatisticas.iteracoes = iteracoes_anteriores;
-        // `semear` marca "fechamento importado", que é verdade para quem colou
-        // cartelas de fora — mas não para quem só voltou ao próprio trabalho.
+
+        self.atual.reiniciar();
+        for &cartela in melhor {
+            self.atual.adicionar(&self.cobertura, cartela, &mut self.oficina.rascunho);
+        }
         self.origem_do_inicio = "trabalho retomado".to_string();
+        self.consolidar_inicio();
+
+        self.estatisticas.iteracoes = iteracoes_anteriores;
     }
 
     /// Escolhe o ponto de partida da busca — a "primeira etapa" do processo em
@@ -1392,6 +1447,110 @@ mod testes {
         // E o piso nunca pode cair abaixo do de uma cobertura simples: toda
         // solução que atende cada alvo três vezes atende cada um ao menos uma.
         assert!(triplo.limite_inferior().valor >= simples.limite_inferior().valor);
+    }
+
+    /// Retomar não é semear: o que veio no arquivo entra exatamente como saiu.
+    #[test]
+    fn retomar_instala_o_fechamento_salvo_sem_deixar_nada_concorrer() {
+        use motor_core::planos::plano_projetivo;
+
+        let mut motor = MotorBusca::novo(problema(21, 5, 2), config_rapida(1)).unwrap();
+
+        // As 21 ótimas de PG(2,4) com 5 duplicatas coladas junto: 26 cartelas.
+        //
+        // Semeadas, estas 26 viram 21 — a poda tira as duplicatas de graça e a
+        // construção algébrica ainda concorre. É o certo para quem cola
+        // cartelas de fora, porque ali o fechamento é um candidato entre
+        // outros. Retomadas, têm de voltar as 26: é o trabalho de quem exportou,
+        // e ele volta como saiu.
+        let retas = plano_projetivo(4).unwrap();
+        let mut salvas: Vec<Cartela> = retas.iter().map(|r| Cartela::dos_indices(r)).collect();
+        for i in 0..5 {
+            salvas.push(salvas[i]);
+        }
+
+        motor.retomar_de(&salvas, 4_000);
+
+        assert!(motor.sessao_retomada(), "o motor precisa saber que veio de um arquivo");
+        assert_eq!(
+            motor.melhor_cartelas(),
+            salvas.as_slice(),
+            "o recorde tem de ser cartela por cartela o que foi salvo"
+        );
+        assert_eq!(motor.estatisticas().iteracoes, 4_000, "as iterações vêm junto");
+
+        // A solução em curso já sai com 25, e isso é a busca funcionando, não a
+        // partida sendo trocada: com o recorde em 26, a meta seguinte é 25, e a
+        // busca começa tirando uma cartela para persegui-la. A prova de que
+        // nada foi construído por cima é que toda cartela em curso saiu do
+        // arquivo — nenhuma é nova.
+        assert_eq!(motor.cartelas_atuais().len(), 25, "a meta seguinte é 25, e a busca já a persegue");
+        assert!(
+            motor.cartelas_atuais().iter().all(|c| salvas.contains(c)),
+            "nenhuma cartela pode ter sido substituída por uma construção nova"
+        );
+    }
+
+    /// O bug relatado: importar um fechamento e ver o estágio 0 montar outro.
+    #[test]
+    fn o_construtor_nao_roda_por_cima_de_uma_sessao_retomada() {
+        // Quem importou 160 cartelas via o construtor montar 198 do zero,
+        // anunciar "partiu de construção gulosa", e a otimização recomeçar de
+        // 198. O recorde de 160 sobrevivia — a comparação o preserva — mas a
+        // solução em curso, que é de onde a busca continua, tinha sido trocada.
+        //
+        // O teste usa o caso mais duro possível: um fechamento salvo tão ruim
+        // que o construtor certamente acharia algo menor. Mesmo assim ele não
+        // pode rodar. Uma sessão retomada não é um candidato a ser batido; é o
+        // pedido do usuário.
+        let mut todas: Vec<Cartela> = Vec::new();
+        for a in 0..12 {
+            for b in (a + 1)..12 {
+                for c in (b + 1)..12 {
+                    for d in (c + 1)..12 {
+                        for e in (d + 1)..12 {
+                            todas.push(Cartela::dos_indices(&[a, b, c, d, e]));
+                        }
+                    }
+                }
+            }
+        }
+        assert_eq!(todas.len(), 792, "todas as cartelas de 5 entre 12");
+
+        let mut retomado = MotorBusca::novo(problema(12, 5, 3), config_rapida(7)).unwrap();
+        retomado.retomar_de(&todas, 1_000);
+
+        let rodou = retomado.construir_partida(Duration::from_secs(2), &mut |_| {});
+
+        assert!(!rodou, "o estágio 0 não pode rodar numa sessão retomada");
+        assert_eq!(retomado.melhor_cartelas().len(), 792, "o recorde é o que veio no arquivo");
+        assert!(
+            retomado.cartelas_atuais().len() >= 791,
+            "a solução em curso continua sendo a do arquivo, e não uma construída: saiu com {}",
+            retomado.cartelas_atuais().len()
+        );
+        assert!(
+            retomado.cartelas_atuais().iter().all(|c| todas.contains(c)),
+            "nenhuma cartela pode ter sido substituída por uma construção nova"
+        );
+        assert_eq!(
+            retomado.origem_do_inicio(),
+            "trabalho retomado",
+            "a tela não pode anunciar uma construção que não houve"
+        );
+
+        // E o outro caminho continua existindo: sem sessão retomada, o estágio 0
+        // roda como sempre. Sem esta metade o teste acima passaria mesmo que a
+        // guarda tivesse desligado o construtor para todo mundo.
+        let mut novo = MotorBusca::novo(problema(12, 5, 3), config_rapida(7)).unwrap();
+        let rodou = novo.construir_partida(Duration::from_secs(2), &mut |_| {});
+
+        assert!(rodou, "uma otimização nova continua passando pelo estágio 0");
+        assert!(
+            novo.cartelas_atuais().len() < 792,
+            "e o estágio 0 continua construindo pequeno: saiu com {}",
+            novo.cartelas_atuais().len()
+        );
     }
 
     /// Importar um fechamento redundante não pode carregar a redundância adiante.
