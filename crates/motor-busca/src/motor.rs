@@ -186,6 +186,25 @@ pub struct Configuracao {
     /// `L` da aceitação tardia: quantas iterações de tolerância a pioras.
     pub memoria_aceitacao: usize,
     /// Iterações sem recorde antes de forçar diversificação (§35).
+    ///
+    /// ## Por que dez mil, e não cinquenta
+    ///
+    /// Cinquenta mil era o número de origem, e o perfil mostrou o que ele
+    /// custava: em `(20,17)`, quarenta mil iterações paradas em 308 cartelas
+    /// esperando o gatilho — que, quando disparou, destravou 38 cartelas de uma
+    /// vez. Quem usa o aplicativo relatou o mesmo do outro lado: em várias
+    /// combinações a busca já não reduz nada por volta das dez mil iterações, e
+    /// dali até cinquenta mil é espera sem progresso.
+    ///
+    /// A medição de limiares que fiz antes disto foi inconclusiva — numa semente
+    /// o limiar baixo perdia por 6 cartelas, noutra ganhava por 28, variância
+    /// maior que o efeito. O que mudou desde então foi
+    /// [`Configuracao::teto_de_trocas_por_iteracao`]: era ele que tornava cada
+    /// diversificação cara, porque o buraco aberto levava as iterações seguintes
+    /// de 1,5 ms para 16 ms. Com o teto, diversificar ficou barato — e o preço
+    /// que pesava contra o limiar baixo deixou de existir.
+    ///
+    /// Dez mil é o ponto onde a busca, medida e observada, para de render.
     pub iteracoes_ate_diversificar: u64,
     /// Ruído da reconstrução gulosa, em `0.0..=1.0`.
     pub ruido_reconstrucao: f64,
@@ -273,7 +292,7 @@ impl Default for Configuracao {
         Self {
             semente: 0x5150_1A55,
             memoria_aceitacao: 500,
-            iteracoes_ate_diversificar: 50_000,
+            iteracoes_ate_diversificar: 10_000,
             ruido_reconstrucao: 0.25,
             orcamento_por_cartela: 30_000,
             orcamento_de_troca: 4_000_000,

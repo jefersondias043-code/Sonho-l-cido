@@ -64,11 +64,14 @@ struct Travado {
 fn ate_travar(pool: u32, cartela: usize, semente: u64, parar_apos: u64, teto: Duration) -> Travado {
     // O estado difícil é produzido pelo motor **de hoje**, sem correção nenhuma:
     // é o ponto em que ele para, e é dele que todas as variantes partem.
+    // O estado difícil é produzido pelo motor de antes destas correções: é o
+    // ponto em que ele para, e é dele que todas as variantes partem.
     let config = Configuracao {
         semente,
         intervalo_progresso: 0,
         teto_de_trocas_por_iteracao: u64::MAX,
         iteracoes_ate_afrouxar_a_meta: 0,
+        iteracoes_ate_diversificar: 50_000,
         ..Default::default()
     };
     let mut motor = MotorBusca::novo(problema(pool, cartela), config).unwrap();
@@ -144,22 +147,20 @@ fn main() {
     // As duas correções que o perfil justificou, isoladas e juntas. O padrão de
     // hoje é a referência: qualquer uma delas só entra se ganhar dele **no
     // estágio difícil**, que é onde ele para.
-    let base = || Configuracao {
-        intervalo_progresso: 0,
-        teto_de_trocas_por_iteracao: u64::MAX,
-        iteracoes_ate_afrouxar_a_meta: 0,
-        ..Default::default()
-    };
+    // Confirmação do limiar, agora **com** o teto de trocas — que é o que
+    // tornava cada diversificação cara. A medição anterior de limiares foi
+    // feita sem ele, e por isso não vale mais.
+    let base = || Configuracao { intervalo_progresso: 0, ..Default::default() };
     let variantes: Vec<(&str, Configuracao)> = vec![
-        ("o de hoje", base()),
-        ("teto de 200 trocas", Configuracao { teto_de_trocas_por_iteracao: 200, ..base() }),
-        ("teto de 50 trocas", Configuracao { teto_de_trocas_por_iteracao: 50, ..base() }),
-        ("válvula da meta", Configuracao { iteracoes_ate_afrouxar_a_meta: 2_000, ..base() }),
-        ("as duas juntas", Configuracao {
-            teto_de_trocas_por_iteracao: 200,
-            iteracoes_ate_afrouxar_a_meta: 2_000,
+        ("limiar 50.000 (o de antes)", Configuracao {
+            iteracoes_ate_diversificar: 50_000,
             ..base()
         }),
+        ("limiar 10.000 (o novo)", Configuracao {
+            iteracoes_ate_diversificar: 10_000,
+            ..base()
+        }),
+        ("limiar 5.000", Configuracao { iteracoes_ate_diversificar: 5_000, ..base() }),
     ];
 
     println!(
