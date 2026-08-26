@@ -217,7 +217,7 @@ fn desempenho(ate_parar: u64, depois: u64, sementes: u64) {
             corte["melhor_cartelas"], corte["elites"], parada_ha(&continua)
         );
 
-        let mut relatar = |nome: &str, m: &MotorWeb| -> (u64, usize) {
+        let relatar = |nome: &str, m: &MotorWeb| -> (u64, usize) {
             let f = estado(m);
             let (d, r, c) = (
                 f["diversificacoes"].as_u64().unwrap() - div0,
