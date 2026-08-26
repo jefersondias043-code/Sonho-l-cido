@@ -139,6 +139,47 @@ pub enum PassoDaMeta {
     AteOPiso,
 }
 
+/// De onde a diversificação parte quando não reaproveita uma elite.
+///
+/// ## O que foi medido
+///
+/// Construir do zero era o que o motor fazia, e o perfil mostrou o preço. Em
+/// `(20,17)`, com o recorde em 245 e a meta em 244, a construção do zero produz
+/// **364 cartelas** — medido, com o ruído alto que a diversificação usa.
+/// `encolher_ate` então corta 120 de uma vez, e sobram 240 sorteios
+/// descobertos. A busca fica com um buraco que não fecha: quarenta mil
+/// iterações a **16 ms cada** (contra 1,5 ms no regime normal) sem um recorde,
+/// e sem saída, porque a meta só é recalculada quando aparece um recorde — que
+/// é justamente o que deixou de vir.
+///
+/// Arruinar o recorde vai para outra região sem jogar fora a qualidade já
+/// conquistada: joga-se fora uma fatia das cartelas e reconstrói-se o resto. O
+/// buraco que sobra é do tamanho da fatia, não da diferença entre uma
+/// construção qualquer e a meta.
+///
+/// ## E mesmo assim perdeu
+///
+/// O raciocínio acima está certo no mecanismo e não se confirmou no resultado.
+/// Em `(20,17)`, com quatro sementes de cinco minutos cada e orçamento de tempo:
+///
+/// | reinício | por semente | média |
+/// |---|---|---:|
+/// | constrói do zero  | 256 · 256 · 259 · 261 | **258,0** |
+/// | arruína o recorde | 272 · 253 · 266 · 256 | 261,8 |
+///
+/// Pior na média e pior em duas das quatro. A ressalva honesta é que cada
+/// corrida disparou **uma única** diversificação, então o experimento tem pouca
+/// força — mas a regra escrita antes de medir dizia "empate ou derrota mantém o
+/// padrão", e é o que vale. Quem for medir de novo precisa de um limiar mais
+/// baixo, para haver eventos suficientes.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum ReinicioDaDiversificacao {
+    /// Constrói do zero, com ruído alto. Vai para longe — e chega grande.
+    DoZero,
+    /// Joga fora uma fração das cartelas do recorde e reconstrói o resto.
+    RuinaDoRecorde { fracao: f64 },
+}
+
 #[derive(Debug, Clone)]
 pub struct Configuracao {
     pub semente: u64,
@@ -160,6 +201,60 @@ pub struct Configuracao {
     pub segmento_adaptativo: u64,
     pub fator_reacao: f64,
     pub recompensas: Recompensas,
+    /// Teto absoluto de trocas de ponto numa iteração.
+    ///
+    /// A descida por troca move **um número** de uma cartela para outra. É uma
+    /// ferramenta de acabamento: vale muito quando falta pouco para fechar a
+    /// cobertura, e quase nada quando o buraco é uma cratera.
+    ///
+    /// O orçamento já acompanha o tamanho do buraco, mas só para cima — e é aí
+    /// que dói. Medido em `(20,17)`: no regime normal, com um ou dois sorteios
+    /// descobertos, uma iteração custa 1,5 ms. Depois de uma diversificação, com
+    /// duzentos e quarenta descobertos, o orçamento sobe ao teto e a mesma
+    /// iteração passa a custar **16 ms** — dez vezes mais para tentar fechar,
+    /// com movimentos de um número por vez, um buraco que precisa de cartelas
+    /// inteiras. O resultado medido foram quarenta mil iterações a 16 ms sem um
+    /// recorde.
+    ///
+    /// Este teto corta o gasto onde ele não rende, sem tocar no caso apertado,
+    /// que é onde a descida por troca ganhou seu lugar: com um ou dois sorteios
+    /// descobertos o orçamento já é de oito a dezesseis trocas, muito abaixo
+    /// dele, e nada muda.
+    ///
+    /// ## Por que 200
+    ///
+    /// Medido em `(20,17)` com partida pareada — todas as variantes saindo do
+    /// mesmo estado travado, bit a bit, e correndo o mesmo relógio:
+    ///
+    /// | teto | cartelas tiradas depois do travamento | iterações |
+    /// |---|---:|---:|
+    /// | sem teto (o de antes) | 29 | 102.625 |
+    /// | **200** | **57** | 135.769 |
+    /// | 50 | 28 | 170.748 |
+    ///
+    /// Cinquenta faz muito mais iterações e rende menos: cortar demais tira a
+    /// ferramenta de acabamento de onde ela serve. Duzentas quase dobraram o
+    /// que saiu.
+    pub teto_de_trocas_por_iteracao: u64,
+    /// Iterações com a cobertura aberta antes de o motor afrouxar a meta.
+    ///
+    /// A meta é um teto de cartelas, e ela só é recalculada quando aparece um
+    /// recorde. Isso cria um estado sem saída: se a solução em curso ficar com
+    /// um buraco que não fecha dentro do teto, não haverá recorde — e sem
+    /// recorde a meta não se move. O motor gira para sempre num teto que não
+    /// serve.
+    ///
+    /// Não é hipótese: o perfil de `(20,17)` pegou o motor assim por quarenta
+    /// mil iterações, com cento e dois sorteios descobertos e nenhum recorde,
+    /// depois de uma diversificação cortar uma construção de 364 cartelas até a
+    /// meta de 244.
+    ///
+    /// Esta válvula sobe a meta uma cartela de cada vez enquanto a cobertura não
+    /// fechar. Não é uma heurística nova: é a saída de um estado em que o motor
+    /// não tinha nenhuma. Zero desliga.
+    pub iteracoes_ate_afrouxar_a_meta: u64,
+    /// De onde a diversificação parte quando não reaproveita uma elite.
+    pub reinicio_da_diversificacao: ReinicioDaDiversificacao,
     /// Teto de operações sobre alvos gasto na descida por troca de ponto.
     ///
     /// Cada troca mexe em duas cartelas, então custa `2 · C(k,t)` operações. O
@@ -188,6 +283,14 @@ impl Default for Configuracao {
             segmento_adaptativo: 500,
             fator_reacao: 0.20,
             recompensas: Recompensas::default(),
+            teto_de_trocas_por_iteracao: 200,
+            iteracoes_ate_afrouxar_a_meta: 2_000,
+            // Medido e recusado: arruinar o recorde perdeu para construir do zero
+            // em `(20,17)`, com quatro sementes de cinco minutos cada — média de
+            // 261,8 cartelas contra 258,0, e derrota em duas das quatro. A
+            // política fica disponível para quem quiser medir de novo, e não
+            // como padrão. Veja [`ReinicioDaDiversificacao`].
+            reinicio_da_diversificacao: ReinicioDaDiversificacao::DoZero,
             intervalo_progresso: 100_000,
             passo_da_meta: PassoDaMeta::Unitario,
         }
@@ -284,6 +387,34 @@ pub struct RetratoDoMotor {
 /// para o caso em que corta.
 pub const TETO_DE_ELITES: usize = 20_000;
 
+/// Quanto cada operador foi usado, e o que rendeu.
+///
+/// É a métrica que faltava para responder à pergunta certa: quando a
+/// redundância acaba e os movimentos simples param de render, o motor **muda de
+/// escala** sozinho? O seletor adaptativo deveria fazer isso — ele desloca peso
+/// para quem entrega — mas sem estes números ninguém sabia se ele estava
+/// deslocando ou dormindo.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct UsoDoOperador {
+    /// Quantas vezes o operador foi escolhido.
+    pub usos: u64,
+    /// Quantas dessas vezes a solução resultante foi aceita.
+    pub aceitas: u64,
+    /// Quantas produziram um recorde global.
+    pub recordes: u64,
+    /// Quantas deixaram a solução **literalmente intacta**.
+    ///
+    /// É a medida de trabalho gasto à toa, e é diferente de "mesmo custo": uma
+    /// alteração que reorganiza a solução sem mudar o custo é um passo lateral,
+    /// e passos laterais são como se atravessa um platô. O que não serve para
+    /// nada é a iteração em que nenhuma cartela mudou de lugar.
+    ///
+    /// Importa porque uma iteração assim é **aceita por definição** — a solução
+    /// resultante não é pior que a de partida — e o seletor a premia como se
+    /// tivesse feito alguma coisa.
+    pub sem_efeito: u64,
+}
+
 pub struct MotorBusca {
     problema: Problema,
     cobertura: MotorCobertura,
@@ -353,6 +484,12 @@ pub struct MotorBusca {
     duracao_acumulada: Duration,
     iteracoes_sem_recorde: u64,
     comecou: bool,
+
+    /// Uso e rendimento de cada operador, na ordem de [`Operador::TODOS`].
+    uso_dos_operadores: Vec<UsoDoOperador>,
+
+    /// Há quantas iterações a solução em curso está com a cobertura aberta.
+    iteracoes_sem_fechar: u64,
 
     /// Verdadeiro quando este motor foi carregado de uma sessão salva.
     ///
@@ -432,6 +569,8 @@ impl MotorBusca {
             estatisticas: Estatisticas::default(),
             duracao_acumulada: Duration::ZERO,
             iteracoes_sem_recorde: 0,
+            uso_dos_operadores: vec![UsoDoOperador::default(); Operador::TODOS.len()],
+            iteracoes_sem_fechar: 0,
             comecou: false,
             retomada: false,
         })
@@ -799,6 +938,7 @@ impl MotorBusca {
 
         let indice_operador = self.seletor.escolher(&mut self.rng);
         let operador = Operador::TODOS[indice_operador];
+        self.uso_dos_operadores[indice_operador].usos += 1;
 
         self.elite_atual.clear();
         if operador == Operador::RecombinarComElite {
@@ -842,7 +982,10 @@ impl MotorBusca {
             // iteração e a busca deixava de contar iterações — o teste de
             // cobertura múltipla saiu de 2,7 s para mais de cinco minutos.
             let buraco = self.atual.total_descobertos() as u64;
-            let orcamento = self.trocas_por_iteracao.min(buraco.saturating_mul(8).max(1));
+            let orcamento = self
+                .trocas_por_iteracao
+                .min(buraco.saturating_mul(8).max(1))
+                .min(self.config.teto_de_trocas_por_iteracao);
             crate::troca::descida_por_troca(
                 &self.cobertura,
                 &mut self.atual,
@@ -881,6 +1024,11 @@ impl MotorBusca {
             self.definir_meta();
         }
 
+        // A solução saiu do lugar? Comparar com o instantâneo é exato para o caso
+        // que interessa — o operador não mexeu em nada — e custa um `memcmp`,
+        // contra a alocação e a ordenação que a assinatura exigiria.
+        let intacta = self.atual.cartelas() == self.oficina.instantaneo.as_slice();
+
         let aceita = self.aceitacao.decidir(depois, antes);
         if aceita {
             self.estatisticas.aceitas += 1;
@@ -906,6 +1054,28 @@ impl MotorBusca {
             self.config.recompensas.recusada
         };
         self.seletor.registrar(indice_operador, pontos);
+        if aceita {
+            self.uso_dos_operadores[indice_operador].aceitas += 1;
+        }
+        if e_recorde {
+            self.uso_dos_operadores[indice_operador].recordes += 1;
+        }
+        if intacta {
+            self.uso_dos_operadores[indice_operador].sem_efeito += 1;
+        }
+
+        // A válvula da meta. Contada sobre a solução em curso, e não sobre o
+        // recorde: o que trava o motor é a cobertura que não fecha dentro do
+        // teto, e é esse estado que precisa de saída.
+        if self.atual.cobertura_total() {
+            self.iteracoes_sem_fechar = 0;
+        } else {
+            self.iteracoes_sem_fechar += 1;
+            let limite = self.config.iteracoes_ate_afrouxar_a_meta;
+            if limite > 0 && self.iteracoes_sem_fechar >= limite {
+                self.afrouxar_a_meta();
+            }
+        }
 
         if e_recorde {
             self.iteracoes_sem_recorde = 0;
@@ -1055,6 +1225,27 @@ impl MotorBusca {
         self.aceitacao.reiniciar(chave_local(&self.atual.avaliacao()));
     }
 
+    /// Sobe a meta uma cartela, para a busca ter onde fechar a cobertura.
+    ///
+    /// Só age quando a cobertura está aberta há tempo demais, e nunca sobe acima
+    /// do recorde: o objetivo é dar espaço para fechar, não desfazer o que já
+    /// foi conquistado. Quando a cobertura fechar, um recorde recalcula a meta
+    /// pelo caminho normal e a válvula some do caminho.
+    fn afrouxar_a_meta(&mut self) {
+        if !matches!(self.problema.objetivo(), Objetivo::MinimizarCartelas) {
+            return;
+        }
+        let teto = self.melhor_avaliacao.cartelas;
+        if teto == 0 || self.alvo_cartelas >= teto {
+            return;
+        }
+
+        self.alvo_cartelas += 1;
+        self.iteracao_da_meta = self.estatisticas.iteracoes;
+        self.iteracoes_sem_fechar = 0;
+        self.aceitacao.reiniciar(chave_local(&self.atual.avaliacao()));
+    }
+
     /// Quantas cartelas descer nesta meta, segundo a política configurada.
     ///
     /// O sinal de "veio fácil" é o número de iterações desde que a meta atual foi
@@ -1117,6 +1308,50 @@ impl MotorBusca {
         }
     }
 
+    /// Volta ao recorde, joga fora uma fatia dele e reconstrói o resto.
+    ///
+    /// É a ruína e reconstrução clássica, aplicada à melhor solução conhecida em
+    /// vez de ao vazio. A diferença é de escala: uma construção do zero em
+    /// `(20,17)` sai com 364 cartelas quando a meta é 244, e o corte que vem a
+    /// seguir abre um buraco de 240 sorteios que a busca não fecha. Arruinar o
+    /// recorde abre um buraco do tamanho da fatia — reparável, e é dele que sai
+    /// a solução seguinte.
+    ///
+    /// O recorde sai do lugar por `mem::take` e volta no fim: clonar dez mil
+    /// cartelas a cada diversificação seria pagar caro por nada.
+    fn arruinar_o_recorde(&mut self, fracao: f64) {
+        let base = std::mem::take(&mut self.melhor);
+        if base.is_empty() {
+            self.melhor = base;
+            return;
+        }
+
+        self.atual.restaurar_de(
+            &self.cobertura,
+            &base,
+            &mut self.oficina.restaurador,
+            &mut self.oficina.rascunho,
+        );
+        self.melhor = base;
+
+        let quantas = ((self.atual.quantidade() as f64) * fracao.clamp(0.05, 0.9)).round() as usize;
+        for _ in 0..quantas.min(self.atual.quantidade().saturating_sub(1)) {
+            let indice = self.rng.gen_range(0..self.atual.quantidade());
+            self.atual.remover(&self.cobertura, indice, &mut self.oficina.rascunho);
+        }
+
+        reparar(
+            &self.cobertura,
+            &mut self.atual,
+            self.alvo_cartelas,
+            // Ruído alto: reconstruir igual devolveria a solução de onde se saiu.
+            self.config.ruido_reconstrucao.max(0.6),
+            self.max_candidatos,
+            &mut self.rng,
+            &mut self.oficina,
+        );
+    }
+
     /// Sai da região atual quando a busca estaciona (§35).
     fn diversificar(&mut self, observador: &mut dyn Observador) {
         self.estatisticas.diversificacoes += 1;
@@ -1140,18 +1375,26 @@ impl MotorBusca {
             );
             "reinício a partir de elite do arquivo"
         } else {
-            let parada = self.parada_em_curso.clone();
-            construir_do_zero(
-                &self.cobertura,
-                &mut self.atual,
-                // Ruído bem alto: o objetivo aqui é ir para longe, não ser bom.
-                self.config.ruido_reconstrucao.max(0.6),
-                self.max_candidatos,
-                &mut self.rng,
-                &mut self.oficina,
-                parada.as_ref(),
-            );
-            "reconstrução completa do zero"
+            match self.config.reinicio_da_diversificacao {
+                ReinicioDaDiversificacao::DoZero => {
+                    let parada = self.parada_em_curso.clone();
+                    construir_do_zero(
+                        &self.cobertura,
+                        &mut self.atual,
+                        // Ruído bem alto: o objetivo aqui é ir para longe.
+                        self.config.ruido_reconstrucao.max(0.6),
+                        self.max_candidatos,
+                        &mut self.rng,
+                        &mut self.oficina,
+                        parada.as_ref(),
+                    );
+                    "reconstrução completa do zero"
+                }
+                ReinicioDaDiversificacao::RuinaDoRecorde { fracao } => {
+                    self.arruinar_o_recorde(fracao);
+                    "ruína e reconstrução do recorde"
+                }
+            }
         };
 
         podar(&self.cobertura, &mut self.atual, &mut self.oficina);
@@ -1220,6 +1463,16 @@ impl MotorBusca {
 
     pub fn gap(&self) -> Option<f64> {
         motor_core::gap(self.melhor_avaliacao.cartelas as u64, self.limite.valor)
+    }
+
+    /// Uso e rendimento de cada operador, na ordem de [`Operador::TODOS`].
+    pub fn uso_dos_operadores(&self) -> &[UsoDoOperador] {
+        &self.uso_dos_operadores
+    }
+
+    /// Os nomes dos operadores, na mesma ordem.
+    pub fn nomes_dos_operadores() -> Vec<&'static str> {
+        Operador::TODOS.iter().map(|o| o.nome()).collect()
     }
 
     pub fn arquivo(&self) -> &ArquivoElites {

@@ -1109,12 +1109,35 @@ mod testes {
         );
 
         // Agora o outro aparelho: tudo tem de chegar.
-        let antes = original.retrato_de_sessao();
         let mut outro = MotorWeb::construir(&configuracao_para_buscar()).unwrap();
         outro.retomar_com(&arquivo).expect("a sessão precisa ser aceita");
-        let depois = outro.retrato_de_sessao();
 
-        assert_eq!(depois, antes, "o retrato do motor tem de atravessar o arquivo inteiro");
+        let antes = estado_de(&original.retrato_de_sessao());
+        let depois = estado_de(&outro.retrato_de_sessao());
+
+        // Tudo que é inteiro bate dígito por dígito. Os pesos dos operadores
+        // ficam fora desta comparação: são `f64` escritos em texto, e a volta
+        // pode mexer no último bit — diferença que não muda decisão nenhuma, e
+        // exigi-la seria exigir do formato uma precisão que ele não promete.
+        for campo in [
+            "iteracoes", "aceitas", "recordes", "diversificacoes", "duplicadas_evitadas",
+            "alvo_cartelas", "passo_atual", "iteracao_da_meta", "melhor_iteracao",
+            "iteracoes_sem_recorde", "melhor_assinatura", "memoria_aceitacao",
+            "passo_da_aceitacao", "usos_do_segmento", "passo_no_segmento", "gerador",
+        ] {
+            assert_eq!(depois[campo], antes[campo], "o campo {campo} não atravessou o arquivo");
+        }
+
+        // E os pesos chegam, com a precisão que um `f64` em texto permite.
+        let (a, b) = (
+            antes["pesos_dos_operadores"].as_array().unwrap(),
+            depois["pesos_dos_operadores"].as_array().unwrap(),
+        );
+        assert_eq!(a.len(), b.len(), "faltam pesos do outro lado");
+        for (x, y) in a.iter().zip(b) {
+            let (x, y) = (x.as_f64().unwrap(), y.as_f64().unwrap());
+            assert!((x - y).abs() <= x.abs() * 1e-12, "peso mudou de verdade: {x} contra {y}");
+        }
     }
 
     /// As elites viajam: é delas que sai o material da recombinação.
