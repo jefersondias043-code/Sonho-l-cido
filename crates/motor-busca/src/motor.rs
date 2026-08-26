@@ -1428,6 +1428,30 @@ impl MotorBusca {
         motor_core::gap(self.melhor_avaliacao.cartelas as u64, self.limite.valor)
     }
 
+    /// Troca o gatilho da diversificação com o motor rodando.
+    ///
+    /// Existe porque o valor certo não é um só. Ele depende da configuração —
+    /// numa, uma iteração custa 1,5 ms; noutra, sessenta — e depende do momento:
+    /// no começo há redundância de sobra e insistir rende, no fim a mesma
+    /// insistência é espera. Medi limiares fixos e o resultado foi ambíguo entre
+    /// sementes, o que é a própria evidência de que não há um número universal.
+    /// Quem sabe qual serve agora é quem está olhando a tela.
+    ///
+    /// **Nada é descartado.** O recorde, a solução em curso, o arquivo de
+    /// elites, os pesos aprendidos e os contadores ficam todos onde estavam. O
+    /// que muda é o limiar — e o relógio que o persegue volta a zero, para o
+    /// valor novo começar a contar a partir de agora em vez de herdar uma espera
+    /// que foi medida contra outro número.
+    pub fn ajustar_diversificacao(&mut self, iteracoes: u64) {
+        self.config.iteracoes_ate_diversificar = iteracoes.max(1);
+        self.iteracoes_sem_recorde = 0;
+    }
+
+    /// O gatilho em vigor, para a tela mostrar o que o motor está usando.
+    pub fn gatilho_da_diversificacao(&self) -> u64 {
+        self.config.iteracoes_ate_diversificar
+    }
+
     /// Uso e rendimento de cada operador, na ordem de [`Operador::TODOS`].
     pub fn uso_dos_operadores(&self) -> &[UsoDoOperador] {
         &self.uso_dos_operadores

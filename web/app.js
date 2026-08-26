@@ -440,6 +440,74 @@ document.querySelector('.abas')?.addEventListener('keydown', (evento) => {
   abas[destino].focus();
 });
 
+/* ─────────── o gatilho da diversificação ─────────── */
+
+/*
+ * Os degraus do seletor.
+ *
+ * Uma escala geométrica, e não linear, porque a diferença que importa é de
+ * ordem de grandeza: entre 10 e 20 há um mundo, entre 9.980 e 9.990 não há
+ * nada. Numa régua linear de 10 a 10.000 os valores baixos ocupariam meio
+ * milímetro do curso e seriam inalcançáveis com o polegar.
+ *
+ * Dezoito degraus com números redondos: quem move o seletor lê um valor que
+ * consegue repetir depois, em vez de 3.847.
+ */
+const DEGRAUS_DO_GATILHO = [
+  10, 20, 30, 50, 75, 100, 150, 200, 300, 500, 750,
+  1_000, 1_500, 2_000, 3_000, 5_000, 7_500, 10_000,
+];
+
+/** Onde a preferência fica entre uma sessão e outra. */
+const CHAVE_DO_GATILHO = 'sonho-lucido:gatilho-diversificacao';
+
+/** O valor em vigor no seletor, em iterações. */
+function gatilhoEscolhido() {
+  const seletor = $('gatilho-diversificacao');
+  const degrau = Number(seletor?.value);
+  return DEGRAUS_DO_GATILHO[degrau] ?? 10_000;
+}
+
+function pintarGatilho() {
+  const valor = gatilhoEscolhido();
+  $('gatilho-valor').textContent = milhares(valor);
+}
+
+/*
+ * O seletor mexe no motor que já está rodando.
+ *
+ * `input` e não `change`: no celular o `change` só dispara ao soltar o dedo, e
+ * o número em cima do seletor precisa acompanhar o polegar para a pessoa saber
+ * onde está parando. A mensagem ao worker vai junto — ela é barata, e mandar
+ * cedo evita o caso em que alguém arrasta, solta fora da tela e nada acontece.
+ */
+ligar('gatilho-diversificacao', 'input', () => {
+  pintarGatilho();
+  const iteracoes = gatilhoEscolhido();
+  try {
+    localStorage.setItem(CHAVE_DO_GATILHO, String(iteracoes));
+  } catch {
+    // Armazenamento cheio ou bloqueado. A preferência não sobrevive ao
+    // recarregamento, e é só isso: o ajuste em si já valeu no motor.
+  }
+  if (trabalhador) trabalhador.postMessage({ tipo: 'diversificacao', iteracoes });
+});
+
+/** Devolve o seletor ao valor que a pessoa deixou da última vez. */
+function lembrarDoGatilho() {
+  let guardado = null;
+  try {
+    guardado = Number(localStorage.getItem(CHAVE_DO_GATILHO));
+  } catch {
+    guardado = null;
+  }
+  const degrau = DEGRAUS_DO_GATILHO.indexOf(guardado);
+  if (degrau >= 0) $('gatilho-diversificacao').value = String(degrau);
+  pintarGatilho();
+}
+
+lembrarDoGatilho();
+
 /* ─────────── conversa com o worker ─────────── */
 
 function garantirTrabalhador() {
@@ -2041,6 +2109,9 @@ function comecar(
     // quem está esperando: num celular alguns segundos, num computador o tempo
     // que a pessoa quiser dar.
     segundosDoConstrutor: Number(document.getElementById('segundos-construtor')?.value) || 20,
+    // O gatilho vale desde a primeira iteração, e não só depois de a pessoa
+    // mexer no seletor.
+    gatilhoDaDiversificacao: gatilhoEscolhido(),
   });
   segurarTelaLigada();
 }

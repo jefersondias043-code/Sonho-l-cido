@@ -718,6 +718,81 @@ try {
   await pagina.waitForSelector('#lotinha.ativo', { timeout: 20000 });
   marcar(true, 'e encerrar continua devolvendo à Lotinha com o modo automático usado');
 
+  // ─── o seletor do gatilho da diversificação ───
+  //
+  // A promessa que este bloco guarda é uma só: mexer no seletor **com o motor
+  // rodando** muda o comportamento da busca e não custa nada do que já foi
+  // conquistado. Um ajuste que zerasse o recorde seria pior que não existir,
+  // porque quem experimenta um controle não espera perder horas de trabalho.
+  await carregarFechamento(20, 17, VINTE);
+  await pagina.waitForFunction(
+    () => Number(document.getElementById('iteracoes').textContent.replace(/\D/g, '')) > 0,
+    undefined,
+    { timeout: 30000 }
+  );
+
+  marcar(
+    await pagina.locator('#gatilho-diversificacao').isVisible(),
+    'o seletor do gatilho aparece durante a busca, que é quando ele serve'
+  );
+
+  const antesDoAjuste = {
+    recorde: await numero('#melhor-cartelas'),
+    iteracoes: await numero('#iteracoes'),
+  };
+
+  // Da direita para a esquerda: de 10.000 para 30 iterações de insistência.
+  await pagina.evaluate(() => {
+    const s = document.getElementById('gatilho-diversificacao');
+    s.value = '2';
+    s.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  marcar(
+    (await texto('#gatilho-valor')) === '30',
+    'o número acompanha o seletor',
+    await texto('#gatilho-valor')
+  );
+
+  // O motor tem de continuar trabalhando, com o recorde intacto.
+  await pagina.waitForFunction(
+    (antes) => Number(document.getElementById('iteracoes').textContent.replace(/\D/g, '')) > antes,
+    antesDoAjuste.iteracoes,
+    { timeout: 30000 }
+  );
+  marcar(
+    (await numero('#melhor-cartelas')) <= antesDoAjuste.recorde,
+    'mexer no seletor não perde o recorde — a busca continua do mesmo ponto',
+    `${antesDoAjuste.recorde} antes, ${await numero('#melhor-cartelas')} depois`
+  );
+
+  // E o ajuste chega ao motor: com 30 iterações de insistência, ele passa a
+  // trocar de região sem parar. Sem a mensagem ao worker isto ficaria em zero.
+  await pagina.waitForFunction(
+    () => {
+      const t = document.getElementById('texto-situacao').textContent;
+      return t.includes('procurando') || t.includes('ótimo');
+    },
+    undefined,
+    { timeout: 20000 }
+  );
+  const diversificou = await pagina.waitForFunction(
+    (antes) => Number(document.getElementById('iteracoes').textContent.replace(/\D/g, '')) > antes + 2000,
+    antesDoAjuste.iteracoes,
+    { timeout: 60000 }
+  ).then(() => true).catch(() => false);
+  marcar(diversificou, 'e o motor segue avançando com o gatilho novo');
+
+  // A escolha sobrevive a fechar e reabrir: quem achou o valor bom não deveria
+  // ter de reencontrá-lo toda vez.
+  await pagina.click('#encerrar');
+  await pagina.waitForSelector('#lotinha.ativo', { timeout: 20000 });
+  await pagina.reload({ waitUntil: 'networkidle' });
+  marcar(
+    (await texto('#gatilho-valor')) === '30',
+    'e o valor escolhido continua lá depois de fechar e reabrir',
+    await texto('#gatilho-valor')
+  );
+
   marcar(errosDeConsole.length === 0, 'nenhum erro no console', errosDeConsole.join(' | ').slice(0, 120));
 } finally {
   await navegador.close();

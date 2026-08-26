@@ -143,6 +143,13 @@ function tratar(mensagem) {
         ligarLaco();
         break;
 
+      // O seletor do gatilho da diversificação. Chega a qualquer momento, e é
+      // aplicado no motor que está rodando — sem descartar recorde, cartelas,
+      // elites nem o que o seletor de operadores aprendeu.
+      case 'diversificacao':
+        if (motor) motor.ajustar_diversificacao(mensagem.iteracoes);
+        break;
+
       case 'pausar':
         // Pausa manual suspende o ciclo. Quem tocou em Pausar quer o motor
         // parado, e não parado por quinze minutos e religado sozinho.
@@ -199,7 +206,14 @@ function tratar(mensagem) {
   }
 }
 
-function criar({ configuracao, fechamento, doBanco, salvo, segundosDoConstrutor: pedido }) {
+function criar({
+  configuracao,
+  fechamento,
+  doBanco,
+  salvo,
+  segundosDoConstrutor: pedido,
+  gatilhoDaDiversificacao,
+}) {
   segundosDoConstrutor = Math.max(1, Number(pedido) || SEGUNDOS_DO_CONSTRUTOR);
   descartarMotor();
 
@@ -227,6 +241,12 @@ function criar({ configuracao, fechamento, doBanco, salvo, segundosDoConstrutor:
     motor.semear_texto(fechamento);
   } else if (Array.isArray(fechamento) && fechamento.length > 0) {
     motor.semear(JSON.stringify(fechamento));
+  }
+
+  // O gatilho escolhido no seletor vale desde a primeira iteração, e não só
+  // depois de o usuário mexer nele.
+  if (Number.isFinite(gatilhoDaDiversificacao) && gatilhoDaDiversificacao > 0) {
+    motor.ajustar_diversificacao(gatilhoDaDiversificacao);
   }
 
   lote = LOTE_INICIAL;

@@ -147,6 +147,12 @@ pub struct Estado {
     /// Verdadeiro quando o melhor conhecido já encostou no limite provado: o
     /// mundo considera essa configuração encerrada.
     pub referencia_resolvida: bool,
+    /// O gatilho da diversificação em vigor, em iterações sem recorde.
+    ///
+    /// Vai no estado para a tela poder mostrar o que o motor está mesmo usando,
+    /// e não o que o seletor diz. São coisas diferentes enquanto a mensagem não
+    /// chega ao worker, e é a do motor que vale.
+    pub gatilho_da_diversificacao: u64,
     /// Como o ponto de partida foi construído.
     pub origem_do_inicio: String,
     /// Verdadeiro quando esta busca continua uma sessão salva.
@@ -679,6 +685,16 @@ impl MotorWeb {
         self.montar_estado(coletor.recordes)
     }
 
+    /// Troca o gatilho da diversificação com o motor rodando.
+    ///
+    /// A tela oferece isto num seletor porque não existe um número certo para
+    /// todas as configurações — e porque quem acompanha a busca percebe antes de
+    /// qualquer medição quando ela parou de render. Nada do trabalho é
+    /// descartado: muda o limiar, e o relógio que o persegue recomeça.
+    pub fn ajustar_diversificacao(&mut self, iteracoes: u32) {
+        self.interno.ajustar_diversificacao(u64::from(iteracoes));
+    }
+
     /// Estado atual, sem avançar nada.
     pub fn estado(&self) -> String {
         self.montar_estado(Vec::new())
@@ -861,6 +877,7 @@ impl MotorWeb {
                 .interno
                 .referencia()
                 .is_some_and(|c| c.aplicacao == motor_core::Aplicacao::Exata && c.referencia.resolvido()),
+            gatilho_da_diversificacao: self.interno.gatilho_da_diversificacao(),
             origem_do_inicio: self.interno.origem_do_inicio().to_string(),
             sessao_retomada: self.interno.sessao_retomada(),
             cartelas_trazidas: self.interno.cartelas_trazidas(),
