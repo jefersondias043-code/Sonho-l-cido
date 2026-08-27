@@ -807,6 +807,27 @@ const AJUSTES_FINOS = [
     direita: '90%',
     ajuda: 'Só tem efeito com o reinício acima em "arruína o recorde".',
   },
+  {
+    chave: 'simetria',
+    nome: 'Trilha simétrica',
+    opcoes: [
+      ['automatico', 'As duas, dividindo o tempo (padrão)'],
+      ['simetrica', 'Só a simétrica'],
+      ['livre', 'Só a livre'],
+    ],
+    padrao: 'automatico',
+    ajuda:
+      'A busca livre move uma cartela por vez. A simétrica move uma órbita — ' +
+      'as vinte e cinco rotações de uma vez —, então nunca quebra a simetria ' +
+      'de um fechamento que a tem. Em automático as duas correm e vale o ' +
+      'menor recorde.',
+    risco:
+      'Medido com 45 s para cada lado: a simétrica ganhou em 20/17 (240 ' +
+      'contra 300), 21/18 (217 contra 244) e 22/19 (132 contra 193), e ' +
+      'empatou em 22/18. Mas há doze configurações cujo melhor fechamento ' +
+      '**não** é simétrico — em 23/20 o melhor simétrico que existe tem 138 ' +
+      'cartelas e o aplicativo entrega 100. Ali, "só a simétrica" perde feio.',
+  },
 ];
 
 const CHAVE_DO_MANUAL = 'sonho-lucido:ajuste-manual';
@@ -891,6 +912,13 @@ function aplicarAjusteFino(a) {
   guardarAjustesFinos();
   if (!trabalhador) return;
 
+  // A simetria não passa pelo `ajustar` do Rust: ela liga e desliga uma
+  // estrutura de megabytes, e por isso tem mensagem própria.
+  if (a.chave === 'simetria') {
+    trabalhador.postMessage({ tipo: 'simetria', modo: valorDoAjuste(a) });
+    return;
+  }
+
   const ajustes = {};
   if (a.chave.startsWith('recompensa_')) {
     ajustes.recompensas = [
@@ -917,6 +945,9 @@ function todosOsAjustesFinos() {
   const ajustes = {};
   for (const a of AJUSTES_FINOS) {
     if (a.chave.startsWith('recompensa_') || a.chave === 'fracao_da_ruina') continue;
+    // A simetria viaja no seu próprio campo de `criar`, não no pacote de
+    // ajustes: do lado do Rust ela é outro método.
+    if (a.chave === 'simetria') continue;
     ajustes[a.chave] = valorDoAjuste(a);
   }
   ajustes.recompensas = [
@@ -1319,6 +1350,20 @@ function aplicarEstado(estado) {
 
   const ritmo = medirRitmo(estado.recordes ?? 0);
   $('ritmo').textContent = ritmo === null ? '—' : ritmo.toFixed(1).replace('.', ',');
+
+  // Qual das duas trilhas está com o recorde. Sem esta linha o seletor da
+  // simetria seria uma escolha às cegas: não haveria como ver se a trilha
+  // simétrica está contribuindo ou só ocupando metade do tempo.
+  const trilha = $('trilha');
+  if (estado.ciclica_cartelas === null || estado.ciclica_cartelas === undefined) {
+    trilha.textContent = 'livre';
+    trilha.title = 'A trilha simétrica não está rodando nesta configuração.';
+  } else {
+    trilha.textContent = estado.trilha_do_recorde ?? 'livre';
+    trilha.title =
+      `Simétrica: ${milhares(estado.ciclica_cartelas)} cartelas em ` +
+      `${milhares(estado.ciclica_iteracoes ?? 0)} iterações.`;
+  }
 
   // O orçamento traduzido para esta configuração. O número cru do seletor não
   // diz nada a quem olha; "12 candidatos por dezena" diz.
@@ -2679,6 +2724,7 @@ function comecar(
     segundosDoConstrutor: Number(document.getElementById('segundos-construtor')?.value) || 20,
     // O gatilho vale desde a primeira iteração, e não só depois de a pessoa
     // mexer no seletor.
+    simetria: valorDoAjuste(AJUSTES_FINOS.find((x) => x.chave === 'simetria')),
     gatilhoDaDiversificacao: gatilhoEscolhido(),
     tetoDeTrocas: trocasEscolhidas(),
     esforcoPorCartela: esforcoEscolhido(),

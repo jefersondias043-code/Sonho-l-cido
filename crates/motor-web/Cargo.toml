@@ -30,3 +30,7 @@ wasm-bindgen = "=0.2.127"
 # Sem isto o build falha com "target não suportado".
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 getrandom = { version = "0.2", features = ["js"] }
+# No navegador não existe relógio de sistema: `std::time::Instant::now()` entra
+# em pânico. `web-time` cobre a mesma interface com `performance.now()`, e é o
+# que o `motor-busca` já usa pelo mesmo motivo.
+web-time = "1"

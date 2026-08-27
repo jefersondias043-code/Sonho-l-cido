@@ -170,6 +170,13 @@ function tratar(mensagem) {
         if (motor) motor.ajustar(JSON.stringify(mensagem.ajustes ?? {}));
         break;
 
+      // O modo da simetria. Desligar solta a instância de órbitas, que ocupa
+      // megabytes; religar a remonta, e isso custa segundos num pool grande —
+      // por isso é troca de modo, e não um interruptor por lote.
+      case 'simetria':
+        if (motor) motor.ajustar_simetria(String(mensagem.modo ?? 'automatico'));
+        break;
+
       case 'pausar':
         // Pausa manual suspende o ciclo. Quem tocou em Pausar quer o motor
         // parado, e não parado por quinze minutos e religado sozinho.
@@ -236,6 +243,7 @@ function criar({
   tetoDeTrocas,
   esforcoPorCartela,
   ajustesFinos,
+  simetria,
 }) {
   segundosDoConstrutor = Math.max(1, Number(pedido) || SEGUNDOS_DO_CONSTRUTOR);
   descartarMotor();
@@ -280,6 +288,9 @@ function criar({
   // O painel manual vale desde a primeira iteração, e não só depois de a
   // pessoa tocar num controle.
   if (ajustesFinos) motor.ajustar(JSON.stringify(ajustesFinos));
+  if (typeof simetria === 'string' && simetria.length > 0) {
+    motor.ajustar_simetria(simetria);
+  }
 
   lote = LOTE_INICIAL;
   postMessage({ tipo: 'criado', totalAlvos: motor.total_alvos() });

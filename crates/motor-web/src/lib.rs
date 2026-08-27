@@ -26,9 +26,18 @@
 //! navegador.
 
 use motor_busca::{
-    CondicoesDeParada, Configuracao, Controle, Evento, MotorBusca, Observador,
+    BuscaCiclica, CondicoesDeParada, Configuracao, Controle, Evento, InstanciaCiclica, MotorBusca,
+    Observador,
 };
 use motor_core::{interpretar_fechamento, Cartela, Objetivo, Problema, RegraCobertura};
+
+// O relógio da fatia da trilha simétrica. No navegador `std::time::Instant`
+// entra em pânico, e o pânico aparece como a busca simplesmente parando.
+#[cfg(target_arch = "wasm32")]
+use web_time::Instant;
+
+#[cfg(not(target_arch = "wasm32"))]
+use std::time::Instant;
 use rand_pcg::Pcg64Mcg;
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
@@ -174,6 +183,18 @@ pub struct Estado {
     /// estágio 0 que não vai acontecer, e provar — nos testes e a olho — que o
     /// Motor Construtor não rodou por cima do fechamento trazido de volta.
     pub sessao_retomada: bool,
+    /// A trilha simétrica: quantas cartelas ela tem, ou `None` quando não está
+    /// rodando (configuração sem simetria útil, instância grande demais, ou o
+    /// usuário desligou).
+    ///
+    /// A tela mostra os dois recordes porque eles medem coisas diferentes, e
+    /// saber qual está na frente é o que diz se vale mudar o modo.
+    pub ciclica_cartelas: Option<u64>,
+    /// Iterações da trilha simétrica. Não se somam às da busca livre: são dois
+    /// laços diferentes, e um número só esconderia qual está trabalhando.
+    pub ciclica_iteracoes: u64,
+    /// Qual trilha detém o recorde: `"livre"`, `"simétrica"` ou `"empate"`.
+    pub trilha_do_recorde: String,
     /// Quantas cartelas o usuário trouxe, ou zero se começou sem fechamento.
     ///
     /// A tela precisa dos dois números para ser honesta: "você trouxe 26, o
@@ -398,7 +419,56 @@ pub struct MotorWeb {
     interno: MotorBusca,
     configuracao: ConfiguracaoEntrada,
     controle: Controle,
+    /// A trilha simétrica, quando a configuração comporta uma.
+    ciclica: Option<BuscaCiclica>,
+    /// O que o usuário escolheu: as duas, só a simétrica, ou só a livre.
+    simetria: ModoSimetria,
+    /// Fatia do tempo de cada lote que vai para a trilha simétrica, em
+    /// centésimos. Começa meio a meio e encolhe quando ela para de contribuir.
+    fatia_da_ciclica: u32,
 }
+
+/// Quem roda.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ModoSimetria {
+    /// As duas trilhas, com o tempo repartido. O recorde é o menor das duas.
+    #[default]
+    Automatico,
+    /// Só a busca livre — o comportamento anterior a esta trilha existir.
+    SoLivre,
+    /// Só a trilha simétrica. Útil nas configurações cujo fechamento no banco é
+    /// invariante por rotação, onde a busca livre nunca aceitou um movimento.
+    SoSimetrica,
+}
+
+impl ModoSimetria {
+    fn do_texto(texto: &str) -> ModoSimetria {
+        match texto {
+            "livre" => ModoSimetria::SoLivre,
+            "simetrica" => ModoSimetria::SoSimetrica,
+            _ => ModoSimetria::Automatico,
+        }
+    }
+
+    fn texto(self) -> &'static str {
+        match self {
+            ModoSimetria::Automatico => "automatico",
+            ModoSimetria::SoLivre => "livre",
+            ModoSimetria::SoSimetrica => "simetrica",
+        }
+    }
+}
+
+/// A fatia inicial do lote que vai para a trilha simétrica, em centésimos.
+const FATIA_INICIAL_DA_CICLICA: u32 = 50;
+/// A fatia a que ela cai quando fica claro que não está contribuindo.
+const FATIA_MINIMA_DA_CICLICA: u32 = 10;
+/// Quantas iterações a trilha simétrica ganha antes de a fatia ser reavaliada.
+///
+/// Medido: em `22/19` ela alcança o ótimo cíclico em 45 segundos, e em `20/17`
+/// chega às 240 do banco em 30 mil iterações. Antes disso, cortar o tempo dela
+/// seria julgar pela largada.
+const CARENCIA_DA_CICLICA: u64 = 30_000;
 
 /// A lógica de verdade, em Rust puro.
 ///
@@ -421,7 +491,14 @@ impl MotorWeb {
         let config = Configuracao { semente: configuracao.semente, ..Default::default() };
         let interno = MotorBusca::novo(problema, config).map_err(|e| e.to_string())?;
 
-        Ok(MotorWeb { interno, configuracao, controle: Controle::novo() })
+        Ok(MotorWeb {
+            interno,
+            configuracao,
+            controle: Controle::novo(),
+            ciclica: None,
+            simetria: ModoSimetria::Automatico,
+            fatia_da_ciclica: FATIA_INICIAL_DA_CICLICA,
+        })
     }
 
     /// Parte de um fechamento existente (Modo A do §6).
@@ -675,6 +752,7 @@ impl MotorWeb {
     /// partida usa, e a partir daí acompanha o número cair.
     pub fn preparar(&mut self) -> String {
         let mut coletor = ColetorDeRecordes::default();
+        self.armar_a_ciclica();
 
         // Teto igual à contagem atual: a construção inicial roda, o laço de
         // busca não chega a dar uma volta.
@@ -737,8 +815,133 @@ impl MotorWeb {
             parar_em_optimalidade: false,
         };
 
-        self.interno.executar(&self.controle, &condicoes, &mut coletor);
+        if !matches!(self.simetria, ModoSimetria::SoSimetrica) {
+            self.interno.executar(&self.controle, &condicoes, &mut coletor);
+        }
+        self.rodar_a_ciclica(max_ms);
         self.montar_estado(coletor.recordes)
+    }
+
+    /// Monta a trilha simétrica, se a configuração comportar uma.
+    ///
+    /// Custa memória — a tabela que liga órbitas de cartela a órbitas de sorteio
+    /// chega a milhões de ligações —, e por isso a instância se recusa a nascer
+    /// acima do teto. Falhar aqui não é erro: é o motor seguindo só com a busca
+    /// livre, que é o que ele sempre fez.
+    fn armar_a_ciclica(&mut self) {
+        if self.ciclica.is_some() || matches!(self.simetria, ModoSimetria::SoLivre) {
+            return;
+        }
+        let problema = self.interno.problema();
+        let regra = problema.regra();
+        // A troca por complementos só vale quando a cartela precisa **conter** o
+        // sorteio inteiro. Com garantia parcial o problema é outro.
+        if regra.alvo != regra.intersecao {
+            return;
+        }
+        let v = problema.tamanho_pool();
+        let k = problema.tamanho_cartela();
+        let t = regra.alvo;
+        if k > v || t > v || k < t || v == k {
+            return;
+        }
+        let Some(inst) = InstanciaCiclica::montar(v, v - k, v - t, Some(&self.controle)) else {
+            return;
+        };
+        self.ciclica =
+            Some(BuscaCiclica::nova(inst, regra.premiadas.max(1) as u32, self.configuracao.semente));
+    }
+
+    /// Dá à trilha simétrica a fatia do lote que lhe cabe, e entrega o recorde
+    /// dela à busca livre quando for melhor.
+    ///
+    /// O sentido da entrega é sempre esse, e nunca o contrário. Foi medindo o
+    /// banco que ficou claro por quê: a busca livre move uma cartela por vez, e
+    /// uma cartela mexida quebra a invariância para sempre. Deixá-la escrever
+    /// por cima do estado da trilha simétrica seria destruir justamente o que
+    /// essa trilha tem de diferente.
+    fn rodar_a_ciclica(&mut self, max_ms: u32) {
+        if matches!(self.simetria, ModoSimetria::SoLivre) {
+            return;
+        }
+        let fatia = if matches!(self.simetria, ModoSimetria::SoSimetrica) {
+            100
+        } else {
+            self.fatia_da_ciclica
+        };
+        let Some(ciclica) = self.ciclica.as_mut() else {
+            return;
+        };
+
+        let orcamento = std::time::Duration::from_millis(
+            u64::from(max_ms.max(1)).saturating_mul(u64::from(fatia)) / 100,
+        );
+        if orcamento.is_zero() {
+            return;
+        }
+        let ate = Instant::now() + orcamento;
+        while Instant::now() < ate && !self.controle.foi_solicitada_parada() {
+            ciclica.avancar(20);
+        }
+
+        let dela = ciclica.melhor_em_cartelas();
+        let da_livre = self.interno.melhor_avaliacao().cartelas as u64;
+
+        if dela > 0 && dela < da_livre {
+            let cartelas = ciclica.melhor_solucao();
+            let iteracoes = self.interno.estatisticas().iteracoes;
+            self.interno.retomar_de(&cartelas, iteracoes);
+        }
+
+        // A fatia só é reavaliada depois da carência: em `20/17` a trilha leva
+        // 30 mil iterações para chegar às 240 do banco, e julgá-la antes disso
+        // seria julgar pela largada.
+        if matches!(self.simetria, ModoSimetria::Automatico)
+            && ciclica.iteracoes() >= CARENCIA_DA_CICLICA
+        {
+            self.fatia_da_ciclica = if dela <= self.interno.melhor_avaliacao().cartelas as u64 {
+                FATIA_INICIAL_DA_CICLICA
+            } else {
+                FATIA_MINIMA_DA_CICLICA
+            };
+        }
+    }
+
+    /// Troca o modo da simetria com o motor rodando.
+    ///
+    /// Aceita `"automatico"`, `"livre"` e `"simetrica"`; qualquer outra coisa
+    /// vira automático, porque um modo ilegível não pode parar a busca.
+    pub fn ajustar_simetria(&mut self, modo: &str) {
+        self.simetria = ModoSimetria::do_texto(modo);
+        if matches!(self.simetria, ModoSimetria::SoLivre) {
+            // Soltar a instância devolve os megabytes que ela ocupa. Se o
+            // usuário voltar atrás, ela é remontada — custa segundos, e não
+            // vale carregá-la parada durante uma busca longa.
+            self.ciclica = None;
+        } else {
+            self.armar_a_ciclica();
+        }
+    }
+
+    pub fn modo_da_simetria(&self) -> String {
+        self.simetria.texto().to_string()
+    }
+
+    /// Quem está com o recorde. Sem trilha simétrica é sempre a livre.
+    fn trilha_do_recorde(&self) -> String {
+        let Some(ciclica) = self.ciclica.as_ref() else {
+            return "livre".to_string();
+        };
+        let dela = ciclica.melhor_em_cartelas();
+        let da_livre = self.interno.melhor_avaliacao().cartelas as u64;
+        if dela == 0 || dela > da_livre {
+            "livre"
+        } else if dela < da_livre {
+            "simétrica"
+        } else {
+            "empate"
+        }
+        .to_string()
     }
 
     /// Troca o gatilho da diversificação com o motor rodando.
@@ -1066,6 +1269,9 @@ impl MotorWeb {
             iteracoes_sem_recorde: self.interno.iteracoes_sem_recorde(),
             origem_do_inicio: self.interno.origem_do_inicio().to_string(),
             sessao_retomada: self.interno.sessao_retomada(),
+            ciclica_cartelas: self.ciclica.as_ref().map(|c| c.melhor_em_cartelas()),
+            ciclica_iteracoes: self.ciclica.as_ref().map_or(0, |c| c.iteracoes()),
+            trilha_do_recorde: self.trilha_do_recorde(),
             cartelas_trazidas: self.interno.cartelas_trazidas(),
 
             novos_recordes,
@@ -1091,6 +1297,80 @@ mod testes {
             semente: 42,
         })
         .unwrap()
+    }
+
+    #[test]
+    fn a_trilha_simetrica_arma_e_nunca_piora_o_recorde() {
+        // 20 dezenas com jogos de 17, sorteio de 15: a configuração cujo
+        // fechamento no banco é cíclico e tem 240 cartelas.
+        let mut motor = MotorWeb::construir(&configuracao(20, 17, 15)).unwrap();
+        motor.preparar();
+
+        let armou = estado_de(&motor.avancar(50, 400));
+        assert!(!armou["ciclica_cartelas"].is_null(), "a trilha simétrica não armou");
+
+        let mut anterior = armou["melhor_cartelas"].as_u64().unwrap();
+        for _ in 0..6 {
+            let e = estado_de(&motor.avancar(50, 400));
+            let agora = e["melhor_cartelas"].as_u64().unwrap();
+            assert!(agora <= anterior, "o recorde subiu de {anterior} para {agora}");
+            anterior = agora;
+            let trilha = e["trilha_do_recorde"].as_str().unwrap();
+            assert!(
+                ["livre", "simétrica", "empate"].contains(&trilha),
+                "trilha desconhecida: {trilha}"
+            );
+        }
+    }
+
+    #[test]
+    fn desligar_a_simetria_solta_a_instancia_e_religar_a_traz_de_volta() {
+        let mut motor = MotorWeb::construir(&configuracao(20, 17, 15)).unwrap();
+        motor.preparar();
+        motor.avancar(20, 200);
+        assert_eq!(motor.modo_da_simetria(), "automatico");
+
+        motor.ajustar_simetria("livre");
+        let e = estado_de(&motor.avancar(20, 200));
+        assert_eq!(motor.modo_da_simetria(), "livre");
+        assert!(e["ciclica_cartelas"].is_null(), "desligada, ela não devia aparecer no estado");
+        assert_eq!(e["trilha_do_recorde"].as_str().unwrap(), "livre");
+
+        motor.ajustar_simetria("automatico");
+        let e = estado_de(&motor.avancar(20, 200));
+        assert!(!e["ciclica_cartelas"].is_null(), "religada, ela devia voltar");
+    }
+
+    #[test]
+    fn um_modo_ilegivel_nao_para_a_busca() {
+        let mut motor = MotorWeb::construir(&configuracao(20, 17, 15)).unwrap();
+        motor.preparar();
+        motor.ajustar_simetria("jabuticaba");
+        assert_eq!(motor.modo_da_simetria(), "automatico");
+        let e = estado_de(&motor.avancar(20, 200));
+        assert!(e["iteracoes"].as_u64().unwrap() > 0 || e["ciclica_iteracoes"].as_u64().unwrap() > 0);
+    }
+
+    #[test]
+    fn onde_a_simetria_nao_se_aplica_a_trilha_simplesmente_nao_nasce() {
+        // Garantia parcial: a cartela atende o alvo sem precisar contê-lo, e a
+        // troca por complementos deixa de valer.
+        let configuracao = serde_json::to_string(&ConfiguracaoEntrada {
+            universo: 20,
+            pool: (1..=20).collect(),
+            cartela: 17,
+            alvo: 15,
+            intersecao: 14,
+            premiadas: 1,
+            orcamento: None,
+            semente: 42,
+        })
+        .unwrap();
+        let mut motor = MotorWeb::construir(&configuracao).unwrap();
+        motor.preparar();
+        let e = estado_de(&motor.avancar(20, 200));
+        assert!(e["ciclica_cartelas"].is_null(), "garantia parcial não comporta trilha simétrica");
+        assert_eq!(e["trilha_do_recorde"].as_str().unwrap(), "livre");
     }
 
     /// Uma configuração em que a busca tem trabalho de verdade.

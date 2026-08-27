@@ -357,6 +357,7 @@ dependencies = [
  "serde",
  "serde_json",
  "wasm-bindgen",
+ "web-time",
 ]
 
 [[package]]

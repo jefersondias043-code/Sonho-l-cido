@@ -884,7 +884,7 @@ try {
   await pagina.click('#modo-manual');
   const quantos = await pagina.locator('#ajuste-fino .ajuste').count();
   marcar(
-    quantos >= 14,
+    quantos >= 15,
     'ligar o modo manual revela todos os controles',
     `${quantos} controles`
   );
@@ -913,6 +913,40 @@ try {
     (await pagina.locator('#aj-reinicio_da_diversificacao').inputValue()) === 'ruina',
     'as escolhas por lista funcionam junto dos seletores'
   );
+
+  // A trilha simétrica: ela move órbitas em vez de cartelas, e por isso não
+  // passa pelo mesmo caminho dos outros treze — liga e desliga uma estrutura de
+  // megabytes do lado do Rust. O que este teste prova é que o caminho existe e
+  // que o mostrador acompanha.
+  marcar(
+    (await pagina.locator('#aj-simetria').count()) === 1,
+    'o painel manual traz o controle da trilha simétrica'
+  );
+  const trilhaAntes = await texto('#trilha');
+  marcar(
+    ['livre', 'simétrica', 'empate'].includes(trilhaAntes),
+    'e o painel diz qual das duas trilhas está com o recorde',
+    trilhaAntes
+  );
+
+  await pagina.selectOption('#aj-simetria', 'livre');
+  // Esperar o próprio valor, e não as iterações subirem: um lote que já estava
+  // em voo quando a mensagem chegou pinta o painel com o estado antigo, e
+  // esperar por ele daria o teste por satisfeito cedo demais.
+  let desligou = true;
+  await pagina
+    .waitForFunction(() => document.getElementById('trilha').textContent === 'livre', null, {
+      timeout: 30000,
+    })
+    .catch(() => {
+      desligou = false;
+    });
+  marcar(
+    desligou,
+    'desligar a simetria devolve o recorde à busca livre, e ela segue rodando',
+    await texto('#trilha')
+  );
+  await pagina.selectOption('#aj-simetria', 'automatico');
 
   const antesDoManual = await numero('#melhor-cartelas');
   const iteracoesNoManual = await numero('#iteracoes');
