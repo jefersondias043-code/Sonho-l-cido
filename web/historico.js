@@ -229,6 +229,15 @@ export function criar(configuracao, dados = {}) {
     atual: dados.atual ?? [],
     motor: dados.motor ?? {},
     elites: dados.elites ?? [],
+    // Quando esta sessão é um **bloco** de um fechamento dividido, e não um
+    // fechamento inteiro: `{ numero, de, cobertura, origem }`.
+    //
+    // Fica na sessão e não numa lista à parte de propósito. Um bloco é um
+    // fechamento como qualquer outro — dá para conferir, simular, copiar,
+    // dividir de novo —, e guardá-lo em outro lugar obrigaria cada ferramenta a
+    // consultar duas fontes e a tratar as duas igual. O que ele precisa é de
+    // **rótulo**, para não se confundir com o fechamento inteiro de onde saiu.
+    bloco: dados.bloco ?? null,
     // Se o motor estava rodando quando esta linha foi gravada.
     //
     // Fica gravado, e não só na memória da página, porque é isso que permite

@@ -851,7 +851,8 @@ details.cartao[open] > summary::after {
  * é "qual era mesmo aquele?", então o número de cartelas vem grande e primeiro;
  * a configuração e a data ficam abaixo, para distinguir trabalhos parecidos.
  */
-.sessao {
+.sessao,
+.bloco {
   background: var(--fundo-cartao);
   border: 1px solid var(--borda);
   border-radius: var(--raio);
@@ -864,26 +865,30 @@ details.cartao[open] > summary::after {
   background: linear-gradient(155deg, #1d2745 0%, #151b31 100%);
 }
 
-.sessao-topo {
+.sessao-topo,
+.bloco-topo {
   display: flex;
   align-items: baseline;
   gap: 10px;
   flex-wrap: wrap;
 }
 
-.sessao-quantia {
+.sessao-quantia,
+.bloco-quantia {
   font-size: 30px;
   font-weight: 700;
   line-height: 1;
   font-variant-numeric: tabular-nums;
 }
 
-.sessao-unidade {
+.sessao-unidade,
+.bloco-unidade {
   color: var(--texto-fraco);
   font-size: 13px;
 }
 
-.sessao-marca {
+.sessao-marca,
+.bloco-marca {
   margin-left: auto;
   font-size: 11.5px;
   font-weight: 600;
@@ -897,20 +902,23 @@ details.cartao[open] > summary::after {
 .sessao-marca.otima { border-color: var(--verde); color: var(--verde); }
 .sessao-marca.viva { border-color: var(--acento); color: var(--acento); }
 
-.sessao-config {
+.sessao-config,
+.bloco-config {
   color: var(--texto-fraco);
   font-size: 12.5px;
   margin-top: 8px;
   line-height: 1.4;
 }
 
-.sessao-acoes {
+.sessao-acoes,
+.bloco-acoes {
   display: flex;
   gap: 8px;
   margin-top: 12px;
 }
 
-.sessao-acoes button {
+.sessao-acoes button,
+.bloco-acoes button {
   flex: 1;
   min-height: 44px;
   border-radius: 10px;

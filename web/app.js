@@ -3071,7 +3071,12 @@ function cartaoDaSessao(sessao) {
     ? milhares(Number(avaliacao.cartelas))
     : inteiro(sessao.melhor.length);
 
-  const marca = avaliacao.otimo
+  // Um bloco não tem ótimo nem mínimo a exibir: ele é um pedaço, e o que
+  // importa dele é de qual fechamento saiu e quanto cobre sozinho.
+  const marca = sessao.bloco
+    ? `<span class="sessao-marca">bloco ${escapar(String(sessao.bloco.numero))} de ` +
+      `${escapar(String(sessao.bloco.de))}</span>`
+    : avaliacao.otimo
     ? '<span class="sessao-marca otima">★ ótimo provado</span>'
     : emAndamento
       ? '<span class="sessao-marca viva">em andamento</span>'
@@ -3081,6 +3086,14 @@ function cartaoDaSessao(sessao) {
 
   const cobertura =
     typeof avaliacao.cobertura === 'number' ? ` · cobertura ${porcento(avaliacao.cobertura)}` : '';
+
+  // Um bloco não tem iterações — ele não foi buscado, foi recortado. Dizer
+  // "0 iterações" seria dizer que a busca não fez nada.
+  const linhaDoMeio = sessao.bloco
+    ? `${escapar(historico.quando(sessao.atualizadaEm))} · de um fechamento de ` +
+      `${milhares(Number(sessao.bloco.origem) || 0)} cartelas${cobertura}`
+    : `${escapar(historico.quando(sessao.atualizadaEm))} · ` +
+      `${milhares(Number(sessao.iteracoes) || 0)} iterações${cobertura}`;
 
   const id = escapar(sessao.id);
 
@@ -3093,11 +3106,14 @@ function cartaoDaSessao(sessao) {
       </div>
       <div class="sessao-config">
         ${escapar(historico.descrever(sessao.configuracao))}<br>
-        ${escapar(historico.quando(sessao.atualizadaEm))} ·
-        ${milhares(Number(sessao.iteracoes) || 0)} iterações${cobertura}
+        ${linhaDoMeio}
       </div>
       <div class="sessao-acoes">
-        <button class="continuar" data-acao="continuar" data-id="${id}">Continuar</button>
+        ${
+          sessao.bloco
+            ? ''
+            : `<button class="continuar" data-acao="continuar" data-id="${id}">Continuar</button>`
+        }
         <button data-acao="ver" data-id="${id}">Ver cartelas</button>
         <button data-acao="checar" data-id="${id}">Checar</button>
         <button class="excluir" data-acao="excluir" data-id="${id}"
@@ -3227,6 +3243,20 @@ function configuracaoDaLotinha(pool, jogo) {
 function chkFontes() {
   const fontes = [];
 
+  // O bloco que a Divisão mandou conferir. Vem primeiro porque é o que a pessoa
+  // acabou de pedir, e não é salvo: quem quiser guardar tem o botão de salvar
+  // ali mesmo. Conferir e guardar são decisões diferentes.
+  if (divParaChecar?.cartelas?.length) {
+    fontes.push({
+      chave: 'bloco',
+      rotulo: `${divParaChecar.descricao} · ${milhares(divParaChecar.cartelas.length)} cartelas`,
+      cartelas: divParaChecar.cartelas,
+      criadaEm: null,
+      descricao: divParaChecar.descricao,
+      configuracao: divParaChecar.configuracao,
+    });
+  }
+
   if (lotFechamento?.length) {
     fontes.push({
       chave: 'lotinha',
@@ -3255,9 +3285,11 @@ function chkFontes() {
     if (!sessao.melhor?.length) continue;
     fontes.push({
       chave: `historico:${sessao.id}`,
-      rotulo: `${historico.descrever(sessao.configuracao)} · ${milhares(
-        sessao.melhor.length
-      )} cartelas · ${historico.quando(sessao.criadaEm)}`,
+      rotulo:
+        (sessao.bloco ? `Bloco ${sessao.bloco.numero}/${sessao.bloco.de} · ` : '') +
+        `${historico.descrever(sessao.configuracao)} · ${milhares(
+          sessao.melhor.length
+        )} cartelas · ${historico.quando(sessao.criadaEm)}`,
       cartelas: sessao.melhor,
       criadaEm: sessao.criadaEm,
       descricao: historico.descrever(sessao.configuracao),
@@ -3697,6 +3729,10 @@ let divUltima = null;
 let divBlocoAberto = null;
 let divPreferida = null;
 let divOcupado = false;
+/** O bloco que a Divisão mandou conferir, enquanto ele não é salvo. */
+let divParaChecar = null;
+/** Ids das sessões criadas ao salvar, para o botão saber que já foi. */
+const divSalvos = new Map();
 
 function abrirDivisao(chave) {
   divPreferida = chave;
@@ -3733,9 +3769,24 @@ function divPintarSeletor(preferida = null) {
 
 function divSelecionar(chave) {
   const fontes = chkFontes().filter((f) => f.configuracao && f.cartelas.length >= 2);
+  const anterior = divFonte?.chave ?? null;
   divFonte = chave ? fontes.find((f) => f.chave === chave) ?? null : null;
-  divUltima = null;
-  divBlocoAberto = null;
+
+  // Só descarta a divisão quando o fechamento é outro. Reescolher o mesmo —
+  // o que acontece toda vez que a lista é repintada — não pode custar o
+  // trabalho que a pessoa já mandou fazer.
+  const mudou = (divFonte?.chave ?? null) !== anterior;
+  if (mudou) {
+    divUltima = null;
+    divBlocoAberto = null;
+    divSalvos.clear();
+  }
+  if (divUltima) {
+    divPintarFicha();
+    divPintarResultado();
+    $('div-dividir').disabled = !divFonte || divOcupado;
+    return;
+  }
 
   $('div-resumo-cartao').hidden = true;
   $('div-blocos-cartao').hidden = true;
@@ -3795,6 +3846,9 @@ async function divDividir() {
     });
     divUltima = JSON.parse(bruto);
     divBlocoAberto = null;
+    // Os ids guardados eram da divisão anterior: os blocos são outros agora, e
+    // marcar o bloco 2 novo como salvo por causa do bloco 2 velho seria mentira.
+    divSalvos.clear();
     divPintarResultado();
   } catch (erro) {
     $('div-erro').hidden = false;
@@ -3878,14 +3932,81 @@ function divPintarResultado() {
     `prêmios se somam. Dividir compra menos, não compra melhor.</em>`;
 
   $('div-blocos-cartao').hidden = false;
-  $('div-blocos').innerHTML = d.blocos
-    .map(
-      (b, i) =>
-        `<button class="secundario bloco-escolha" data-bloco="${i}">Bloco ${i + 1} · ` +
-        `${milhares(b.cartelas.length)} cartelas · cobre ${porcento(b.cobertura)}</button>`
-    )
-    .join('');
+  $('div-blocos').innerHTML = d.blocos.map((b, i) => divCartaoDoBloco(b, i)).join('');
   divPintarCartelas();
+}
+
+/**
+ * Um bloco, com tudo que dá para fazer com ele.
+ *
+ * As quatro ações são as mesmas que um fechamento inteiro tem, e de propósito:
+ * um bloco **é** um fechamento — menor e sem garantia, mas conferível,
+ * simulável, copiável e guardável como qualquer outro. Duplicar a simulação
+ * aqui dentro daria menos do que mandar para a Checar, que já tem as faixas, o
+ * sorteio simulado e a estatística de mil sorteios.
+ */
+function divCartaoDoBloco(bloco, i) {
+  const salvo = divSalvos.has(i);
+  return `
+    <div class="bloco">
+      <div class="bloco-topo">
+        <span class="bloco-quantia">${milhares(bloco.cartelas.length)}</span>
+        <span class="bloco-unidade">cartelas</span>
+        <span class="bloco-marca">bloco ${i + 1} de ${divUltima.blocos.length}</span>
+      </div>
+      <div class="bloco-config">
+        cobre <b>${porcento(bloco.cobertura)}</b> dos sorteios ·
+        custa ${porcento(bloco.cartelas.length / divUltima.cartelas_do_inteiro)} do inteiro
+      </div>
+      <div class="bloco-acoes">
+        <button data-bloco-acao="ver" data-bloco="${i}">${
+          divBlocoAberto === i ? 'Fechar' : 'Ver cartelas'
+        }</button>
+        <button data-bloco-acao="checar" data-bloco="${i}">Conferir e simular</button>
+        <button data-bloco-acao="copiar" data-bloco="${i}">Copiar</button>
+        ${navigator.share ? `<button data-bloco-acao="compartilhar" data-bloco="${i}">Compartilhar</button>` : ''}
+        <button data-bloco-acao="salvar" data-bloco="${i}"${salvo ? ' disabled' : ''}>${
+          salvo ? 'Salvo ✓' : 'Salvar'
+        }</button>
+      </div>
+    </div>`;
+}
+
+/** O bloco como texto, com um cabeçalho que diz o que ele é e o que não é. */
+function divTextoDoBloco(i) {
+  const bloco = divUltima.blocos[i];
+  const total = divUltima.blocos.length;
+  const corpo = bloco.cartelas
+    .map((cartela) => cartela.map((n) => String(n).padStart(2, '0')).join(' '))
+    .join('\n');
+  return (
+    `# Sonho Lúcido — bloco ${i + 1} de ${total}\n` +
+    `# ${divFonte?.descricao ?? 'fechamento dividido'}\n` +
+    `# ${bloco.cartelas.length} das ${divUltima.cartelas_do_inteiro} cartelas do fechamento inteiro\n` +
+    `# cobre ${porcento(bloco.cobertura)} dos sorteios possíveis — o inteiro cobre 100%\n` +
+    `${corpo}\n`
+  );
+}
+
+/** Guarda o bloco no histórico, de onde as outras ferramentas o enxergam. */
+function divSalvarBloco(i) {
+  const bloco = divUltima.blocos[i];
+  const sessao = historico.criar(divFonte.configuracao, {
+    melhor: bloco.cartelas,
+    avaliacao: { cartelas: bloco.cartelas.length, cobertura: bloco.cobertura },
+    bloco: {
+      numero: i + 1,
+      de: divUltima.blocos.length,
+      cobertura: bloco.cobertura,
+      origem: divUltima.cartelas_do_inteiro,
+    },
+  });
+  divSalvos.set(i, sessao.id);
+  atualizarAtalhoDoHistorico(historico.quantidade());
+  // A tela do histórico é desenhada uma vez e fica; sem isto o bloco recém
+  // salvo só apareceria depois de alguma outra coisa mandar repintar.
+  pintarHistorico();
+  return sessao;
 }
 
 function divPintarCartelas() {
@@ -3910,20 +4031,105 @@ function divPintarCartelas() {
   destino.querySelectorAll('.cartelas').forEach(ajustarReservaDasLevas);
 }
 
+let divChavesPintadas = null;
+
+/**
+ * Repinta a lista de fechamentos, se ela mudou.
+ *
+ * Repintar sem necessidade apagaria a divisão que a pessoa acabou de fazer — e
+ * apagaria em dois momentos em que ela certamente não quer: ao voltar da Checar,
+ * onde acabou de conferir um bloco, e ao salvar um bloco, que muda a lista
+ * justamente porque a divisão deu certo.
+ */
 function divAtualizarFontes() {
-  divPintarSeletor(divPreferida);
+  const chaves = chkFontes()
+    .filter((f) => f.configuracao && f.cartelas.length >= 2)
+    .map((f) => `${f.chave}#${f.cartelas.length}`)
+    .join('|');
+  const pedida = divPreferida;
   divPreferida = null;
+
+  if (chaves === divChavesPintadas && !pedida) return;
+  divChavesPintadas = chaves;
+  divPintarSeletor(pedida);
 }
 
 ligar('div-fechamento', 'change', (e) => divSelecionar(e.target.value));
 ligar('div-partes', 'input', divPintarFicha);
 ligar('div-dividir', 'click', divDividir);
-ligar('div-blocos', 'click', (e) => {
-  const alvo = e.target.closest('.bloco-escolha');
-  if (!alvo) return;
+ligar('div-blocos', 'click', async (e) => {
+  const alvo = e.target.closest('[data-bloco-acao]');
+  if (!alvo || !divUltima) return;
   const i = Number(alvo.dataset.bloco);
-  divBlocoAberto = divBlocoAberto === i ? null : i;
-  divPintarCartelas();
+  const bloco = divUltima.blocos[i];
+  if (!bloco) return;
+
+  switch (alvo.dataset.blocoAcao) {
+    case 'ver':
+      divBlocoAberto = divBlocoAberto === i ? null : i;
+      divPintarResultado();
+      break;
+
+    case 'checar':
+      // Sem salvar: conferir é olhar, e nem tudo que se olha se guarda. A Checar
+      // recebe o bloco como fonte de passagem, e traz junto o sorteio simulado,
+      // as faixas e a estatística de mil sorteios que ela já tem.
+      divParaChecar = {
+        cartelas: bloco.cartelas,
+        configuracao: divFonte.configuracao,
+        descricao: `Bloco ${i + 1} de ${divUltima.blocos.length} · ${divFonte.descricao}`,
+      };
+      abrirChecagem('bloco');
+      break;
+
+    case 'copiar':
+      try {
+        await navigator.clipboard.writeText(divTextoDoBloco(i));
+        avisar(`Bloco ${i + 1} copiado — ${milhares(bloco.cartelas.length)} cartelas.`, true);
+      } catch {
+        avisar('O navegador não deixou copiar. Abra o bloco e segure o dedo sobre as cartelas.');
+      }
+      break;
+
+    case 'compartilhar':
+      try {
+        await navigator.share({
+          title: `Bloco ${i + 1} de ${divUltima.blocos.length} — Sonho Lúcido`,
+          text: divTextoDoBloco(i),
+        });
+      } catch (erro) {
+        // Cancelar a folha de compartilhamento não é erro, e avisar seria ruído.
+        if (erro?.name !== 'AbortError') {
+          avisar('Não deu para compartilhar. O botão de copiar continua valendo.');
+        }
+      }
+      break;
+
+    case 'salvar': {
+      if (divSalvos.has(i)) return;
+      divSalvarBloco(i);
+      divPintarResultado();
+      avisar(`Bloco ${i + 1} salvo no histórico.`, true);
+      break;
+    }
+  }
+});
+
+ligar('div-salvar-todos', 'click', () => {
+  if (!divUltima) return;
+  let quantos = 0;
+  for (let i = 0; i < divUltima.blocos.length; i++) {
+    if (divSalvos.has(i)) continue;
+    divSalvarBloco(i);
+    quantos++;
+  }
+  divPintarResultado();
+  avisar(
+    quantos
+      ? `${quantos} bloco${quantos > 1 ? 's' : ''} salvo${quantos > 1 ? 's' : ''} no histórico.`
+      : 'Todos os blocos já estavam salvos.',
+    true
+  );
 });
 
 /**

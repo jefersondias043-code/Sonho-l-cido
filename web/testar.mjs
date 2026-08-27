@@ -1044,13 +1044,118 @@ try {
     aviso.replace(/\s+/g, ' ').slice(0, 90)
   );
 
-  await pagina.click('#div-blocos .bloco-escolha');
+  await pagina.click('#div-blocos [data-bloco-acao="ver"][data-bloco="0"]');
   await pagina.waitForSelector('#div-cartelas .cartela', { timeout: 10000 });
   const mostradas = await pagina.locator('#div-cartelas .cartela').count();
   marcar(
     mostradas === Number(blocos[0][1].replace(/\D/g, '')),
     'e escolher um bloco mostra exatamente as cartelas dele',
     `${mostradas} cartelas`
+  );
+
+  // ─── o que dá para fazer com um bloco ───
+  //
+  // Um bloco é um fechamento como qualquer outro: conferível, simulável,
+  // copiável, guardável. O que se prova aqui é que ele chega inteiro às outras
+  // ferramentas — sem isso, "dividir" pararia no meio do caminho.
+  const cartelasDoBloco = await pagina.evaluate(() =>
+    [...document.querySelectorAll('#div-cartelas .cartela')].map((c) =>
+      c.lastElementChild.textContent.trim()
+    )
+  );
+
+  await pagina.click('#div-blocos [data-bloco-acao="checar"][data-bloco="0"]');
+  await pagina.waitForSelector('#checar.ativo', { timeout: 10000 });
+  const rotuloNaChecar = await pagina.locator('#chk-fechamento option:checked').innerText();
+  marcar(
+    /Bloco 1 de 4/.test(rotuloNaChecar),
+    'mandar um bloco para a Checar leva o bloco, e não o fechamento inteiro',
+    rotuloNaChecar
+  );
+
+  // E a simulação da Checar funciona sobre ele — que é o pedido original: poder
+  // simular sorteios sobre o bloco escolhido.
+  await pagina.click('#chk-sortear');
+  await pagina.waitForSelector('#chk-resumo-cartao:not([hidden])', { timeout: 20000 });
+  marcar(
+    (await pagina.locator('#chk-resumo-cartao').isVisible()) &&
+      /1[45]|Nenhuma|acertos/i.test(await texto('#chk-resumo-cartao')),
+    'e o sorteio simulado roda sobre o bloco, com o mesmo painel de sempre',
+    (await texto('#chk-resumo-cartao')).replace(/\s+/g, ' ').slice(0, 60)
+  );
+
+  await pagina.click('#aba-dividir');
+  await pagina.waitForSelector('#dividir.ativo', { timeout: 10000 });
+
+  // Salvar: o bloco tem de aparecer no histórico rotulado como bloco, e não
+  // se confundir com o fechamento de onde saiu.
+  const antesDeSalvar = await pagina.evaluate(() =>
+    JSON.parse(localStorage.getItem('sonho-lucido:historico') ?? '[]').length
+  );
+  await pagina.click('#div-blocos [data-bloco-acao="salvar"][data-bloco="1"]');
+  await pagina.waitForFunction(
+    (antes) =>
+      JSON.parse(localStorage.getItem('sonho-lucido:historico') ?? '[]').length > antes,
+    antesDeSalvar,
+    { timeout: 10000 }
+  );
+  const salvo = await pagina.evaluate(
+    () => JSON.parse(localStorage.getItem('sonho-lucido:historico') ?? '[]')[0]
+  );
+  marcar(
+    salvo?.bloco?.numero === 2 && salvo?.bloco?.de === 4 && salvo.melhor.length === 60,
+    'salvar um bloco guarda as cartelas dele, rotuladas como bloco 2 de 4',
+    `bloco ${salvo?.bloco?.numero}/${salvo?.bloco?.de} · ${salvo?.melhor?.length} cartelas`
+  );
+  marcar(
+    (await texto('#div-blocos')).includes('Salvo ✓'),
+    'e o botão passa a dizer que já foi'
+  );
+
+  await pagina.click('#div-salvar-todos');
+  await pagina.waitForFunction(
+    () => !document.querySelector('#div-blocos [data-bloco-acao="salvar"]:not([disabled])'),
+    undefined,
+    { timeout: 10000 }
+  );
+  const depoisDeTodos = await pagina.evaluate(() =>
+    JSON.parse(localStorage.getItem('sonho-lucido:historico') ?? '[]')
+  );
+  marcar(
+    depoisDeTodos.filter((sessao) => sessao.bloco).length === 4,
+    'e "salvar todos" completa os quatro sem duplicar o que já estava salvo',
+    `${depoisDeTodos.filter((s) => s.bloco).length} blocos no histórico`
+  );
+
+  // O histórico distingue um bloco de um fechamento inteiro — sem isso a lista
+  // viraria uma pilha de fechamentos parecidos sem como saber qual é qual.
+  await pagina.click('#aba-historico');
+  await pagina.waitForSelector('#historico.ativo', { timeout: 10000 });
+  const textoDoHistorico = await texto('#lista-historico');
+  marcar(
+    /bloco 1 de 4/i.test(textoDoHistorico) && /de um fechamento de 240 cartelas/i.test(textoDoHistorico),
+    'e o histórico mostra de qual fechamento cada bloco saiu',
+    textoDoHistorico.replace(/\s+/g, ' ').slice(0, 80)
+  );
+
+  // A cópia: o mesmo conteúdo que a tela mostra, com um cabeçalho que diz o que
+  // o bloco é — e, principalmente, o que ele não é.
+  await pagina.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+  await pagina.click('#aba-dividir');
+  await pagina.waitForSelector('#dividir.ativo', { timeout: 10000 });
+  await pagina.click('#div-blocos [data-bloco-acao="copiar"][data-bloco="0"]');
+  const copiado = await pagina.evaluate(() => navigator.clipboard.readText());
+  const linhasCopiadas = copiado
+    .split('\n')
+    .filter((l) => l && !l.startsWith('#'))
+    .map((l) => l.trim());
+  marcar(
+    linhasCopiadas.length === 60 &&
+      linhasCopiadas.every((l, i) => l === cartelasDoBloco[i]) &&
+      /cobre .* dos sorteios/.test(copiado) &&
+      /o inteiro cobre 100%/.test(copiado),
+    'copiar leva as cartelas do bloco e o aviso de que ele não é o inteiro',
+    copiado.split('\n')[3] ?? ''
   );
 
   marcar(errosDeConsole.length === 0, 'nenhum erro no console', errosDeConsole.join(' | ').slice(0, 120));
