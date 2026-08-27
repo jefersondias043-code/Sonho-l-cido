@@ -407,6 +407,7 @@ function mostrarPainel(nome) {
   // histórico. Atualizar ao abrir a aba é o único momento em que isso importa,
   // e evita espalhar chamadas por toda parte.
   if (nome === 'checar') chkAtualizarFontes();
+  if (nome === 'dividir') divAtualizarFontes();
   if (nome === 'historico') mostrarTrabalhoInterrompido();
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
@@ -3202,6 +3203,27 @@ let chkSimulando = false;
  * olhando; depois o resultado da busca em curso; depois o histórico, do mais
  * recente para o mais antigo.
  */
+/**
+ * A configuração do fechamento que a Lotinha carregou.
+ *
+ * Ela não existia porque nenhuma tela precisava dela: a Lotinha entrega
+ * cartelas prontas e a conferência trabalha só com elas. A divisão precisa —
+ * ela monta um motor de cobertura para medir o que cada bloco cobre, e para
+ * isso tem de saber qual é o problema.
+ */
+function configuracaoDaLotinha(pool, jogo) {
+  if (!pool || !jogo) return null;
+  return {
+    universo: 25,
+    pool: Array.from({ length: pool }, (_, i) => i + 1),
+    cartela: jogo,
+    alvo: 15,
+    intersecao: 15,
+    premiadas: 1,
+    semente: 1,
+  };
+}
+
 function chkFontes() {
   const fontes = [];
 
@@ -3212,6 +3234,7 @@ function chkFontes() {
       cartelas: lotFechamento,
       criadaEm: null,
       descricao: `${lotPool} dezenas · jogos de ${lotJogo}`,
+      configuracao: configuracaoDaLotinha(lotPool, lotJogo),
     });
   }
 
@@ -3224,6 +3247,7 @@ function chkFontes() {
       descricao: configuracaoDaBusca
         ? historico.descrever(configuracaoDaBusca)
         : 'resultado em tela',
+      configuracao: configuracaoDaBusca ?? null,
     });
   }
 
@@ -3237,6 +3261,7 @@ function chkFontes() {
       cartelas: sessao.melhor,
       criadaEm: sessao.criadaEm,
       descricao: historico.descrever(sessao.configuracao),
+      configuracao: sessao.configuracao ?? null,
     });
   }
 
@@ -3647,6 +3672,259 @@ function abrirChecagem(chave) {
   chkPreferida = chave;
   mostrarPainel('checar');
 }
+
+/* ─────────── Dividir fechamento ─────────── */
+
+/*
+ * Trocar garantia por custo, sabendo exatamente quanto.
+ *
+ * A conta que quase todo mundo faz é "dividi em 4, então tenho 1 em 4". Ela
+ * está errada para menos, e por um motivo que só aparece medindo: um fechamento
+ * real cobre cada sorteio várias vezes — de 2,1 vezes em 20/17 a 3,2 em 23/20.
+ * Essa redundância é o que faz um bloco valer mais do que a fração que ele
+ * representa. Medido no banco, dividindo ao meio: 23/18 entrega 90,2% da
+ * cobertura por metade do custo.
+ *
+ * Como o número exato é calculável, a tela mostra o número exato. "Aproximadamente
+ * 1 em 4" seria pessimista e vago ao mesmo tempo.
+ */
+
+/** Quantos blocos o seletor oferece. Acima disto o bloco vira pó. */
+const MAIS_BLOCOS = 20;
+
+let divFonte = null;
+let divUltima = null;
+let divBlocoAberto = null;
+let divPreferida = null;
+let divOcupado = false;
+
+function abrirDivisao(chave) {
+  divPreferida = chave;
+  mostrarPainel('dividir');
+}
+
+function divPintarSeletor(preferida = null) {
+  const seletor = $('div-fechamento');
+  const fontes = chkFontes().filter((f) => f.configuracao && f.cartelas.length >= 2);
+
+  if (!fontes.length) {
+    seletor.innerHTML = '<option value="">nenhum fechamento disponível</option>';
+    seletor.disabled = true;
+    divSelecionar(null);
+    return;
+  }
+
+  seletor.disabled = false;
+  const escolhida =
+    fontes.find((f) => f.chave === preferida)?.chave ??
+    fontes.find((f) => f.chave === divFonte?.chave)?.chave ??
+    fontes[0].chave;
+
+  seletor.innerHTML = fontes
+    .map(
+      (f) =>
+        `<option value="${escapar(f.chave)}"${f.chave === escolhida ? ' selected' : ''}>${escapar(
+          f.rotulo
+        )}</option>`
+    )
+    .join('');
+  divSelecionar(escolhida);
+}
+
+function divSelecionar(chave) {
+  const fontes = chkFontes().filter((f) => f.configuracao && f.cartelas.length >= 2);
+  divFonte = chave ? fontes.find((f) => f.chave === chave) ?? null : null;
+  divUltima = null;
+  divBlocoAberto = null;
+
+  $('div-resumo-cartao').hidden = true;
+  $('div-blocos-cartao').hidden = true;
+  $('div-erro').hidden = true;
+  $('div-andamento').hidden = true;
+  $('div-dividir').disabled = !divFonte || divOcupado;
+
+  const seletor = $('div-partes');
+  const teto = divFonte ? Math.min(MAIS_BLOCOS, divFonte.cartelas.length) : 2;
+  seletor.max = String(Math.max(0, teto - 2));
+  seletor.value = String(Math.min(2, Number(seletor.max)));
+  seletor.disabled = !divFonte;
+  $('div-direita').textContent = `${teto} blocos`;
+
+  divPintarFicha();
+}
+
+/** O número de blocos escolhido. O seletor guarda o índice, não o valor. */
+function divPartes() {
+  return Number($('div-partes').value) + 2;
+}
+
+function divPintarFicha() {
+  const destino = $('div-ficha');
+  if (!divFonte) {
+    destino.innerHTML =
+      '<b>Nenhum fechamento para dividir.</b> <em>Carregue um na tela da ' +
+      'Lotinha, ou rode uma busca.</em>';
+    return;
+  }
+  const partes = divPartes();
+  const porBloco = Math.ceil(divFonte.cartelas.length / partes);
+  destino.innerHTML =
+    `<b>${escapar(divFonte.descricao)}</b> · ${milhares(divFonte.cartelas.length)} cartelas` +
+    `<br><em>Em ${partes} blocos: cerca de ${milhares(porBloco)} cartelas cada.</em>`;
+}
+
+async function divDividir() {
+  if (!divFonte || divOcupado) return;
+  divOcupado = true;
+  $('div-dividir').disabled = true;
+  $('div-erro').hidden = true;
+  $('div-andamento').hidden = false;
+  $('div-andamento').innerHTML =
+    '<b>Repartindo…</b> <em>Cada bloco é montado escolhendo a cartela que mais ' +
+    'acrescenta ao que ele ainda não cobre, e depois a cobertura de cada um é ' +
+    'contada sorteio a sorteio.</em>';
+
+  // Um quadro para a mensagem acima chegar à tela antes do trabalho começar.
+  await new Promise((r) => setTimeout(r, 30));
+
+  try {
+    const bruto = await divPedirAoTrabalhador({
+      configuracao: divFonte.configuracao,
+      cartelas: divFonte.cartelas,
+      partes: divPartes(),
+    });
+    divUltima = JSON.parse(bruto);
+    divBlocoAberto = null;
+    divPintarResultado();
+  } catch (erro) {
+    $('div-erro').hidden = false;
+    $('div-erro').innerHTML = `<b>Não deu para dividir.</b> <em>${escapar(String(erro?.message ?? erro))}</em>`;
+    $('div-resumo-cartao').hidden = true;
+    $('div-blocos-cartao').hidden = true;
+  } finally {
+    divOcupado = false;
+    $('div-andamento').hidden = true;
+    $('div-dividir').disabled = !divFonte;
+  }
+}
+
+/**
+ * Manda o pedido ao trabalhador e espera a resposta.
+ *
+ * Um trabalhador por divisão, encerrado ao fim: ele carrega uma cópia inteira
+ * do WebAssembly, e mantê-lo vivo custaria essa memória durante uma busca que
+ * já tem a sua. Dividir é coisa de vez em quando, não de todo lote.
+ */
+function divPedirAoTrabalhador(pedido) {
+  return new Promise((resolver, recusar) => {
+    let trabalhadorDaDivisao;
+    try {
+      trabalhadorDaDivisao = new Worker('./divisor.js', { type: 'module' });
+    } catch (erro) {
+      recusar(erro);
+      return;
+    }
+    const encerrar = () => trabalhadorDaDivisao.terminate();
+    trabalhadorDaDivisao.onmessage = ({ data }) => {
+      encerrar();
+      if (data?.tipo === 'divisao') resolver(data.saida);
+      else recusar(new Error(data?.erro ?? 'a divisão não respondeu'));
+    };
+    trabalhadorDaDivisao.onerror = (e) => {
+      encerrar();
+      recusar(new Error(e?.message ?? 'o trabalhador da divisão falhou'));
+    };
+    trabalhadorDaDivisao.postMessage({ tipo: 'dividir', pedido });
+  });
+}
+
+function divPintarResultado() {
+  if (!divUltima) return;
+  const d = divUltima;
+  const partes = d.blocos.length;
+  const inteiro = d.cartelas_do_inteiro;
+
+  $('div-resumo-cartao').hidden = false;
+  $('div-resumo').innerHTML = `
+    <table class="faixas">
+      <thead><tr><th>Bloco</th><th>Cartelas</th><th>Custo</th><th>Cobre</th></tr></thead>
+      <tbody>
+        ${d.blocos
+          .map(
+            (b, i) => `<tr>
+              <td>${i + 1}</td>
+              <td>${milhares(b.cartelas.length)}</td>
+              <td>${porcento(b.cartelas.length / inteiro)}</td>
+              <td><b>${porcento(b.cobertura)}</b></td>
+            </tr>`
+          )
+          .join('')}
+        <tr><td><b>inteiro</b></td><td><b>${milhares(inteiro)}</b></td><td><b>100%</b></td>
+            <td><b>100%</b></td></tr>
+      </tbody>
+    </table>`;
+
+  // O aviso é a parte séria desta tela, e tem três frases porque são três
+  // coisas diferentes que a pessoa precisa saber antes de gastar dinheiro.
+  $('div-aviso').innerHTML =
+    `<b>A garantia é do fechamento inteiro.</b> <em>Jogando só um bloco você ` +
+    `paga cerca de ${porcento(1 / partes)} do custo e cobre ` +
+    `${porcento(d.pior_cobertura)} dos sorteios possíveis dentro do seu pool — ` +
+    `bem mais que os ${porcento(d.fracao_ingenua)} que a divisão sugeriria, ` +
+    `porque o fechamento cobre cada sorteio mais de uma vez. Mas deixa de ser ` +
+    `garantia: em ${porcento(1 - d.pior_cobertura)} dos sorteios o bloco ` +
+    `escolhido não terá a cartela premiada. E o retorno esperado por real não ` +
+    `muda — cada cartela tem a mesma chance esteja em que bloco estiver, e ` +
+    `prêmios se somam. Dividir compra menos, não compra melhor.</em>`;
+
+  $('div-blocos-cartao').hidden = false;
+  $('div-blocos').innerHTML = d.blocos
+    .map(
+      (b, i) =>
+        `<button class="secundario bloco-escolha" data-bloco="${i}">Bloco ${i + 1} · ` +
+        `${milhares(b.cartelas.length)} cartelas · cobre ${porcento(b.cobertura)}</button>`
+    )
+    .join('');
+  divPintarCartelas();
+}
+
+function divPintarCartelas() {
+  const destino = $('div-cartelas');
+  if (divBlocoAberto === null || !divUltima) {
+    destino.innerHTML =
+      '<p class="ajuda">Toque num bloco para ver as cartelas dele.</p>';
+    return;
+  }
+  const bloco = divUltima.blocos[divBlocoAberto];
+  const escritas = bloco.cartelas.map(
+    (cartela, i) => `
+      <div class="cartela">
+        <span class="indice">${String(i + 1).padStart(2, '0')}</span>
+        <span>${cartela.map((n) => String(n).padStart(2, '0')).join(' ')}</span>
+      </div>`
+  );
+  destino.innerHTML =
+    `<p class="ajuda">Bloco ${divBlocoAberto + 1} — ${milhares(bloco.cartelas.length)} ` +
+    `cartelas, cobrindo ${porcento(bloco.cobertura)} dos sorteios.</p>` +
+    `<div class="cartelas em-levas">${emLevas(escritas)}</div>`;
+  destino.querySelectorAll('.cartelas').forEach(ajustarReservaDasLevas);
+}
+
+function divAtualizarFontes() {
+  divPintarSeletor(divPreferida);
+  divPreferida = null;
+}
+
+ligar('div-fechamento', 'change', (e) => divSelecionar(e.target.value));
+ligar('div-partes', 'input', divPintarFicha);
+ligar('div-dividir', 'click', divDividir);
+ligar('div-blocos', 'click', (e) => {
+  const alvo = e.target.closest('.bloco-escolha');
+  if (!alvo) return;
+  const i = Number(alvo.dataset.bloco);
+  divBlocoAberto = divBlocoAberto === i ? null : i;
+  divPintarCartelas();
+});
 
 /**
  * Repinta a lista de fechamentos, se ela mudou.

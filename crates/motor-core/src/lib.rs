@@ -51,6 +51,7 @@ pub mod avaliacao;
 pub mod cartela;
 pub mod cobertura;
 pub mod combinatoria;
+pub mod divisao;
 pub mod conjunto;
 pub mod limites;
 pub mod planos;

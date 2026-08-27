@@ -32,6 +32,7 @@
   <button class="aba" role="tab" id="aba-buscar" aria-controls="buscar" aria-selected="false" tabindex="-1" data-painel="buscar">Buscar</button>
   <button class="aba" role="tab" id="aba-resultado" aria-controls="resultado" aria-selected="false" tabindex="-1" data-painel="resultado">Resultado</button>
   <button class="aba" role="tab" id="aba-checar" aria-controls="checar" aria-selected="false" tabindex="-1" data-painel="checar">Checar</button>
+  <button class="aba" role="tab" id="aba-dividir" aria-controls="dividir" aria-selected="false" tabindex="-1" data-painel="dividir">Dividir</button>
   <button class="aba" role="tab" id="aba-historico" aria-controls="historico" aria-selected="false" tabindex="-1" data-painel="historico">Histórico</button>
 </nav>
 
@@ -556,6 +557,47 @@
 </section>
 
 <!-- ══════════════════ HISTÓRICO ══════════════════ -->
+<section id="dividir" class="painel" role="tabpanel" aria-labelledby="aba-dividir">
+  <div class="cartao">
+    <h2>1 · Qual fechamento</h2>
+    <p class="ajuda">
+      A divisão reparte as cartelas que já existem. Nada é montado de novo:
+      juntando todos os blocos, você tem de volta o fechamento inteiro, com a
+      garantia dele intacta.
+    </p>
+    <select id="div-fechamento" aria-label="Fechamento a dividir"></select>
+    <div class="referencia" id="div-ficha"></div>
+  </div>
+
+  <div class="cartao" id="div-controle-cartao">
+    <h2>2 · Em quantos blocos</h2>
+    <input type="range" id="div-partes" min="0" max="1" step="1" value="0"
+      aria-label="Quantidade de blocos">
+    <div class="extremos"><span id="div-esquerda">2 blocos</span><span id="div-direita"></span></div>
+    <p class="ajuda">
+      Quanto mais blocos, menos cartelas em cada um e menor o custo — e menor a
+      chance de o bloco que você jogar conter a cartela premiada.
+    </p>
+    <div class="controles">
+      <button class="principal" id="div-dividir">Dividir fechamento</button>
+    </div>
+    <div class="referencia" id="div-erro" hidden></div>
+    <div class="referencia" id="div-andamento" hidden></div>
+  </div>
+
+  <div class="cartao" id="div-resumo-cartao" hidden>
+    <h2>3 · O que cada bloco vale</h2>
+    <div id="div-resumo"></div>
+    <div class="referencia" id="div-aviso"></div>
+  </div>
+
+  <div class="cartao" id="div-blocos-cartao" hidden>
+    <h2>4 · Escolha o bloco</h2>
+    <div id="div-blocos"></div>
+    <div id="div-cartelas"></div>
+  </div>
+</section>
+
 <section id="historico" class="painel" role="tabpanel" aria-labelledby="aba-historico">
   <div class="cartao">
     <h2>Seus trabalhos</h2>

@@ -215,8 +215,8 @@ try {
 
   const abas = await pagina.$$eval('.aba', (b) => b.map((x) => x.textContent.trim()));
   marcar(
-    abas.join(',') === 'Lotinha,Buscar,Resultado,Checar,Histórico',
-    'as abas são as cinco da Lotinha, sem a tela de configuração',
+    abas.join(',') === 'Lotinha,Buscar,Resultado,Checar,Dividir,Histórico',
+    'as abas são as seis da Lotinha, sem a tela de configuração',
     abas.join(' · ')
   );
   marcar(
@@ -986,6 +986,71 @@ try {
     'e os três valores escolhidos continuam lá depois de fechar e reabrir',
     `gatilho ${await texto('#gatilho-valor')} · acabamento ${await texto('#trocas-valor')}` +
       ` · esforço ${await texto('#esforco-valor')}`
+  );
+
+  // ─── a divisão do fechamento ───
+  //
+  // Trocar garantia por custo. O que precisa ficar provado é que a divisão
+  // reparte de verdade — sem perder nem repetir cartela —, que ela mede o que
+  // cada bloco cobre em vez de estimar, e que a tela diz com todas as letras
+  // que a garantia ficou para trás.
+  //
+  // A página foi recarregada acima, então o fechamento precisa ser carregado de
+  // novo: 20 dezenas com jogos de 17, que são 240 cartelas.
+  await carregarFechamento(20, 17, VINTE);
+  await pagina.click('#aba-dividir');
+  await pagina.waitForSelector('#dividir.ativo', { timeout: 10000 });
+
+  marcar(
+    (await pagina.locator('#div-fechamento option').count()) >= 1 &&
+      !(await pagina.locator('#div-fechamento').isDisabled()),
+    'a aba Dividir encontra sozinha o fechamento que está na tela',
+    await pagina.locator('#div-fechamento option').first().innerText()
+  );
+
+  // O seletor guarda o índice, não o número de blocos: valor 2 são 4 blocos.
+  await pagina.evaluate(() => {
+    const s = document.getElementById('div-partes');
+    s.value = '2';
+    s.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await pagina.click('#div-dividir');
+  await pagina.waitForSelector('#div-resumo-cartao:not([hidden])', { timeout: 30000 });
+
+  const divisao = await pagina.evaluate(() => {
+    const linhas = [...document.querySelectorAll('#div-resumo tbody tr')];
+    return linhas.map((tr) => [...tr.children].map((td) => td.textContent.trim()));
+  });
+  // A última linha é o fechamento inteiro; as anteriores são os blocos.
+  const blocos = divisao.slice(0, -1);
+  const soma = blocos.reduce((t, l) => t + Number(l[1].replace(/\D/g, '')), 0);
+  marcar(
+    blocos.length === 4 && soma === 240,
+    'dividir em quatro reparte as 240 cartelas sem perder nem sobrar nenhuma',
+    `${blocos.length} blocos somando ${soma}`
+  );
+
+  const coberturas = blocos.map((l) => Number(l[3].replace('%', '').replace(',', '.')));
+  marcar(
+    coberturas.every((c) => c > 25),
+    'e cada bloco cobre mais do que o quarto que ele representa',
+    coberturas.map((c) => `${c}%`).join(' · ')
+  );
+
+  const aviso = await texto('#div-aviso');
+  marcar(
+    /garantia é do fechamento inteiro/i.test(aviso) && /não muda/.test(aviso),
+    'a tela diz que a garantia acabou, e que o retorno esperado não melhorou',
+    aviso.replace(/\s+/g, ' ').slice(0, 90)
+  );
+
+  await pagina.click('#div-blocos .bloco-escolha');
+  await pagina.waitForSelector('#div-cartelas .cartela', { timeout: 10000 });
+  const mostradas = await pagina.locator('#div-cartelas .cartela').count();
+  marcar(
+    mostradas === Number(blocos[0][1].replace(/\D/g, '')),
+    'e escolher um bloco mostra exatamente as cartelas dele',
+    `${mostradas} cartelas`
   );
 
   marcar(errosDeConsole.length === 0, 'nenhum erro no console', errosDeConsole.join(' | ').slice(0, 120));

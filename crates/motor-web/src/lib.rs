@@ -671,11 +671,115 @@ impl MotorWeb {
     }
 }
 
+/// O pedido de divisão, como a tela o manda.
+#[derive(Debug, Clone, Deserialize)]
+pub struct PedidoDeDivisao {
+    /// A configuração do problema — a mesma forma de [`ConfiguracaoEntrada`].
+    pub configuracao: ConfiguracaoEntrada,
+    /// O fechamento, em rótulos do universo, como o usuário o vê.
+    pub cartelas: Vec<Vec<u32>>,
+    /// Em quantos blocos repartir.
+    pub partes: usize,
+}
+
+/// Um bloco, pronto para a tela.
+#[derive(Debug, Clone, Serialize)]
+pub struct BlocoSaida {
+    /// As cartelas do bloco, em rótulos do universo.
+    pub cartelas: Vec<Vec<u32>>,
+    /// Sorteios que este bloco cobre sozinho.
+    pub cobertos: u64,
+    /// A fração que isso representa, em `0.0..=1.0`.
+    pub cobertura: f64,
+}
+
+/// O resultado da divisão.
+#[derive(Debug, Clone, Serialize)]
+pub struct DivisaoSaida {
+    pub blocos: Vec<BlocoSaida>,
+    pub total_alvos: u64,
+    /// Quantas cartelas tinha o fechamento inteiro.
+    pub cartelas_do_inteiro: usize,
+    /// A cobertura do pior bloco. É o número honesto de tela: quem escolhe um
+    /// bloco sem olhar não pode contar com mais do que isto.
+    pub pior_cobertura: f64,
+    pub melhor_cobertura: f64,
+    /// `1 / partes` — a estimativa ingênua, para a tela poder mostrar as duas
+    /// lado a lado. A verdadeira é sempre maior, e é esse contraste que
+    /// justifica a ferramenta existir.
+    pub fracao_ingenua: f64,
+}
+
+/// Reparte um fechamento em blocos equilibrados, medindo o que cada um cobre.
+///
+/// Função solta, e não método de [`MotorWeb`], de propósito: a tela precisa
+/// dividir um fechamento guardado no histórico, onde não há busca em curso e
+/// não faria sentido montar um motor só para isso.
+pub fn dividir_com(pedido_json: &str) -> Result<String, String> {
+    let pedido: PedidoDeDivisao =
+        serde_json::from_str(pedido_json).map_err(|e| format!("pedido ilegível: {e}"))?;
+
+    let problema = pedido.configuracao.para_problema()?;
+    let motor = motor_core::MotorCobertura::novo(&problema)
+        .map_err(|e| format!("configuração grande demais: {e}"))?;
+
+    let cartelas: Vec<Cartela> = pedido
+        .cartelas
+        .iter()
+        .map(|linha| {
+            let mut cartela = Cartela::vazia();
+            for &rotulo in linha {
+                let indice = problema
+                    .indice_do_rotulo(rotulo)
+                    .ok_or_else(|| format!("o número {rotulo} não está no pool"))?;
+                cartela.inserir(indice);
+            }
+            Ok(cartela)
+        })
+        .collect::<Result<_, String>>()?;
+
+    let divisao = motor_core::divisao::dividir(&motor, &cartelas, pedido.partes).ok_or_else(
+        || {
+            format!(
+                "não dá para repartir {} cartelas em {} blocos",
+                cartelas.len(),
+                pedido.partes
+            )
+        },
+    )?;
+
+    let pool = problema.pool();
+    let blocos = divisao
+        .blocos
+        .iter()
+        .map(|b| BlocoSaida {
+            cartelas: b.cartelas.iter().map(|&i| cartelas[i].rotulos(pool)).collect(),
+            cobertos: b.cobertos,
+            cobertura: b.cobertura(divisao.total_alvos),
+        })
+        .collect();
+
+    let saida = DivisaoSaida {
+        blocos,
+        total_alvos: divisao.total_alvos,
+        cartelas_do_inteiro: cartelas.len(),
+        pior_cobertura: divisao.pior_cobertura(),
+        melhor_cobertura: divisao.melhor_cobertura(),
+        fracao_ingenua: 1.0 / pedido.partes as f64,
+    };
+    serde_json::to_string(&saida).map_err(|e| e.to_string())
+}
+
 /// A camada de adaptação para o JavaScript.
 ///
 /// Cada método aqui é uma linha: chama a lógica acima e traduz o erro. Se
 /// alguma regra aparecer neste bloco, ela deixou de ser testável — é o sinal de
 /// que está no lugar errado.
+#[wasm_bindgen]
+pub fn dividir(pedido_json: &str) -> Result<String, JsValue> {
+    dividir_com(pedido_json).map_err(|e| JsValue::from_str(&e))
+}
+
 #[wasm_bindgen]
 impl MotorWeb {
     #[wasm_bindgen(constructor)]
@@ -1371,6 +1475,84 @@ mod testes {
         let e = estado_de(&motor.avancar(20, 200));
         assert!(e["ciclica_cartelas"].is_null(), "garantia parcial não comporta trilha simétrica");
         assert_eq!(e["trilha_do_recorde"].as_str().unwrap(), "livre");
+    }
+
+    #[test]
+    fn dividir_reparte_o_fechamento_e_mede_o_que_cada_bloco_cobre() {
+        // Um fechamento gordo de propósito: todas as C(9,4) cartelas cobrindo
+        // C(9,3). A redundância é grande, e é ela que faz um bloco valer mais
+        // que a fração que representa.
+        let cartelas: Vec<Vec<u32>> = (1..=9u32)
+            .flat_map(|a| {
+                ((a + 1)..=9).flat_map(move |b| {
+                    ((b + 1)..=9).flat_map(move |c| ((c + 1)..=9).map(move |d| vec![a, b, c, d]))
+                })
+            })
+            .collect();
+        assert_eq!(cartelas.len(), 126);
+
+        let pedido = serde_json::json!({
+            "configuracao": {
+                "universo": 9, "pool": (1..=9).collect::<Vec<u32>>(), "cartela": 4,
+                "alvo": 3, "intersecao": 3, "premiadas": 1, "semente": 1
+            },
+            "cartelas": cartelas,
+            "partes": 4
+        });
+        let bruto = dividir_com(&pedido.to_string()).expect("a divisão precisa sair");
+        let d: serde_json::Value = serde_json::from_str(&bruto).unwrap();
+
+        assert_eq!(d["blocos"].as_array().unwrap().len(), 4);
+        assert_eq!(d["cartelas_do_inteiro"].as_u64().unwrap(), 126);
+
+        // Nenhuma cartela se perde nem se repete entre os blocos.
+        let mut todas: Vec<Vec<u32>> = Vec::new();
+        for b in d["blocos"].as_array().unwrap() {
+            for c in b["cartelas"].as_array().unwrap() {
+                todas.push(c.as_array().unwrap().iter().map(|x| x.as_u64().unwrap() as u32).collect());
+            }
+        }
+        assert_eq!(todas.len(), 126);
+        let mut ordenadas = todas.clone();
+        ordenadas.sort();
+        ordenadas.dedup();
+        assert_eq!(ordenadas.len(), 126, "a divisão repetiu ou perdeu cartela");
+
+        // E o número que a ferramenta existe para mostrar.
+        let pior = d["pior_cobertura"].as_f64().unwrap();
+        let ingenua = d["fracao_ingenua"].as_f64().unwrap();
+        assert!((ingenua - 0.25).abs() < 1e-9);
+        assert!(pior > ingenua, "pior bloco {pior:.3} não superou a fração ingênua {ingenua:.3}");
+        assert!(pior <= 1.0);
+    }
+
+    #[test]
+    fn dividir_recusa_o_que_nao_da_e_explica() {
+        let cartelas: Vec<Vec<u32>> = vec![vec![1, 2, 3, 4], vec![5, 6, 7, 8]];
+        let pedir = |partes: usize| {
+            serde_json::json!({
+                "configuracao": {
+                    "universo": 9, "pool": (1..=9).collect::<Vec<u32>>(), "cartela": 4,
+                    "alvo": 3, "intersecao": 3, "premiadas": 1, "semente": 1
+                },
+                "cartelas": cartelas, "partes": partes
+            })
+            .to_string()
+        };
+        let erro = dividir_com(&pedir(5)).unwrap_err();
+        assert!(erro.contains("5 blocos"), "o erro precisa dizer o que foi pedido: {erro}");
+        assert!(dividir_com(&pedir(1)).is_err(), "um bloco só não é divisão");
+        assert!(dividir_com("{").is_err());
+
+        // Um número fora do pool é erro de quem chamou, não pânico.
+        let fora = serde_json::json!({
+            "configuracao": {
+                "universo": 9, "pool": (1..=9).collect::<Vec<u32>>(), "cartela": 4,
+                "alvo": 3, "intersecao": 3, "premiadas": 1, "semente": 1
+            },
+            "cartelas": [[1, 2, 3, 99]], "partes": 2
+        });
+        assert!(dividir_com(&fora.to_string()).unwrap_err().contains("99"));
     }
 
     /// Uma configuração em que a busca tem trabalho de verdade.
