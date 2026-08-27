@@ -1452,6 +1452,25 @@ impl MotorBusca {
         self.config.iteracoes_ate_diversificar
     }
 
+    /// Troca o teto de trocas por iteração com o motor rodando.
+    ///
+    /// Pelo mesmo motivo do gatilho da diversificação: não há um número certo
+    /// para todas as configurações. O teto decide quanto acabamento cabe em cada
+    /// tentativa — poucas tentativas lapidadas ou muitas tentativas rápidas — e
+    /// qual dos dois rende depende de quão cara é uma troca ali. Medindo em
+    /// `(20,17)`, 200 quase dobrou o que a busca conseguiu tirar, e 50 foi pior
+    /// que não ter teto nenhum.
+    ///
+    /// Nada é descartado: é um número que a próxima iteração lê.
+    pub fn ajustar_teto_de_trocas(&mut self, trocas: u64) {
+        self.config.teto_de_trocas_por_iteracao = trocas.max(1);
+    }
+
+    /// O teto em vigor, para a tela mostrar o que o motor está usando.
+    pub fn teto_de_trocas(&self) -> u64 {
+        self.config.teto_de_trocas_por_iteracao
+    }
+
     /// Uso e rendimento de cada operador, na ordem de [`Operador::TODOS`].
     pub fn uso_dos_operadores(&self) -> &[UsoDoOperador] {
         &self.uso_dos_operadores

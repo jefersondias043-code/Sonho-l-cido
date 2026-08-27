@@ -1210,12 +1210,14 @@ details.cartao[open] > summary::after {
  * destaque porque este não é um resultado — é um ajuste. Competir em tamanho
  * com "melhor solução conhecida" seria dizer que têm a mesma importância.
  */
-#cartao-diversificacao .numerao span {
+#cartao-diversificacao .numerao span,
+#cartao-trocas .numerao span {
   font-size: 38px;
   letter-spacing: -1px;
 }
 
-#gatilho-diversificacao {
+#gatilho-diversificacao,
+#teto-de-trocas {
   -webkit-appearance: none;
   appearance: none;
   width: 100%;
@@ -1225,14 +1227,16 @@ details.cartao[open] > summary::after {
   margin: 0;
 }
 
-#gatilho-diversificacao::-webkit-slider-runnable-track {
+#gatilho-diversificacao::-webkit-slider-runnable-track,
+#teto-de-trocas::-webkit-slider-runnable-track {
   height: 6px;
   border-radius: 3px;
   background: var(--fundo-campo);
   border: 1px solid var(--borda);
 }
 
-#gatilho-diversificacao::-moz-range-track {
+#gatilho-diversificacao::-moz-range-track,
+#teto-de-trocas::-moz-range-track {
   height: 6px;
   border-radius: 3px;
   background: var(--fundo-campo);
@@ -1241,7 +1245,8 @@ details.cartao[open] > summary::after {
 
 /* O punho é grande: este controle é para ser usado com o polegar, no celular,
    possivelmente com o motor rodando e a tela pulsando. */
-#gatilho-diversificacao::-webkit-slider-thumb {
+#gatilho-diversificacao::-webkit-slider-thumb,
+#teto-de-trocas::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
   width: 28px;
@@ -1253,7 +1258,8 @@ details.cartao[open] > summary::after {
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
 }
 
-#gatilho-diversificacao::-moz-range-thumb {
+#gatilho-diversificacao::-moz-range-thumb,
+#teto-de-trocas::-moz-range-thumb {
   width: 28px;
   height: 28px;
   border-radius: 50%;
@@ -1262,7 +1268,8 @@ details.cartao[open] > summary::after {
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
 }
 
-#gatilho-diversificacao:focus-visible {
+#gatilho-diversificacao:focus-visible,
+#teto-de-trocas:focus-visible {
   outline: 2px solid var(--acento);
   outline-offset: 4px;
   border-radius: var(--raio);

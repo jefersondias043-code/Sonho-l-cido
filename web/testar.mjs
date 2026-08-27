@@ -782,15 +782,43 @@ try {
   ).then(() => true).catch(() => false);
   marcar(diversificou, 'e o motor segue avançando com o gatilho novo');
 
+  // O segundo seletor: o acabamento de cada tentativa. Mesma promessa.
+  marcar(
+    await pagina.locator('#teto-de-trocas').isVisible(),
+    'o seletor do acabamento também aparece durante a busca'
+  );
+  const antesDasTrocas = await numero('#melhor-cartelas');
+  const iteracoesAntesDasTrocas = await numero('#iteracoes');
+  await pagina.evaluate(() => {
+    const s = document.getElementById('teto-de-trocas');
+    s.value = '0';
+    s.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  marcar(
+    (await texto('#trocas-valor')) === '10',
+    'o número do acabamento acompanha o seletor',
+    await texto('#trocas-valor')
+  );
+  await pagina.waitForFunction(
+    (antes) => Number(document.getElementById('iteracoes').textContent.replace(/\D/g, '')) > antes,
+    iteracoesAntesDasTrocas,
+    { timeout: 30000 }
+  );
+  marcar(
+    (await numero('#melhor-cartelas')) <= antesDasTrocas,
+    'mexer no acabamento também não perde o recorde',
+    `${antesDasTrocas} antes, ${await numero('#melhor-cartelas')} depois`
+  );
+
   // A escolha sobrevive a fechar e reabrir: quem achou o valor bom não deveria
   // ter de reencontrá-lo toda vez.
   await pagina.click('#encerrar');
   await pagina.waitForSelector('#lotinha.ativo', { timeout: 20000 });
   await pagina.reload({ waitUntil: 'networkidle' });
   marcar(
-    (await texto('#gatilho-valor')) === '30',
-    'e o valor escolhido continua lá depois de fechar e reabrir',
-    await texto('#gatilho-valor')
+    (await texto('#gatilho-valor')) === '30' && (await texto('#trocas-valor')) === '10',
+    'e os dois valores escolhidos continuam lá depois de fechar e reabrir',
+    `gatilho ${await texto('#gatilho-valor')} · acabamento ${await texto('#trocas-valor')}`
   );
 
   marcar(errosDeConsole.length === 0, 'nenhum erro no console', errosDeConsole.join(' | ').slice(0, 120));

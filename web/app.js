@@ -493,6 +493,54 @@ ligar('gatilho-diversificacao', 'input', () => {
   if (trabalhador) trabalhador.postMessage({ tipo: 'diversificacao', iteracoes });
 });
 
+/*
+ * Os degraus do acabamento — quantas trocas de dezena cabem numa tentativa.
+ *
+ * Geométrica pelo mesmo motivo da outra escala, e o topo em 5.000 porque ali o
+ * teto deixa de morder: o orçamento de trabalho do motor já não passa disso, e
+ * empurrar mais para a direita não muda nada.
+ */
+const DEGRAUS_DAS_TROCAS = [
+  10, 15, 25, 40, 60, 100, 150, 200, 300, 500, 750, 1_000, 1_500, 2_500, 5_000,
+];
+
+const CHAVE_DAS_TROCAS = 'sonho-lucido:teto-de-trocas';
+
+function trocasEscolhidas() {
+  const degrau = Number($('teto-de-trocas')?.value);
+  return DEGRAUS_DAS_TROCAS[degrau] ?? 200;
+}
+
+function pintarTrocas() {
+  $('trocas-valor').textContent = milhares(trocasEscolhidas());
+}
+
+ligar('teto-de-trocas', 'input', () => {
+  pintarTrocas();
+  const trocas = trocasEscolhidas();
+  try {
+    localStorage.setItem(CHAVE_DAS_TROCAS, String(trocas));
+  } catch {
+    // Sem armazenamento a preferência não sobrevive ao recarregamento, e é só
+    // isso: o ajuste em si já valeu no motor.
+  }
+  if (trabalhador) trabalhador.postMessage({ tipo: 'trocas', trocas });
+});
+
+function lembrarDasTrocas() {
+  let guardado = null;
+  try {
+    guardado = Number(localStorage.getItem(CHAVE_DAS_TROCAS));
+  } catch {
+    guardado = null;
+  }
+  const degrau = DEGRAUS_DAS_TROCAS.indexOf(guardado);
+  if (degrau >= 0) $('teto-de-trocas').value = String(degrau);
+  pintarTrocas();
+}
+
+lembrarDasTrocas();
+
 /** Devolve o seletor ao valor que a pessoa deixou da última vez. */
 function lembrarDoGatilho() {
   let guardado = null;
@@ -2112,6 +2160,7 @@ function comecar(
     // O gatilho vale desde a primeira iteração, e não só depois de a pessoa
     // mexer no seletor.
     gatilhoDaDiversificacao: gatilhoEscolhido(),
+    tetoDeTrocas: trocasEscolhidas(),
   });
   segurarTelaLigada();
 }

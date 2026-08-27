@@ -150,6 +150,12 @@ function tratar(mensagem) {
         if (motor) motor.ajustar_diversificacao(mensagem.iteracoes);
         break;
 
+      // O seletor do acabamento. Mesmo caminho: aplicado no motor que está
+      // rodando, sem descartar nada — é um número que a próxima iteração lê.
+      case 'trocas':
+        if (motor) motor.ajustar_teto_de_trocas(mensagem.trocas);
+        break;
+
       case 'pausar':
         // Pausa manual suspende o ciclo. Quem tocou em Pausar quer o motor
         // parado, e não parado por quinze minutos e religado sozinho.
@@ -213,6 +219,7 @@ function criar({
   salvo,
   segundosDoConstrutor: pedido,
   gatilhoDaDiversificacao,
+  tetoDeTrocas,
 }) {
   segundosDoConstrutor = Math.max(1, Number(pedido) || SEGUNDOS_DO_CONSTRUTOR);
   descartarMotor();
@@ -247,6 +254,9 @@ function criar({
   // depois de o usuário mexer nele.
   if (Number.isFinite(gatilhoDaDiversificacao) && gatilhoDaDiversificacao > 0) {
     motor.ajustar_diversificacao(gatilhoDaDiversificacao);
+  }
+  if (Number.isFinite(tetoDeTrocas) && tetoDeTrocas > 0) {
+    motor.ajustar_teto_de_trocas(tetoDeTrocas);
   }
 
   lote = LOTE_INICIAL;

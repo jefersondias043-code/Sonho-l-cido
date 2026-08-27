@@ -292,6 +292,41 @@
       recomeça é só a contagem, com o valor novo.
     </p>
   </div>
+
+  <!-- O teto de trocas por iteração. Mesmo lugar e mesmo motivo do seletor
+       acima: é ajuste para usar acompanhando a busca, não antes dela. -->
+  <div class="cartao" id="cartao-trocas">
+    <div class="rotulo">Acabamento em cada tentativa</div>
+    <div class="numerao">
+      <span id="trocas-valor">200</span><small>trocas de dezena</small>
+    </div>
+    <input
+      type="range"
+      id="teto-de-trocas"
+      min="0"
+      max="14"
+      step="1"
+      value="7"
+      aria-label="Quantas trocas de dezena o motor faz no máximo em cada tentativa"
+    >
+    <div class="extremos">
+      <span>10 — tentativas rápidas</span>
+      <span>5.000 — lapida cada uma</span>
+    </div>
+    <p class="ajuda">
+      Depois de remontar a solução, o motor ainda tenta mover dezenas de uma
+      cartela para outra, para fechar o que faltou. É acabamento fino, e custa
+      caro: à esquerda ele faz muitas tentativas rápidas, à direita poucas e bem
+      lapidadas.
+    </p>
+    <p class="ajuda">
+      Vale mexer olhando <strong>iterações por segundo</strong> e
+      <strong>ainda a cobrir</strong>: se a velocidade despencou e o buraco não
+      fecha, puxe para a esquerda. Medindo em 20 dezenas com jogos de 17, 200
+      quase dobrou o que a busca conseguiu tirar — e 50 foi pior que não ter
+      teto nenhum, então o mínimo não é o melhor.
+    </p>
+  </div>
   <button class="secundario" id="exportar-sessao">Exportar sessão para arquivo</button>
   <p class="ajuda">
     O arquivo leva o trabalho inteiro, não só as cartelas: o recorde, a solução

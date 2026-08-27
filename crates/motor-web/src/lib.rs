@@ -153,6 +153,8 @@ pub struct Estado {
     /// e não o que o seletor diz. São coisas diferentes enquanto a mensagem não
     /// chega ao worker, e é a do motor que vale.
     pub gatilho_da_diversificacao: u64,
+    /// O teto de trocas por iteração em vigor.
+    pub teto_de_trocas: u64,
     /// Como o ponto de partida foi construído.
     pub origem_do_inicio: String,
     /// Verdadeiro quando esta busca continua uma sessão salva.
@@ -695,6 +697,16 @@ impl MotorWeb {
         self.interno.ajustar_diversificacao(u64::from(iteracoes));
     }
 
+    /// Troca o teto de trocas por iteração com o motor rodando.
+    ///
+    /// A descida por troca move uma dezena de uma cartela para outra. É
+    /// acabamento: quanto dele cabe em cada tentativa decide se o motor faz
+    /// poucas tentativas lapidadas ou muitas tentativas rápidas — e qual dos
+    /// dois rende depende da configuração e do momento.
+    pub fn ajustar_teto_de_trocas(&mut self, trocas: u32) {
+        self.interno.ajustar_teto_de_trocas(u64::from(trocas));
+    }
+
     /// Estado atual, sem avançar nada.
     pub fn estado(&self) -> String {
         self.montar_estado(Vec::new())
@@ -878,6 +890,7 @@ impl MotorWeb {
                 .referencia()
                 .is_some_and(|c| c.aplicacao == motor_core::Aplicacao::Exata && c.referencia.resolvido()),
             gatilho_da_diversificacao: self.interno.gatilho_da_diversificacao(),
+            teto_de_trocas: self.interno.teto_de_trocas(),
             origem_do_inicio: self.interno.origem_do_inicio().to_string(),
             sessao_retomada: self.interno.sessao_retomada(),
             cartelas_trazidas: self.interno.cartelas_trazidas(),
