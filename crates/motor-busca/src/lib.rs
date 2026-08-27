@@ -37,6 +37,7 @@
 pub mod aceitacao;
 pub mod adaptativo;
 pub mod arquivo;
+pub mod ciclica;
 pub mod construcao;
 pub mod construtor;
 pub mod controle;
@@ -51,6 +52,7 @@ pub use adaptativo::{Recompensas, SeletorAdaptativo};
 pub use aceitacao::AceitacaoTardia;
 pub use arquivo::{distancia_estrutural, ArquivoElites, Elite};
 pub use exato::{Desfecho, Instancia};
+pub use ciclica::BuscaCiclica;
 pub use orbitas::InstanciaCiclica;
 pub use controle::{
     CondicoesDeParada, Coletor, Controle, Estatisticas, Evento, MotivoEncerramento, Observador,

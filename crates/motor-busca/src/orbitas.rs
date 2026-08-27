@@ -33,6 +33,8 @@
 use std::collections::HashMap;
 
 use motor_core::cartela::Cartela;
+use rand::Rng;
+use rand_pcg::Pcg64Mcg;
 
 use crate::controle::Controle;
 
@@ -107,14 +109,14 @@ pub fn orbitas(v: u32, k: u32) -> Vec<(u32, u32)> {
 }
 
 /// `C(n, k)` sem estourar, para o teto de memória. Satura no teto.
-fn combinacoes_pequenas(n: u32, k: u32) -> usize {
+fn combinacoes_pequenas(n: u32, k: u32, teto: usize) -> usize {
     if k > n {
         return 0;
     }
     let mut total: usize = 1;
     for i in 0..k.min(n - k) {
         total = total.saturating_mul((n - i) as usize) / (i as usize + 1);
-        if total > TETO_DE_LIGACOES {
+        if total > teto {
             return usize::MAX;
         }
     }
@@ -163,7 +165,23 @@ impl InstanciaCiclica {
     /// `v` é o pool, `a` o que falta à cartela e `b` o que falta ao alvo. Devolve
     /// `None` também se pedirem para parar no meio: montar leva tempo, e um
     /// pedido de parada não pode esperar o fim.
+    ///
+    /// O teto de memória é o do celular. Uma ferramenta que roda fora dele pode
+    /// pedir mais com [`InstanciaCiclica::montar_ate`] — em 25 dezenas com jogos
+    /// de 22 a tabela pede 15,7 milhões de ligações, e é só ali que ela existe.
     pub fn montar(v: usize, a: usize, b: usize, parar: Option<&Controle>) -> Option<Self> {
+        Self::montar_ate(v, a, b, TETO_DE_LIGACOES, parar)
+    }
+
+    /// Como [`InstanciaCiclica::montar`], com o teto de ligações escolhido por
+    /// quem chama. Só faz sentido afrouxá-lo fora do navegador.
+    pub fn montar_ate(
+        v: usize,
+        a: usize,
+        b: usize,
+        teto: usize,
+        parar: Option<&Controle>,
+    ) -> Option<Self> {
         if v > MAIOR_POOL || a == 0 || a > b || b > v {
             return None;
         }
@@ -174,7 +192,7 @@ impl InstanciaCiclica {
         if orb_a.is_empty() || orb_b.is_empty() {
             return None;
         }
-        if orb_a.len().saturating_mul(combinacoes_pequenas(v - a, b - a)) > TETO_DE_LIGACOES {
+        if orb_a.len().saturating_mul(combinacoes_pequenas(v - a, b - a, teto)) > teto {
             return None;
         }
 
@@ -273,6 +291,47 @@ impl InstanciaCiclica {
         cartelas
     }
 
+
+    /// A primeira solução: o guloso que olha todas as candidatas a cada escolha.
+    pub fn guloso(&self, premiadas: u32) -> Vec<usize> {
+        guloso_amplo(&self.cobre, &self.peso_b, &self.orb_a, premiadas)
+    }
+
+    /// Fecha a cobertura a partir do que já está escolhido, em ordem sorteada.
+    pub fn reparar(&self, ja: &[usize], premiadas: u32, rng: &mut Pcg64Mcg) -> Vec<usize> {
+        guloso_por_alvo(&self.cobre, &self.inverso, &self.peso_b, &self.orb_a, ja, premiadas, rng)
+    }
+
+    /// Tira as órbitas cujos alvos já estão cobertos o bastante por outras.
+    pub fn podar(&self, escolha: &mut Vec<usize>, premiadas: u32) {
+        podar_orbitas(&self.cobre, &self.orb_a, &self.peso_b, premiadas, escolha);
+    }
+
+    /// Peso dos alvos que a escolha ainda não atende `premiadas` vezes, e o
+    /// excesso pago nos que atende demais.
+    ///
+    /// Os dois compõem a chave de custo: cobrir vem primeiro, e entre soluções
+    /// completas vence a que gasta menos cartelas; empatou, a menos redundante.
+    pub fn descobertos_e_excesso(&self, escolha: &[usize], premiadas: u32) -> (u64, u64) {
+        let mut vezes = vec![0u32; self.peso_b.len()];
+        for &i in escolha {
+            for &alvo in &self.cobre[i] {
+                vezes[alvo as usize] += 1;
+            }
+        }
+        let mut descobertos = 0u64;
+        let mut excesso = 0u64;
+        for (alvo, &v) in vezes.iter().enumerate() {
+            let peso = u64::from(self.peso_b[alvo]);
+            if v < premiadas {
+                descobertos += peso * u64::from(premiadas - v);
+            } else {
+                excesso += peso * u64::from(v - premiadas);
+            }
+        }
+        (descobertos, excesso)
+    }
+
     /// A ponte para o resolvedor exato de [`crate::exato`].
     ///
     /// O peso de cada candidato é o tamanho da órbita, e não 1: minimizar o
@@ -285,6 +344,172 @@ impl InstanciaCiclica {
     pub fn para_exato(&self) -> Option<crate::exato::Instancia> {
         let peso: Vec<u64> = self.orb_a.iter().map(|&(_, t)| t as u64).collect();
         crate::exato::Instancia::nova(self.cobre.clone(), peso, self.alvos())
+    }
+}
+
+/* ─────────── as peças que a construção e a busca dividem ─────────── */
+/// O guloso que olha todas as candidatas a cada escolha.
+///
+/// Custa uma varredura completa por órbita escolhida — lento, e por isso só serve
+/// para a primeira solução. Medido, ele parte de 441 órbitas em `23/17` onde o
+/// guloso por alvo parte de 459, e as dezoito de diferença são adiantamento que o
+/// passeio não precisa reconquistar.
+pub(crate) fn guloso_amplo(
+    cobre: &[Vec<u32>],
+    peso_b: &[u32],
+    orb_a: &[(u32, u32)],
+    premiadas: u32,
+) -> Vec<usize> {
+    let mut vezes = vec![0u32; peso_b.len()];
+    let mut faltam = peso_b.len();
+    let mut dentro = vec![false; orb_a.len()];
+    let mut escolhidas = Vec::new();
+
+    while faltam > 0 {
+        let mut melhor: Option<(usize, u64, u64)> = None;
+        for (i, alvos) in cobre.iter().enumerate() {
+            if dentro[i] {
+                continue;
+            }
+            let ganho: u64 = alvos
+                .iter()
+                .filter(|&&alvo| vezes[alvo as usize] < premiadas)
+                .map(|&alvo| peso_b[alvo as usize] as u64)
+                .sum();
+            if ganho == 0 {
+                continue;
+            }
+            let custo = orb_a[i].1 as u64;
+            if melhor.is_none_or_menor(ganho, custo) {
+                melhor = Some((i, ganho, custo));
+            }
+        }
+        let Some((i, _, _)) = melhor else { break };
+        dentro[i] = true;
+        escolhidas.push(i);
+        for &alvo in &cobre[i] {
+            let antes = vezes[alvo as usize];
+            vezes[alvo as usize] = antes + 1;
+            if antes + 1 == premiadas {
+                faltam -= 1;
+            }
+        }
+    }
+    escolhidas
+}
+
+/// Completa a cobertura escolhendo, para cada alvo em falta, a melhor órbita que
+/// o cobre.
+///
+/// Muito mais barato que o guloso amplo: em vez de varrer todas as candidatas,
+/// olha só as que cobrem o alvo em questão. É o que permite dezenas de milhares
+/// de reparações no tempo em que a varredura completa faz uma.
+pub(crate) fn guloso_por_alvo(
+    cobre: &[Vec<u32>],
+    inverso: &[Vec<u32>],
+    peso_b: &[u32],
+    orb_a: &[(u32, u32)],
+    ja_escolhidas: &[usize],
+    premiadas: u32,
+    rng: &mut Pcg64Mcg,
+) -> Vec<usize> {
+    let mut vezes = vec![0u32; peso_b.len()];
+    let mut dentro = vec![false; orb_a.len()];
+    let mut escolhidas = Vec::with_capacity(ja_escolhidas.len() + 32);
+
+    for &i in ja_escolhidas {
+        if dentro[i] {
+            continue;
+        }
+        dentro[i] = true;
+        escolhidas.push(i);
+        for &alvo in &cobre[i] {
+            vezes[alvo as usize] += 1;
+        }
+    }
+
+    let mut ordem: Vec<u32> = (0..peso_b.len() as u32).collect();
+    // Embaralhar é o que dá caminhos diferentes à mesma reparação; sem isso o
+    // passeio devolve sempre a mesma peça no mesmo buraco.
+    for i in (1..ordem.len()).rev() {
+        ordem.swap(i, rng.gen_range(0..=i));
+    }
+
+    for alvo in ordem {
+        while vezes[alvo as usize] < premiadas {
+            let mut melhor: Option<(usize, u64, u64)> = None;
+            for &cand in &inverso[alvo as usize] {
+                let i = cand as usize;
+                if dentro[i] {
+                    continue;
+                }
+                let ganho: u64 = cobre[i]
+                    .iter()
+                    .filter(|&&x| vezes[x as usize] < premiadas)
+                    .map(|&x| peso_b[x as usize] as u64)
+                    .sum();
+                if ganho == 0 {
+                    continue;
+                }
+                let custo = orb_a[i].1 as u64;
+                if melhor.is_none_or_menor(ganho, custo) {
+                    melhor = Some((i, ganho, custo));
+                }
+            }
+            let Some((i, _, _)) = melhor else { break };
+            dentro[i] = true;
+            escolhidas.push(i);
+            for &x in &cobre[i] {
+                vezes[x as usize] += 1;
+            }
+        }
+    }
+    escolhidas
+}
+
+/// Tira as órbitas cujos alvos já estão cobertos o bastante por outras.
+///
+/// Da mais cara para a mais barata: uma órbita de 23 vale 23 cartelas, e sair
+/// com a maior primeiro rende mais.
+pub(crate) fn podar_orbitas(
+    cobre: &[Vec<u32>],
+    orb_a: &[(u32, u32)],
+    peso_b: &[u32],
+    premiadas: u32,
+    escolhidas: &mut Vec<usize>,
+) {
+    let mut vezes = vec![0u32; peso_b.len()];
+    for &i in escolhidas.iter() {
+        for &alvo in &cobre[i] {
+            vezes[alvo as usize] += 1;
+        }
+    }
+    let mut ordem = escolhidas.clone();
+    ordem.sort_unstable_by_key(|&i| std::cmp::Reverse(orb_a[i].1));
+    let mut sobrando = Vec::with_capacity(escolhidas.len());
+    for i in ordem {
+        if cobre[i].iter().all(|&alvo| vezes[alvo as usize] > premiadas) {
+            for &alvo in &cobre[i] {
+                vezes[alvo as usize] -= 1;
+            }
+        } else {
+            sobrando.push(i);
+        }
+    }
+    *escolhidas = sobrando;
+}
+
+/// Compara `ganho/custo` sem dividir: o produto cruzado decide.
+trait MelhorQue {
+    fn is_none_or_menor(&self, ganho: u64, custo: u64) -> bool;
+}
+
+impl MelhorQue for Option<(usize, u64, u64)> {
+    fn is_none_or_menor(&self, ganho: u64, custo: u64) -> bool {
+        match self {
+            Some((_, g, c)) => ganho * c > g * custo,
+            None => true,
+        }
     }
 }
 
