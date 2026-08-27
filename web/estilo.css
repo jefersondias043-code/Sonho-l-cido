@@ -1211,13 +1211,15 @@ details.cartao[open] > summary::after {
  * com "melhor solução conhecida" seria dizer que têm a mesma importância.
  */
 #cartao-diversificacao .numerao span,
-#cartao-trocas .numerao span {
+#cartao-trocas .numerao span,
+#cartao-esforco .numerao span {
   font-size: 38px;
   letter-spacing: -1px;
 }
 
 #gatilho-diversificacao,
-#teto-de-trocas {
+#teto-de-trocas,
+#esforco-por-cartela {
   -webkit-appearance: none;
   appearance: none;
   width: 100%;
@@ -1228,7 +1230,8 @@ details.cartao[open] > summary::after {
 }
 
 #gatilho-diversificacao::-webkit-slider-runnable-track,
-#teto-de-trocas::-webkit-slider-runnable-track {
+#teto-de-trocas::-webkit-slider-runnable-track,
+#esforco-por-cartela::-webkit-slider-runnable-track {
   height: 6px;
   border-radius: 3px;
   background: var(--fundo-campo);
@@ -1236,7 +1239,8 @@ details.cartao[open] > summary::after {
 }
 
 #gatilho-diversificacao::-moz-range-track,
-#teto-de-trocas::-moz-range-track {
+#teto-de-trocas::-moz-range-track,
+#esforco-por-cartela::-moz-range-track {
   height: 6px;
   border-radius: 3px;
   background: var(--fundo-campo);
@@ -1246,7 +1250,8 @@ details.cartao[open] > summary::after {
 /* O punho é grande: este controle é para ser usado com o polegar, no celular,
    possivelmente com o motor rodando e a tela pulsando. */
 #gatilho-diversificacao::-webkit-slider-thumb,
-#teto-de-trocas::-webkit-slider-thumb {
+#teto-de-trocas::-webkit-slider-thumb,
+#esforco-por-cartela::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
   width: 28px;
@@ -1259,7 +1264,8 @@ details.cartao[open] > summary::after {
 }
 
 #gatilho-diversificacao::-moz-range-thumb,
-#teto-de-trocas::-moz-range-thumb {
+#teto-de-trocas::-moz-range-thumb,
+#esforco-por-cartela::-moz-range-thumb {
   width: 28px;
   height: 28px;
   border-radius: 50%;
@@ -1269,7 +1275,8 @@ details.cartao[open] > summary::after {
 }
 
 #gatilho-diversificacao:focus-visible,
-#teto-de-trocas:focus-visible {
+#teto-de-trocas:focus-visible,
+#esforco-por-cartela:focus-visible {
   outline: 2px solid var(--acento);
   outline-offset: 4px;
   border-radius: var(--raio);

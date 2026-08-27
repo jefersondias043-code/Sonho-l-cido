@@ -541,6 +541,86 @@ function lembrarDasTrocas() {
 
 lembrarDasTrocas();
 
+/*
+ * Os degraus do esforço ao montar cada cartela.
+ *
+ * O topo em 500.000 e o piso em 2.000 vêm do que o número vira na prática: em
+ * 20 dezenas com jogos de 17, o orçamento padrão dá doze candidatos avaliados
+ * por dezena; 2.000 dá um só, e 500.000 passa de duzentos. Abaixo e acima disso
+ * o seletor deixaria de mudar alguma coisa.
+ */
+const DEGRAUS_DO_ESFORCO = [
+  2_000, 3_000, 5_000, 8_000, 12_000, 20_000, 30_000,
+  50_000, 80_000, 125_000, 200_000, 320_000, 500_000,
+];
+
+const CHAVE_DO_ESFORCO = 'sonho-lucido:esforco-por-cartela';
+
+function esforcoEscolhido() {
+  const degrau = Number($('esforco-por-cartela')?.value);
+  return DEGRAUS_DO_ESFORCO[degrau] ?? 30_000;
+}
+
+function pintarEsforco() {
+  $('esforco-valor').textContent = milhares(esforcoEscolhido());
+}
+
+ligar('esforco-por-cartela', 'input', () => {
+  pintarEsforco();
+  const orcamento = esforcoEscolhido();
+  try {
+    localStorage.setItem(CHAVE_DO_ESFORCO, String(orcamento));
+  } catch {
+    // Sem armazenamento a preferência não sobrevive ao recarregamento.
+  }
+  if (trabalhador) trabalhador.postMessage({ tipo: 'esforco', orcamento });
+});
+
+function lembrarDoEsforco() {
+  let guardado = null;
+  try {
+    guardado = Number(localStorage.getItem(CHAVE_DO_ESFORCO));
+  } catch {
+    guardado = null;
+  }
+  const degrau = DEGRAUS_DO_ESFORCO.indexOf(guardado);
+  if (degrau >= 0) $('esforco-por-cartela').value = String(degrau);
+  pintarEsforco();
+}
+
+lembrarDoEsforco();
+
+/* ─────────── o ritmo das melhorias ─────────── */
+
+/*
+ * Quantas melhorias por minuto, numa janela curta.
+ *
+ * "melhorias" sozinho é acumulado desde o início: depois de cem, mais uma não
+ * muda o número, e quem move um seletor fica sem saber se acertou. O ritmo é o
+ * mostrador que fecha esse laço — move-se o seletor, olha-se aqui.
+ *
+ * A janela é de dois minutos: menos que isso oscila demais para ser lido, mais
+ * que isso demora a reagir ao ajuste que a pessoa acabou de fazer.
+ */
+const JANELA_DO_RITMO = 2 * 60 * 1000;
+let amostrasDoRitmo = [];
+
+function medirRitmo(recordes) {
+  const agora = Date.now();
+  amostrasDoRitmo.push({ agora, recordes });
+  amostrasDoRitmo = amostrasDoRitmo.filter((a) => agora - a.agora <= JANELA_DO_RITMO);
+
+  const primeira = amostrasDoRitmo[0];
+  const minutos = (agora - primeira.agora) / 60000;
+  // Menos de vinte segundos de janela ainda não é medida, é ruído.
+  if (minutos < 1 / 3) return null;
+  return (recordes - primeira.recordes) / minutos;
+}
+
+function zerarRitmo() {
+  amostrasDoRitmo = [];
+}
+
 /** Devolve o seletor ao valor que a pessoa deixou da última vez. */
 function lembrarDoGatilho() {
   let guardado = null;
@@ -815,6 +895,27 @@ function aplicarEstado(estado) {
   $('iteracoes').textContent = milhares(estado.iteracoes);
   $('velocidade').textContent = estado.velocidade ? milhares(estado.velocidade) : '—';
   $('recordes').textContent = estado.recordes;
+
+  // O relógio que o seletor de insistência persegue. Mostrá-lo é o que torna
+  // aquele seletor legível: dá para ver o número subindo em direção ao valor
+  // escolhido, e cair a zero quando uma melhoria aparece.
+  $('sem-melhoria').textContent = milhares(estado.iteracoes_sem_recorde ?? 0);
+
+  const ritmo = medirRitmo(estado.recordes ?? 0);
+  $('ritmo').textContent = ritmo === null ? '—' : ritmo.toFixed(1).replace('.', ',');
+
+  // O orçamento traduzido para esta configuração. O número cru do seletor não
+  // diz nada a quem olha; "12 candidatos por dezena" diz.
+  const candidatos = $('candidatos-por-dezena');
+  if (estado.candidatos_por_dezena > 0) {
+    candidatos.hidden = false;
+    candidatos.textContent =
+      `Nesta configuração isso dá ${milhares(estado.candidatos_por_dezena)} ` +
+      `candidato${estado.candidatos_por_dezena === 1 ? '' : 's'} avaliado` +
+      `${estado.candidatos_por_dezena === 1 ? '' : 's'} por dezena.`;
+  } else {
+    candidatos.hidden = true;
+  }
 
   const noMinimo = noMinimoComprovado(estado);
   $('selo-otimo').hidden = !noMinimo;
@@ -2120,6 +2221,9 @@ function comecar(
   desmontarTrabalhador();
 
   recordes = [];
+  // A janela do ritmo é de uma busca só: arrastar as amostras da anterior
+  // mostraria um ritmo que não é o desta.
+  zerarRitmo();
   melhorCartelas = cartelasIniciais;
   configuracaoDaBusca = configuracao;
   referenciaDaBusca = referenciaDe(configuracao);
@@ -2161,6 +2265,7 @@ function comecar(
     // mexer no seletor.
     gatilhoDaDiversificacao: gatilhoEscolhido(),
     tetoDeTrocas: trocasEscolhidas(),
+    esforcoPorCartela: esforcoEscolhido(),
   });
   segurarTelaLigada();
 }

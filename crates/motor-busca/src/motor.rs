@@ -1471,6 +1471,49 @@ impl MotorBusca {
         self.config.teto_de_trocas_por_iteracao
     }
 
+    /// Troca o esforço gasto ao montar cada cartela, com o motor rodando.
+    ///
+    /// É a outra metade do custo de uma iteração. O teto de trocas manda no que
+    /// acontece **depois** de remontar a solução; este orçamento manda no que
+    /// acontece **durante** — quantos candidatos o motor avalia antes de
+    /// escolher cada dezena de uma cartela nova.
+    ///
+    /// Mais orçamento dá cartelas melhores e menos tentativas por segundo; menos
+    /// dá o contrário. Qual dos dois rende depende de quanto custa uma avaliação
+    /// naquela configuração, e é por isso que não há um número certo para todas.
+    ///
+    /// O número de candidatos por posição é recalculado aqui: ele é derivado do
+    /// orçamento e do custo de avaliação **desta** configuração, e guardá-lo sem
+    /// recalcular deixaria o ajuste sem efeito.
+    pub fn ajustar_orcamento_por_cartela(&mut self, orcamento: u64) {
+        self.config.orcamento_por_cartela = orcamento.max(1);
+        self.max_candidatos =
+            crate::construcao::candidatos_por_posicao(&self.cobertura, self.config.orcamento_por_cartela);
+    }
+
+    /// O orçamento em vigor, para a tela mostrar o que o motor está usando.
+    pub fn orcamento_por_cartela(&self) -> u64 {
+        self.config.orcamento_por_cartela
+    }
+
+    /// Quantos candidatos o motor avalia em cada posição de uma cartela nova.
+    ///
+    /// É o orçamento traduzido para esta configuração. Vai à tela porque o
+    /// orçamento cru não diz nada a quem olha — "doze candidatos por dezena"
+    /// diz.
+    pub fn candidatos_por_dezena(&self) -> usize {
+        self.max_candidatos
+    }
+
+    /// Há quantas iterações a busca está sem um recorde.
+    ///
+    /// É exatamente o número que o gatilho da diversificação persegue, e por
+    /// isso vale mostrá-lo: quem move o seletor de insistência precisa ver
+    /// contra o que o valor escolhido está sendo comparado.
+    pub fn iteracoes_sem_recorde(&self) -> u64 {
+        self.iteracoes_sem_recorde
+    }
+
     /// Uso e rendimento de cada operador, na ordem de [`Operador::TODOS`].
     pub fn uso_dos_operadores(&self) -> &[UsoDoOperador] {
         &self.uso_dos_operadores

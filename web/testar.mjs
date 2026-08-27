@@ -810,15 +810,74 @@ try {
     `${antesDasTrocas} antes, ${await numero('#melhor-cartelas')} depois`
   );
 
+  // O terceiro seletor: o esforço ao montar cada cartela.
+  marcar(
+    await pagina.locator('#esforco-por-cartela').isVisible(),
+    'o seletor do esforço também aparece durante a busca'
+  );
+  const antesDoEsforco = await numero('#melhor-cartelas');
+  const iteracoesAntesDoEsforco = await numero('#iteracoes');
+  const candidatosAntes = await numero('#candidatos-por-dezena');
+  await pagina.evaluate(() => {
+    const s = document.getElementById('esforco-por-cartela');
+    s.value = '12';
+    s.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  marcar(
+    (await texto('#esforco-valor')) === '500.000',
+    'o número do esforço acompanha o seletor',
+    await texto('#esforco-valor')
+  );
+  // Esperar pelo **próprio número que deve mudar**, e não pelas iterações.
+  // Esperar pelas iterações era uma corrida: elas sobem por um estado que já
+  // estava a caminho antes de o ajuste chegar ao motor, e a asserção seguinte
+  // lia o valor antigo.
+  const recalculou = await pagina
+    .waitForFunction(
+      (antes) =>
+        Number(
+          document.getElementById('candidatos-por-dezena').textContent.replace(/\D/g, '')
+        ) > antes,
+      candidatosAntes,
+      { timeout: 30000 }
+    )
+    .then(() => true)
+    .catch(() => false);
+  marcar(
+    recalculou,
+    'e o motor recalcula os candidatos por dezena — o ajuste não é enfeite',
+    `${candidatosAntes} antes, ${await numero('#candidatos-por-dezena')} depois`
+  );
+  await pagina.waitForFunction(
+    (antes) => Number(document.getElementById('iteracoes').textContent.replace(/\D/g, '')) > antes,
+    iteracoesAntesDoEsforco,
+    { timeout: 30000 }
+  );
+  marcar(
+    (await numero('#melhor-cartelas')) <= antesDoEsforco,
+    'mexer no esforço também não perde o recorde',
+    `${antesDoEsforco} antes, ${await numero('#melhor-cartelas')} depois`
+  );
+
+  // Os mostradores que tornam os seletores utilizáveis.
+  marcar(
+    (await texto('#sem-melhoria')) !== '—',
+    'a tela mostra há quantas iterações não aparece melhoria',
+    await texto('#sem-melhoria')
+  );
+
   // A escolha sobrevive a fechar e reabrir: quem achou o valor bom não deveria
   // ter de reencontrá-lo toda vez.
   await pagina.click('#encerrar');
   await pagina.waitForSelector('#lotinha.ativo', { timeout: 20000 });
   await pagina.reload({ waitUntil: 'networkidle' });
   marcar(
-    (await texto('#gatilho-valor')) === '30' && (await texto('#trocas-valor')) === '10',
-    'e os dois valores escolhidos continuam lá depois de fechar e reabrir',
-    `gatilho ${await texto('#gatilho-valor')} · acabamento ${await texto('#trocas-valor')}`
+    (await texto('#gatilho-valor')) === '30' &&
+      (await texto('#trocas-valor')) === '10' &&
+      (await texto('#esforco-valor')) === '500.000',
+    'e os três valores escolhidos continuam lá depois de fechar e reabrir',
+    `gatilho ${await texto('#gatilho-valor')} · acabamento ${await texto('#trocas-valor')}` +
+      ` · esforço ${await texto('#esforco-valor')}`
   );
 
   marcar(errosDeConsole.length === 0, 'nenhum erro no console', errosDeConsole.join(' | ').slice(0, 120));

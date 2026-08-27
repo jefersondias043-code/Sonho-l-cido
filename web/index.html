@@ -249,6 +249,11 @@
       <div class="item"><span id="iteracoes">—</span><small>iterações</small></div>
       <div class="item"><span id="velocidade">—</span><small>por segundo</small></div>
       <div class="item"><span id="recordes">—</span><small>melhorias</small></div>
+      <!-- Os dois mostradores que tornam os seletores utilizáveis. "melhorias"
+           é acumulado desde o início: depois de cem, mais uma não muda o
+           número, e quem ajusta fica sem realimentação. -->
+      <div class="item"><span id="sem-melhoria">—</span><small>sem melhoria há</small></div>
+      <div class="item"><span id="ritmo">—</span><small>melhorias por minuto</small></div>
     </div>
   </div>
 
@@ -325,6 +330,42 @@
       fecha, puxe para a esquerda. Medindo em 20 dezenas com jogos de 17, 200
       quase dobrou o que a busca conseguiu tirar — e 50 foi pior que não ter
       teto nenhum, então o mínimo não é o melhor.
+    </p>
+  </div>
+
+  <!-- A outra metade do custo de uma iteração: o teto de trocas manda no que
+       acontece depois de remontar a solução, este manda no que acontece
+       durante. -->
+  <div class="cartao" id="cartao-esforco">
+    <div class="rotulo">Esforço ao montar cada cartela</div>
+    <div class="numerao">
+      <span id="esforco-valor">30.000</span><small>de orçamento</small>
+    </div>
+    <input
+      type="range"
+      id="esforco-por-cartela"
+      min="0"
+      max="12"
+      step="1"
+      value="6"
+      aria-label="Quanto esforço o motor gasta escolhendo as dezenas de cada cartela nova"
+    >
+    <div class="extremos">
+      <span>2.000 — monta às pressas</span>
+      <span>500.000 — escolhe com cuidado</span>
+    </div>
+    <div class="referencia" id="candidatos-por-dezena" hidden></div>
+    <p class="ajuda">
+      Ao montar uma cartela nova, o motor avalia vários candidatos antes de
+      escolher cada dezena. À esquerda ele monta às pressas e faz muitas
+      tentativas; à direita escolhe com cuidado e faz poucas. É o mesmo tipo de
+      troca do acabamento, só que na outra ponta da iteração.
+    </p>
+    <p class="ajuda">
+      Julgue por <strong>melhorias por minuto</strong>, não por
+      <strong>por segundo</strong>: mais tentativas ruins não valem menos
+      tentativas boas. Se a velocidade subir e as melhorias não, você foi longe
+      demais para a esquerda.
     </p>
   </div>
   <button class="secundario" id="exportar-sessao">Exportar sessão para arquivo</button>

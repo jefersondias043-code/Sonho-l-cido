@@ -155,6 +155,17 @@ pub struct Estado {
     pub gatilho_da_diversificacao: u64,
     /// O teto de trocas por iteração em vigor.
     pub teto_de_trocas: u64,
+    /// O esforço gasto ao montar cada cartela, em vigor.
+    pub orcamento_por_cartela: u64,
+    /// Quantos candidatos o motor avalia por dezena — o orçamento traduzido
+    /// para esta configuração, que é o número que diz alguma coisa a quem olha.
+    pub candidatos_por_dezena: usize,
+    /// Há quantas iterações a busca está sem um recorde.
+    ///
+    /// Vai em **todo** lote, e não só no retrato de gravação, porque é o
+    /// mostrador que torna o seletor de insistência utilizável: sem ele, quem
+    /// move o seletor não vê contra o que o valor está sendo comparado.
+    pub iteracoes_sem_recorde: u64,
     /// Como o ponto de partida foi construído.
     pub origem_do_inicio: String,
     /// Verdadeiro quando esta busca continua uma sessão salva.
@@ -707,6 +718,14 @@ impl MotorWeb {
         self.interno.ajustar_teto_de_trocas(u64::from(trocas));
     }
 
+    /// Troca o esforço gasto ao montar cada cartela, com o motor rodando.
+    ///
+    /// A outra metade do custo de uma iteração: o teto de trocas manda no que
+    /// acontece depois de remontar, este manda no que acontece durante.
+    pub fn ajustar_orcamento_por_cartela(&mut self, orcamento: u32) {
+        self.interno.ajustar_orcamento_por_cartela(u64::from(orcamento));
+    }
+
     /// Estado atual, sem avançar nada.
     pub fn estado(&self) -> String {
         self.montar_estado(Vec::new())
@@ -891,6 +910,9 @@ impl MotorWeb {
                 .is_some_and(|c| c.aplicacao == motor_core::Aplicacao::Exata && c.referencia.resolvido()),
             gatilho_da_diversificacao: self.interno.gatilho_da_diversificacao(),
             teto_de_trocas: self.interno.teto_de_trocas(),
+            orcamento_por_cartela: self.interno.orcamento_por_cartela(),
+            candidatos_por_dezena: self.interno.candidatos_por_dezena(),
+            iteracoes_sem_recorde: self.interno.iteracoes_sem_recorde(),
             origem_do_inicio: self.interno.origem_do_inicio().to_string(),
             sessao_retomada: self.interno.sessao_retomada(),
             cartelas_trazidas: self.interno.cartelas_trazidas(),

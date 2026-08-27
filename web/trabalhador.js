@@ -156,6 +156,13 @@ function tratar(mensagem) {
         if (motor) motor.ajustar_teto_de_trocas(mensagem.trocas);
         break;
 
+      // O seletor do esforço ao montar cartela. Do lado do Rust ele recalcula
+      // quantos candidatos cabem por dezena nesta configuração — guardar o
+      // orçamento sem recalcular deixaria o ajuste sem efeito.
+      case 'esforco':
+        if (motor) motor.ajustar_orcamento_por_cartela(mensagem.orcamento);
+        break;
+
       case 'pausar':
         // Pausa manual suspende o ciclo. Quem tocou em Pausar quer o motor
         // parado, e não parado por quinze minutos e religado sozinho.
@@ -220,6 +227,7 @@ function criar({
   segundosDoConstrutor: pedido,
   gatilhoDaDiversificacao,
   tetoDeTrocas,
+  esforcoPorCartela,
 }) {
   segundosDoConstrutor = Math.max(1, Number(pedido) || SEGUNDOS_DO_CONSTRUTOR);
   descartarMotor();
@@ -257,6 +265,9 @@ function criar({
   }
   if (Number.isFinite(tetoDeTrocas) && tetoDeTrocas > 0) {
     motor.ajustar_teto_de_trocas(tetoDeTrocas);
+  }
+  if (Number.isFinite(esforcoPorCartela) && esforcoPorCartela > 0) {
+    motor.ajustar_orcamento_por_cartela(esforcoPorCartela);
   }
 
   lote = LOTE_INICIAL;
