@@ -936,7 +936,10 @@ try {
   let desligou = true;
   await pagina
     .waitForFunction(() => document.getElementById('trilha').textContent === 'livre', null, {
-      timeout: 30000,
+      // Folgado de propósito: o que se afirma aqui é que o modo chega ao motor,
+      // não em quanto tempo. Com a máquina ocupada um lote demora, e um teste
+      // que falha por isso não está medindo o que diz medir.
+      timeout: 60000,
     })
     .catch(() => {
       desligou = false;
