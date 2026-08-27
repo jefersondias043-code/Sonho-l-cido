@@ -122,6 +122,21 @@ impl SeletorAdaptativo {
         self.segmentos_concluidos += 1;
     }
 
+    /// Muda a reação e o tamanho do segmento com a busca rodando.
+    ///
+    /// A reação é quanto o rendimento do último segmento pesa contra o
+    /// acumulado: 0 congela os pesos onde estão, 1 joga fora todo o histórico a
+    /// cada reajuste. O segmento é de quantas em quantas iterações o reajuste
+    /// acontece.
+    ///
+    /// Não zera pontos nem usos: o segmento em formação continua valendo, e um
+    /// segmento novo mais curto pode fechar na iteração seguinte.
+    pub fn reconfigurar(&mut self, fator_reacao: f64, tamanho_segmento: u64) {
+        self.fator_reacao = fator_reacao.clamp(0.0, 1.0);
+        self.tamanho_segmento = tamanho_segmento.max(1);
+        self.passo_no_segmento = self.passo_no_segmento.min(self.tamanho_segmento - 1);
+    }
+
     pub fn pesos(&self) -> &[f64] {
         &self.pesos
     }

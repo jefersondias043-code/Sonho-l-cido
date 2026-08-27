@@ -326,6 +326,49 @@ fn texto_para_gerador(texto: &str) -> Option<Pcg64Mcg> {
     texto.trim().parse::<u128>().ok().map(Pcg64Mcg::new)
 }
 
+/// Os ajustes que a tela pode fazer no motor rodando.
+///
+/// Todo campo é opcional, e a tela manda só o que o dedo acabou de mexer. O
+/// nome de cada um é o mesmo do parâmetro no motor de propósito: quem lê o
+/// painel e quem lê o código estão olhando a mesma coisa.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct AjustesEntrada {
+    #[serde(default)]
+    pub iteracoes_ate_diversificar: Option<u64>,
+    #[serde(default)]
+    pub teto_de_trocas_por_iteracao: Option<u64>,
+    #[serde(default)]
+    pub orcamento_por_cartela: Option<u64>,
+    #[serde(default)]
+    pub ruido_reconstrucao: Option<f64>,
+    #[serde(default)]
+    pub memoria_aceitacao: Option<usize>,
+    #[serde(default)]
+    pub capacidade_por_faixa: Option<usize>,
+    #[serde(default)]
+    pub maximo_de_faixas: Option<usize>,
+    #[serde(default)]
+    pub distancia_minima_elites: Option<f64>,
+    #[serde(default)]
+    pub segmento_adaptativo: Option<u64>,
+    #[serde(default)]
+    pub fator_reacao: Option<f64>,
+    /// Pontos por resultado, na ordem: recorde, melhorou, aceita, recusada.
+    /// Uma lista de outro tamanho é ignorada inteira — aplicar em parte daria
+    /// recompensas trocadas, que é pior que não aplicar.
+    #[serde(default)]
+    pub recompensas: Option<Vec<f64>>,
+    /// `"unitario"`, `"ate_o_piso"` ou `"adaptativo"`.
+    #[serde(default)]
+    pub passo_da_meta: Option<String>,
+    /// `"do_zero"` ou `"ruina"`.
+    #[serde(default)]
+    pub reinicio_da_diversificacao: Option<String>,
+    /// Fração arruinada quando o reinício é `"ruina"`.
+    #[serde(default)]
+    pub fracao_da_ruina: Option<f64>,
+}
+
 /// Observador que apenas recolhe os recordes do lote.
 ///
 /// Progresso e diversificação são ignorados de propósito: a interface se
@@ -726,6 +769,114 @@ impl MotorWeb {
         self.interno.ajustar_orcamento_por_cartela(u64::from(orcamento));
     }
 
+    /// Aplica ajustes ao motor rodando, a partir de um JSON parcial.
+    ///
+    /// Um método só para treze parâmetros. A alternativa — treze métodos quase
+    /// iguais — seria treze lugares para esquecer o recálculo que alguns deles
+    /// exigem, e é o tipo de repetição que fica errada em silêncio.
+    ///
+    /// Um JSON ilegível é ignorado, e a busca segue com o que tinha: um painel
+    /// que derruba o motor por causa de um campo mal formado seria pior que um
+    /// painel que não muda nada.
+    pub fn ajustar(&mut self, ajustes_json: &str) {
+        let Ok(entrada) = serde_json::from_str::<AjustesEntrada>(ajustes_json) else {
+            return;
+        };
+
+        let recompensas = entrada.recompensas.as_ref().and_then(|r| {
+            (r.len() == 4 && r.iter().all(|p| p.is_finite() && *p >= 0.0)).then(|| {
+                motor_busca::Recompensas {
+                    recorde: r[0],
+                    melhorou: r[1],
+                    aceita: r[2],
+                    recusada: r[3],
+                }
+            })
+        });
+
+        let passo_da_meta = entrada.passo_da_meta.as_deref().and_then(|nome| match nome {
+            "unitario" => Some(motor_busca::PassoDaMeta::Unitario),
+            "ate_o_piso" => Some(motor_busca::PassoDaMeta::AteOPiso),
+            "adaptativo" => Some(motor_busca::PassoDaMeta::Adaptativo {
+                maximo: 64,
+                iteracoes_para_dobrar: 2_000,
+                iteracoes_para_recuar: 20_000,
+            }),
+            _ => None,
+        });
+
+        let reinicio = entrada.reinicio_da_diversificacao.as_deref().and_then(|nome| match nome {
+            "do_zero" => Some(motor_busca::ReinicioDaDiversificacao::DoZero),
+            "ruina" => Some(motor_busca::ReinicioDaDiversificacao::RuinaDoRecorde {
+                fracao: entrada.fracao_da_ruina.unwrap_or(0.35).clamp(0.05, 0.9),
+            }),
+            _ => None,
+        });
+
+        self.interno.aplicar_ajustes(&motor_busca::Ajustes {
+            iteracoes_ate_diversificar: entrada.iteracoes_ate_diversificar,
+            teto_de_trocas_por_iteracao: entrada.teto_de_trocas_por_iteracao,
+            orcamento_por_cartela: entrada.orcamento_por_cartela,
+            ruido_reconstrucao: entrada.ruido_reconstrucao,
+            memoria_aceitacao: entrada.memoria_aceitacao,
+            capacidade_por_faixa: entrada.capacidade_por_faixa,
+            maximo_de_faixas: entrada.maximo_de_faixas,
+            distancia_minima_elites: entrada.distancia_minima_elites,
+            segmento_adaptativo: entrada.segmento_adaptativo,
+            fator_reacao: entrada.fator_reacao,
+            recompensas,
+            passo_da_meta,
+            reinicio_da_diversificacao: reinicio,
+        });
+    }
+
+    /// Tudo que o motor está usando agora, em JSON.
+    ///
+    /// A tela mostra isto ao lado dos controles: sem ele, quem move um seletor
+    /// vê o que o seletor diz, e não o que o motor faz — e são coisas diferentes
+    /// enquanto a mensagem não chega, ou se algum ajuste for recusado.
+    pub fn ajustes_em_vigor(&self) -> String {
+        let c = self.interno.configuracao();
+        let entrada = AjustesEntrada {
+            iteracoes_ate_diversificar: Some(c.iteracoes_ate_diversificar),
+            teto_de_trocas_por_iteracao: Some(c.teto_de_trocas_por_iteracao),
+            orcamento_por_cartela: Some(c.orcamento_por_cartela),
+            ruido_reconstrucao: Some(c.ruido_reconstrucao),
+            memoria_aceitacao: Some(c.memoria_aceitacao),
+            capacidade_por_faixa: Some(c.capacidade_por_faixa),
+            maximo_de_faixas: Some(c.maximo_de_faixas),
+            distancia_minima_elites: Some(c.distancia_minima_elites),
+            segmento_adaptativo: Some(c.segmento_adaptativo),
+            fator_reacao: Some(c.fator_reacao),
+            recompensas: Some(vec![
+                c.recompensas.recorde,
+                c.recompensas.melhorou,
+                c.recompensas.aceita,
+                c.recompensas.recusada,
+            ]),
+            passo_da_meta: Some(
+                match c.passo_da_meta {
+                    motor_busca::PassoDaMeta::Unitario => "unitario",
+                    motor_busca::PassoDaMeta::AteOPiso => "ate_o_piso",
+                    motor_busca::PassoDaMeta::Adaptativo { .. } => "adaptativo",
+                }
+                .to_string(),
+            ),
+            reinicio_da_diversificacao: Some(
+                match c.reinicio_da_diversificacao {
+                    motor_busca::ReinicioDaDiversificacao::DoZero => "do_zero",
+                    motor_busca::ReinicioDaDiversificacao::RuinaDoRecorde { .. } => "ruina",
+                }
+                .to_string(),
+            ),
+            fracao_da_ruina: match c.reinicio_da_diversificacao {
+                motor_busca::ReinicioDaDiversificacao::RuinaDoRecorde { fracao } => Some(fracao),
+                motor_busca::ReinicioDaDiversificacao::DoZero => None,
+            },
+        };
+        serde_json::to_string(&entrada).unwrap_or_else(|_| "{}".to_string())
+    }
+
     /// Estado atual, sem avançar nada.
     pub fn estado(&self) -> String {
         self.montar_estado(Vec::new())
@@ -1121,6 +1272,83 @@ mod testes {
         ] {
             assert_eq!(depois[campo], antes[campo], "o campo {campo} não atravessou o arquivo");
         }
+    }
+
+    /// O painel de ajuste manual chega mesmo ao motor.
+    #[test]
+    fn os_ajustes_do_painel_valem_no_motor() {
+        // O que este teste guarda: um painel que mostra números bonitos e não
+        // muda nada é pior que não ter painel, porque quem o usa passa a
+        // atribuir ao motor decisões que ele nunca tomou.
+        let mut motor = MotorWeb::construir(&configuracao_para_buscar()).unwrap();
+        motor.preparar();
+
+        let antes = estado_de(&motor.ajustes_em_vigor());
+        assert_eq!(antes["memoria_aceitacao"], 500);
+        assert_eq!(antes["passo_da_meta"], "unitario");
+        assert_eq!(antes["reinicio_da_diversificacao"], "do_zero");
+
+        motor.ajustar(
+            r#"{
+                "memoria_aceitacao": 50,
+                "ruido_reconstrucao": 0.7,
+                "capacidade_por_faixa": 3,
+                "maximo_de_faixas": 2,
+                "distancia_minima_elites": 0.6,
+                "segmento_adaptativo": 100,
+                "fator_reacao": 0.9,
+                "recompensas": [40, 20, 8, 2],
+                "passo_da_meta": "ate_o_piso",
+                "reinicio_da_diversificacao": "ruina",
+                "fracao_da_ruina": 0.5
+            }"#,
+        );
+
+        let depois = estado_de(&motor.ajustes_em_vigor());
+        assert_eq!(depois["memoria_aceitacao"], 50, "a memória da aceitação");
+        assert_eq!(depois["ruido_reconstrucao"], 0.7, "o acaso da reconstrução");
+        assert_eq!(depois["capacidade_por_faixa"], 3, "a capacidade das faixas");
+        assert_eq!(depois["maximo_de_faixas"], 2, "o número de faixas");
+        assert_eq!(depois["distancia_minima_elites"], 0.6, "a distância mínima");
+        assert_eq!(depois["segmento_adaptativo"], 100, "o segmento do seletor");
+        assert_eq!(depois["fator_reacao"], 0.9, "a reação dos pesos");
+        assert_eq!(depois["recompensas"], serde_json::json!([40.0, 20.0, 8.0, 2.0]));
+        assert_eq!(depois["passo_da_meta"], "ate_o_piso");
+        assert_eq!(depois["reinicio_da_diversificacao"], "ruina");
+        assert_eq!(depois["fracao_da_ruina"], 0.5);
+
+        // E o motor continua trabalhando com os valores novos.
+        let recorde = estado_de(&motor.estado())["melhor_cartelas"].clone();
+        motor.avancar(2_000, 60_000);
+        assert!(
+            estado_de(&motor.estado())["melhor_cartelas"].as_u64()
+                <= recorde.as_u64(),
+            "o recorde não pode piorar por causa de um ajuste"
+        );
+    }
+
+    /// Um ajuste parcial mexe só no que veio, e lixo não derruba nada.
+    #[test]
+    fn um_ajuste_parcial_nao_encosta_no_resto() {
+        let mut motor = MotorWeb::construir(&configuracao_para_buscar()).unwrap();
+        motor.preparar();
+
+        motor.ajustar(r#"{"ruido_reconstrucao": 0.5}"#);
+        let depois = estado_de(&motor.ajustes_em_vigor());
+        assert_eq!(depois["ruido_reconstrucao"], 0.5, "o que veio muda");
+        assert_eq!(depois["memoria_aceitacao"], 500, "o que não veio fica");
+
+        // Um JSON quebrado é ignorado: um painel que derruba o motor por causa
+        // de um campo mal formado seria pior que um painel que não muda nada.
+        motor.ajustar("isto não é json");
+        motor.ajustar(r#"{"recompensas": [1, 2]}"#);
+        let ainda = estado_de(&motor.ajustes_em_vigor());
+        assert_eq!(ainda["ruido_reconstrucao"], 0.5, "o lixo não desfez o ajuste bom");
+        assert_eq!(
+            ainda["recompensas"],
+            serde_json::json!([30.0, 12.0, 4.0, 0.0]),
+            "uma lista de recompensas incompleta é recusada inteira"
+        );
     }
 
     /// O arquivo carrega o estado da busca, e não só o resultado dela.

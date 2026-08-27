@@ -1289,3 +1289,110 @@ details.cartao[open] > summary::after {
   font-size: 13px;
   margin: -4px 0 10px;
 }
+
+/* ─────────── painel de ajuste manual ─────────── */
+
+/*
+ * Cada controle do painel é um bloco compacto: rótulo, valor, seletor,
+ * extremos. Bem menor que os três cartões principais, e de propósito — são
+ * catorze, e dar a cada um o peso visual de um cartão de destaque tornaria a
+ * tela ilegível.
+ */
+.ajuste {
+  padding: 14px 0;
+  border-top: 1px solid var(--borda);
+}
+
+.ajuste-topo {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
+.ajuste-nome {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.ajuste-valor {
+  font-variant-numeric: tabular-nums;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--acento);
+}
+
+.ajuste input[type='range'] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 44px;
+  background: transparent;
+  cursor: pointer;
+  margin: 0;
+}
+
+.ajuste input[type='range']::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--fundo-campo);
+  border: 1px solid var(--borda);
+}
+
+.ajuste input[type='range']::-moz-range-track {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--fundo-campo);
+  border: 1px solid var(--borda);
+}
+
+.ajuste input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 26px;
+  height: 26px;
+  margin-top: -11px;
+  border-radius: 50%;
+  background: var(--acento);
+  border: 3px solid var(--fundo-cartao);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+
+.ajuste input[type='range']::-moz-range-thumb {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--acento);
+  border: 3px solid var(--fundo-cartao);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+
+.ajuste select {
+  width: 100%;
+  min-height: 44px;
+  background: var(--fundo-campo);
+  color: var(--texto);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  padding: 0 12px;
+  font-size: 15px;
+}
+
+.ajuste .extremos {
+  margin: -6px 0 6px;
+}
+
+/* O aviso dos parâmetros que eu não recomendaria mexer. Fica ao lado do
+   controle, e não escondido: esconder seria decidir pelo usuário. */
+.ajuste-risco {
+  display: block;
+  margin-top: 4px;
+  padding: 8px 10px;
+  border-left: 3px solid var(--ouro);
+  background: rgba(255, 199, 90, 0.08);
+  border-radius: 0 8px 8px 0;
+  color: var(--texto-fraco);
+  font-size: 13.5px;
+  line-height: 1.45;
+}

@@ -53,7 +53,8 @@ pub use controle::{
     Silencioso,
 };
 pub use motor::{
-    Configuracao, MotorBusca, PassoDaMeta, ReinicioDaDiversificacao, RetratoDoMotor, UsoDoOperador,
+    Ajustes, Configuracao, MotorBusca, PassoDaMeta, ReinicioDaDiversificacao, RetratoDoMotor,
+    UsoDoOperador,
     TETO_DE_ELITES,
 };
 pub use oficina::Oficina;

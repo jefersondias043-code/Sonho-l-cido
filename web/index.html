@@ -368,6 +368,27 @@
       demais para a esquerda.
     </p>
   </div>
+
+  <!-- O painel completo. Os controles de dentro são gerados a partir de uma
+       tabela em `app.js`, e não escritos aqui: são catorze, e catorze blocos de
+       HTML quase iguais seriam catorze lugares para um se desencontrar dos
+       outros. A tabela é a fonte única — rótulo, faixa, padrão e aviso. -->
+  <div class="cartao" id="cartao-manual">
+    <label class="alternador">
+      <input type="checkbox" id="modo-manual">
+      <span>Ajuste manual completo</span>
+    </label>
+    <p class="ajuda" id="aviso-manual">
+      No modo padrão, tudo abaixo fica nos valores que eu medi. Ligando o ajuste
+      manual, todos os parâmetros do motor ficam na sua mão — inclusive os que
+      eu não recomendaria mexer, marcados com o motivo ao lado. Desligar devolve
+      tudo ao padrão.
+    </p>
+    <div id="ajuste-fino" hidden></div>
+    <button class="secundario" id="restaurar-padrao" hidden>
+      Restaurar tudo ao padrão
+    </button>
+  </div>
   <button class="secundario" id="exportar-sessao">Exportar sessão para arquivo</button>
   <p class="ajuda">
     O arquivo leva o trabalho inteiro, não só as cartelas: o recorde, a solução

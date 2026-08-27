@@ -63,6 +63,21 @@ impl AceitacaoTardia {
         self.historico.len()
     }
 
+    /// Muda o tamanho da memória com a busca rodando.
+    ///
+    /// Encurtar corta o excesso; alargar completa com o custo de referência
+    /// dado. Em nenhum dos casos o que já estava se perde — a régua fica com a
+    /// tolerância que tinha nas posições que sobrevivem, e é isso que faz o
+    /// ajuste valer na hora em vez de esperar `L` iterações para ter efeito.
+    pub fn redimensionar(&mut self, tamanho: usize, custo: ChaveCusto) {
+        let tamanho = tamanho.max(1);
+        if tamanho == self.historico.len() {
+            return;
+        }
+        self.historico.resize(tamanho, custo);
+        self.passo %= tamanho as u64;
+    }
+
     /// A memória inteira, para gravar num arquivo de sessão.
     ///
     /// Sem ela, retomar devolve uma régua chapada no custo da solução salva, e

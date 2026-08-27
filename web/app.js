@@ -590,6 +590,422 @@ function lembrarDoEsforco() {
 
 lembrarDoEsforco();
 
+/* ─────────── painel de ajuste manual ─────────── */
+
+/*
+ * Todos os parâmetros do motor, numa tabela.
+ *
+ * Catorze controles escritos à mão em HTML seriam catorze lugares para o
+ * rótulo, a faixa, o padrão e o aviso se desencontrarem. Aqui cada linha é a
+ * fonte única de tudo que aquele controle é, e a tela é gerada dela.
+ *
+ * `chave` é o nome do parâmetro no motor — de propósito o mesmo dos dois lados,
+ * para quem lê o painel e quem lê o código estarem olhando a mesma coisa.
+ *
+ * `risco` existe porque alguns destes eu não recomendaria mexer, e a resposta
+ * certa a isso é dizer o motivo ao lado do controle, não escondê-lo.
+ */
+const AJUSTES_FINOS = [
+  {
+    chave: 'memoria_aceitacao',
+    nome: 'Tolerância a piorar',
+    unidade: 'iterações de memória',
+    degraus: [50, 100, 200, 350, 500, 750, 1_000, 2_000, 5_000],
+    padrao: 500,
+    esquerda: '50 — quase só aceita melhorar',
+    direita: '5.000 — tolera muito',
+    ajuda:
+      'Contra o que uma tentativa é julgada: a solução de tantas iterações ' +
+      'atrás. Curto deixa a busca gulosa e ela trava mais fácil; longo deixa ' +
+      'passar quase tudo e ela vagueia.',
+  },
+  {
+    chave: 'ruido_reconstrucao',
+    nome: 'Acaso ao reconstruir',
+    unidade: '',
+    minimo: 0,
+    maximo: 1,
+    passo: 0.05,
+    padrao: 0.25,
+    esquerda: '0 — sempre a melhor dezena',
+    direita: '1 — sorteio puro',
+    ajuda:
+      'Ao repor uma cartela, quanto o motor foge da escolha melhor. Zero ' +
+      'repete sempre o mesmo caminho e não sai do lugar; um monta lixo.',
+  },
+  {
+    chave: 'capacidade_por_faixa',
+    nome: 'Soluções guardadas por faixa',
+    unidade: '',
+    minimo: 1,
+    maximo: 24,
+    passo: 1,
+    padrao: 12,
+    esquerda: '1',
+    direita: '24',
+    ajuda:
+      'Quantas soluções o arquivo guarda para cada tamanho. Mais material ' +
+      'para recombinar e para reiniciar depois de uma diversificação.',
+  },
+  {
+    chave: 'maximo_de_faixas',
+    nome: 'Faixas do arquivo',
+    unidade: '',
+    minimo: 1,
+    maximo: 16,
+    passo: 1,
+    padrao: 8,
+    esquerda: '1',
+    direita: '16',
+    ajuda:
+      'Quantos tamanhos diferentes o arquivo mantém ao mesmo tempo. As faixas ' +
+      'mais gordas são as primeiras a sair quando estoura.',
+  },
+  {
+    chave: 'distancia_minima_elites',
+    nome: 'Diferença mínima entre guardadas',
+    unidade: '',
+    minimo: 0,
+    maximo: 1,
+    passo: 0.05,
+    padrao: 0.3,
+    esquerda: '0 — aceita quase iguais',
+    direita: '1 — só se nada em comum',
+    ajuda:
+      'O quanto duas soluções guardadas precisam diferir. Baixo enche o ' +
+      'arquivo de variações da mesma ideia; alto deixa o arquivo quase vazio.',
+  },
+  {
+    chave: 'segmento_adaptativo',
+    nome: 'Iterações entre reajustes dos pesos',
+    unidade: '',
+    degraus: [50, 100, 200, 350, 500, 1_000, 2_000, 5_000],
+    padrao: 500,
+    esquerda: '50 — reajusta sempre',
+    direita: '5.000 — reajusta raro',
+    ajuda:
+      'De quantas em quantas iterações o motor recalcula qual transformação ' +
+      'anda rendendo.',
+    risco:
+      'Medido: o seletor de pesos empurrou as duas transformações mais ' +
+      'profundas para o piso, com 0% de aceitação. Mexer aqui pode melhorar ' +
+      'isso — ou piorar. Eu não sei, porque nunca variei este número.',
+  },
+  {
+    chave: 'fator_reacao',
+    nome: 'Velocidade de reação dos pesos',
+    unidade: '',
+    minimo: 0,
+    maximo: 1,
+    passo: 0.05,
+    padrao: 0.2,
+    esquerda: '0 — congela os pesos',
+    direita: '1 — esquece o passado',
+    ajuda:
+      'Quanto o rendimento do último segmento pesa contra tudo que veio antes.',
+    risco:
+      'Mesmo caso do anterior: é o mecanismo que desligou as transformações ' +
+      'profundas, e o efeito de mexer nele não foi medido.',
+  },
+  {
+    chave: 'recompensa_recorde',
+    nome: 'Pontos por um recorde',
+    unidade: '',
+    minimo: 0,
+    maximo: 60,
+    passo: 1,
+    padrao: 30,
+    esquerda: '0',
+    direita: '60',
+    ajuda: 'Quanto uma transformação ganha quando derruba o recorde.',
+    risco:
+      'As quatro recompensas decidem quais transformações o motor passa a ' +
+      'usar. Desequilibrá-las é a forma mais direta de fazer o motor render ' +
+      'menos sem que nada pareça errado na tela.',
+  },
+  {
+    chave: 'recompensa_melhorou',
+    nome: 'Pontos por melhorar',
+    unidade: '',
+    minimo: 0,
+    maximo: 60,
+    passo: 1,
+    padrao: 12,
+    esquerda: '0',
+    direita: '60',
+    ajuda: 'Quando a tentativa ficou melhor que a solução de onde partiu.',
+  },
+  {
+    chave: 'recompensa_aceita',
+    nome: 'Pontos por ser aceita',
+    unidade: '',
+    minimo: 0,
+    maximo: 60,
+    passo: 1,
+    padrao: 4,
+    esquerda: '0',
+    direita: '60',
+    ajuda:
+      'Quando piorou mas passou no critério de aceitação — é o que mantém a ' +
+      'exploração viva.',
+  },
+  {
+    chave: 'recompensa_recusada',
+    nome: 'Pontos por ser recusada',
+    unidade: '',
+    minimo: 0,
+    maximo: 60,
+    passo: 1,
+    padrao: 0,
+    esquerda: '0',
+    direita: '60',
+    ajuda:
+      'Zero por padrão. Dar pontos aqui é dizer ao motor que tentar e falhar ' +
+      'também vale — que é uma forma de manter vivas as transformações ' +
+      'profundas, hoje desligadas por nunca serem aceitas.',
+  },
+  {
+    chave: 'passo_da_meta',
+    nome: 'Quanto a meta desce por recorde',
+    opcoes: [
+      ['unitario', 'Uma cartela por vez (padrão)'],
+      ['adaptativo', 'Dobra enquanto vem fácil'],
+      ['ate_o_piso', 'Mira direto no mínimo provado'],
+    ],
+    padrao: 'unitario',
+    ajuda: 'A meta é um teto de cartelas. Descê-la aperta a busca.',
+    risco:
+      'Medido com seis sementes por caso: mirar no piso deu **zero recordes** ' +
+      'em quatro configurações, e o passo dobrando trava numa meta que não ' +
+      'alcança. O padrão ganhou dos dois.',
+  },
+  {
+    chave: 'reinicio_da_diversificacao',
+    nome: 'De onde a diversificação parte',
+    opcoes: [
+      ['do_zero', 'Constrói do zero (padrão)'],
+      ['ruina', 'Arruína o recorde e reconstrói'],
+    ],
+    padrao: 'do_zero',
+    ajuda:
+      'Quando o motor muda de região, metade das vezes ele parte de uma ' +
+      'solução guardada; a outra metade é isto.',
+    risco:
+      'Arruinar o recorde perdeu em duas medições — 261,8 contra 258,0 na ' +
+      'primeira, e 256,0 contra 247,0 na segunda, esta com eventos ' +
+      'suficientes. O mecanismo faz sentido; o resultado não veio.',
+  },
+  {
+    chave: 'fracao_da_ruina',
+    nome: 'Quanto da solução a ruína joga fora',
+    unidade: '',
+    minimo: 0.05,
+    maximo: 0.9,
+    passo: 0.05,
+    padrao: 0.35,
+    esquerda: '5%',
+    direita: '90%',
+    ajuda: 'Só tem efeito com o reinício acima em "arruína o recorde".',
+  },
+];
+
+const CHAVE_DO_MANUAL = 'sonho-lucido:ajuste-manual';
+
+/** O valor em vigor de um ajuste, lido do controle que o representa. */
+function valorDoAjuste(a) {
+  const campo = $(`aj-${a.chave}`);
+  if (!campo) return a.padrao;
+  if (a.opcoes) return campo.value;
+  if (a.degraus) return a.degraus[Number(campo.value)] ?? a.padrao;
+  return Number(campo.value);
+}
+
+/** Como o valor aparece ao lado do nome. */
+function mostrarValor(a, valor) {
+  if (a.opcoes) return '';
+  if (Number.isInteger(valor) && Math.abs(valor) >= 1) return milhares(valor);
+  return valor.toFixed(2).replace('.', ',');
+}
+
+/**
+ * Monta o painel a partir da tabela.
+ *
+ * Uma vez só, na carga. Os controles ficam escondidos junto do contêiner
+ * enquanto o modo manual estiver desligado.
+ */
+function montarAjusteFino() {
+  const destino = $('ajuste-fino');
+  destino.innerHTML = AJUSTES_FINOS.map((a) => {
+    const id = `aj-${a.chave}`;
+    const controle = a.opcoes
+      ? `<select id="${id}">${a.opcoes
+          .map(([v, r]) => `<option value="${v}">${escapar(r)}</option>`)
+          .join('')}</select>`
+      : a.degraus
+        ? `<input type="range" id="${id}" min="0" max="${a.degraus.length - 1}" step="1"
+             value="${a.degraus.indexOf(a.padrao)}" aria-label="${escapar(a.nome)}">`
+        : `<input type="range" id="${id}" min="${a.minimo}" max="${a.maximo}"
+             step="${a.passo}" value="${a.padrao}" aria-label="${escapar(a.nome)}">`;
+
+    const extremos = a.opcoes
+      ? ''
+      : `<div class="extremos"><span>${escapar(a.esquerda)}</span><span>${escapar(
+          a.direita
+        )}</span></div>`;
+
+    return `
+      <div class="ajuste">
+        <div class="ajuste-topo">
+          <span class="ajuste-nome">${escapar(a.nome)}</span>
+          <span class="ajuste-valor" id="val-${a.chave}"></span>
+        </div>
+        ${controle}
+        ${extremos}
+        <p class="ajuda">${escapar(a.ajuda)}${
+          a.unidade ? ` Medido em ${escapar(a.unidade)}.` : ''
+        }</p>
+        ${a.risco ? `<span class="ajuste-risco">${escapar(a.risco)}</span>` : ''}
+      </div>`;
+  }).join('');
+
+  for (const a of AJUSTES_FINOS) {
+    const campo = $(`aj-${a.chave}`);
+    campo.addEventListener('input', () => aplicarAjusteFino(a));
+    campo.addEventListener('change', () => aplicarAjusteFino(a));
+    pintarAjuste(a);
+  }
+}
+
+function pintarAjuste(a) {
+  $(`val-${a.chave}`).textContent = mostrarValor(a, valorDoAjuste(a));
+}
+
+/*
+ * Manda ao motor só o que mudou.
+ *
+ * As quatro recompensas viajam juntas porque do lado do Rust elas são um
+ * conjunto: mandar uma sozinha daria recompensas trocadas.
+ */
+function aplicarAjusteFino(a) {
+  pintarAjuste(a);
+  guardarAjustesFinos();
+  if (!trabalhador) return;
+
+  const ajustes = {};
+  if (a.chave.startsWith('recompensa_')) {
+    ajustes.recompensas = [
+      valorDoAjuste(AJUSTES_FINOS.find((x) => x.chave === 'recompensa_recorde')),
+      valorDoAjuste(AJUSTES_FINOS.find((x) => x.chave === 'recompensa_melhorou')),
+      valorDoAjuste(AJUSTES_FINOS.find((x) => x.chave === 'recompensa_aceita')),
+      valorDoAjuste(AJUSTES_FINOS.find((x) => x.chave === 'recompensa_recusada')),
+    ];
+  } else if (a.chave === 'reinicio_da_diversificacao' || a.chave === 'fracao_da_ruina') {
+    ajustes.reinicio_da_diversificacao = valorDoAjuste(
+      AJUSTES_FINOS.find((x) => x.chave === 'reinicio_da_diversificacao')
+    );
+    ajustes.fracao_da_ruina = valorDoAjuste(
+      AJUSTES_FINOS.find((x) => x.chave === 'fracao_da_ruina')
+    );
+  } else {
+    ajustes[a.chave] = valorDoAjuste(a);
+  }
+  trabalhador.postMessage({ tipo: 'ajustar', ajustes });
+}
+
+/** Tudo que o painel tem agora, para mandar de uma vez. */
+function todosOsAjustesFinos() {
+  const ajustes = {};
+  for (const a of AJUSTES_FINOS) {
+    if (a.chave.startsWith('recompensa_') || a.chave === 'fracao_da_ruina') continue;
+    ajustes[a.chave] = valorDoAjuste(a);
+  }
+  ajustes.recompensas = [
+    valorDoAjuste(AJUSTES_FINOS.find((x) => x.chave === 'recompensa_recorde')),
+    valorDoAjuste(AJUSTES_FINOS.find((x) => x.chave === 'recompensa_melhorou')),
+    valorDoAjuste(AJUSTES_FINOS.find((x) => x.chave === 'recompensa_aceita')),
+    valorDoAjuste(AJUSTES_FINOS.find((x) => x.chave === 'recompensa_recusada')),
+  ];
+  ajustes.fracao_da_ruina = valorDoAjuste(
+    AJUSTES_FINOS.find((x) => x.chave === 'fracao_da_ruina')
+  );
+  return ajustes;
+}
+
+function guardarAjustesFinos() {
+  try {
+    const guardado = {};
+    for (const a of AJUSTES_FINOS) guardado[a.chave] = valorDoAjuste(a);
+    localStorage.setItem(CHAVE_DO_MANUAL, JSON.stringify(guardado));
+  } catch {
+    // Sem armazenamento os ajustes não sobrevivem ao recarregamento.
+  }
+}
+
+/** Devolve cada controle ao padrão medido. */
+function restaurarPadrao() {
+  for (const a of AJUSTES_FINOS) {
+    const campo = $(`aj-${a.chave}`);
+    if (a.opcoes) campo.value = a.padrao;
+    else if (a.degraus) campo.value = String(a.degraus.indexOf(a.padrao));
+    else campo.value = String(a.padrao);
+    pintarAjuste(a);
+  }
+  guardarAjustesFinos();
+  if (trabalhador) {
+    trabalhador.postMessage({ tipo: 'ajustar', ajustes: todosOsAjustesFinos() });
+  }
+}
+
+function lembrarDosAjustesFinos() {
+  let guardado = null;
+  try {
+    guardado = JSON.parse(localStorage.getItem(CHAVE_DO_MANUAL) ?? 'null');
+  } catch {
+    guardado = null;
+  }
+  if (!guardado) return;
+  for (const a of AJUSTES_FINOS) {
+    const valor = guardado[a.chave];
+    if (valor === undefined) continue;
+    const campo = $(`aj-${a.chave}`);
+    if (a.opcoes) campo.value = valor;
+    else if (a.degraus) {
+      const degrau = a.degraus.indexOf(valor);
+      if (degrau >= 0) campo.value = String(degrau);
+    } else campo.value = String(valor);
+    pintarAjuste(a);
+  }
+}
+
+ligar('modo-manual', 'change', () => {
+  const manual = $('modo-manual').checked;
+  $('ajuste-fino').hidden = !manual;
+  $('restaurar-padrao').hidden = !manual;
+  try {
+    localStorage.setItem('sonho-lucido:modo-manual', manual ? 'sim' : 'nao');
+  } catch {
+    // Sem armazenamento o modo não sobrevive ao recarregamento.
+  }
+  // Voltar ao padrão devolve os valores, para "padrão" querer dizer sempre a
+  // mesma coisa. Os três seletores de cima ficam como estão: são os controles
+  // do dia a dia, e não fazem parte do ajuste fino.
+  if (!manual) restaurarPadrao();
+});
+
+ligar('restaurar-padrao', 'click', restaurarPadrao);
+
+montarAjusteFino();
+lembrarDosAjustesFinos();
+try {
+  if (localStorage.getItem('sonho-lucido:modo-manual') === 'sim') {
+    $('modo-manual').checked = true;
+    $('ajuste-fino').hidden = false;
+    $('restaurar-padrao').hidden = false;
+  }
+} catch {
+  // Sem armazenamento o painel começa fechado, no padrão.
+}
+
 /* ─────────── o ritmo das melhorias ─────────── */
 
 /*
@@ -2266,6 +2682,9 @@ function comecar(
     gatilhoDaDiversificacao: gatilhoEscolhido(),
     tetoDeTrocas: trocasEscolhidas(),
     esforcoPorCartela: esforcoEscolhido(),
+    // Só quando o modo manual está ligado: no padrão, o motor já nasce com
+    // estes valores e mandá-los seria dizer duas vezes a mesma coisa.
+    ajustesFinos: $('modo-manual')?.checked ? todosOsAjustesFinos() : null,
   });
   segurarTelaLigada();
 }

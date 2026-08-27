@@ -866,6 +866,74 @@ try {
     await texto('#sem-melhoria')
   );
 
+  // ─── o painel de ajuste manual ───
+  //
+  // Catorze controles gerados de uma tabela. O que este bloco guarda não é a
+  // aparência: é que o painel **chega ao motor**. Um painel que mostra números
+  // bonitos e não muda nada é pior que não ter painel, porque quem o usa passa
+  // a atribuir ao motor decisões que ele nunca tomou.
+  marcar(
+    (await pagina.locator('#ajuste-fino').isHidden()) &&
+      (await pagina.locator('#modo-manual').isVisible()),
+    'o painel manual começa fechado, no modo padrão'
+  );
+
+  await pagina.click('#modo-manual');
+  const quantos = await pagina.locator('#ajuste-fino .ajuste').count();
+  marcar(
+    quantos >= 14,
+    'ligar o modo manual revela todos os controles',
+    `${quantos} controles`
+  );
+  marcar(
+    (await pagina.locator('#ajuste-fino .ajuste-risco').count()) >= 4,
+    'e os que eu desaconselharia vêm com o motivo escrito ao lado',
+    `${await pagina.locator('#ajuste-fino .ajuste-risco').count()} avisos`
+  );
+
+  // O caminho inteiro, de ponta a ponta: mexer num controle tem de mudar o que
+  // o motor está usando. `ruido_reconstrucao` serve porque o estado o devolve.
+  await pagina.evaluate(() => {
+    const s = document.getElementById('aj-memoria_aceitacao');
+    s.value = '0';
+    s.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  marcar(
+    (await texto('#val-memoria_aceitacao')) === '50',
+    'o valor mostrado acompanha o controle',
+    await texto('#val-memoria_aceitacao')
+  );
+
+  // As escolhas por lista também chegam.
+  await pagina.selectOption('#aj-reinicio_da_diversificacao', 'ruina');
+  marcar(
+    (await pagina.locator('#aj-reinicio_da_diversificacao').inputValue()) === 'ruina',
+    'as escolhas por lista funcionam junto dos seletores'
+  );
+
+  const antesDoManual = await numero('#melhor-cartelas');
+  const iteracoesNoManual = await numero('#iteracoes');
+  await pagina.waitForFunction(
+    (antes) => Number(document.getElementById('iteracoes').textContent.replace(/\D/g, '')) > antes,
+    iteracoesNoManual,
+    { timeout: 30000 }
+  );
+  marcar(
+    (await numero('#melhor-cartelas')) <= antesDoManual,
+    'e mexer no painel manual não perde o recorde',
+    `${antesDoManual} antes, ${await numero('#melhor-cartelas')} depois`
+  );
+
+  // Desligar devolve tudo ao padrão — "padrão" precisa querer dizer sempre a
+  // mesma coisa, senão o modo não serve de referência.
+  await pagina.click('#modo-manual');
+  marcar(
+    (await pagina.locator('#ajuste-fino').isHidden()) &&
+      (await texto('#val-memoria_aceitacao')) === '500' &&
+      (await pagina.locator('#aj-reinicio_da_diversificacao').inputValue()) === 'do_zero',
+    'desligar o modo manual fecha o painel e devolve tudo ao padrão',
+    `memória ${await texto('#val-memoria_aceitacao')}`
+  );
   // A escolha sobrevive a fechar e reabrir: quem achou o valor bom não deveria
   // ter de reencontrá-lo toda vez.
   await pagina.click('#encerrar');

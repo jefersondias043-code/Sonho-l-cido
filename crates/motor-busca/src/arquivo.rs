@@ -180,6 +180,33 @@ impl ArquivoElites {
         self.assinaturas.contains(&assinatura)
     }
 
+    /// Muda a forma do arquivo com a busca rodando.
+    ///
+    /// Apertar a capacidade ou o número de faixas descarta o excedente na hora;
+    /// afrouxar só abre espaço para o que vier. A distância mínima passa a valer
+    /// para as próximas admissões — as que já estão guardadas ficam, porque
+    /// reexaminá-las contra uma régua nova só poderia esvaziar o arquivo, e um
+    /// arquivo vazio é o que mais custa à busca.
+    pub fn reconfigurar(
+        &mut self,
+        capacidade_por_faixa: usize,
+        maximo_de_faixas: usize,
+        distancia_minima: f64,
+    ) {
+        self.capacidade_por_faixa = capacidade_por_faixa.max(1);
+        self.maximo_de_faixas = maximo_de_faixas.max(1);
+        self.distancia_minima = distancia_minima.clamp(0.0, 1.0);
+
+        for faixa in self.faixas.values_mut() {
+            while faixa.len() > self.capacidade_por_faixa {
+                if let Some(saiu) = faixa.pop() {
+                    self.assinaturas.remove(&saiu.assinatura);
+                }
+            }
+        }
+        self.aparar_faixas();
+    }
+
     /// Repõe elites vindas de um arquivo de sessão, sem julgá-las de novo.
     ///
     /// Deliberadamente **não** passa por [`Self::registrar`]. O que chega aqui já

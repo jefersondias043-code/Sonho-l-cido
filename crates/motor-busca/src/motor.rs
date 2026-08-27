@@ -379,6 +379,27 @@ pub struct RetratoDoMotor {
     pub gerador: Option<Pcg64Mcg>,
 }
 
+/// Um conjunto de ajustes a aplicar ao motor rodando.
+///
+/// Todo campo é opcional: o que vier `None` fica como estava. A tela manda só o
+/// controle que a pessoa acabou de mexer.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Ajustes {
+    pub iteracoes_ate_diversificar: Option<u64>,
+    pub teto_de_trocas_por_iteracao: Option<u64>,
+    pub orcamento_por_cartela: Option<u64>,
+    pub ruido_reconstrucao: Option<f64>,
+    pub memoria_aceitacao: Option<usize>,
+    pub capacidade_por_faixa: Option<usize>,
+    pub maximo_de_faixas: Option<usize>,
+    pub distancia_minima_elites: Option<f64>,
+    pub segmento_adaptativo: Option<u64>,
+    pub fator_reacao: Option<f64>,
+    pub recompensas: Option<Recompensas>,
+    pub passo_da_meta: Option<PassoDaMeta>,
+    pub reinicio_da_diversificacao: Option<ReinicioDaDiversificacao>,
+}
+
 /// Quantas cartelas o arquivo de sessão gasta com elites, no máximo.
 ///
 /// Vinte mil cartelas são cerca de um megabyte de JSON — muito ao lado de um
@@ -1503,6 +1524,84 @@ impl MotorBusca {
     /// diz.
     pub fn candidatos_por_dezena(&self) -> usize {
         self.max_candidatos
+    }
+
+    /// Aplica um conjunto de ajustes ao motor que está rodando.
+    ///
+    /// Um ponto único em vez de um método por parâmetro. São treze, e treze
+    /// métodos quase iguais seriam treze lugares para esquecer o recálculo que
+    /// alguns deles exigem — é o tipo de repetição que fica errada em silêncio.
+    ///
+    /// Cada campo é opcional: o que não vier fica como está. Isso é o que
+    /// permite à tela mandar só o que o dedo acabou de mover.
+    ///
+    /// **Nada é descartado.** Recorde, solução em curso, elites, pesos
+    /// aprendidos e contadores continuam onde estavam. Ajustes que mexem em
+    /// estrutura — a memória da aceitação e a forma do arquivo de elites —
+    /// preservam o que cabe e cortam só o excedente.
+    pub fn aplicar_ajustes(&mut self, a: &Ajustes) {
+        if let Some(v) = a.iteracoes_ate_diversificar {
+            self.ajustar_diversificacao(v);
+        }
+        if let Some(v) = a.teto_de_trocas_por_iteracao {
+            self.ajustar_teto_de_trocas(v);
+        }
+        if let Some(v) = a.orcamento_por_cartela {
+            self.ajustar_orcamento_por_cartela(v);
+        }
+        if let Some(v) = a.ruido_reconstrucao {
+            self.config.ruido_reconstrucao = v.clamp(0.0, 1.0);
+        }
+        if let Some(v) = a.memoria_aceitacao {
+            self.config.memoria_aceitacao = v.max(1);
+            let custo = chave_local(&self.atual.avaliacao());
+            self.aceitacao.redimensionar(self.config.memoria_aceitacao, custo);
+        }
+        if let Some(v) = a.passo_da_meta {
+            self.config.passo_da_meta = v;
+        }
+        if let Some(v) = a.reinicio_da_diversificacao {
+            self.config.reinicio_da_diversificacao = v;
+        }
+        if let Some(r) = a.recompensas {
+            self.config.recompensas = r;
+        }
+
+        let mexeu_no_seletor = a.fator_reacao.is_some() || a.segmento_adaptativo.is_some();
+        if let Some(v) = a.fator_reacao {
+            self.config.fator_reacao = v.clamp(0.0, 1.0);
+        }
+        if let Some(v) = a.segmento_adaptativo {
+            self.config.segmento_adaptativo = v.max(1);
+        }
+        if mexeu_no_seletor {
+            self.seletor.reconfigurar(self.config.fator_reacao, self.config.segmento_adaptativo);
+        }
+
+        let mexeu_no_arquivo = a.capacidade_por_faixa.is_some()
+            || a.maximo_de_faixas.is_some()
+            || a.distancia_minima_elites.is_some();
+        if let Some(v) = a.capacidade_por_faixa {
+            self.config.capacidade_por_faixa = v.max(1);
+        }
+        if let Some(v) = a.maximo_de_faixas {
+            self.config.maximo_de_faixas = v.max(1);
+        }
+        if let Some(v) = a.distancia_minima_elites {
+            self.config.distancia_minima_elites = v.clamp(0.0, 1.0);
+        }
+        if mexeu_no_arquivo {
+            self.arquivo.reconfigurar(
+                self.config.capacidade_por_faixa,
+                self.config.maximo_de_faixas,
+                self.config.distancia_minima_elites,
+            );
+        }
+    }
+
+    /// A configuração em vigor, para a tela mostrar o que o motor está usando.
+    pub fn configuracao(&self) -> &Configuracao {
+        &self.config
     }
 
     /// Há quantas iterações a busca está sem um recorde.

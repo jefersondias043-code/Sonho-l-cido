@@ -163,6 +163,13 @@ function tratar(mensagem) {
         if (motor) motor.ajustar_orcamento_por_cartela(mensagem.orcamento);
         break;
 
+      // O painel de ajuste manual. Um caminho só para os catorze parâmetros: o
+      // Rust recebe um JSON parcial e aplica o que vier, recalculando por
+      // dentro o que precisa ser recalculado.
+      case 'ajustar':
+        if (motor) motor.ajustar(JSON.stringify(mensagem.ajustes ?? {}));
+        break;
+
       case 'pausar':
         // Pausa manual suspende o ciclo. Quem tocou em Pausar quer o motor
         // parado, e não parado por quinze minutos e religado sozinho.
@@ -228,6 +235,7 @@ function criar({
   gatilhoDaDiversificacao,
   tetoDeTrocas,
   esforcoPorCartela,
+  ajustesFinos,
 }) {
   segundosDoConstrutor = Math.max(1, Number(pedido) || SEGUNDOS_DO_CONSTRUTOR);
   descartarMotor();
@@ -269,6 +277,9 @@ function criar({
   if (Number.isFinite(esforcoPorCartela) && esforcoPorCartela > 0) {
     motor.ajustar_orcamento_por_cartela(esforcoPorCartela);
   }
+  // O painel manual vale desde a primeira iteração, e não só depois de a
+  // pessoa tocar num controle.
+  if (ajustesFinos) motor.ajustar(JSON.stringify(ajustesFinos));
 
   lote = LOTE_INICIAL;
   postMessage({ tipo: 'criado', totalAlvos: motor.total_alvos() });
