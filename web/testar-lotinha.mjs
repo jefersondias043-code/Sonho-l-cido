@@ -249,6 +249,50 @@ try {
     `${pisos.length} combinações conferidas em BigInt`
   );
 
+  // ─── 3a′. o banco inteiro cobre, sorteio a sorteio ───
+  //
+  // A varredura exaustiva que já existia nesta suíte confere a **fórmula**
+  // (`lot.construir`), e não os fechamentos guardados no `lotinha.json`. São
+  // coisas diferentes: o banco vem de horas de busca, a fórmula de uma conta
+  // fechada, e é o banco que chega ao aparelho.
+  //
+  // A lacuna apareceu ao trocar duas entradas do banco por fechamentos
+  // menores: nada na suíte teria pego um erro ali. Agora todas as 35 entradas
+  // não triviais são conferidas contra **todo** sorteio possível dentro do
+  // pool — de C(18,15) = 816 a C(25,15) = 3.268.760. Leva pouco mais de um
+  // minuto, e é a única prova que vale sobre o que o usuário recebe.
+  const bancoInteiro = await pagina.evaluate(async () => {
+    const lot = await import('./lotinha.js');
+    const banco = await fetch('./lotinha.json').then((r) => r.json());
+    const saida = { conferidas: 0, sorteios: 0, falhas: [] };
+    for (const chave of Object.keys(banco.fechamentos)) {
+      const blocos = banco.fechamentos[chave];
+      // A entrada trivial — jogo do tamanho do pool — é um bloco vazio.
+      if (blocos.length === 0 || blocos[0].length === 0) continue;
+      const pool = Number(chave.split(',')[0]);
+      const dezenas = Array.from({ length: pool }, (_, i) => i + 1);
+      // O banco guarda a forma complementar: as dezenas que **faltam** ao jogo.
+      const jogos = blocos.map((b) => {
+        const fora = new Set(b);
+        return dezenas.filter((d) => !fora.has(d));
+      });
+      const c = lot.conferirCobertura(dezenas, jogos, 15, 1, { exaustivo: true });
+      saida.conferidas += 1;
+      saida.sorteios += c.total;
+      if (c.cobertos !== c.total) {
+        saida.falhas.push(`${chave}: ${c.total - c.cobertos} sorteios descobertos`);
+      }
+    }
+    return saida;
+  });
+  marcar(
+    bancoInteiro.falhas.length === 0 && bancoInteiro.conferidas === 35,
+    'cada fechamento do banco cobre todo sorteio possível do seu pool',
+    `${bancoInteiro.conferidas} fechamentos · ` +
+      `${bancoInteiro.sorteios.toLocaleString('pt-BR')} sorteios` +
+      (bancoInteiro.falhas.length ? ` · FALHAS: ${bancoInteiro.falhas.join(', ')}` : '')
+  );
+
   // ─── 3b′. o piso não pode passar por cima do que já existe ───
   //
   // Esta é a asserção que protege a fonte mais nova do piso — os valores exatos
