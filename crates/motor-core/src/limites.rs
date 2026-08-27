@@ -19,6 +19,9 @@ pub enum MetodoLimite {
     Schonheim,
     /// Contagem simples: total de alvos dividido pelo que cabe em uma cartela.
     Contagem,
+    /// Valor exato de um sistema de Turán pequeno, elevado até a configuração
+    /// pedida. Ver [`TURAN_EXATOS`] e [`elevar_turan`].
+    TuranElevado,
     /// Limite inferior já provado na literatura, catalogado em
     /// [`crate::referencia`]. Costuma ser bem mais forte que os dois anteriores
     /// — supera Schönheim em metade das configurações conhecidas — porque vem de
@@ -30,6 +33,7 @@ impl std::fmt::Display for MetodoLimite {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             MetodoLimite::Schonheim => write!(f, "cota de Schönheim"),
+            MetodoLimite::TuranElevado => write!(f, "Turán exato, elevado"),
             MetodoLimite::Contagem => write!(f, "cota de contagem"),
             MetodoLimite::Publicado => write!(f, "limite provado na literatura"),
         }
@@ -92,6 +96,136 @@ pub fn schonheim(v: usize, k: usize, t: usize) -> u64 {
     recorrencia(v as u128, k as u128, t as u32).min(u64::MAX as u128) as u64
 }
 
+/// Valores **exatos** de sistemas de Turán pequenos, na forma `(a, b, n, T)`.
+///
+/// `T(n, b, a)` é a menor família de `a`-conjuntos de `n` pontos tal que todo
+/// `b`-conjunto contenha algum dela. É a forma complementar em que a modalidade
+/// vive: uma cartela de `k` dezenas num pool de `v` é o complemento de
+/// `a = v − k`, e um sorteio de `t` é o complemento de `b = v − t`.
+///
+/// Todo valor aqui foi obtido por **busca exaustiva sem restrição de simetria**,
+/// pela ferramenta `turan-exatos` do `motor-busca`. Essa exigência não é
+/// cerimônia: um ótimo obtido dentro de uma família simétrica é limite
+/// **superior**, e colocá-lo aqui faria o aplicativo declarar impossível uma
+/// solução que existe.
+///
+/// Schönheim erra alguns destes para menos — em `(a=3, b=5)` ela dá 4 onde o
+/// exato é 5, e 7 onde o exato é 8 —, e é dessa diferença que sai o piso melhor.
+const TURAN_EXATOS: &[(u8, u8, u8, u32)] = &[
+    (3, 5, 5, 1),
+    (3, 5, 6, 2),
+    (3, 5, 7, 5),
+    (3, 5, 8, 8),
+    (3, 6, 6, 1),
+    (3, 6, 7, 2),
+    (3, 6, 8, 4),
+    (3, 6, 9, 7),
+    (3, 7, 7, 1),
+    (3, 7, 8, 2),
+    (3, 7, 9, 3),
+    (3, 7, 10, 6),
+    (3, 8, 8, 1),
+    (3, 8, 9, 2),
+    (3, 8, 10, 3),
+    (3, 8, 11, 5),
+    (3, 9, 9, 1),
+    (3, 9, 10, 2),
+    (3, 9, 11, 3),
+    (3, 9, 12, 4),
+    (3, 10, 10, 1),
+    (3, 10, 11, 2),
+    (3, 10, 12, 3),
+    (3, 10, 13, 4),
+    (4, 6, 6, 1),
+    (4, 6, 7, 3),
+    (4, 6, 8, 6),
+    (4, 7, 7, 1),
+    (4, 7, 8, 2),
+    (4, 7, 9, 5),
+    (4, 8, 8, 1),
+    (4, 8, 9, 2),
+    (4, 8, 10, 4),
+    (4, 9, 9, 1),
+    (4, 9, 10, 2),
+    (4, 9, 11, 4),
+    (4, 10, 10, 1),
+    (4, 10, 11, 2),
+    (4, 10, 12, 3),
+    (5, 7, 7, 1),
+    (5, 7, 8, 3),
+    (5, 8, 8, 1),
+    (5, 8, 9, 3),
+    (5, 8, 10, 6),
+    (5, 9, 9, 1),
+    (5, 9, 10, 2),
+    (5, 10, 10, 1),
+    (5, 10, 11, 2),
+    (6, 8, 8, 1),
+    (6, 8, 9, 3),
+    (6, 9, 9, 1),
+    (6, 9, 10, 3),
+    (6, 10, 10, 1),
+    (6, 10, 11, 3),
+    (7, 9, 9, 1),
+    (7, 9, 10, 4),
+    (7, 10, 10, 1),
+    (7, 10, 11, 3),
+];
+
+/// Leva um valor exato pequeno para `n` maior sem perder o direito de chamá-lo
+/// de prova.
+///
+/// Fixe um ponto `x`. Os blocos que **não** contêm `x` já formam sozinhos um
+/// sistema de Turán sobre os outros `n−1` pontos: todo `b`-conjunto de lá
+/// precisa conter um bloco, e nenhum bloco que passe por `x` cabe dentro dele.
+/// Então cada ponto é evitado por ao menos `T(n−1)` blocos. Somando sobre os `n`
+/// pontos, e notando que cada bloco de tamanho `a` evita `n − a` pontos:
+///
+/// ```text
+/// T(n) · (n − a) ≥ n · T(n−1)
+/// ```
+///
+/// Medido: `T(8, 5, 3) = 8` elevado até `n = 20` devolve 185, contra os 160 de
+/// Schönheim — e o melhor fechamento conhecido ali tem 240 cartelas.
+pub fn elevar_turan(base_n: usize, base_valor: u64, ate_n: usize, a: usize) -> u64 {
+    if ate_n <= base_n || a == 0 {
+        return base_valor;
+    }
+    let mut valor = base_valor as u128;
+    for n in (base_n + 1)..=ate_n {
+        if n <= a {
+            return 0;
+        }
+        valor = (n as u128 * valor).div_ceil((n - a) as u128);
+    }
+    valor.min(u64::MAX as u128) as u64
+}
+
+/// O melhor piso que [`TURAN_EXATOS`] sustenta para `C(v, k, t)`.
+///
+/// Toma o máximo sobre todas as bases da família em vez de confiar na maior:
+/// hoje a maior sempre vence, mas isso é um fato dos números que estão na
+/// tabela, não um teorema — e uma base nova poderia inverter a ordem sem avisar.
+///
+/// Devolve 0 quando a família não está catalogada, que é o valor neutro do
+/// `max` em [`limite_inferior`].
+pub fn turan_elevado(v: usize, k: usize, t: usize) -> u64 {
+    if k > v || t > k {
+        return 0;
+    }
+    let a = v - k;
+    let b = v - t;
+    if a == 0 || a > b || b > v {
+        return 0;
+    }
+    TURAN_EXATOS
+        .iter()
+        .filter(|&&(ta, tb, _, _)| ta as usize == a && tb as usize == b)
+        .map(|&(_, _, n, valor)| elevar_turan(n as usize, u64::from(valor), v, a))
+        .max()
+        .unwrap_or(0)
+}
+
 /// Melhor limite inferior disponível para a configuração do motor.
 ///
 /// Para covering designs usa o mais forte entre três fontes: o limite já provado
@@ -128,6 +262,8 @@ pub fn limite_inferior(motor: &MotorCobertura) -> LimiteInferior {
     // uma cobertura simples e não pode ser menor que o mínimo de uma. O piso
     // final é o mais forte entre os dois argumentos independentes — o do
     // catálogo, sem multiplicar, e o de contagem, já multiplicado.
+    // O mesmo argumento vale para o Turán elevado: ele é o mínimo de uma
+    // cobertura simples, e toda cobertura múltipla também é uma simples.
     let por_schonheim =
         schonheim(motor.tamanho_pool(), motor.tamanho_cartela(), motor.intersecao());
     let publicado = referencia::consultar(
@@ -140,13 +276,18 @@ pub fn limite_inferior(motor: &MotorCobertura) -> LimiteInferior {
 
     // Empates ficam com o método mais simples de explicar: uma cota fechada é
     // mais informativa na tela do que "está num catálogo".
-    let melhor = por_contagem.max(por_schonheim).max(publicado);
+    let por_turan =
+        turan_elevado(motor.tamanho_pool(), motor.tamanho_cartela(), motor.intersecao());
+
+    let melhor = por_contagem.max(por_schonheim).max(publicado).max(por_turan);
     let metodo = if melhor == por_schonheim {
         MetodoLimite::Schonheim
     } else if melhor == por_contagem {
         MetodoLimite::Contagem
-    } else {
+    } else if melhor == publicado {
         MetodoLimite::Publicado
+    } else {
+        MetodoLimite::TuranElevado
     };
 
     LimiteInferior { valor: melhor, metodo }
@@ -190,6 +331,98 @@ mod testes {
         (12, 24),
         (13, 26),
     ];
+
+    /// Os melhores fechamentos que o aplicativo já entrega, para as vinte
+    /// configurações da Lotinha ainda sem mínimo conhecido. Vindos de
+    /// `web/lotinha.json`, e conferidos sorteio a sorteio pela suíte do
+    /// navegador.
+    ///
+    /// Estão aqui por um motivo só, e é o mais importante deste módulo: um piso
+    /// **acima** de uma solução que existe é uma prova falsa, e faria o
+    /// aplicativo declarar impossível o que ele mesmo já entregou.
+    const MELHOR_QUE_TEMOS: [(usize, usize, u64); 20] = [
+        (20, 17, 240),
+        (21, 17, 1095),
+        (21, 18, 182),
+        (22, 17, 3454),
+        (22, 18, 660),
+        (22, 19, 126),
+        (23, 17, 10051),
+        (23, 18, 2162),
+        (23, 19, 475),
+        (23, 20, 100),
+        (24, 17, 26837),
+        (24, 18, 5884),
+        (24, 19, 1506),
+        (24, 20, 334),
+        (24, 21, 80),
+        (25, 18, 14875),
+        (25, 19, 3856),
+        (25, 20, 1104),
+        (25, 21, 266),
+        (25, 22, 72),
+    ];
+
+    #[test]
+    fn o_piso_de_turan_nunca_passa_do_fechamento_que_ja_existe() {
+        for (pool, jogo, temos) in MELHOR_QUE_TEMOS {
+            let piso = turan_elevado(pool, jogo, 15);
+            assert!(
+                piso <= temos,
+                "{pool}/{jogo}: piso {piso} acima das {temos} cartelas que já existem"
+            );
+        }
+    }
+
+    #[test]
+    fn o_piso_de_turan_reproduz_as_quatro_melhorias_medidas() {
+        // As únicas quatro em que o exato pequeno supera Schönheim. Se um valor
+        // novo entrar em TURAN_EXATOS estes números sobem — e aí é para conferir
+        // de novo contra MELHOR_QUE_TEMOS antes de atualizar aqui.
+        assert_eq!(turan_elevado(20, 17, 15), 185, "Schönheim dá 160");
+        assert_eq!(turan_elevado(21, 18, 15), 122, "Schönheim dá 117");
+        assert_eq!(turan_elevado(22, 18, 15), 360, "Schönheim dá 261");
+        assert_eq!(turan_elevado(22, 19, 15), 98, "Schönheim dá 79");
+    }
+
+    #[test]
+    fn familia_fora_da_tabela_nao_inventa_piso() {
+        // `a = v − k` de 1 e 2 são os casos que Turán já fecha por fórmula, e
+        // não estão catalogados: precisam devolver o neutro do `max`.
+        assert_eq!(turan_elevado(20, 19, 15), 0);
+        assert_eq!(turan_elevado(20, 18, 15), 0);
+        // Fora da modalidade também.
+        assert_eq!(turan_elevado(9, 3, 2), 0);
+        // E parâmetros sem sentido não entram em pânico.
+        assert_eq!(turan_elevado(5, 9, 2), 0);
+        assert_eq!(turan_elevado(20, 20, 15), 0);
+    }
+
+    #[test]
+    fn elevar_e_monotono_e_devolve_a_base_quando_nao_ha_degrau() {
+        assert_eq!(elevar_turan(8, 8, 20, 3), 185);
+        assert_eq!(elevar_turan(8, 8, 9, 3), 12);
+        assert_eq!(elevar_turan(8, 8, 10, 3), 18);
+        assert_eq!(elevar_turan(8, 8, 8, 3), 8);
+        assert_eq!(elevar_turan(8, 8, 5, 3), 8);
+        // Subir um degrau nunca pode baixar o piso.
+        let mut anterior = 8;
+        for n in 9..=20 {
+            let atual = elevar_turan(8, 8, n, 3);
+            assert!(atual >= anterior, "n={n}");
+            anterior = atual;
+        }
+    }
+
+    #[test]
+    fn a_tabela_so_guarda_familias_que_a_modalidade_usa() {
+        for &(a, b, n, valor) in TURAN_EXATOS {
+            assert!(a >= 3, "a ≤ 2 é fórmula fechada, não precisa de tabela");
+            assert!(a <= b, "({a},{b},{n},{valor}): bloco maior que o alvo");
+            assert!((n as usize) >= b as usize, "({a},{b},{n}): n abaixo de b");
+            assert!(valor >= 1);
+        }
+    }
 
     #[test]
     fn schonheim_reproduz_os_numeros_de_cobertura_conhecidos() {

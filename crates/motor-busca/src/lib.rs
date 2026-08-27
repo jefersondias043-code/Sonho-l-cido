@@ -40,14 +40,18 @@ pub mod arquivo;
 pub mod construcao;
 pub mod construtor;
 pub mod controle;
+pub mod exato;
 pub mod motor;
 pub mod oficina;
 pub mod operadores;
+pub mod orbitas;
 pub mod troca;
 
 pub use adaptativo::{Recompensas, SeletorAdaptativo};
 pub use aceitacao::AceitacaoTardia;
 pub use arquivo::{distancia_estrutural, ArquivoElites, Elite};
+pub use exato::{Desfecho, Instancia};
+pub use orbitas::InstanciaCiclica;
 pub use controle::{
     CondicoesDeParada, Coletor, Controle, Estatisticas, Evento, MotivoEncerramento, Observador,
     Silencioso,

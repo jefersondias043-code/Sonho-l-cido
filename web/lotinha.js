@@ -204,6 +204,122 @@ function schonheim(v, k, t, premiadas = 1) {
 }
 
 /**
+ * Valores **exatos** de sistemas de Turán pequenos, como `[a, b, n, T(n,b,a)]`.
+ *
+ * Espelho de `TURAN_EXATOS` em `motor-core::limites`, e o espelho existe porque
+ * as duas telas do aplicativo precisam dizer o mesmo número para o mesmo
+ * problema — já divergiram antes, e o conserto foi este.
+ *
+ * `T(n, b, a)` é a menor família de `a`-conjuntos de `n` pontos tal que todo
+ * `b`-conjunto contenha algum dela. Um jogo de `k` dezenas num pool de `P` é o
+ * complemento de `a = P − k`; um sorteio de 15 é o complemento de `b = P − 15`.
+ *
+ * Todos vieram de busca exaustiva **sem restrição de simetria** — a ferramenta
+ * `turan-exatos` do `motor-busca`. Um ótimo obtido dentro de uma família
+ * simétrica é limite superior e não pode entrar aqui.
+ */
+const TURAN_EXATOS = [
+  [3,5,5,1],
+  [3,5,6,2],
+  [3,5,7,5],
+  [3,5,8,8],
+  [3,6,6,1],
+  [3,6,7,2],
+  [3,6,8,4],
+  [3,6,9,7],
+  [3,7,7,1],
+  [3,7,8,2],
+  [3,7,9,3],
+  [3,7,10,6],
+  [3,8,8,1],
+  [3,8,9,2],
+  [3,8,10,3],
+  [3,8,11,5],
+  [3,9,9,1],
+  [3,9,10,2],
+  [3,9,11,3],
+  [3,9,12,4],
+  [3,10,10,1],
+  [3,10,11,2],
+  [3,10,12,3],
+  [3,10,13,4],
+  [4,6,6,1],
+  [4,6,7,3],
+  [4,6,8,6],
+  [4,7,7,1],
+  [4,7,8,2],
+  [4,7,9,5],
+  [4,8,8,1],
+  [4,8,9,2],
+  [4,8,10,4],
+  [4,9,9,1],
+  [4,9,10,2],
+  [4,9,11,4],
+  [4,10,10,1],
+  [4,10,11,2],
+  [4,10,12,3],
+  [5,7,7,1],
+  [5,7,8,3],
+  [5,8,8,1],
+  [5,8,9,3],
+  [5,8,10,6],
+  [5,9,9,1],
+  [5,9,10,2],
+  [5,10,10,1],
+  [5,10,11,2],
+  [6,8,8,1],
+  [6,8,9,3],
+  [6,9,9,1],
+  [6,9,10,3],
+  [6,10,10,1],
+  [6,10,11,3],
+  [7,9,9,1],
+  [7,9,10,4],
+  [7,10,10,1],
+  [7,10,11,3],
+];
+
+/**
+ * Leva um valor exato pequeno para `n` maior sem deixar de ser prova.
+ *
+ * Fixe um ponto `x`. Os blocos que não contêm `x` formam sozinhos um sistema de
+ * Turán sobre os outros `n−1` pontos. Somando sobre os `n` pontos, e como cada
+ * bloco de tamanho `a` evita `n − a` deles:
+ *
+ *     T(n) · (n − a) ≥ n · T(n−1)
+ */
+function elevarTuran(baseN, baseValor, ateN, a) {
+  if (ateN <= baseN || a === 0) return baseValor;
+  let valor = baseValor;
+  for (let n = baseN + 1; n <= ateN; n++) {
+    if (n <= a) return 0;
+    valor = Math.ceil((n * valor) / (n - a));
+  }
+  return valor;
+}
+
+/**
+ * O melhor piso que [`TURAN_EXATOS`] sustenta para este pool e este jogo.
+ *
+ * Toma o máximo sobre todas as bases da família, e não a maior: hoje a maior
+ * sempre vence, mas isso é um fato dos números catalogados e não um teorema.
+ *
+ * Devolve 0 quando a família não está na tabela — o neutro do `max` de quem
+ * chama.
+ */
+function turanElevado(pool, jogo, sorteio) {
+  if (jogo > pool || sorteio > jogo) return 0;
+  const a = pool - jogo;
+  const b = pool - sorteio;
+  if (a === 0 || a > b || b > pool) return 0;
+  let melhor = 0;
+  for (const [ta, tb, n, valor] of TURAN_EXATOS) {
+    if (ta === a && tb === b) melhor = Math.max(melhor, elevarTuran(n, valor, pool, a));
+  }
+  return melhor;
+}
+
+/**
  * A cotação neutra: quanto uma banca precisaria pagar para o jogo não ter
  * vantagem para lado nenhum.
  *
@@ -263,7 +379,13 @@ export function minimo(pool, jogo, garantia = SORTEIO, premiadas = 1) {
   // ela acompanha `premiadas`, pela recursão generalizada.
   const porSchonheim =
     garantia === SORTEIO ? schonheim(pool, jogo, SORTEIO, premiadas) : 0;
-  const piso = Math.max(porContagem, porSchonheim);
+  // O Turán elevado é o mínimo de uma cobertura **simples**, e vale como está
+  // mesmo com mais de uma cartela premiada: toda cobertura múltipla também é
+  // uma simples, então não pode ser menor. Multiplicá-lo por `premiadas`
+  // inventaria um piso que nenhum teorema sustenta — é a mesma fronteira que o
+  // `motor-core` desenha.
+  const porTuran = garantia === SORTEIO ? turanElevado(pool, jogo, SORTEIO) : 0;
+  const piso = Math.max(porContagem, porSchonheim, porTuran);
 
   // Jogo do tamanho do pool: uma aposta só, e ela ou ganha ou perde inteira.
   // Não há um segundo jogo distinto para premiar junto.

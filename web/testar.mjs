@@ -372,12 +372,15 @@ try {
   // 20 dezenas com jogos de 17: 240 jogos, e ninguém no mundo sabe o mínimo.
   // O motor não vai provar nada aqui, que é exatamente a condição em que o
   // relógio e a pausa precisam ser exercitados.
+  //
+  // O 185 do piso é o Turán exato elevado — `T(8,5,3) = 8` levado até n = 20.
+  // Schönheim dava 160 aqui, e o número na tela mudou junto.
   await carregarFechamento(20, 17, VINTE);
   marcar(true, 'uma segunda busca roda limpa depois de encerrar', `${await texto('#melhor-cartelas')} jogos`);
 
   const emAberto = await texto('#referencia-busca');
   marcar(
-    /problema em aberto/.test(emAberto) && /160/.test(emAberto),
+    /problema em aberto/.test(emAberto) && /185/.test(emAberto),
     'no caso em aberto a tela mostra o piso conhecido, não um mínimo inventado',
     emAberto.replace(/\s+/g, ' ').slice(0, 78)
   );

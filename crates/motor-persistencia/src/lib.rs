@@ -489,6 +489,7 @@ fn nome_do_metodo(metodo: MetodoLimite) -> &'static str {
         MetodoLimite::Schonheim => "schonheim",
         MetodoLimite::Contagem => "contagem",
         MetodoLimite::Publicado => "publicado",
+        MetodoLimite::TuranElevado => "turan-elevado",
     }
 }
 
@@ -496,6 +497,7 @@ fn metodo_do_nome(nome: &str) -> MetodoLimite {
     match nome {
         "schonheim" => MetodoLimite::Schonheim,
         "publicado" => MetodoLimite::Publicado,
+        "turan-elevado" => MetodoLimite::TuranElevado,
         _ => MetodoLimite::Contagem,
     }
 }

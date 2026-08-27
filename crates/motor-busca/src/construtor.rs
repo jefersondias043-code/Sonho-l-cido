@@ -38,7 +38,6 @@
 //! solução pequena e furada é pior que uma grande e correta: ela vira uma
 //! garantia falsa na mão de quem apostou.
 
-use std::collections::HashMap;
 use std::time::Duration;
 
 // No navegador não existe relógio de sistema, e `std::time::Instant::now()`
@@ -58,15 +57,8 @@ use rand_pcg::Pcg64Mcg;
 use crate::construcao::{construir_do_zero, construir_guloso_global, podar};
 use crate::controle::Controle;
 use crate::oficina::Oficina;
+use crate::orbitas::InstanciaCiclica;
 use motor_core::planos::semente_algebrica;
-
-/// Teto de ligações da construção por órbitas.
-///
-/// A tabela que liga órbitas de cartela a órbitas de sorteio é o que essa
-/// construção guarda na memória, e ela cresce com o produto dos dois. Num
-/// celular, passar disto é pedir para o navegador derrubar a aba — e a
-/// construção que sobra continua servindo.
-const TETO_DE_LIGACOES: usize = 8_000_000;
 
 /// Uma construção encontrada, com o nome de quem a produziu.
 #[derive(Debug, Clone)]
@@ -229,65 +221,23 @@ fn por_orbitas(
     let v = cobertura.tamanho_pool();
     let k = cobertura.tamanho_cartela();
     let t = regra.alvo;
-    if v > 31 || k > v || t > v || k < t {
-        return None;
-    }
-    let a = (v - k) as u32;
-    let b = (v - t) as u32;
-    if a == 0 || a > b {
+    if k > v || t > v || k < t {
         return None;
     }
     let premiadas = regra.premiadas.max(1) as u32;
 
-    let orb_a = orbitas(v as u32, a);
-    let orb_b = orbitas(v as u32, b);
-    let quantas_ligacoes = orb_a.len().saturating_mul(combinacoes_pequenas(v as u32 - a, b - a));
-    if quantas_ligacoes > TETO_DE_LIGACOES || orb_a.is_empty() || orb_b.is_empty() {
-        return None;
-    }
-
-    let indice_b: HashMap<u32, usize> =
-        orb_b.iter().enumerate().map(|(i, &(m, _))| (m, i)).collect();
-    let peso_b: Vec<u32> = orb_b.iter().map(|&(_, t)| t).collect();
-
-    // Quais órbitas de alvo cada órbita de cartela cobre. Basta olhar a partir do
-    // representante: girar a cartela e o alvo juntos dá a mesma órbita de alvo.
-    let mut cobre: Vec<Vec<u32>> = Vec::with_capacity(orb_a.len());
-    for &(rep, _) in &orb_a {
-        if parou(parar) {
-            return None;
-        }
-        let livres: Vec<u32> = (0..v as u32).filter(|i| rep & (1 << i) == 0).collect();
-        let mut alvos = Vec::new();
-        combinar(&livres, (b - a) as usize, &mut |extra: &[u32]| {
-            let mut m = rep;
-            for &e in extra {
-                m |= 1 << e;
-            }
-            if let Some(&i) = indice_b.get(&canonico(m, v as u32)) {
-                alvos.push(i as u32);
-            }
-        });
-        alvos.sort_unstable();
-        alvos.dedup();
-        cobre.push(alvos);
-    }
-
-    // O índice invertido é o que torna a reparação barata: para fechar um alvo
-    // descoberto só interessam as órbitas que o cobrem — algumas dezenas, contra
-    // varrer os milhares de candidatos.
-    let mut inverso: Vec<Vec<u32>> = vec![Vec::new(); orb_b.len()];
-    for (i, alvos) in cobre.iter().enumerate() {
-        for &alvo in alvos {
-            inverso[alvo as usize].push(i as u32);
-        }
-    }
+    // Quem monta a instância — e quem sabe quanto custa cada órbita — é o módulo
+    // `orbitas`. O resolvedor exato de `exato` consome exatamente a mesma coisa.
+    let inst = InstanciaCiclica::montar(v, v - k, v - t, parar)?;
+    let cobre = inst.cobre();
+    let inverso = inst.inverso();
+    let peso_b = inst.peso_dos_alvos();
+    let orb_a = inst.orbitas_de_cartela();
 
     let comeco = Instant::now();
-    let mut melhor = guloso_amplo(&cobre, &peso_b, &orb_a, premiadas);
-    podar_orbitas(&cobre, &orb_a, &peso_b, premiadas, &mut melhor);
-    let custo = |esc: &[usize]| -> u64 { esc.iter().map(|&i| orb_a[i].1 as u64).sum() };
-    let mut melhor_custo = custo(&melhor);
+    let mut melhor = guloso_amplo(cobre, peso_b, orb_a, premiadas);
+    podar_orbitas(cobre, orb_a, peso_b, premiadas, &mut melhor);
+    let mut melhor_custo = inst.custo(&melhor);
 
     // Passeio que aceita empate: num problema de cobertura há muitas soluções do
     // mesmo tamanho, e é andando entre elas que se chega à borda de onde cabe uma
@@ -305,9 +255,9 @@ fn por_orbitas(
             semente_da_vez.swap_remove(fora);
         }
         let mut refeita =
-            guloso_por_alvo(&cobre, &inverso, &peso_b, &orb_a, &semente_da_vez, premiadas, rng);
-        podar_orbitas(&cobre, &orb_a, &peso_b, premiadas, &mut refeita);
-        let c = custo(&refeita);
+            guloso_por_alvo(cobre, inverso, peso_b, orb_a, &semente_da_vez, premiadas, rng);
+        podar_orbitas(cobre, orb_a, peso_b, premiadas, &mut refeita);
+        let c = inst.custo(&refeita);
         if c <= custo_atual {
             custo_atual = c;
             atual = refeita;
@@ -318,121 +268,10 @@ fn por_orbitas(
         }
     }
 
-    // Expandir: cada órbita vira todas as suas rotações, e cada complemento vira
-    // a cartela que lhe falta.
-    let cheia = mascara_cheia(v as u32);
-    let mut cartelas = Vec::with_capacity(melhor_custo as usize);
-    for &i in &melhor {
-        let (rep, tamanho) = orb_a[i];
-        let mut m = rep;
-        for _ in 0..tamanho {
-            let dentro: Vec<usize> =
-                (0..v).filter(|&d| (!m & cheia) & (1 << d as u32) != 0).collect();
-            cartelas.push(Cartela::dos_indices(&dentro));
-            m = girar(m, v as u32);
-        }
-    }
-    cartelas.sort_unstable();
-    cartelas.dedup();
-    Some(cartelas)
+    Some(inst.expandir(&melhor))
 }
 
 /* ─────────── as peças da construção por órbitas ─────────── */
-
-fn mascara_cheia(v: u32) -> u32 {
-    if v >= 32 {
-        u32::MAX
-    } else {
-        (1u32 << v) - 1
-    }
-}
-
-/// Gira o conjunto uma posição: `i → i + 1 (mod v)`.
-fn girar(mascara: u32, v: u32) -> u32 {
-    ((mascara << 1) | (mascara >> (v - 1))) & mascara_cheia(v)
-}
-
-/// A menor rotação — o nome pelo qual a órbita inteira atende.
-fn canonico(mascara: u32, v: u32) -> u32 {
-    let mut menor = mascara;
-    let mut atual = mascara;
-    for _ in 1..v {
-        atual = girar(atual, v);
-        if atual < menor {
-            menor = atual;
-        }
-    }
-    menor
-}
-
-/// Quantas rotações distintas a órbita tem. Divide `v`, e só é menor em pools
-/// compostos, onde um conjunto pode se repetir ao girar.
-fn tamanho_da_orbita(mascara: u32, v: u32) -> u32 {
-    let mut atual = mascara;
-    for passo in 1..v {
-        atual = girar(atual, v);
-        if atual == mascara {
-            return passo;
-        }
-    }
-    v
-}
-
-/// Os representantes de órbita de tamanho `k`, com o tamanho de cada uma.
-fn orbitas(v: u32, k: u32) -> Vec<(u32, u32)> {
-    let mut vistas: HashMap<u32, u32> = HashMap::new();
-    let cheia = mascara_cheia(v);
-    if k == 0 || k > v {
-        return Vec::new();
-    }
-    let mut atual = (1u32 << k) - 1;
-    while atual <= cheia && atual != 0 {
-        let c = canonico(atual, v);
-        vistas.entry(c).or_insert_with(|| tamanho_da_orbita(c, v));
-        let menor = atual & atual.wrapping_neg();
-        let ondulacao = atual.wrapping_add(menor);
-        if ondulacao == 0 {
-            break;
-        }
-        let uns = ((atual ^ ondulacao) >> 2) / menor;
-        atual = ondulacao | uns;
-    }
-    let mut saida: Vec<(u32, u32)> = vistas.into_iter().collect();
-    saida.sort_unstable();
-    saida
-}
-
-/// `C(n, k)` sem estourar, para o teto de memória. Satura no teto.
-fn combinacoes_pequenas(n: u32, k: u32) -> usize {
-    if k > n {
-        return 0;
-    }
-    let mut total: usize = 1;
-    for i in 0..k.min(n - k) {
-        total = total.saturating_mul((n - i) as usize) / (i as usize + 1);
-        if total > TETO_DE_LIGACOES {
-            return usize::MAX;
-        }
-    }
-    total
-}
-
-/// Todas as combinações de `k` elementos, entregues uma a uma.
-fn combinar(itens: &[u32], k: usize, acao: &mut impl FnMut(&[u32])) {
-    fn passo(itens: &[u32], k: usize, inicio: usize, atual: &mut Vec<u32>, acao: &mut impl FnMut(&[u32])) {
-        if atual.len() == k {
-            acao(atual);
-            return;
-        }
-        for i in inicio..itens.len() {
-            atual.push(itens[i]);
-            passo(itens, k, i + 1, atual, acao);
-            atual.pop();
-        }
-    }
-    let mut atual = Vec::with_capacity(k);
-    passo(itens, k, 0, &mut atual, acao);
-}
 
 /// O guloso que olha todas as candidatas a cada escolha.
 ///

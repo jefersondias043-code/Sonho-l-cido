@@ -249,6 +249,42 @@ try {
     `${pisos.length} combinações conferidas em BigInt`
   );
 
+  // ─── 3b′. o piso não pode passar por cima do que já existe ───
+  //
+  // Esta é a asserção que protege a fonte mais nova do piso — os valores exatos
+  // de Turán, elevados. Um piso **acima** de um fechamento que o aplicativo já
+  // entrega não é um limite conservador: é uma prova falsa, e faria a tela
+  // declarar impossível o que ela mesma está mostrando. Vale contra o banco
+  // embutido, que é a única coleção de soluções que se sabe existirem.
+  const contraOBanco = await pagina.evaluate(async () => {
+    const lot = await import('./lotinha.js');
+    const banco = await fetch('./lotinha.json').then((r) => r.json());
+    return lot.matriz().map((l) => ({
+      pool: l.pool,
+      jogo: l.jogo,
+      piso: l.piso,
+      banco: (banco.fechamentos[`${l.pool},${l.jogo}`] || []).length,
+    }));
+  });
+
+  const doNosso = contraOBanco.filter((l) => l.banco > 0);
+  const furados = doNosso.filter((l) => l.piso > l.banco);
+  marcar(
+    furados.length === 0 && doNosso.length === 44,
+    'nenhum piso passa por cima do fechamento que o aplicativo já entrega',
+    `${doNosso.length} combinações do banco conferidas`
+  );
+
+  // E o ganho que os exatos de Turán trouxeram, nomeado: sem isto uma tabela
+  // que voltasse ao vazio passaria despercebida, porque nada mais quebraria.
+  const comTuran = { '20,17': 185, '21,18': 122, '22,18': 360, '22,19': 98 };
+  const subiram = doNosso.filter((l) => comTuran[`${l.pool},${l.jogo}`] === l.piso);
+  marcar(
+    subiram.length === 4,
+    'e em quatro delas o piso vem do Turán exato elevado, acima de Schönheim',
+    subiram.map((l) => `${l.pool}/${l.jogo}: ${l.piso}`).join(' · ')
+  );
+
   // ─── 3c. a tela diz a que distância do piso ela está ───
   //
   // "Não dá com menos de 11.967" é verdade e é inútil sozinho: o usuário recebe
