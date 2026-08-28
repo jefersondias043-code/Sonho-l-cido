@@ -8,7 +8,7 @@ use std::time::Instant;
 
 use motor_core::cartela::Cartela;
 use motor_core::cobertura::MotorCobertura;
-use motor_core::divisao::{dividir, dividir_em_sequencia};
+use motor_core::divisao::{dividir, melhor_bloco_com};
 use motor_core::problema::{Objetivo, Problema, RegraCobertura};
 
 fn main() {
@@ -16,10 +16,10 @@ fn main() {
     let banco: serde_json::Value = serde_json::from_str(&bruto).unwrap();
     let fechamentos = banco["fechamentos"].as_object().unwrap();
 
-    let casos = ["20,17", "21,18", "22,19", "23,20", "23,18", "24,17"];
+    let casos = ["20,17", "21,18", "22,19", "23,20"];
     println!(
-        "{:>9} {:>8} {:>7}  {:>7} {:>11} {:>8} {:>11} {:>8}",
-        "pool,jogo", "cartelas", "partes", "1/k", "rodízio", "tempo", "sequência", "tempo"
+        "{:>9} {:>8} {:>7} {:>7} {:>11} {:>10} {:>8} {:>10} {:>9}",
+        "pool,jogo", "cartelas", "partes", "tamanho", "melhor de k", "guloso", "tempo", "com troca", "tempo"
     );
 
     for chave in casos {
@@ -51,25 +51,38 @@ fn main() {
         .unwrap();
         let motor = MotorCobertura::novo(&problema).unwrap();
 
-        for partes in [2usize, 4, 10, 50, 200] {
+        for partes in [2usize, 4, 10, 50] {
             if partes > cartelas.len() {
                 continue;
             }
-            let t = Instant::now();
             let a = dividir(&motor, &cartelas, partes).unwrap();
-            let ma = t.elapsed().as_millis();
+
+            // O tamanho tem de ser o mesmo dos dois lados. Comparar um bloco de
+            // quatro cartelas com um de cinco não diz nada sobre o método.
+            let tamanho = a
+                .blocos
+                .iter()
+                .max_by_key(|b| b.cobertos)
+                .map(|b| b.cartelas.len())
+                .unwrap();
+
             let t = Instant::now();
-            let b = dividir_em_sequencia(&motor, &cartelas, partes).unwrap();
+            let g = melhor_bloco_com(&motor, &cartelas, tamanho, 0).unwrap();
+            let mg = t.elapsed().as_millis();
+            let t = Instant::now();
+            let b = melhor_bloco_com(&motor, &cartelas, tamanho, 12).unwrap();
             let mb = t.elapsed().as_millis();
+
             println!(
-                "{:>9} {:>8} {:>7}  {:>6.2}% {:>10.2}% {:>6}ms {:>10.2}% {:>6}ms",
+                "{:>9} {:>8} {:>7} {:>7} {:>10.2}% {:>9.2}% {:>6}ms {:>9.2}% {:>7}ms",
                 chave,
                 cartelas.len(),
                 partes,
-                100.0 / partes as f64,
-                100.0 * a.pior_cobertura(),
-                ma,
-                100.0 * b.pior_cobertura(),
+                tamanho,
+                100.0 * a.melhor_cobertura(),
+                100.0 * g.cobertura(a.total_alvos),
+                mg,
+                100.0 * b.cobertura(a.total_alvos),
                 mb
             );
         }

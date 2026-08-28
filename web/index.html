@@ -580,28 +580,33 @@
       até mil, ou até o número de cartelas do fechamento, o que for menor.
     </p>
     <div class="controles">
-      <button class="principal" id="div-dividir">Dividir fechamento</button>
+      <button class="principal" id="div-dividir">Encontrar o melhor bloco</button>
     </div>
     <div class="referencia" id="div-erro" hidden></div>
     <div class="referencia" id="div-andamento" hidden></div>
   </div>
 
   <div class="cartao" id="div-resumo-cartao" hidden>
-    <h2>3 · O que cada bloco vale</h2>
+    <h2>3 · O que o bloco vale</h2>
     <div id="div-resumo"></div>
     <div class="referencia" id="div-aviso"></div>
   </div>
 
   <div class="cartao" id="div-blocos-cartao" hidden>
-    <h2>4 · Escolha o bloco</h2>
+    <h2>4 · O bloco</h2>
     <p class="ajuda">
-      Cada bloco é um fechamento por si: dá para conferir, simular sorteios,
-      copiar, compartilhar e guardar — como qualquer outro.
+      Ele é um fechamento por si: dá para conferir, simular sorteios, copiar,
+      compartilhar e guardar — como qualquer outro.
     </p>
-    <div id="div-blocos"></div>
+    <!--
+      Os dois botões vêm antes da lista de propósito: em "ver todos" a lista tem
+      até 24 cartões, e deixá-los no fim obrigaria a rolar tudo para voltar.
+    -->
     <div class="controles">
-      <button class="secundario" id="div-salvar-todos">Salvar todos no histórico</button>
+      <button class="secundario" id="div-ver-todos" hidden>Ver todos os blocos</button>
+      <button class="secundario" id="div-salvar-todos" hidden>Salvar todos no histórico</button>
     </div>
+    <div id="div-blocos"></div>
     <div id="div-cartelas"></div>
   </div>
 </section>

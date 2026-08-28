@@ -990,10 +990,11 @@ try {
 
   // ─── a divisão do fechamento ───
   //
-  // Trocar garantia por custo. O que precisa ficar provado é que a divisão
-  // reparte de verdade — sem perder nem repetir cartela —, que ela mede o que
-  // cada bloco cobre em vez de estimar, e que a tela diz com todas as letras
-  // que a garantia ficou para trás.
+  // Trocar garantia por custo. O resultado padrão é **um** bloco: de mil, só um
+  // interessa, e ele tem de ser escolhido, não sorteado. O que precisa ficar
+  // provado é que houve escolha — o bloco entregue cobre mais que um bloco
+  // qualquer do mesmo tamanho — e que a tela diz com todas as letras que a
+  // garantia ficou para trás.
   //
   // A página foi recarregada acima, então o fechamento precisa ser carregado de
   // novo: 20 dezenas com jogos de 17, que são 240 cartelas.
@@ -1017,24 +1018,34 @@ try {
   await pagina.click('#div-dividir');
   await pagina.waitForSelector('#div-resumo-cartao:not([hidden])', { timeout: 30000 });
 
-  const divisao = await pagina.evaluate(() => {
-    const linhas = [...document.querySelectorAll('#div-resumo tbody tr')];
-    return linhas.map((tr) => [...tr.children].map((td) => td.textContent.trim()));
+  const escolhido = await pagina.evaluate(() => {
+    const cartoes = document.querySelectorAll('#div-blocos .bloco');
+    const numero = (rotulo) => {
+      const linha = [...document.querySelectorAll('#div-resumo tr')].find((tr) =>
+        tr.textContent.includes(rotulo)
+      );
+      return linha ? Number(linha.lastElementChild.textContent.replace('%', '').replace(',', '.')) : null;
+    };
+    return {
+      cartoes: cartoes.length,
+      cartelas: Number(
+        document.querySelector('#div-blocos .bloco-quantia')?.textContent.replace(/\D/g, '')
+      ),
+      tipica: numero('qualquer'),
+      cobre: numero('Este bloco cobre'),
+      ingenua: numero('sugeriria'),
+    };
   });
-  // A última linha é o fechamento inteiro; as anteriores são os blocos.
-  const blocos = divisao.slice(0, -1);
-  const soma = blocos.reduce((t, l) => t + Number(l[1].replace(/\D/g, '')), 0);
-  marcar(
-    blocos.length === 4 && soma === 240,
-    'dividir em quatro reparte as 240 cartelas sem perder nem sobrar nenhuma',
-    `${blocos.length} blocos somando ${soma}`
-  );
 
-  const coberturas = blocos.map((l) => Number(l[3].replace('%', '').replace(',', '.')));
   marcar(
-    coberturas.every((c) => c > 25),
-    'e cada bloco cobre mais do que o quarto que ele representa',
-    coberturas.map((c) => `${c}%`).join(' · ')
+    escolhido.cartoes === 1 && escolhido.cartelas === 60,
+    'pedindo um quarto do custo, vem um bloco só — com as 60 cartelas do quarto',
+    `${escolhido.cartoes} bloco de ${escolhido.cartelas} cartelas`
+  );
+  marcar(
+    escolhido.cobre > escolhido.tipica && escolhido.tipica > escolhido.ingenua,
+    'e ele cobre mais que um bloco qualquer, que já cobre mais que um quarto',
+    `escolhido ${escolhido.cobre}% · qualquer ${escolhido.tipica}% · um quarto ${escolhido.ingenua}%`
   );
 
   const aviso = await texto('#div-aviso');
@@ -1044,59 +1055,62 @@ try {
     aviso.replace(/\s+/g, ' ').slice(0, 90)
   );
 
-  await pagina.click('#div-blocos [data-bloco-acao="ver"][data-bloco="0"]');
-  await pagina.waitForSelector('#div-cartelas .cartela', { timeout: 10000 });
-  const mostradas = await pagina.locator('#div-cartelas .cartela').count();
+  // Ver a divisão inteira continua disponível quando são poucos blocos: aí faz
+  // sentido comprar dois ou três, e a soma deles recompõe o fechamento.
+  await pagina.click('#div-ver-todos');
+  await pagina.waitForFunction(
+    () =>
+      document.querySelectorAll('#div-blocos .bloco').length === 4 &&
+      document.getElementById('div-andamento').hidden,
+    undefined,
+    { timeout: 30000 }
+  );
+  const divisao = await pagina.evaluate(() =>
+    [...document.querySelectorAll('#div-resumo tbody tr')]
+      .slice(0, -1)
+      .map((tr) => [...tr.children].map((td) => td.textContent.trim()))
+  );
+  const soma = divisao.reduce((t, l) => t + Number(l[1].replace(/\D/g, '')), 0);
   marcar(
-    mostradas === Number(blocos[0][1].replace(/\D/g, '')),
-    'e escolher um bloco mostra exatamente as cartelas dele',
-    `${mostradas} cartelas`
+    divisao.length === 4 && soma === 240,
+    'ver todos reparte as 240 cartelas em quatro, sem perder nem sobrar nenhuma',
+    `${divisao.length} blocos somando ${soma}`
+  );
+  const coberturas = divisao.map((l) => Number(l[3].replace('%', '').replace(',', '.')));
+  marcar(
+    coberturas.every((c) => c > 25) && Math.max(...coberturas) <= escolhido.cobre,
+    'e nenhum pedaço da divisão supera o bloco que a seleção entregou',
+    `melhor pedaço ${Math.max(...coberturas)}% · escolhido ${escolhido.cobre}%`
   );
 
-  // O seletor vai até mil, ou até o número de cartelas — o que for menor. Com
-  // 240 cartelas o teto é 200, o último degrau que ainda cabe.
-  const faixa = await pagina.evaluate(() => {
-    const s = document.getElementById('div-partes');
-    return { max: Number(s.max), direita: document.getElementById('div-direita').textContent };
-  });
-  marcar(
-    faixa.direita === '200 blocos',
-    'o seletor oferece até 200 blocos num fechamento de 240 cartelas',
-    faixa.direita
+  // Com muitos blocos a lista deixa de ser oferecida: mil cartões seriam um
+  // catálogo, e o que se quer de mil blocos é um.
+  await pagina.click('#div-ver-todos');
+  await pagina.waitForFunction(
+    () =>
+      document.querySelectorAll('#div-blocos .bloco').length === 1 &&
+      document.getElementById('div-andamento').hidden,
+    undefined,
+    { timeout: 30000 }
   );
-
-  // E dividir no teto tem de funcionar: é o caso em que a estratégia econômica
-  // entra, e ela precisa devolver blocos de verdade.
-  await pagina.evaluate((max) => {
+  await pagina.evaluate(() => {
     const s = document.getElementById('div-partes');
-    s.value = String(max);
+    s.value = String(s.max);
     s.dispatchEvent(new Event('input', { bubbles: true }));
-  }, faixa.max);
+  });
   await pagina.click('#div-dividir');
   await pagina.waitForFunction(
-    () => document.querySelectorAll('#div-blocos .bloco').length > 100,
+    () =>
+      document.querySelectorAll('#div-blocos .bloco').length === 1 &&
+      document.querySelector('#div-blocos .bloco-quantia')?.textContent.replace(/\D/g, '') === '1' &&
+      document.getElementById('div-andamento').hidden,
     undefined,
     { timeout: 60000 }
   );
-  const muitos = await pagina.evaluate(() => {
-    const linhas = [...document.querySelectorAll('#div-resumo tbody tr')].slice(0, -1);
-    return {
-      blocos: linhas.length,
-      soma: linhas.reduce((t, tr) => t + Number(tr.children[1].textContent.replace(/\D/g, '')), 0),
-      pior: Math.min(
-        ...linhas.map((tr) => Number(tr.children[3].textContent.replace('%', '').replace(',', '.')))
-      ),
-    };
-  });
   marcar(
-    muitos.blocos === 200 && muitos.soma === 240,
-    'dividir em 200 blocos reparte as 240 cartelas sem perder nenhuma',
-    `${muitos.blocos} blocos somando ${muitos.soma}`
-  );
-  marcar(
-    muitos.pior > 0.5,
-    'e mesmo miúdo, cada bloco vale mais que o meio por cento que ele representa',
-    `pior bloco: ${muitos.pior}%`
+    await pagina.locator('#div-ver-todos').isHidden(),
+    'em 200 blocos a lista não é oferecida — vem o escolhido, e só ele',
+    `botão escondido`
   );
 
   // De volta a quatro, que é onde o resto do teste trabalha.
@@ -1107,12 +1121,22 @@ try {
   });
   await pagina.click('#div-dividir');
   await pagina.waitForFunction(
-    () => document.querySelectorAll('#div-blocos .bloco').length === 4,
+    () =>
+      document.querySelectorAll('#div-blocos .bloco').length === 1 &&
+      document.querySelector('#div-blocos .bloco-quantia')?.textContent.replace(/\D/g, '') === '60' &&
+      document.getElementById('div-andamento').hidden,
     undefined,
     { timeout: 30000 }
   );
   await pagina.click('#div-blocos [data-bloco-acao="ver"][data-bloco="0"]');
   await pagina.waitForSelector('#div-cartelas .cartela', { timeout: 10000 });
+  const mostradas = await pagina.locator('#div-cartelas .cartela').count();
+  marcar(
+    mostradas === 60,
+    'e ver as cartelas mostra exatamente as do bloco',
+    `${mostradas} cartelas`
+  );
+
 
   // ─── o que dá para fazer com um bloco ───
   //
@@ -1129,8 +1153,8 @@ try {
   await pagina.waitForSelector('#checar.ativo', { timeout: 10000 });
   const rotuloNaChecar = await pagina.locator('#chk-fechamento option:checked').innerText();
   marcar(
-    /Bloco 1 de 4/.test(rotuloNaChecar),
-    'mandar um bloco para a Checar leva o bloco, e não o fechamento inteiro',
+    /Melhor bloco \(1\/4\)/.test(rotuloNaChecar),
+    'mandar o bloco para a Checar leva o bloco, e não o fechamento inteiro',
     rotuloNaChecar
   );
 
@@ -1148,12 +1172,12 @@ try {
   await pagina.click('#aba-dividir');
   await pagina.waitForSelector('#dividir.ativo', { timeout: 10000 });
 
-  // Salvar: o bloco tem de aparecer no histórico rotulado como bloco, e não
-  // se confundir com o fechamento de onde saiu.
+  // Salvar: o bloco tem de aparecer no histórico rotulado pelo que ele é — o
+  // melhor de um quarto do custo —, e não se confundir com o fechamento inteiro.
   const antesDeSalvar = await pagina.evaluate(() =>
     JSON.parse(localStorage.getItem('sonho-lucido:historico') ?? '[]').length
   );
-  await pagina.click('#div-blocos [data-bloco-acao="salvar"][data-bloco="1"]');
+  await pagina.click('#div-blocos [data-bloco-acao="salvar"][data-bloco="0"]');
   await pagina.waitForFunction(
     (antes) =>
       JSON.parse(localStorage.getItem('sonho-lucido:historico') ?? '[]').length > antes,
@@ -1164,28 +1188,13 @@ try {
     () => JSON.parse(localStorage.getItem('sonho-lucido:historico') ?? '[]')[0]
   );
   marcar(
-    salvo?.bloco?.numero === 2 && salvo?.bloco?.de === 4 && salvo.melhor.length === 60,
-    'salvar um bloco guarda as cartelas dele, rotuladas como bloco 2 de 4',
-    `bloco ${salvo?.bloco?.numero}/${salvo?.bloco?.de} · ${salvo?.melhor?.length} cartelas`
+    salvo?.bloco?.numero === null && salvo?.bloco?.de === 4 && salvo.melhor.length === 60,
+    'salvar guarda as 60 cartelas, marcadas como o melhor bloco de um quarto',
+    `numero ${salvo?.bloco?.numero} · de ${salvo?.bloco?.de} · ${salvo?.melhor?.length} cartelas`
   );
   marcar(
     (await texto('#div-blocos')).includes('Salvo ✓'),
     'e o botão passa a dizer que já foi'
-  );
-
-  await pagina.click('#div-salvar-todos');
-  await pagina.waitForFunction(
-    () => !document.querySelector('#div-blocos [data-bloco-acao="salvar"]:not([disabled])'),
-    undefined,
-    { timeout: 10000 }
-  );
-  const depoisDeTodos = await pagina.evaluate(() =>
-    JSON.parse(localStorage.getItem('sonho-lucido:historico') ?? '[]')
-  );
-  marcar(
-    depoisDeTodos.filter((sessao) => sessao.bloco).length === 4,
-    'e "salvar todos" completa os quatro sem duplicar o que já estava salvo',
-    `${depoisDeTodos.filter((s) => s.bloco).length} blocos no histórico`
   );
 
   // O histórico distingue um bloco de um fechamento inteiro — sem isso a lista
@@ -1194,8 +1203,9 @@ try {
   await pagina.waitForSelector('#historico.ativo', { timeout: 10000 });
   const textoDoHistorico = await texto('#lista-historico');
   marcar(
-    /bloco 1 de 4/i.test(textoDoHistorico) && /de um fechamento de 240 cartelas/i.test(textoDoHistorico),
-    'e o histórico mostra de qual fechamento cada bloco saiu',
+    /melhor bloco · 1\/4/i.test(textoDoHistorico) &&
+      /de um fechamento de 240 cartelas/i.test(textoDoHistorico),
+    'e o histórico mostra de qual fechamento o bloco saiu',
     textoDoHistorico.replace(/\s+/g, ' ').slice(0, 80)
   );
 
@@ -1218,6 +1228,31 @@ try {
     'copiar leva as cartelas do bloco e o aviso de que ele não é o inteiro',
     copiado.split('\n')[3] ?? ''
   );
+
+  // E salvar todos continua servindo na divisão inteira, onde faz sentido.
+  await pagina.click('#div-ver-todos');
+  await pagina.waitForFunction(
+    () =>
+      document.querySelectorAll('#div-blocos .bloco').length === 4 &&
+      document.getElementById('div-andamento').hidden,
+    undefined,
+    { timeout: 30000 }
+  );
+  await pagina.click('#div-salvar-todos');
+  await pagina.waitForFunction(
+    () => !document.querySelector('#div-blocos [data-bloco-acao="salvar"]:not([disabled])'),
+    undefined,
+    { timeout: 10000 }
+  );
+  const guardados = await pagina.evaluate(() =>
+    JSON.parse(localStorage.getItem('sonho-lucido:historico') ?? '[]').filter((s) => s.bloco)
+  );
+  marcar(
+    guardados.filter((s) => s.bloco.numero !== null).length === 4,
+    'e "salvar todos" guarda os quatro pedaços da divisão',
+    `${guardados.length} blocos no histórico`
+  );
+
 
   marcar(errosDeConsole.length === 0, 'nenhum erro no console', errosDeConsole.join(' | ').slice(0, 120));
 } finally {

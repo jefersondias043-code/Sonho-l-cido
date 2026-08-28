@@ -680,6 +680,10 @@ pub struct PedidoDeDivisao {
     pub cartelas: Vec<Vec<u32>>,
     /// Em quantos blocos repartir.
     pub partes: usize,
+    /// Quando verdadeiro, devolve **um** bloco — o melhor daquele tamanho — em
+    /// vez da divisão inteira.
+    #[serde(default)]
+    pub apenas_o_melhor: bool,
 }
 
 /// Um bloco, pronto para a tela.
@@ -708,6 +712,12 @@ pub struct DivisaoSaida {
     /// lado a lado. A verdadeira é sempre maior, e é esse contraste que
     /// justifica a ferramenta existir.
     pub fracao_ingenua: f64,
+    /// Quando a resposta é um bloco só: quanto cobriria um bloco **qualquer**
+    /// do mesmo tamanho, tirado de uma divisão comum.
+    ///
+    /// É contra este número que a seleção se justifica. Sem ele, "o melhor
+    /// bloco" é uma promessa sem prova ao lado.
+    pub cobertura_tipica: Option<f64>,
 }
 
 /// Reparte um fechamento em blocos equilibrados, medindo o que cada um cobre.
@@ -738,17 +748,47 @@ pub fn dividir_com(pedido_json: &str) -> Result<String, String> {
         })
         .collect::<Result<_, String>>()?;
 
-    let divisao = motor_core::divisao::dividir(&motor, &cartelas, pedido.partes).ok_or_else(
-        || {
-            format!(
-                "não dá para repartir {} cartelas em {} blocos",
-                cartelas.len(),
-                pedido.partes
-            )
-        },
-    )?;
+    let erro = || {
+        format!("não dá para repartir {} cartelas em {} blocos", cartelas.len(), pedido.partes)
+    };
+    if pedido.partes < 2 || pedido.partes > cartelas.len() {
+        return Err(erro());
+    }
 
     let pool = problema.pool();
+    let total_alvos = motor.total_alvos() as u64;
+
+    // Um bloco só: procura direto o melhor conjunto daquele tamanho, sem a
+    // amarra de ter de sobrar cartelas boas para outros blocos. E mede também
+    // um bloco comum do mesmo tamanho, que é o termo de comparação.
+    if pedido.apenas_o_melhor {
+        let tamanho = cartelas.len() / pedido.partes;
+        let escolhido =
+            motor_core::divisao::melhor_bloco(&motor, &cartelas, tamanho).ok_or_else(erro)?;
+
+        let tipica = motor_core::divisao::dividir(&motor, &cartelas, pedido.partes)
+            .map(|d| {
+                let soma: u64 = d.blocos.iter().map(|b| b.cobertos).sum();
+                soma as f64 / d.blocos.len() as f64 / total_alvos as f64
+            });
+
+        let saida = DivisaoSaida {
+            blocos: vec![BlocoSaida {
+                cartelas: escolhido.cartelas.iter().map(|&i| cartelas[i].rotulos(pool)).collect(),
+                cobertos: escolhido.cobertos,
+                cobertura: escolhido.cobertura(total_alvos),
+            }],
+            total_alvos,
+            cartelas_do_inteiro: cartelas.len(),
+            pior_cobertura: escolhido.cobertura(total_alvos),
+            melhor_cobertura: escolhido.cobertura(total_alvos),
+            fracao_ingenua: 1.0 / pedido.partes as f64,
+            cobertura_tipica: tipica,
+        };
+        return serde_json::to_string(&saida).map_err(|e| e.to_string());
+    }
+
+    let divisao = motor_core::divisao::dividir(&motor, &cartelas, pedido.partes).ok_or_else(erro)?;
     let blocos = divisao
         .blocos
         .iter()
@@ -766,6 +806,7 @@ pub fn dividir_com(pedido_json: &str) -> Result<String, String> {
         pior_cobertura: divisao.pior_cobertura(),
         melhor_cobertura: divisao.melhor_cobertura(),
         fracao_ingenua: 1.0 / pedido.partes as f64,
+        cobertura_tipica: None,
     };
     serde_json::to_string(&saida).map_err(|e| e.to_string())
 }
@@ -1524,6 +1565,65 @@ mod testes {
         assert!((ingenua - 0.25).abs() < 1e-9);
         assert!(pior > ingenua, "pior bloco {pior:.3} não superou a fração ingênua {ingenua:.3}");
         assert!(pior <= 1.0);
+    }
+
+    #[test]
+    fn pedir_so_o_melhor_devolve_um_bloco_e_o_termo_de_comparacao() {
+        let cartelas: Vec<Vec<u32>> = (1..=9u32)
+            .flat_map(|a| {
+                ((a + 1)..=9).flat_map(move |b| {
+                    ((b + 1)..=9).flat_map(move |c| ((c + 1)..=9).map(move |d| vec![a, b, c, d]))
+                })
+            })
+            .collect();
+        let pedido = serde_json::json!({
+            "configuracao": {
+                "universo": 9, "pool": (1..=9).collect::<Vec<u32>>(), "cartela": 4,
+                "alvo": 3, "intersecao": 3, "premiadas": 1, "semente": 1
+            },
+            "cartelas": cartelas,
+            "partes": 4,
+            "apenas_o_melhor": true
+        });
+        let d: serde_json::Value =
+            serde_json::from_str(&dividir_com(&pedido.to_string()).unwrap()).unwrap();
+
+        let blocos = d["blocos"].as_array().unwrap();
+        assert_eq!(blocos.len(), 1, "pedindo um, vem um");
+        assert_eq!(blocos[0]["cartelas"].as_array().unwrap().len(), 126 / 4);
+
+        // E o número que prova que houve seleção: o bloco escolhido cobre mais
+        // que um bloco comum do mesmo tamanho.
+        let escolhido = blocos[0]["cobertura"].as_f64().unwrap();
+        let tipica = d["cobertura_tipica"].as_f64().expect("a comparação precisa vir junto");
+        assert!(
+            escolhido >= tipica,
+            "o escolhido cobre {escolhido:.4} e um bloco comum cobre {tipica:.4}"
+        );
+        assert!(escolhido > d["fracao_ingenua"].as_f64().unwrap());
+    }
+
+    #[test]
+    fn a_divisao_inteira_nao_promete_comparacao_que_nao_faz_sentido() {
+        // Com a divisão toda na tela, cada bloco é o seu próprio termo de
+        // comparação: um "bloco típico" seria a média do que já está à vista.
+        let cartelas: Vec<Vec<u32>> = vec![
+            vec![1, 2, 3, 4],
+            vec![5, 6, 7, 8],
+            vec![1, 3, 5, 7],
+            vec![2, 4, 6, 8],
+        ];
+        let pedido = serde_json::json!({
+            "configuracao": {
+                "universo": 9, "pool": (1..=9).collect::<Vec<u32>>(), "cartela": 4,
+                "alvo": 3, "intersecao": 3, "premiadas": 1, "semente": 1
+            },
+            "cartelas": cartelas, "partes": 2
+        });
+        let d: serde_json::Value =
+            serde_json::from_str(&dividir_com(&pedido.to_string()).unwrap()).unwrap();
+        assert!(d["cobertura_tipica"].is_null());
+        assert_eq!(d["blocos"].as_array().unwrap().len(), 2);
     }
 
     #[test]

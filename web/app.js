@@ -3074,8 +3074,10 @@ function cartaoDaSessao(sessao) {
   // Um bloco não tem ótimo nem mínimo a exibir: ele é um pedaço, e o que
   // importa dele é de qual fechamento saiu e quanto cobre sozinho.
   const marca = sessao.bloco
-    ? `<span class="sessao-marca">bloco ${escapar(String(sessao.bloco.numero))} de ` +
-      `${escapar(String(sessao.bloco.de))}</span>`
+    ? sessao.bloco.numero
+      ? `<span class="sessao-marca">bloco ${escapar(String(sessao.bloco.numero))} de ` +
+        `${escapar(String(sessao.bloco.de))}</span>`
+      : `<span class="sessao-marca">melhor bloco · 1/${escapar(String(sessao.bloco.de))}</span>`
     : avaliacao.otimo
     ? '<span class="sessao-marca otima">★ ótimo provado</span>'
     : emAndamento
@@ -3286,7 +3288,11 @@ function chkFontes() {
     fontes.push({
       chave: `historico:${sessao.id}`,
       rotulo:
-        (sessao.bloco ? `Bloco ${sessao.bloco.numero}/${sessao.bloco.de} · ` : '') +
+        (sessao.bloco
+          ? sessao.bloco.numero
+            ? `Bloco ${sessao.bloco.numero}/${sessao.bloco.de} · `
+            : `Melhor bloco (1/${sessao.bloco.de}) · `
+          : '') +
         `${historico.descrever(sessao.configuracao)} · ${milhares(
           sessao.melhor.length
         )} cartelas · ${historico.quando(sessao.criadaEm)}`,
@@ -3745,6 +3751,18 @@ let divOcupado = false;
 let divParaChecar = null;
 /** Ids das sessões criadas ao salvar, para o botão saber que já foi. */
 const divSalvos = new Map();
+/**
+ * Se a tela mostra a divisão inteira, em vez do melhor bloco.
+ *
+ * O padrão é o melhor bloco. Com mil blocos, listar todos seria entregar um
+ * catálogo em vez de uma resposta — e o que se quer de mil blocos é um. Ver
+ * todos continua disponível, e faz sentido quando são poucos: aí dá para
+ * comprar dois, três, e a soma deles recompõe o fechamento inteiro.
+ */
+let divVerTodos = false;
+
+/** Acima disto, ver a divisão inteira deixa de ser oferecido. */
+const VER_TODOS_ATE = 24;
 
 function abrirDivisao(chave) {
   divPreferida = chave;
@@ -3849,10 +3867,14 @@ async function divDividir() {
   $('div-dividir').disabled = true;
   $('div-erro').hidden = true;
   $('div-andamento').hidden = false;
-  $('div-andamento').innerHTML =
-    '<b>Repartindo…</b> <em>Cada bloco é montado escolhendo a cartela que mais ' +
-    'acrescenta ao que ele ainda não cobre, e depois a cobertura de cada um é ' +
-    'contada sorteio a sorteio.</em>';
+  $('div-andamento').innerHTML = divVerTodos
+    ? '<b>Repartindo…</b> <em>Cada bloco é montado escolhendo a cartela que mais ' +
+      'acrescenta ao que ele ainda não cobre, e depois a cobertura de cada um é ' +
+      'contada sorteio a sorteio.</em>'
+    : '<b>Procurando o melhor bloco…</b> <em>Todas as cartelas do fechamento ' +
+      'disputam as vagas: entra a que mais acrescenta ao que já está escolhido, ' +
+      'e depois as escolhidas são trocadas enquanto a troca melhorar. No fim a ' +
+      'cobertura é contada sorteio a sorteio.</em>';
 
   // Um quadro para a mensagem acima chegar à tela antes do trabalho começar.
   await new Promise((r) => setTimeout(r, 30));
@@ -3862,6 +3884,7 @@ async function divDividir() {
       configuracao: divFonte.configuracao,
       cartelas: divFonte.cartelas,
       partes: divPartes(),
+      apenas_o_melhor: !divVerTodos,
     });
     divUltima = JSON.parse(bruto);
     divBlocoAberto = null;
@@ -3914,11 +3937,69 @@ function divPedirAoTrabalhador(pedido) {
 function divPintarResultado() {
   if (!divUltima) return;
   const d = divUltima;
-  const partes = d.blocos.length;
   const inteiro = d.cartelas_do_inteiro;
+  const escolhidas = divPartes();
+  const umSo = d.blocos.length === 1;
 
   $('div-resumo-cartao').hidden = false;
-  $('div-resumo').innerHTML = `
+  $('div-resumo').innerHTML = umSo ? divResumoDoEscolhido(d) : divResumoDaDivisao(d, inteiro);
+
+  // O aviso é a parte séria desta tela, e tem três frases porque são três
+  // coisas diferentes que a pessoa precisa saber antes de gastar dinheiro.
+  const cobre = umSo ? d.blocos[0].cobertura : d.pior_cobertura;
+  $('div-aviso').innerHTML =
+    `<b>A garantia é do fechamento inteiro.</b> <em>Jogando ` +
+    `${umSo ? 'este bloco' : 'só um bloco'} você paga cerca de ` +
+    `${porcento(1 / escolhidas)} do custo e cobre ${porcento(cobre)} dos sorteios ` +
+    `possíveis dentro do seu pool — bem mais que os ${porcento(d.fracao_ingenua)} ` +
+    `que a divisão sugeriria, porque o fechamento cobre cada sorteio mais de uma ` +
+    `vez. Mas deixa de ser garantia: em ${porcento(1 - cobre)} dos sorteios o ` +
+    `bloco não terá a cartela premiada. E o retorno esperado por real não muda — ` +
+    `cada cartela tem a mesma chance esteja em que bloco estiver, e prêmios se ` +
+    `somam. Dividir compra menos, não compra melhor.</em>`;
+
+  $('div-blocos-cartao').hidden = false;
+  $('div-blocos').innerHTML = d.blocos.map((b, i) => divCartaoDoBloco(b, i)).join('');
+  $('div-salvar-todos').hidden = umSo;
+  $('div-ver-todos').textContent = umSo
+    ? `Ver os ${milhares(escolhidas)} blocos da divisão`
+    : 'Voltar ao melhor bloco';
+  // Listar mil blocos seria entregar um catálogo em vez de uma resposta; com
+  // poucos, ver todos é útil, porque aí dá para comprar dois ou três.
+  $('div-ver-todos').hidden = umSo && escolhidas > VER_TODOS_ATE;
+  divPintarCartelas();
+}
+
+/**
+ * O bloco escolhido, e a prova de que houve escolha.
+ *
+ * O número do meio é o que importa: quanto cobriria um bloco **qualquer** do
+ * mesmo tamanho. Sem ele, "o melhor bloco" seria uma promessa sem nada ao lado
+ * que a sustente — e a diferença é justamente o que a seleção comprou.
+ */
+function divResumoDoEscolhido(d) {
+  const b = d.blocos[0];
+  const tipica = d.cobertura_tipica;
+  return `
+    <table class="faixas">
+      <tbody>
+        <tr><td>Cartelas do bloco</td><td><b>${milhares(b.cartelas.length)}</b> de ${milhares(
+          d.cartelas_do_inteiro
+        )}</td></tr>
+        <tr><td>Custo</td><td><b>${porcento(b.cartelas.length / d.cartelas_do_inteiro)}</b> do inteiro</td></tr>
+        <tr><td>Divisão simples sugeriria</td><td>${porcento(d.fracao_ingenua)}</td></tr>
+        ${
+          typeof tipica === 'number'
+            ? `<tr><td>Um bloco qualquer cobriria</td><td>${porcento(tipica)}</td></tr>`
+            : ''
+        }
+        <tr><td><b>Este bloco cobre</b></td><td><b>${porcento(b.cobertura)}</b></td></tr>
+      </tbody>
+    </table>`;
+}
+
+function divResumoDaDivisao(d, inteiro) {
+  return `
     <table class="faixas">
       <thead><tr><th>Bloco</th><th>Cartelas</th><th>Custo</th><th>Cobre</th></tr></thead>
       <tbody>
@@ -3936,23 +4017,6 @@ function divPintarResultado() {
             <td><b>100%</b></td></tr>
       </tbody>
     </table>`;
-
-  // O aviso é a parte séria desta tela, e tem três frases porque são três
-  // coisas diferentes que a pessoa precisa saber antes de gastar dinheiro.
-  $('div-aviso').innerHTML =
-    `<b>A garantia é do fechamento inteiro.</b> <em>Jogando só um bloco você ` +
-    `paga cerca de ${porcento(1 / partes)} do custo e cobre ` +
-    `${porcento(d.pior_cobertura)} dos sorteios possíveis dentro do seu pool — ` +
-    `bem mais que os ${porcento(d.fracao_ingenua)} que a divisão sugeriria, ` +
-    `porque o fechamento cobre cada sorteio mais de uma vez. Mas deixa de ser ` +
-    `garantia: em ${porcento(1 - d.pior_cobertura)} dos sorteios o bloco ` +
-    `escolhido não terá a cartela premiada. E o retorno esperado por real não ` +
-    `muda — cada cartela tem a mesma chance esteja em que bloco estiver, e ` +
-    `prêmios se somam. Dividir compra menos, não compra melhor.</em>`;
-
-  $('div-blocos-cartao').hidden = false;
-  $('div-blocos').innerHTML = d.blocos.map((b, i) => divCartaoDoBloco(b, i)).join('');
-  divPintarCartelas();
 }
 
 /**
@@ -3971,7 +4035,11 @@ function divCartaoDoBloco(bloco, i) {
       <div class="bloco-topo">
         <span class="bloco-quantia">${milhares(bloco.cartelas.length)}</span>
         <span class="bloco-unidade">cartelas</span>
-        <span class="bloco-marca">bloco ${i + 1} de ${divUltima.blocos.length}</span>
+        <span class="bloco-marca">${
+          divUltima.blocos.length === 1
+            ? 'o melhor desse tamanho'
+            : `bloco ${i + 1} de ${divUltima.blocos.length}`
+        }</span>
       </div>
       <div class="bloco-config">
         cobre <b>${porcento(bloco.cobertura)}</b> dos sorteios ·
@@ -3998,8 +4066,9 @@ function divTextoDoBloco(i) {
   const corpo = bloco.cartelas
     .map((cartela) => cartela.map((n) => String(n).padStart(2, '0')).join(' '))
     .join('\n');
+  const nome = total === 1 ? `melhor bloco de ${bloco.cartelas.length} cartelas` : `bloco ${i + 1} de ${total}`;
   return (
-    `# Sonho Lúcido — bloco ${i + 1} de ${total}\n` +
+    `# Sonho Lúcido — ${nome}\n` +
     `# ${divFonte?.descricao ?? 'fechamento dividido'}\n` +
     `# ${bloco.cartelas.length} das ${divUltima.cartelas_do_inteiro} cartelas do fechamento inteiro\n` +
     `# cobre ${porcento(bloco.cobertura)} dos sorteios possíveis — o inteiro cobre 100%\n` +
@@ -4014,8 +4083,10 @@ function divSalvarBloco(i) {
     melhor: bloco.cartelas,
     avaliacao: { cartelas: bloco.cartelas.length, cobertura: bloco.cobertura },
     bloco: {
-      numero: i + 1,
-      de: divUltima.blocos.length,
+      // Um bloco só não é "o segundo de quatro": é o melhor daquele tamanho.
+      // `numero` nulo é o que a tela lê para dizer isso.
+      numero: divUltima.blocos.length === 1 ? null : i + 1,
+      de: divUltima.blocos.length === 1 ? divPartes() : divUltima.blocos.length,
       cobertura: bloco.cobertura,
       origem: divUltima.cartelas_do_inteiro,
     },
@@ -4096,7 +4167,10 @@ ligar('div-blocos', 'click', async (e) => {
       divParaChecar = {
         cartelas: bloco.cartelas,
         configuracao: divFonte.configuracao,
-        descricao: `Bloco ${i + 1} de ${divUltima.blocos.length} · ${divFonte.descricao}`,
+        descricao:
+          divUltima.blocos.length === 1
+            ? `Melhor bloco (1/${divPartes()}) · ${divFonte.descricao}`
+            : `Bloco ${i + 1} de ${divUltima.blocos.length} · ${divFonte.descricao}`,
       };
       abrirChecagem('bloco');
       break;
@@ -4132,6 +4206,11 @@ ligar('div-blocos', 'click', async (e) => {
       break;
     }
   }
+});
+
+ligar('div-ver-todos', 'click', () => {
+  divVerTodos = !divVerTodos;
+  divDividir();
 });
 
 ligar('div-salvar-todos', 'click', () => {

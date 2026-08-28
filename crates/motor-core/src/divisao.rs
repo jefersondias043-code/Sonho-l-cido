@@ -52,6 +52,34 @@ use crate::cobertura::{MotorCobertura, Rascunho};
 /// entrega o mesmo resultado, e por isso guardar mais deixa de comprar nada.
 const TETO_DE_MEMORIA: usize = 48 * 1024 * 1024;
 
+/// Quantas varreduras de troca [`melhor_bloco`] faz antes de desistir.
+const MAXIMO_DE_RODADAS_DE_TROCA: usize = 12;
+
+/// Quanto trabalho a troca pode gastar, contado em sorteios visitados.
+///
+/// A troca é a parte cara e a que menos rende. Medido, com o tamanho do bloco
+/// casado dos dois lados:
+///
+/// ```text
+///                  melhor de k    guloso    guloso + troca
+/// 21/18 em  2         75,19%      79,08%        79,34%
+/// 22/19 em  2         74,99%      76,44%        76,78%
+/// 23/20 em  4         59,58%      59,65%        60,87%
+/// 20/17 em 10         20,27%      20,43%        20,43%
+/// ```
+///
+/// O guloso sozinho já pega quase tudo; a troca acrescenta de zero a 1,2 ponto
+/// custando de 5 a 13 vezes o tempo — e num fechamento de 2.139 cartelas ela
+/// levava **339 segundos**, que não é espera, é travamento.
+///
+/// Daí o orçamento: ela roda enquanto couber, e para onde estiver. O resultado
+/// nunca fica pior que o guloso, porque só troca o que melhora.
+///
+/// Contado em sorteios e não em segundos porque precisa ser o mesmo em toda
+/// máquina — um orçamento por relógio daria respostas diferentes no celular e
+/// no computador, para o mesmo pedido.
+const ORCAMENTO_DA_TROCA: u64 = 150_000_000;
+
 /// Um bloco: quais cartelas do fechamento original, e quanto ele cobre sozinho.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Bloco {
@@ -93,6 +121,194 @@ impl Divisao {
             .iter()
             .map(|b| b.cobertura(self.total_alvos))
             .fold(0.0, f64::max)
+    }
+}
+
+/// O melhor bloco de `quantas` cartelas que este fechamento contém.
+///
+/// ## Por que não é o melhor pedaço de uma divisão
+///
+/// Repartir em `k` blocos e ficar com o melhor deles é pior do que procurar o
+/// melhor conjunto direto, e o motivo é que a repartição amarra: cada bloco tem
+/// de deixar cartelas boas para os outros. Aqui não há outros — todas as
+/// cartelas do fechamento disputam as `quantas` vagas.
+///
+/// ## Como
+///
+/// Guloso e depois troca. O guloso escolhe, `quantas` vezes, a cartela que mais
+/// acrescenta ao que já está escolhido; é o método clássico para cobertura
+/// máxima, e o único com garantia — nunca fica abaixo de 63% do ótimo, porque a
+/// cobertura é submodular.
+///
+/// A troca conserta o que o guloso deixa passar: uma cartela escolhida cedo
+/// pode ter virado supérflua depois, e sai para dar lugar a outra que
+/// acrescenta mais. Roda enquanto melhorar.
+///
+/// A contagem por sorteio é o que torna as duas baratas: `vezes[sorteio]` diz
+/// quantas cartelas escolhidas o cobrem, e daí saem os dois números que
+/// interessam sem varrer nada — o que uma candidata acrescentaria (sorteios com
+/// `vezes == 0`) e o que uma escolhida levaria embora (sorteios com `vezes == 1`).
+pub fn melhor_bloco(
+    motor: &MotorCobertura,
+    cartelas: &[Cartela],
+    quantas: usize,
+) -> Option<Bloco> {
+    melhor_bloco_com(motor, cartelas, quantas, MAXIMO_DE_RODADAS_DE_TROCA)
+}
+
+/// Como [`melhor_bloco`], com o número de rodadas de troca escolhido por quem
+/// chama. Zero rodadas é o guloso puro — serve para medir o que a troca compra.
+pub fn melhor_bloco_com(
+    motor: &MotorCobertura,
+    cartelas: &[Cartela],
+    quantas: usize,
+    rodadas: usize,
+) -> Option<Bloco> {
+    if quantas == 0 || quantas > cartelas.len() {
+        return None;
+    }
+    let total_alvos = motor.total_alvos();
+    let mut rascunho = Rascunho::novo();
+
+    // Quantas cartelas escolhidas cobrem cada sorteio.
+    let mut vezes = vec![0u32; total_alvos];
+    let mut dentro = vec![false; cartelas.len()];
+    let mut escolhidas: Vec<usize> = Vec::with_capacity(quantas);
+    let mut cobertos: u64 = 0;
+
+    let mut tetos: Vec<(u32, u32)> = Vec::with_capacity(cartelas.len());
+    for (i, &c) in cartelas.iter().enumerate() {
+        motor.alvos_da_cartela(c, &mut rascunho);
+        tetos.push((rascunho.alvos().len() as u32, i as u32));
+    }
+    tetos.sort_unstable();
+    let mut fila = tetos.clone();
+
+    // ─── guloso ───
+    while escolhidas.len() < quantas {
+        let Some(i) = melhor_por_contagem(motor, cartelas, &mut fila, &dentro, &vezes, &mut rascunho)
+        else {
+            break;
+        };
+        motor.alvos_da_cartela(cartelas[i], &mut rascunho);
+        for &alvo in rascunho.alvos() {
+            if vezes[alvo as usize] == 0 {
+                cobertos += 1;
+            }
+            vezes[alvo as usize] += 1;
+        }
+        dentro[i] = true;
+        escolhidas.push(i);
+    }
+
+    // ─── troca ───
+    let mut orcamento = ORCAMENTO_DA_TROCA;
+    'rodadas: for _ in 0..rodadas {
+        let mut melhorou = false;
+
+        let mut posicao = 0;
+        while posicao < escolhidas.len() {
+            if orcamento == 0 {
+                break 'rodadas;
+            }
+            let sai = escolhidas[posicao];
+
+            // O que esta cartela leva embora: os sorteios que só ela cobre.
+            motor.alvos_da_cartela(cartelas[sai], &mut rascunho);
+            let perda = rascunho.alvos().iter().filter(|&&a| vezes[a as usize] == 1).count() as u64;
+
+            // Tira-a de fato, para as candidatas serem medidas contra o buraco.
+            for &alvo in rascunho.alvos() {
+                vezes[alvo as usize] -= 1;
+            }
+            dentro[sai] = false;
+
+            let mut melhor: Option<(usize, u64)> = None;
+            for (j, &c) in cartelas.iter().enumerate() {
+                if dentro[j] || j == sai {
+                    continue;
+                }
+                motor.alvos_da_cartela(c, &mut rascunho);
+                orcamento = orcamento.saturating_sub(rascunho.alvos().len() as u64);
+                let ganho =
+                    rascunho.alvos().iter().filter(|&&a| vezes[a as usize] == 0).count() as u64;
+                if melhor.map_or(true, |(_, g)| ganho > g) {
+                    melhor = Some((j, ganho));
+                }
+                if orcamento == 0 {
+                    break;
+                }
+            }
+
+            match melhor {
+                Some((entra, ganho)) if ganho > perda => {
+                    motor.alvos_da_cartela(cartelas[entra], &mut rascunho);
+                    for &alvo in rascunho.alvos() {
+                        vezes[alvo as usize] += 1;
+                    }
+                    dentro[entra] = true;
+                    escolhidas[posicao] = entra;
+                    cobertos = cobertos + ganho - perda;
+                    melhorou = true;
+                }
+                _ => {
+                    // Nada melhora: devolve a que saiu.
+                    motor.alvos_da_cartela(cartelas[sai], &mut rascunho);
+                    for &alvo in rascunho.alvos() {
+                        vezes[alvo as usize] += 1;
+                    }
+                    dentro[sai] = true;
+                }
+            }
+            posicao += 1;
+        }
+
+        if !melhorou {
+            break;
+        }
+    }
+
+    escolhidas.sort_unstable();
+    Some(Bloco { cartelas: escolhidas, cobertos })
+}
+
+/// A candidata que mais acrescenta ao que já está coberto, com a mesma poda
+/// preguiçosa de [`melhor_para`] — aqui contra a contagem por sorteio.
+fn melhor_por_contagem(
+    motor: &MotorCobertura,
+    cartelas: &[Cartela],
+    fila: &mut Vec<(u32, u32)>,
+    dentro: &[bool],
+    vezes: &[u32],
+    rascunho: &mut Rascunho,
+) -> Option<usize> {
+    loop {
+        let (_, indice) = *fila.last()?;
+        let i = indice as usize;
+        if dentro[i] {
+            fila.pop();
+            continue;
+        }
+        motor.alvos_da_cartela(cartelas[i], rascunho);
+        let ganho = rascunho.alvos().iter().filter(|&&a| vezes[a as usize] == 0).count() as u32;
+
+        if ganho == 0 {
+            fila.pop();
+            return Some(i);
+        }
+        let proximo =
+            fila.iter().rev().skip(1).find(|(_, j)| !dentro[*j as usize]).map(|&(t, _)| t);
+        match proximo {
+            Some(teto) if ganho < teto => {
+                fila.pop();
+                let posicao = fila.partition_point(|&(t, _)| t < ganho);
+                fila.insert(posicao, (ganho, indice));
+            }
+            _ => {
+                fila.pop();
+                return Some(i);
+            }
+        }
     }
 }
 
@@ -541,6 +757,82 @@ mod testes {
         let soma: usize = d.blocos.iter().map(|b| b.cartelas.len()).sum();
         assert_eq!(soma, cartelas.len());
         assert!(d.pior_cobertura() > 1.0 / 400.0, "mesmo miúdo, o bloco vale mais que 1/k");
+    }
+
+    #[test]
+    fn o_melhor_bloco_ganha_do_melhor_pedaco_de_uma_divisao() {
+        // A razão de a seleção existir: repartir amarra cada bloco a deixar
+        // cartelas boas para os outros, e procurar direto não tem essa amarra.
+        let motor = motor_de(10, 5, 3);
+        let cartelas = todas(10, 5);
+        for partes in [2, 3, 4] {
+            let d = dividir(&motor, &cartelas, partes).unwrap();
+            let tamanho = d
+                .blocos
+                .iter()
+                .max_by_key(|b| b.cobertos)
+                .map(|b| b.cartelas.len())
+                .unwrap();
+            let escolhido = melhor_bloco(&motor, &cartelas, tamanho).unwrap();
+            assert!(
+                escolhido.cobertos >= d.blocos.iter().map(|b| b.cobertos).max().unwrap(),
+                "partes={partes}: o escolhido cobre {} e o melhor pedaço cobre {}",
+                escolhido.cobertos,
+                d.blocos.iter().map(|b| b.cobertos).max().unwrap()
+            );
+            assert_eq!(escolhido.cartelas.len(), tamanho);
+        }
+    }
+
+    #[test]
+    fn a_troca_nunca_piora_o_guloso() {
+        // Ela só aceita substituições que aumentam a cobertura, e o orçamento
+        // pode interrompê-la em qualquer ponto. Nos dois casos o que sai tem de
+        // ser ao menos o que o guloso tinha.
+        let motor = motor_de(10, 5, 3);
+        let cartelas = todas(10, 5);
+        for tamanho in [3, 10, 40, 100] {
+            let guloso = melhor_bloco_com(&motor, &cartelas, tamanho, 0).unwrap();
+            let trocado = melhor_bloco_com(&motor, &cartelas, tamanho, 12).unwrap();
+            assert!(
+                trocado.cobertos >= guloso.cobertos,
+                "tamanho={tamanho}: troca piorou de {} para {}",
+                guloso.cobertos,
+                trocado.cobertos
+            );
+            assert_eq!(trocado.cartelas.len(), tamanho);
+            // E sem repetir cartela.
+            let mut vistas = trocado.cartelas.clone();
+            vistas.sort_unstable();
+            vistas.dedup();
+            assert_eq!(vistas.len(), tamanho);
+        }
+    }
+
+    #[test]
+    fn a_contagem_do_melhor_bloco_bate_com_a_conta_feita_a_mao() {
+        let motor = motor_de(9, 4, 3);
+        let cartelas = todas(9, 4);
+        let b = melhor_bloco(&motor, &cartelas, 20).unwrap();
+        let mut rascunho = Rascunho::novo();
+        let mut vistos = vec![false; motor.total_alvos()];
+        for &i in &b.cartelas {
+            motor.alvos_da_cartela(cartelas[i], &mut rascunho);
+            for &a in rascunho.alvos() {
+                vistos[a as usize] = true;
+            }
+        }
+        assert_eq!(b.cobertos, vistos.iter().filter(|&&v| v).count() as u64);
+    }
+
+    #[test]
+    fn escolher_todas_as_cartelas_cobre_tudo_e_escolher_nenhuma_nao_existe() {
+        let motor = motor_de(9, 4, 3);
+        let cartelas = todas(9, 4);
+        let inteiro = melhor_bloco(&motor, &cartelas, cartelas.len()).unwrap();
+        assert_eq!(inteiro.cobertos, motor.total_alvos() as u64);
+        assert!(melhor_bloco(&motor, &cartelas, 0).is_none());
+        assert!(melhor_bloco(&motor, &cartelas, cartelas.len() + 1).is_none());
     }
 
     #[test]
