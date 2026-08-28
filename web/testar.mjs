@@ -1053,6 +1053,67 @@ try {
     `${mostradas} cartelas`
   );
 
+  // O seletor vai até mil, ou até o número de cartelas — o que for menor. Com
+  // 240 cartelas o teto é 200, o último degrau que ainda cabe.
+  const faixa = await pagina.evaluate(() => {
+    const s = document.getElementById('div-partes');
+    return { max: Number(s.max), direita: document.getElementById('div-direita').textContent };
+  });
+  marcar(
+    faixa.direita === '200 blocos',
+    'o seletor oferece até 200 blocos num fechamento de 240 cartelas',
+    faixa.direita
+  );
+
+  // E dividir no teto tem de funcionar: é o caso em que a estratégia econômica
+  // entra, e ela precisa devolver blocos de verdade.
+  await pagina.evaluate((max) => {
+    const s = document.getElementById('div-partes');
+    s.value = String(max);
+    s.dispatchEvent(new Event('input', { bubbles: true }));
+  }, faixa.max);
+  await pagina.click('#div-dividir');
+  await pagina.waitForFunction(
+    () => document.querySelectorAll('#div-blocos .bloco').length > 100,
+    undefined,
+    { timeout: 60000 }
+  );
+  const muitos = await pagina.evaluate(() => {
+    const linhas = [...document.querySelectorAll('#div-resumo tbody tr')].slice(0, -1);
+    return {
+      blocos: linhas.length,
+      soma: linhas.reduce((t, tr) => t + Number(tr.children[1].textContent.replace(/\D/g, '')), 0),
+      pior: Math.min(
+        ...linhas.map((tr) => Number(tr.children[3].textContent.replace('%', '').replace(',', '.')))
+      ),
+    };
+  });
+  marcar(
+    muitos.blocos === 200 && muitos.soma === 240,
+    'dividir em 200 blocos reparte as 240 cartelas sem perder nenhuma',
+    `${muitos.blocos} blocos somando ${muitos.soma}`
+  );
+  marcar(
+    muitos.pior > 0.5,
+    'e mesmo miúdo, cada bloco vale mais que o meio por cento que ele representa',
+    `pior bloco: ${muitos.pior}%`
+  );
+
+  // De volta a quatro, que é onde o resto do teste trabalha.
+  await pagina.evaluate(() => {
+    const s = document.getElementById('div-partes');
+    s.value = '2';
+    s.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await pagina.click('#div-dividir');
+  await pagina.waitForFunction(
+    () => document.querySelectorAll('#div-blocos .bloco').length === 4,
+    undefined,
+    { timeout: 30000 }
+  );
+  await pagina.click('#div-blocos [data-bloco-acao="ver"][data-bloco="0"]');
+  await pagina.waitForSelector('#div-cartelas .cartela', { timeout: 10000 });
+
   // ─── o que dá para fazer com um bloco ───
   //
   // Um bloco é um fechamento como qualquer outro: conferível, simulável,

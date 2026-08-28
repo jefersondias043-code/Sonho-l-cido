@@ -8,7 +8,7 @@ use std::time::Instant;
 
 use motor_core::cartela::Cartela;
 use motor_core::cobertura::MotorCobertura;
-use motor_core::divisao::dividir;
+use motor_core::divisao::{dividir, dividir_em_sequencia};
 use motor_core::problema::{Objetivo, Problema, RegraCobertura};
 
 fn main() {
@@ -18,8 +18,8 @@ fn main() {
 
     let casos = ["20,17", "21,18", "22,19", "23,20", "23,18", "24,17"];
     println!(
-        "{:>9} {:>8} {:>7}  {:>7} {:>11} {:>8}",
-        "pool,jogo", "cartelas", "partes", "1/k", "pior bloco", "tempo"
+        "{:>9} {:>8} {:>7}  {:>7} {:>11} {:>8} {:>11} {:>8}",
+        "pool,jogo", "cartelas", "partes", "1/k", "rodízio", "tempo", "sequência", "tempo"
     );
 
     for chave in casos {
@@ -51,21 +51,26 @@ fn main() {
         .unwrap();
         let motor = MotorCobertura::novo(&problema).unwrap();
 
-        for partes in [2usize, 4, 10] {
+        for partes in [2usize, 4, 10, 50, 200] {
             if partes > cartelas.len() {
                 continue;
             }
             let t = Instant::now();
-            let d = dividir(&motor, &cartelas, partes).unwrap();
-            let ms = t.elapsed().as_millis();
+            let a = dividir(&motor, &cartelas, partes).unwrap();
+            let ma = t.elapsed().as_millis();
+            let t = Instant::now();
+            let b = dividir_em_sequencia(&motor, &cartelas, partes).unwrap();
+            let mb = t.elapsed().as_millis();
             println!(
-                "{:>9} {:>8} {:>7}  {:>6.1}% {:>10.1}% {:>6}ms",
+                "{:>9} {:>8} {:>7}  {:>6.2}% {:>10.2}% {:>6}ms {:>10.2}% {:>6}ms",
                 chave,
                 cartelas.len(),
                 partes,
                 100.0 / partes as f64,
-                100.0 * d.pior_cobertura(),
-                ms
+                100.0 * a.pior_cobertura(),
+                ma,
+                100.0 * b.pior_cobertura(),
+                mb
             );
         }
     }

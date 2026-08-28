@@ -3721,8 +3721,20 @@ function abrirChecagem(chave) {
  * 1 em 4" seria pessimista e vago ao mesmo tempo.
  */
 
-/** Quantos blocos o seletor oferece. Acima disto o bloco vira pó. */
-const MAIS_BLOCOS = 20;
+/**
+ * Os degraus do seletor de blocos.
+ *
+ * De 2 a 1.000, geométricos. Um seletor linear até mil teria 999 posições e
+ * seria impossível de acertar no dedo; e a diferença entre 137 e 150 blocos não
+ * muda decisão nenhuma — o que muda é a ordem de grandeza. Perto do 2, onde cada
+ * passo dobra o custo, os degraus são de um em um.
+ *
+ * O teto real é o número de cartelas do fechamento: não existe bloco vazio.
+ */
+const DEGRAUS_DOS_BLOCOS = [
+  2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 15, 20, 25, 30, 40, 50, 60, 75, 100, 125, 150, 200, 250, 300,
+  400, 500, 600, 750, 1000,
+];
 
 let divFonte = null;
 let divUltima = null;
@@ -3795,18 +3807,23 @@ function divSelecionar(chave) {
   $('div-dividir').disabled = !divFonte || divOcupado;
 
   const seletor = $('div-partes');
-  const teto = divFonte ? Math.min(MAIS_BLOCOS, divFonte.cartelas.length) : 2;
-  seletor.max = String(Math.max(0, teto - 2));
-  seletor.value = String(Math.min(2, Number(seletor.max)));
+  const cabem = divFonte ? divFonte.cartelas.length : 2;
+  const ate = DEGRAUS_DOS_BLOCOS.filter((d) => d <= cabem);
+  divDegraus = ate.length ? ate : [2];
+  seletor.max = String(divDegraus.length - 1);
+  seletor.value = String(Math.min(2, divDegraus.length - 1));
   seletor.disabled = !divFonte;
-  $('div-direita').textContent = `${teto} blocos`;
+  $('div-direita').textContent = `${milhares(divDegraus[divDegraus.length - 1])} blocos`;
 
   divPintarFicha();
 }
 
+/** Os degraus que cabem no fechamento escolhido. */
+let divDegraus = DEGRAUS_DOS_BLOCOS.slice();
+
 /** O número de blocos escolhido. O seletor guarda o índice, não o valor. */
 function divPartes() {
-  return Number($('div-partes').value) + 2;
+  return divDegraus[Number($('div-partes').value)] ?? 2;
 }
 
 function divPintarFicha() {
@@ -3818,10 +3835,12 @@ function divPintarFicha() {
     return;
   }
   const partes = divPartes();
-  const porBloco = Math.ceil(divFonte.cartelas.length / partes);
+  const porBloco = Math.floor(divFonte.cartelas.length / partes);
   destino.innerHTML =
     `<b>${escapar(divFonte.descricao)}</b> · ${milhares(divFonte.cartelas.length)} cartelas` +
-    `<br><em>Em ${partes} blocos: cerca de ${milhares(porBloco)} cartelas cada.</em>`;
+    `<br><em>Em ${milhares(partes)} blocos: ${milhares(porBloco)} a ` +
+    `${milhares(Math.ceil(divFonte.cartelas.length / partes))} cartelas cada, ` +
+    `custando ${porcento(1 / partes)} do inteiro.</em>`;
 }
 
 async function divDividir() {

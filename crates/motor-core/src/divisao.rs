@@ -46,6 +46,12 @@
 use crate::cartela::Cartela;
 use crate::cobertura::{MotorCobertura, Rascunho};
 
+/// Quanta memória o rodízio pode pedir antes de valer a pena trocar de método.
+///
+/// Não é o limite do aparelho: é o ponto em que a estratégia mais econômica já
+/// entrega o mesmo resultado, e por isso guardar mais deixa de comprar nada.
+const TETO_DE_MEMORIA: usize = 48 * 1024 * 1024;
+
 /// Um bloco: quais cartelas do fechamento original, e quanto ele cobre sozinho.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Bloco {
@@ -90,6 +96,73 @@ impl Divisao {
     }
 }
 
+/// Divide preenchendo **um bloco de cada vez**, com um mapa de cobertura só.
+///
+/// O rodízio de [`dividir`] guarda um mapa por bloco. Com poucos blocos isso é
+/// barato e dá o melhor resultado; com mil blocos são mil mapas sobre milhões
+/// de sorteios, e o navegador derruba a aba antes de terminar.
+///
+/// Aqui o mapa é reaproveitado: o bloco 1 é montado inteiro, o mapa é zerado, e
+/// o bloco 2 é montado com o que sobrou. A memória deixa de depender do número
+/// de blocos.
+///
+/// O preço está no último bloco, que fica com o que ninguém quis — e é medindo
+/// esse preço que se decide qual das duas usar.
+pub fn dividir_em_sequencia(
+    motor: &MotorCobertura,
+    cartelas: &[Cartela],
+    partes: usize,
+) -> Option<Divisao> {
+    let total_alvos = motor.total_alvos();
+    let palavras = total_alvos.div_ceil(64);
+    let mut rascunho = Rascunho::novo();
+
+    let mut tetos: Vec<u32> = Vec::with_capacity(cartelas.len());
+    for &c in cartelas {
+        motor.alvos_da_cartela(c, &mut rascunho);
+        tetos.push(rascunho.alvos().len() as u32);
+    }
+
+    let base = cartelas.len() / partes;
+    let sobra = cartelas.len() % partes;
+    let mut usada = vec![false; cartelas.len()];
+    let mut blocos = Vec::with_capacity(partes);
+    let mut mascara = vec![0u64; palavras];
+
+    for b in 0..partes {
+        let quantas = base + usize::from(b < sobra);
+        mascara.iter_mut().for_each(|p| *p = 0);
+
+        // A fila é refeita a cada bloco porque o mapa foi zerado: os ganhos
+        // voltaram ao teto, e a poda preguiçosa precisa de tetos válidos.
+        let mut fila: Vec<(u32, u32)> = (0..cartelas.len() as u32)
+            .filter(|&i| !usada[i as usize])
+            .map(|i| (tetos[i as usize], i))
+            .collect();
+        fila.sort_unstable();
+
+        let mut escolhidas = Vec::with_capacity(quantas);
+        while escolhidas.len() < quantas {
+            let Some(i) = melhor_para(motor, cartelas, &mut fila, &usada, &mascara, &mut rascunho)
+            else {
+                break;
+            };
+            motor.alvos_da_cartela(cartelas[i], &mut rascunho);
+            for &alvo in rascunho.alvos() {
+                mascara[alvo as usize / 64] |= 1 << (alvo as usize % 64);
+            }
+            escolhidas.push(i);
+            usada[i] = true;
+        }
+
+        escolhidas.sort_unstable();
+        let cobertos = mascara.iter().map(|p| u64::from(p.count_ones())).sum();
+        blocos.push(Bloco { cartelas: escolhidas, cobertos });
+    }
+
+    Some(Divisao { blocos, total_alvos: total_alvos as u64 })
+}
+
 /// Divide `cartelas` em `partes` blocos equilibrados, maximizando o que cada um
 /// cobre sozinho.
 ///
@@ -104,6 +177,31 @@ pub fn dividir(
         return None;
     }
     let total_alvos = motor.total_alvos();
+
+    // O rodízio guarda um mapa de cobertura e uma fila **por bloco**. Com poucos
+    // blocos isso é barato e dá o melhor resultado; com muitos, estoura a
+    // memória do aparelho antes de terminar. Em 25 dezenas são 3,2 milhões de
+    // sorteios, e cada mapa ocupa 400 KB: mil blocos seriam 400 MB só de mapas.
+    //
+    // A troca é indolor porque as duas concordam justamente onde o rodízio
+    // ficaria caro. Medido, o pior bloco de cada uma:
+    //
+    // ```text
+    //                 rodízio   sequência
+    // 21/18 em   4     50,60%      37,93%     ← o rodízio ganha, e muito
+    // 22/19 em   4     52,02%      49,42%
+    // 23/18 em  50      6,95%       6,80%     ← empatam
+    // 20/17 em 200      0,88%       0,88%
+    // 24/17 em 200      1,39%       1,38%
+    // ```
+    //
+    // Com blocos pequenos sobra pouco espaço para equilibrar, e as duas chegam
+    // ao mesmo lugar.
+    let por_bloco = total_alvos.div_ceil(64) * 8 + cartelas.len() * 8;
+    if partes.saturating_mul(por_bloco) > TETO_DE_MEMORIA {
+        return dividir_em_sequencia(motor, cartelas, partes);
+    }
+
     let palavras = total_alvos.div_ceil(64);
     let mut rascunho = Rascunho::novo();
 
@@ -215,6 +313,15 @@ fn melhor_para(
             .iter()
             .filter(|&&a| mascara[a as usize / 64] & (1 << (a as usize % 64)) == 0)
             .count() as u32;
+
+        // Uma cartela que não acrescenta nada é tão boa quanto qualquer outra
+        // que também não acrescente: leva-se esta e pronto. Sem esta saída, o
+        // fim de um bloco já saturado devolve todas as candidatas à fila com
+        // teto zero, uma por vez, e a reinserção vira trabalho quadrático.
+        if ganho == 0 {
+            fila.pop();
+            return Some(i);
+        }
 
         // O teto do próximo candidato ainda vivo.
         let proximo = fila
@@ -389,6 +496,51 @@ mod testes {
             "por cobertura {:.3} não ganhou de por ordem {pior_ingenuo:.3}",
             d.pior_cobertura()
         );
+    }
+
+    #[test]
+    fn as_duas_estrategias_particionam_igual_e_concordam_com_muitos_blocos() {
+        let motor = motor_de(10, 5, 3);
+        let cartelas = todas(10, 5);
+        for partes in [2, 4, 20, 60, cartelas.len()] {
+            let a = dividir(&motor, &cartelas, partes).unwrap();
+            let b = dividir_em_sequencia(&motor, &cartelas, partes).unwrap();
+
+            // As duas precisam repartir o fechamento inteiro, sempre.
+            for d in [&a, &b] {
+                let mut vistas: Vec<usize> =
+                    d.blocos.iter().flat_map(|x| x.cartelas.iter().copied()).collect();
+                vistas.sort_unstable();
+                assert_eq!(vistas, (0..cartelas.len()).collect::<Vec<_>>(), "partes={partes}");
+                let menor = d.blocos.iter().map(|x| x.cartelas.len()).min().unwrap();
+                let maior = d.blocos.iter().map(|x| x.cartelas.len()).max().unwrap();
+                assert!(maior - menor <= 1, "partes={partes}");
+            }
+
+            // E o rodízio nunca pode ser **pior** que a sequência: ele é a
+            // estratégia cara, e só existe enquanto compra alguma coisa.
+            assert!(
+                a.pior_cobertura() >= b.pior_cobertura() - 1e-9,
+                "partes={partes}: rodízio {:.4} perdeu da sequência {:.4}",
+                a.pior_cobertura(),
+                b.pior_cobertura()
+            );
+        }
+    }
+
+    #[test]
+    fn com_blocos_demais_para_a_memoria_a_divisao_ainda_sai() {
+        // A configuração mais pesada da modalidade tem 3,2 milhões de sorteios,
+        // e mil mapas de cobertura seriam 400 MB. Aqui o que se prova é que o
+        // pedido grande é atendido em vez de derrubar a aba — a escolha da
+        // estratégia acontece por dentro, sem quem chamou precisar saber.
+        let motor = motor_de(12, 6, 3);
+        let cartelas = todas(12, 6);
+        let d = dividir(&motor, &cartelas, 400).unwrap();
+        assert_eq!(d.blocos.len(), 400);
+        let soma: usize = d.blocos.iter().map(|b| b.cartelas.len()).sum();
+        assert_eq!(soma, cartelas.len());
+        assert!(d.pior_cobertura() > 1.0 / 400.0, "mesmo miúdo, o bloco vale mais que 1/k");
     }
 
     #[test]
