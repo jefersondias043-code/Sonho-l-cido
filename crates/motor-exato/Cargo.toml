@@ -1,0 +1,14 @@
+[package]
+name = "motor-exato"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Construtor matemático exato de fechamentos mínimos"
+
+# Nenhuma dependência dos outros motores, e é de propósito: este crate resolve o
+# problema por conta própria, do modelo formal à prova. Reaproveitar o motor da
+# busca traria junto as suposições dele, e a proposta aqui é a inversa.
+[dependencies]
+serde = { workspace = true }
