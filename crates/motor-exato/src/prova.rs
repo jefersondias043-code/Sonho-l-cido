@@ -668,9 +668,18 @@ impl BuscaExata {
 /// aceita soluções estritamente menores — o que já se tem não precisa ser
 /// reencontrado.
 pub fn resolver(inst: &Instancia, teto: usize, orcamento: u64) -> Prova {
+    varrer(inst.clone(), teto, orcamento)
+}
+
+/// Como [`resolver`], mas tomando a instância para si.
+///
+/// A diferença é de memória, e não é pequena: a matriz de cobertura pode passar
+/// de cem megabytes, e clonar para depois descartar o original dobrava o pico
+/// num aparelho que não tem essa folga.
+pub fn varrer(inst: Instancia, teto: usize, orcamento: u64) -> Prova {
     let candidatos = inst.cobre.len();
     let alvos = inst.alvos;
-    let mut busca = BuscaExata::nova(inst.clone(), teto);
+    let mut busca = BuscaExata::nova(inst, teto);
     busca.avancar(orcamento);
     Prova { desfecho: busca.desfecho(), visitados: busca.visitados(), candidatos, alvos }
 }
@@ -690,7 +699,7 @@ fn grande_demais(p: &Problema) -> Prova {
 /// A prova sem restrição: vale para todas as coleções, com ou sem simetria.
 pub fn provar_livre(p: &Problema, teto: usize, orcamento: u64) -> Prova {
     match Instancia::livre(p) {
-        Some(inst) => resolver(&inst, teto, orcamento),
+        Some(inst) => varrer(inst, teto, orcamento),
         None => grande_demais(p),
     }
 }
@@ -698,7 +707,7 @@ pub fn provar_livre(p: &Problema, teto: usize, orcamento: u64) -> Prova {
 /// A prova dentro da simetria cíclica: espaço muito menor, afirmação mais fraca.
 pub fn provar_ciclica(p: &Problema, teto: usize, orcamento: u64) -> Prova {
     match Instancia::ciclica(p) {
-        Some(inst) => resolver(&inst, teto, orcamento),
+        Some(inst) => varrer(inst, teto, orcamento),
         None => grande_demais(p),
     }
 }
