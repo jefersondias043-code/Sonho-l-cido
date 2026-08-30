@@ -553,6 +553,7 @@ impl MotorBusca {
         let (tamanho_pool, tamanho_cartela) =
             (problema.tamanho_pool(), problema.tamanho_cartela());
         let (alvo, intersecao) = (problema.regra().alvo, problema.regra().intersecao);
+        let premiadas = problema.regra().premiadas;
 
         Ok(Self {
             problema,
@@ -581,6 +582,7 @@ impl MotorBusca {
                 tamanho_cartela,
                 alvo,
                 intersecao,
+                premiadas,
             ),
             origem_do_inicio: String::new(),
             cartelas_trazidas: 0,

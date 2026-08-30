@@ -25,14 +25,113 @@ let configuracaoAtual = null;
 let descendo = false;
 let medindo = null;
 
+/* ─────────── os números escolhidos ─────────── */
+
+/*
+ * O universo é quantos números existem; o pool é quais deles você vai jogar.
+ * A distinção importa porque a garantia é sobre o pool — se o sorteio cair
+ * fora dele, nenhum fechamento do mundo salva — e porque as cartelas saem com
+ * os números marcados, prontas para usar.
+ */
+const escolhidos = new Set();
+let premiadas = 1;
+
+function montarGrade() {
+  const universo = Number($('cs-universo').value);
+  const grade = $('cs-grade');
+  grade.innerHTML = '';
+  if (!Number.isInteger(universo) || universo < 1 || universo > 31) return;
+  for (let n = 1; n <= universo; n += 1) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'numero';
+    b.textContent = String(n).padStart(2, '0');
+    b.dataset.n = String(n);
+    b.addEventListener('click', () => {
+      if (escolhidos.has(n)) escolhidos.delete(n);
+      else escolhidos.add(n);
+      medir();
+    });
+    grade.appendChild(b);
+  }
+}
+
+/** Os números marcados, em ordem. É o pool que vai ao motor. */
+function pool() {
+  return [...escolhidos].sort((a, b) => a - b);
+}
+
+function combinacoes(n, k) {
+  if (k < 0 || k > n) return 0;
+  let total = 1;
+  for (let i = 0; i < Math.min(k, n - k); i += 1) {
+    total = (total * (n - i)) / (i + 1);
+  }
+  return Math.round(total);
+}
+
+/**
+ * Quantas cartelas distintas conseguem atender um mesmo sorteio.
+ *
+ * É o teto de cartelas premiadas: acima dele não há o que comprar, só repetir
+ * cartela — que soma custo e prêmio na mesma proporção e não muda nada.
+ *
+ * A conta existe também na Lotinha, presa a um sorteio de 15. Aqui o sorteio é
+ * parâmetro, então ela precisa ser a versão geral; e mora neste arquivo, e não
+ * num módulo comum, porque cada aplicativo da plataforma se sustenta sozinho.
+ */
+function maximoPremiadas(v, k, j, t) {
+  let total = 0;
+  for (let i = t; i <= Math.min(k, j); i += 1) {
+    if (k - i <= v - j) total += combinacoes(j, i) * combinacoes(v - j, k - i);
+  }
+  return Math.max(1, Math.min(total, 1000));
+}
+
+/** A escala de cartelas premiadas: de 1 a 8, e sempre incluindo o teto. */
+function montarPremiadas(teto) {
+  if (premiadas > teto) premiadas = teto;
+  const escala = [];
+  for (let r = 1; r <= Math.min(teto, 8); r += 1) escala.push(r);
+  if (!escala.includes(teto)) escala.push(teto);
+  if (!escala.includes(premiadas)) escala.push(premiadas);
+  escala.sort((a, b) => a - b);
+
+  const alvo = $('cs-premiadas');
+  alvo.innerHTML = '';
+  for (const r of escala) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'opcao' + (r === premiadas ? ' ativa' : '');
+    b.textContent = String(r);
+    b.dataset.valor = String(r);
+    b.setAttribute('aria-pressed', String(r === premiadas));
+    b.addEventListener('click', () => {
+      premiadas = r;
+      medir();
+    });
+    alvo.appendChild(b);
+  }
+}
+
+function pintarContagem(universo) {
+  const marcados = escolhidos.size;
+  $('cs-contagem').innerHTML =
+    marcados === 0
+      ? '<b>Nenhum número marcado.</b> <em>Marque os que você vai jogar.</em>'
+      : `<b>${marcados} de ${universo} marcados.</b>`;
+}
+
 /* ─────────── o problema ─────────── */
 
 function lerParametros() {
   return {
     universo: Number($('cs-universo').value),
+    pool: pool(),
     cartela: Number($('cs-cartela').value),
     alvo: Number($('cs-alvo').value),
     intersecao: Number($('cs-intersecao').value),
+    premiadas,
   };
 }
 
@@ -42,18 +141,24 @@ function lerParametros() {
  * Cada mensagem diz o que está errado **e** por quê. "Inválido" manda a pessoa
  * adivinhar; "a cartela não cabe no universo" ela conserta sozinha.
  */
-function criticar({ universo, cartela, alvo, intersecao }) {
+function criticar({ universo, pool, cartela, alvo, intersecao, premiadas }) {
   if (![universo, cartela, alvo, intersecao].every((n) => Number.isInteger(n) && n > 0)) {
     return 'Os quatro números precisam ser inteiros maiores que zero.';
   }
   if (universo > 31) {
     return 'O universo vai até 31 números — acima disso a conta não cabe na memória do aparelho.';
   }
-  if (cartela > universo) {
-    return `A cartela tem ${cartela} números e o universo só tem ${universo}: ela não cabe.`;
+  if (pool.length === 0) {
+    return 'Marque na grade quais números você vai jogar.';
   }
-  if (alvo > universo) {
-    return `O sorteio tira ${alvo} números de um universo de ${universo}: não há de onde tirar.`;
+  // Daqui para baixo o que limita é o **pool**, e não o universo: a garantia
+  // vale dentro dos números que você marcou, e é entre eles que as cartelas
+  // são montadas.
+  if (cartela > pool.length) {
+    return `A cartela tem ${cartela} números e você marcou só ${pool.length}: ela não cabe.`;
+  }
+  if (alvo > pool.length) {
+    return `O sorteio tira ${alvo} números de um pool de ${pool.length}: não há de onde tirar.`;
   }
   if (intersecao > alvo) {
     return `A garantia pede ${intersecao} acertos de um sorteio que só tem ${alvo} números.`;
@@ -61,17 +166,24 @@ function criticar({ universo, cartela, alvo, intersecao }) {
   if (intersecao > cartela) {
     return `A garantia pede ${intersecao} acertos numa cartela de ${cartela} números.`;
   }
+  const teto = maximoPremiadas(pool.length, cartela, alvo, intersecao);
+  if (premiadas > teto) {
+    return (
+      `Você pediu ${premiadas} cartelas premiadas, e só existem ${teto} cartelas distintas ` +
+      `capazes de atender um mesmo sorteio — acima disso só repetindo cartela.`
+    );
+  }
   return null;
 }
 
 function configuracaoDe(p) {
   return {
     universo: p.universo,
-    pool: Array.from({ length: p.universo }, (_, i) => i + 1),
+    pool: p.pool,
     cartela: p.cartela,
     alvo: p.alvo,
     intersecao: p.intersecao,
-    premiadas: 1,
+    premiadas: p.premiadas,
     semente: 20260828,
   };
 }
@@ -84,7 +196,26 @@ function configuracaoDe(p) {
  * o tamanho do universo e o piso — em vez de descobrir depois de meia hora.
  */
 function medir() {
+  const universo = Number($('cs-universo').value);
+  if ($('cs-grade').childElementCount !== (Number.isInteger(universo) ? universo : -1)) {
+    montarGrade();
+    for (const n of [...escolhidos]) if (n > universo) escolhidos.delete(n);
+  }
+  for (const b of document.querySelectorAll('#cs-grade .numero')) {
+    const marcado = escolhidos.has(Number(b.dataset.n));
+    b.classList.toggle('escolhido', marcado);
+    b.setAttribute('aria-pressed', String(marcado));
+  }
+  pintarContagem(universo);
+
   const p = lerParametros();
+  montarPremiadas(
+    p.pool.length > 0
+      ? maximoPremiadas(p.pool.length, p.cartela, p.alvo, p.intersecao)
+      : 1
+  );
+  p.premiadas = premiadas;
+
   const erro = criticar(p);
   $('cs-erro').hidden = !erro;
   if (erro) {
@@ -231,12 +362,18 @@ function pintarAndamento(m) {
 function pintarResultado() {
   if (!solucao.length) return;
   $('cs-resultado-cartao').hidden = false;
+  const quantasPremiadas = configuracaoAtual.premiadas ?? 1;
   $('cs-ficha').innerHTML =
     `<b>${milhares(solucao.length)} cartelas</b> de ${escapar(
       String(configuracaoAtual.cartela)
-    )} números, num universo de ${escapar(String(configuracaoAtual.universo))}.` +
+    )} números, entre os ${escapar(String(configuracaoAtual.pool.length))} que você marcou.` +
     `<br><em>Toda combinação de ${escapar(String(configuracaoAtual.alvo))} números tem ao ` +
-    `menos ${escapar(String(configuracaoAtual.intersecao))} deles dentro de alguma cartela.</em>`;
+    `menos ${escapar(String(configuracaoAtual.intersecao))} deles dentro de ` +
+    `${
+      quantasPremiadas > 1
+        ? `<b>${escapar(String(quantasPremiadas))}</b> cartelas`
+        : 'alguma cartela'
+    }.</em>`;
   $('cs-cartelas').innerHTML =
     `<div class="cartelas em-levas">${solucao
       .map(
@@ -300,8 +437,10 @@ function textoDaSolucao() {
   const c = configuracaoAtual;
   return (
     `# Sonho Lúcido — Construtor\n` +
-    `# ${solucao.length} cartelas de ${c.cartela} números, universo de ${c.universo}\n` +
-    `# garante ${c.intersecao} acertos em todo sorteio de ${c.alvo}\n` +
+    `# ${solucao.length} cartelas de ${c.cartela} números, pool de ${c.pool.length}\n` +
+    `# garante ${c.intersecao} acertos em todo sorteio de ${c.alvo}` +
+    `${(c.premiadas ?? 1) > 1 ? `, em ${c.premiadas} cartelas` : ''}\n` +
+    `# números do pool: ${c.pool.join(' ')}\n` +
     solucao.map((linha) => linha.map((n) => String(n).padStart(2, '0')).join(' ')).join('\n') +
     '\n'
   );
@@ -312,6 +451,24 @@ function textoDaSolucao() {
 for (const campo of ['cs-universo', 'cs-cartela', 'cs-alvo', 'cs-intersecao']) {
   $(campo).addEventListener('input', medir);
 }
+
+$('cs-limpar').addEventListener('click', () => {
+  escolhidos.clear();
+  medir();
+});
+
+$('cs-todos').addEventListener('click', () => {
+  const universo = Number($('cs-universo').value);
+  for (let n = 1; n <= universo; n += 1) escolhidos.add(n);
+  medir();
+});
+
+// Começa com o universo inteiro marcado: quem quiser tirar números tira, e quem
+// só quer experimentar não precisa marcar treze botões antes de a tela
+// responder.
+montarGrade();
+for (let n = 1; n <= Number($('cs-universo').value); n += 1) escolhidos.add(n);
+medir();
 
 $('cs-construir').addEventListener('click', () => {
   if (!configuracaoAtual) return;

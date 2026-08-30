@@ -40,6 +40,17 @@
       <input type="number" id="cs-universo" min="2" max="31" step="1" value="13" inputmode="numeric">
     </label>
 
+    <p class="ajuda">
+      <b>Os seus números</b> — marque quais deles você vai jogar. As cartelas
+      saem com eles, e não com posições que você teria de traduzir depois.
+    </p>
+    <div class="grade-numeros" id="cs-grade"></div>
+    <div class="referencia" id="cs-contagem"></div>
+    <div class="acoes-linha">
+      <button class="secundario" id="cs-limpar">Limpar</button>
+      <button class="secundario" id="cs-todos">Marcar todos</button>
+    </div>
+
     <label class="campo">
       <span>Cartela — quantos números em cada escolha</span>
       <input type="number" id="cs-cartela" min="1" max="31" step="1" value="5" inputmode="numeric">
@@ -54,6 +65,12 @@
       <span>Garantia — quantos deles uma cartela precisa conter</span>
       <input type="number" id="cs-intersecao" min="1" max="31" step="1" value="2" inputmode="numeric">
     </label>
+
+    <p class="ajuda">
+      <b>Cartelas premiadas</b> — quantas cartelas suas precisam ganhar, e não
+      apenas uma. Custa mais, às vezes bem menos do que parece.
+    </p>
+    <div class="opcoes" id="cs-premiadas"></div>
 
     <div class="referencia" id="cs-erro" hidden></div>
     <div class="referencia" id="cs-medida"></div>

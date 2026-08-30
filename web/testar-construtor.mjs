@@ -90,6 +90,25 @@ async function descrever(universo, cartela, alvo, intersecao) {
   );
 }
 
+/** Marca exatamente estes números na grade, dentro de um universo dado. */
+async function marcarNumeros(universo, numeros) {
+  await pagina.fill('#cs-universo', String(universo));
+  await pagina.click('#cs-limpar');
+  for (const n of numeros) await pagina.click(`#cs-grade .numero[data-n="${n}"]`);
+}
+
+/** Escolhe quantas cartelas precisam estar premiadas. */
+async function pedirPremiadas(r) {
+  await pagina.click(`#cs-premiadas .opcao[data-valor="${r}"]`);
+}
+
+/** O piso que a medida anuncia. */
+async function pisoDaMedida() {
+  const t = await texto('#cs-medida');
+  const m = t.match(/menos de ([\d.]+) cartelas/);
+  return m ? Number(m[1].replace(/\D/g, '')) : 0;
+}
+
 console.log('Teste do Construtor\n');
 
 try {
@@ -218,6 +237,93 @@ try {
     'e diz "no máximo", porque o piso é um piso e não uma promessa',
     (await texto('#cs-veredito')).slice(0, 70)
   );
+
+  // ─── 7. a grade: as cartelas saem com os números marcados ───
+  //
+  // Nove ímpares dentro de um universo de 25, cartelas de 3, saem 2 e garante 2:
+  // é C(9,3,2). O que se cobra é que nenhuma cartela traga um número par.
+  const impares = [1, 3, 5, 7, 9, 11, 13, 15, 17];
+  await marcarNumeros(25, impares);
+  await descrever(25, 3, 2, 2);
+  marcar(
+    (await pisoDaMedida()) === 12,
+    'a medida usa o pool marcado, e não o universo inteiro',
+    `piso ${await pisoDaMedida()} para C(9,3,2)`
+  );
+
+  await pagina.click('#cs-construir');
+  await pagina.waitForFunction(
+    () => !document.getElementById('cs-resultado-cartao').hidden &&
+      document.querySelectorAll('#cs-cartelas .cartela').length > 0,
+    undefined,
+    { timeout: 90000 }
+  );
+  const numerosUsados = await pagina.$$eval('#cs-cartelas .cartela span:last-child', (s) =>
+    [...new Set(s.flatMap((x) => x.textContent.trim().split(/\s+/).map(Number)))].sort(
+      (a, b) => a - b
+    )
+  );
+  marcar(
+    numerosUsados.every((n) => impares.includes(n)),
+    'e as cartelas saem com os números que foram marcados na grade',
+    `usou ${numerosUsados.join(' ')}`
+  );
+
+  // ─── 8. cartelas premiadas ───
+  //
+  // Exigir que duas cartelas ganhem, e não só uma, dobra a cota de contagem —
+  // e o método precisa dizer contagem, porque Schönheim e a tabela publicada
+  // falam de cobertura simples e não valem multiplicadas.
+  await pedirPremiadas(2);
+  await pagina.waitForFunction(
+    () => document.getElementById('cs-medida').textContent.includes('24'),
+    undefined,
+    { timeout: 20000 }
+  );
+  marcar(
+    (await pisoDaMedida()) === 24,
+    'pedir duas cartelas premiadas dobra o piso de contagem',
+    `piso ${await pisoDaMedida()}`
+  );
+  const medidaComDuas = await texto('#cs-medida');
+  marcar(
+    /contagem/.test(medidaComDuas),
+    'e o piso passa a vir da contagem, que é a única cota que vale multiplicada',
+    medidaComDuas.slice(-80)
+  );
+  // A tabela publicada fala de cobertura simples. Mostrá-la ao lado de um
+  // pedido dobrado convidaria a comparar 26 cartelas com um "melhor do mundo"
+  // que resolve outro problema.
+  marcar(
+    !/publicou/.test(medidaComDuas),
+    'e a tela cala sobre o melhor do mundo, porque a tabela não fala de duas premiadas',
+    medidaComDuas.slice(-80)
+  );
+
+  await pagina.click('#cs-construir');
+  await pagina.waitForFunction(
+    () => !document.getElementById('cs-escada-cartao').hidden &&
+      document.getElementById('cs-melhor').textContent.trim() !== '—',
+    undefined,
+    { timeout: 90000 }
+  );
+  const comDuas = await numero('#cs-melhor');
+  marcar(
+    comDuas >= 24,
+    'e a construção com duas premiadas respeita o novo piso',
+    `${comDuas} cartelas`
+  );
+  marcar(
+    /2<\/b> cartelas|2 cartelas/.test(await pagina.innerHTML('#cs-ficha')),
+    'a ficha do resultado diz que são duas cartelas premiadas',
+    (await texto('#cs-ficha')).slice(-70)
+  );
+
+  // Pedir mais premiadas do que o possível é recusado com o teto.
+  const teto = await pagina.$$eval('#cs-premiadas .opcao', (b) =>
+    Math.max(...b.map((x) => Number(x.dataset.valor)))
+  );
+  marcar(teto > 2, 'a escala de premiadas mostra até o teto do que é possível', `teto ${teto}`);
 
   marcar(errosDeConsole.length === 0, 'nenhum erro no console', errosDeConsole.join(' | ').slice(0, 120));
 } finally {

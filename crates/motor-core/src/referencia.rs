@@ -132,7 +132,17 @@ pub fn consultar_problema(
     cartela: usize,
     alvo: usize,
     intersecao: usize,
+    premiadas: usize,
 ) -> Option<Consulta> {
+    // A tabela publicada fala de cobertura **simples**: cada sorteio atendido
+    // por uma cartela. Com mais de uma cartela premiada ela não é referência
+    // nem teto — um covering design não entrega duas cartelas premiadas por
+    // sorteio, e nada garante que dobrá-lo baste. Exibi-la ao lado de um pedido
+    // dobrado convidaria a uma comparação que não existe: o usuário veria 26
+    // cartelas contra um "melhor do mundo: 12" que resolve outro problema.
+    if premiadas > 1 {
+        return None;
+    }
     let referencia = consultar(pool, cartela, intersecao)?;
     let aplicacao = if alvo == intersecao { Aplicacao::Exata } else { Aplicacao::Teto };
     Some(Consulta { referencia, aplicacao })
@@ -292,16 +302,28 @@ mod testes {
         // O caso do fechamento de loteria: pool 20, cartelas de 6, garantir 4
         // acertos se saírem 6. Não é covering design, mas cobrir todas as
         // 4-uplas resolve com folga — e isso é um número publicado.
-        let c = consultar_problema(20, 6, 6, 4).expect("há teto para esta configuração");
+        let c = consultar_problema(20, 6, 6, 4, 1).expect("há teto para esta configuração");
         assert_eq!(c.aplicacao, Aplicacao::Teto);
         assert_eq!(c.referencia.melhor_conhecido, consultar(20, 6, 4).unwrap().melhor_conhecido);
     }
 
     #[test]
     fn cobertura_completa_recebe_o_numero_exato() {
-        let c = consultar_problema(21, 5, 2, 2).expect("C(21,5,2) está na tabela");
+        let c = consultar_problema(21, 5, 2, 2, 1).expect("C(21,5,2) está na tabela");
         assert_eq!(c.aplicacao, Aplicacao::Exata);
         assert_eq!(c.referencia.melhor_conhecido, 21);
+    }
+
+    /// A tabela publicada descreve cobertura simples. Pedir duas cartelas
+    /// premiadas é outro problema, e a tabela não fala dele — nem como
+    /// referência nem como teto.
+    #[test]
+    fn a_tabela_nao_atende_quem_pede_mais_de_uma_cartela_premiada() {
+        assert!(consultar_problema(9, 3, 2, 2, 1).is_some(), "com uma premiada a tabela vale");
+        assert!(
+            consultar_problema(9, 3, 2, 2, 2).is_none(),
+            "com duas premiadas ela deixa de valer, e calar é mais honesto que comparar"
+        );
     }
 
     /// O teto tem de ser **de verdade** um teto: uma cobertura completa das

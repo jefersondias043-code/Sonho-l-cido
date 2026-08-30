@@ -39,12 +39,17 @@ conta, não há nada saindo do telefone.
 | **Construtor** | qual é a menor estrutura que satisfaz estas regras? |
 | **Construtor Exato** | qual é o mínimo, e como sei que é o mínimo? |
 
-O Construtor Exato recebe os **cinco** números que descrevem um fechamento —
-pool, tamanho do jogo, quantos números são sorteados, quantos deles a cartela
-precisa conter, e quantas cartelas premiadas — e uma grade onde você marca quais
-dezenas vai jogar, para as cartelas saírem com os seus números. Separar o
-sorteio da garantia é o que permite pedir "saem 15, quero garantir 13", que os
-três números de um covering design não conseguem descrever.
+Os **dois construtores** recebem os mesmos cinco números que descrevem um
+fechamento — pool, tamanho do jogo, quantos números são sorteados, quantos deles
+a cartela precisa conter, e quantas cartelas premiadas — e a mesma grade onde
+você marca quais dezenas vai jogar, para as cartelas saírem com os seus números.
+Separar o sorteio da garantia é o que permite pedir "saem 15, quero garantir
+13", que os três números de um covering design não conseguem descrever.
+
+Com mais de uma cartela premiada a tabela publicada some da tela dos dois, e
+isso é de propósito: ela descreve cobertura **simples**, e um covering design
+não entrega duas cartelas premiadas por sorteio. Mostrá-la ali convidaria a
+comparar o seu resultado com um número que resolve outro problema.
 
 A Lotinha parte de um fechamento pronto e conferido, e o motor entra depois para
 tentar superá-lo. O Construtor faz o caminho inverso, para qualquer problema de
