@@ -1,14 +1,18 @@
 /*
  * A tela do Construtor Matemático Exato.
  *
- * O aplicativo tem sete estágios e mostra os sete. A tentação seria uma chamada
- * só que devolvesse um número no fim de dez segundos — e ela esconderia
+ * O aplicativo tem oito estágios e mostra os oito. A tentação seria uma chamada
+ * só que devolvesse um número no fim de dois minutos — e ela esconderia
  * justamente o que há para ver: que determinar o mínimo, construir, verificar e
  * provar são quatro trabalhos diferentes, e que só o encontro dos dois últimos
  * autoriza a palavra "mínimo".
  *
- * A regra que decide o que pode ser afirmado mora em `exato-veredito.js`, sem
- * DOM e sem WebAssembly. Aqui só há pintura e sequência.
+ * Todo estágio longo mostra progresso ao vivo e pode ser parado. A versão
+ * anterior não mostrava nada, e uma tela parada é indistinguível de uma tela
+ * travada — quem está olhando não tem como saber se espera ou se desiste.
+ *
+ * A regra do que pode ser afirmado mora em `exato-veredito.js`, sem DOM e sem
+ * WebAssembly. Aqui só há pintura e sequência.
  */
 
 import { frase, folga, veredito, MINIMO, FALHA } from './exato-veredito.js';
@@ -17,14 +21,27 @@ const $ = (id) => document.getElementById(id);
 
 const trabalhador = new Worker('./exato-trabalhador.js', { type: 'module' });
 
-/** Quantos nós a busca cíclica recebe: ela varre um espaço muito menor. */
+/** Quanto trabalho a construção ganha, por unidade de esforço escolhida. */
+const TRABALHO_POR_ESFORCO = 100_000_000;
+
+/** Quantos nós a prova ganha, por unidade de esforço escolhida. */
+const NOS_POR_ESFORCO = 10_000_000;
+
+/**
+ * Quanto tempo cada estágio longo ganha, por unidade de esforço.
+ *
+ * O orçamento em unidades de trabalho não consegue prometer nada sobre o
+ * relógio: a mesma unidade custa nanossegundos num problema e microssegundos
+ * noutro. O prazo é a promessa que importa para quem está olhando — o
+ * aplicativo sempre volta, e volta quando disse que voltaria.
+ */
+const MILISSEGUNDOS_POR_ESFORCO = 5_000;
+
+/** A busca cíclica varre um espaço muito menor: recebe uma fração dos nós. */
 const FATIA_CICLICA = 4;
 
-/** Quanto o botão "insistir" multiplica o orçamento. */
-const MULTIPLICADOR_DA_INSISTENCIA = 10;
-
-/** Teto do orçamento, para o botão não crescer para sempre. */
-const ORCAMENTO_MAXIMO = 2_000_000_000;
+/** Acima disto as cartelas não são todas desenhadas — só copiadas. */
+const CARTELAS_DESENHADAS = 500;
 
 /*
  * Cada execução tem um número. Respostas de execuções anteriores chegam depois
@@ -32,9 +49,19 @@ const ORCAMENTO_MAXIMO = 2_000_000_000;
  * de um problema que não é mais o da tela.
  */
 let etapa = 0;
+let rodando = false;
 let pedido = null;
-let esforco = 0;
+let esforco = 4;
 let estado = null;
+
+/* ─────────── os números escolhidos ─────────── */
+
+let universo = 25;
+const escolhidos = new Set();
+let jogo = 17;
+let sorteio = 15;
+let garantia = 15;
+let premiadas = 1;
 
 function escapar(texto) {
   return String(texto).replace(
@@ -43,9 +70,7 @@ function escapar(texto) {
   );
 }
 
-function milhares(n) {
-  return Number(n).toLocaleString('pt-BR');
-}
+const milhares = (n) => Number(n).toLocaleString('pt-BR');
 
 /** Números grandes vêm do motor como texto, porque não cabem num `Number`. */
 function grande(texto) {
@@ -63,6 +88,139 @@ function avisar(texto) {
   }, 2600);
 }
 
+/* ─────────── binomiais, para a tela contar sozinha ─────────── */
+
+function combinacoes(n, k) {
+  if (k < 0 || k > n) return 0;
+  let total = 1;
+  for (let i = 0; i < Math.min(k, n - k); i += 1) {
+    total = (total * (n - i)) / (i + 1);
+  }
+  return Math.round(total);
+}
+
+/**
+ * Quantas cartelas distintas conseguem atender um mesmo sorteio.
+ *
+ * É o teto de cartelas premiadas: acima dele não há o que comprar, só repetir
+ * cartela — que soma custo e prêmio na mesma proporção e não muda nada.
+ */
+function maximoPremiadas(v, k, j, t) {
+  let total = 0;
+  for (let i = t; i <= Math.min(k, j); i += 1) {
+    if (k - i <= v - j) total += combinacoes(j, i) * combinacoes(v - j, k - i);
+  }
+  return Math.max(1, Math.min(total, 1000));
+}
+
+/* ─────────── a grade e os parâmetros ─────────── */
+
+function montarGrade() {
+  const grade = $('ex-grade');
+  grade.innerHTML = '';
+  for (let n = 1; n <= universo; n += 1) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'numero';
+    b.textContent = String(n).padStart(2, '0');
+    b.dataset.n = String(n);
+    b.addEventListener('click', () => {
+      if (escolhidos.has(n)) escolhidos.delete(n);
+      else escolhidos.add(n);
+      pintarParametros();
+    });
+    grade.appendChild(b);
+  }
+}
+
+/** Uma fileira de botões de opção, com o valor ativo marcado. */
+function montarOpcoes(id, valores, atual, aoEscolher) {
+  const alvo = $(id);
+  alvo.innerHTML = '';
+  for (const valor of valores) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'opcao' + (valor === atual ? ' ativa' : '');
+    b.textContent = String(valor);
+    b.dataset.valor = String(valor);
+    b.setAttribute('aria-pressed', String(valor === atual));
+    b.addEventListener('click', () => {
+      aoEscolher(valor);
+      pintarParametros();
+    });
+    alvo.appendChild(b);
+  }
+}
+
+/** A escala de cartelas premiadas: de 1 a 8, e sempre incluindo o teto. */
+function escalaDePremiadas(teto) {
+  const escala = [];
+  for (let r = 1; r <= Math.min(teto, 8); r += 1) escala.push(r);
+  if (!escala.includes(teto)) escala.push(teto);
+  if (!escala.includes(premiadas)) escala.splice(escala.length - 1, 0, premiadas);
+  return escala.sort((a, b) => a - b);
+}
+
+function pintarParametros() {
+  const v = escolhidos.size;
+
+  // Os limites de cada parâmetro dependem dos outros, e mostrar opções que não
+  // descrevem problema nenhum só faria a pessoa descobrir isso por erro.
+  jogo = Math.max(1, Math.min(jogo, Math.max(v, 1)));
+  sorteio = Math.max(1, Math.min(sorteio, Math.max(v, 1)));
+  garantia = Math.max(1, Math.min(garantia, Math.min(jogo, sorteio)));
+  const teto = v > 0 ? maximoPremiadas(v, jogo, sorteio, garantia) : 1;
+  premiadas = Math.max(1, Math.min(premiadas, teto));
+
+  for (const b of document.querySelectorAll('#ex-grade .numero')) {
+    const marcado = escolhidos.has(Number(b.dataset.n));
+    b.classList.toggle('escolhido', marcado);
+    b.setAttribute('aria-pressed', String(marcado));
+  }
+
+  $('ex-contagem').innerHTML =
+    v === 0
+      ? '<b>Nenhum número marcado.</b> <em>Marque os que você vai jogar.</em>'
+      : `<b>${v} de ${universo} marcados.</b> <em>São ${milhares(
+          combinacoes(v, sorteio)
+        )} sorteios possíveis dentro deles.</em>`;
+
+  const ateV = (limite) => {
+    const lista = [];
+    for (let n = 1; n <= limite; n += 1) lista.push(n);
+    return lista;
+  };
+
+  montarOpcoes('ex-jogo', ateV(Math.max(v, 1)), jogo, (n) => {
+    jogo = n;
+  });
+  montarOpcoes('ex-sorteio', ateV(Math.max(v, 1)), sorteio, (n) => {
+    sorteio = n;
+  });
+  montarOpcoes('ex-garantia', ateV(Math.min(jogo, sorteio)), garantia, (n) => {
+    garantia = n;
+  });
+  montarOpcoes('ex-premiadas', escalaDePremiadas(teto), premiadas, (n) => {
+    premiadas = n;
+  });
+
+  const botao = $('ex-resolver');
+  const falta = jogo > v || v === 0;
+  botao.disabled = falta || rodando;
+  botao.textContent = falta ? 'Marque ao menos o tamanho do jogo' : 'Resolver';
+}
+
+function trocarUniverso() {
+  const novo = Number($('ex-universo').value);
+  if (!Number.isInteger(novo) || novo < 2 || novo > 31) return;
+  universo = novo;
+  for (const n of [...escolhidos]) if (n > universo) escolhidos.delete(n);
+  montarGrade();
+  pintarParametros();
+}
+
+/* ─────────── a sequência ─────────── */
+
 function esconderTudo() {
   for (const id of [
     'ex-analise-cartao',
@@ -75,60 +233,44 @@ function esconderTudo() {
     $(id).hidden = true;
   }
   $('ex-erro').hidden = true;
-  $('ex-insistir').hidden = true;
 }
 
-/* ─────────── o pedido ─────────── */
-
-function lerPedido() {
-  const v = Number($('ex-universo').value);
-  const k = Number($('ex-cartela').value);
-  const t = Number($('ex-alvo').value);
-  for (const [nome, valor] of [
-    ['v', v],
-    ['k', k],
-    ['t', t],
-  ]) {
-    if (!Number.isInteger(valor) || valor < 1) {
-      throw new Error(`${nome} precisa ser um número inteiro maior que zero`);
-    }
-  }
-  if (k > v) throw new Error(`a cartela tem ${k} números e o universo só tem ${v}: ela não cabe`);
-  if (t > k) throw new Error(`o alvo pede ${t} números juntos numa cartela de ${k}`);
-  return { v, k, t };
+/** As dezenas marcadas, em ordem: a posição `i` da cartela é o número `lista[i]`. */
+function dezenas() {
+  return [...escolhidos].sort((a, b) => a - b);
 }
 
 function comecar() {
-  let novo;
-  try {
-    novo = lerPedido();
-  } catch (erro) {
-    $('ex-erro').hidden = false;
-    $('ex-erro').innerHTML = `<b>Não dá para resolver isso.</b> <em>${escapar(erro.message)}</em>`;
-    return;
-  }
+  const lista = dezenas();
+  if (lista.length === 0 || jogo > lista.length) return;
 
   etapa += 1;
-  pedido = novo;
-  esforco = Number($('ex-esforco').value);
+  rodando = true;
+  pedido = { v: lista.length, k: jogo, j: sorteio, t: garantia, r: premiadas };
+  esforco = Number($('ex-esforco').value) || 1;
   estado = {
-    analise: null,
     piso: 0,
     origem: '',
+    fechado: false,
     cartelas: [],
     metodo: '',
     verificado: false,
     descobertos: 0,
     ciclicaFechou: false,
-    livreFechou: false,
-    nos: 0,
+    linhasDaProva: [],
+    familiaPendente: null,
+    dadosPendentes: null,
+    parado: false,
   };
 
   esconderTudo();
+  $('ex-parar').hidden = false;
+  $('ex-resolver').disabled = true;
   $('ex-analise-cartao').hidden = false;
-  $('ex-alvos').textContent = '…';
-  $('ex-blocos').textContent = '…';
-  $('ex-por-bloco').textContent = '…';
+  for (const id of ['ex-alvos', 'ex-blocos', 'ex-por-bloco', 'ex-por-alvo']) {
+    $(id).textContent = '…';
+  }
+  trabalhador.postMessage({ tipo: 'retomar' });
   enviar({ tipo: 'analisar' });
 }
 
@@ -136,34 +278,46 @@ function enviar(mensagem) {
   trabalhador.postMessage({ ...mensagem, pedido: JSON.stringify(pedido), etapa });
 }
 
+function encerrar() {
+  rodando = false;
+  $('ex-parar').hidden = true;
+  pintarParametros();
+}
+
 /* ─────────── a pintura, estágio a estágio ─────────── */
 
 function pintarAnalise(dados) {
-  estado.analise = dados;
   $('ex-alvos').textContent = grande(dados.alvos);
   $('ex-blocos').textContent = grande(dados.blocos);
   $('ex-por-bloco').textContent = grande(dados.alvos_por_bloco);
+  $('ex-por-alvo').textContent = grande(dados.blocos_por_alvo);
 }
 
-function pintarPiso(dados, aprofundado) {
+function pintarPiso(dados) {
   estado.piso = dados.valor;
   estado.origem = dados.origem;
+  estado.fechado = dados.fechado;
   $('ex-piso-cartao').hidden = false;
   $('ex-piso').innerHTML =
     `<b>Nada menor que ${milhares(dados.valor)} cartelas existe.</b>` +
     `<br><em>De onde vem: ${escapar(dados.origem)}.</em>` +
-    (aprofundado
+    (dados.fechado
       ? ''
-      : '<br><em>Aprofundando pelo subproblema resolvido aqui dentro…</em>');
+      : '<br><em>Com sorteio diferente da garantia, ou mais de uma cartela premiada, ' +
+        'só a cota de contagem vale — as outras falam de cobertura simples, e esticá-las ' +
+        'até aqui inventaria um piso.</em>');
 }
 
-function pintarConstrucao(dados) {
-  estado.cartelas = dados.cartelas;
-  estado.metodo = dados.metodo;
+function pintarConstrucao(passo, terminou) {
   $('ex-construcao-cartao').hidden = false;
-  $('ex-construcao').innerHTML =
-    `<b>${milhares(dados.tamanho)} cartelas.</b>` +
-    `<br><em>Método: ${escapar(dados.metodo)}.</em>`;
+  const feito = Math.min(1, passo.partidas / Math.max(1, passo.partidas_previstas));
+  $('ex-construcao-barra').style.width = `${Math.round(feito * 100)}%`;
+  $('ex-construcao').innerHTML = terminou
+    ? `<b>${milhares(passo.melhor)} cartelas.</b>` +
+      `<br><em>Método: ${escapar(estado.metodo)} · ${milhares(passo.partidas)} tentativas.</em>`
+    : `<b>${passo.melhor ? `${milhares(passo.melhor)} cartelas` : 'procurando a primeira'}</b>` +
+      ` <em>— tentativa ${milhares(passo.partidas + 1)}, ` +
+      `${milhares(passo.trabalho)} passos dados.</em>`;
 }
 
 function pintarVerificacao(dados) {
@@ -171,15 +325,38 @@ function pintarVerificacao(dados) {
   estado.descobertos = dados.descobertos;
   $('ex-verificacao-cartao').hidden = false;
   $('ex-verificacao').innerHTML = dados.cobre
-    ? `<b>Confere.</b> <em>Os ${milhares(dados.alvos)} alvos estão todos cobertos.</em>`
+    ? `<b>Confere.</b> <em>Os ${milhares(dados.alvos)} sorteios possíveis estão todos ` +
+      `atendidos${dados.premiadas > 1 ? ` por ${dados.premiadas} cartelas cada` : ''}.</em>`
     : `<b>Não confere.</b> <em>${milhares(dados.descobertos)} de ${milhares(
         dados.alvos
-      )} alvos ficaram descobertos.</em>`;
+      )} sorteios ficaram sem a garantia.</em>`;
 }
 
-function pintarProva(linhas) {
+function pintarProva(linhas, andando) {
   $('ex-prova-cartao').hidden = false;
   $('ex-prova').innerHTML = linhas.join('<br>');
+  if (!andando) $('ex-prova-barra').style.width = '100%';
+}
+
+function contarProva(dados, familia) {
+  const nome = familia === 'ciclica' ? 'família cíclica' : 'todas as coleções';
+  const nos = `${milhares(dados.visitados)} nós, ${milhares(dados.candidatos)} candidatas`;
+  switch (dados.desfecho) {
+    case 'minimo':
+      return `<b>${nome}:</b> achou ${milhares(dados.tamanho)} e varreu o resto — ${nos}.`;
+    case 'nada-abaixo':
+      return `<b>${nome}:</b> nada abaixo de ${milhares(dados.tamanho)} existe — ${nos}.`;
+    case 'excedido':
+      return (
+        `<b>${nome}:</b> o orçamento acabou antes da resposta — ${nos}. ` +
+        `Isto é "não sei", e não "não existe".`
+      );
+    default:
+      return (
+        `<b>${nome}:</b> grande demais para varrer neste aparelho — ` +
+        `${milhares(dados.candidatos)} candidatas.`
+      );
+  }
 }
 
 function pintarResultado() {
@@ -198,25 +375,37 @@ function pintarResultado() {
   $('ex-encontrado').textContent = milhares(encontrado);
   $('ex-provado').textContent = `≥ ${milhares(estado.piso)}`;
   $('ex-folga').textContent = milhares(folga(encontrado, estado.piso));
-  $('ex-insistir').hidden = qual === MINIMO || qual === FALHA;
   $('ex-compartilhar').hidden = typeof navigator.share !== 'function';
 
+  const numeros = dezenas();
+  const mostradas = estado.cartelas.slice(0, CARTELAS_DESENHADAS);
+  $('ex-aviso-cartelas').hidden = estado.cartelas.length <= CARTELAS_DESENHADAS;
+  $('ex-aviso-cartelas').innerHTML =
+    `<em>Desenhando as primeiras ${milhares(CARTELAS_DESENHADAS)} de ` +
+    `${milhares(estado.cartelas.length)} — o botão Copiar leva todas.</em>`;
+
   $('ex-cartelas').innerHTML =
-    `<div class="cartelas">${estado.cartelas
+    `<div class="cartelas">${mostradas
       .map(
         (c, i) =>
           `<div class="cartela"><span class="indice">${String(i + 1).padStart(2, '0')}</span>` +
-          `<span>${c.map((n) => String(n).padStart(2, '0')).join(' ')}</span></div>`
+          `<span>${c.map((p) => String(numeros[p - 1]).padStart(2, '0')).join(' ')}</span></div>`
       )
       .join('')}</div>`;
+
+  if (qual === MINIMO || qual === FALHA) $('ex-prova-barra').style.width = '100%';
+  encerrar();
 }
 
 /* ─────────── o texto que sai do aplicativo ─────────── */
 
 function textoDoResultado() {
+  const numeros = dezenas();
   const encontrado = estado.cartelas.length;
   const cabecalho =
-    `C(${pedido.v},${pedido.k},${pedido.t}) — ${frase({
+    `Pool de ${pedido.v}, jogos de ${pedido.k}, saem ${pedido.j}, garante ${pedido.t}` +
+    `${pedido.r > 1 ? `, ${pedido.r} cartelas premiadas` : ''}\n` +
+    `${frase({
       verificado: estado.verificado,
       encontrado,
       piso: estado.piso,
@@ -225,111 +414,98 @@ function textoDoResultado() {
     })}\n` +
     `Piso: ${estado.origem}\n` +
     `Construção: ${estado.metodo}\n\n`;
-  return cabecalho + estado.cartelas.map((c) => c.join(' ')).join('\n') + '\n';
+  return (
+    cabecalho +
+    estado.cartelas.map((c) => c.map((p) => numeros[p - 1]).join(' ')).join('\n') +
+    '\n'
+  );
 }
 
-/* ─────────── a sequência ─────────── */
+/* ─────────── o que vem depois de cada estágio ─────────── */
 
-function proximoDepoisDaVerificacao() {
+function depoisDaVerificacao() {
   // O piso pelo subproblema é caro e pode dispensar a prova inteira: se ele
   // encostar na construção, não há o que procurar.
-  enviar({ tipo: 'aprofundar', orcamento: esforco });
+  enviar({ tipo: 'aprofundar', orcamento: esforco * NOS_POR_ESFORCO });
 }
 
-function proximoDepoisDoPisoFundo() {
+function depoisDoPiso() {
   const encontrado = estado.cartelas.length;
   if (!estado.verificado) {
     pintarResultado();
     return;
   }
   if (encontrado <= estado.piso) {
-    pintarProva([
-      '<b>Não foi preciso procurar.</b>',
-      `<em>O piso já encosta na construção: ${milhares(encontrado)} cartelas, ` +
-        `e nada menor que ${milhares(estado.piso)} existe.</em>`,
-    ]);
+    pintarProva(
+      [
+        '<b>Não foi preciso procurar.</b>',
+        `<em>O piso já encosta na construção: ${milhares(encontrado)} cartelas, ` +
+          `e nada menor que ${milhares(estado.piso)} existe.</em>`,
+      ],
+      false
+    );
     pintarResultado();
     return;
   }
-  pintarProva(['<em>Varrendo a família cíclica…</em>']);
+  estado.linhasDaProva = [];
+  pintarProva(['<em>Varrendo a família cíclica…</em>'], true);
   enviar({
     tipo: 'provar',
     teto: encontrado,
-    orcamento: Math.max(1000, Math.floor(esforco / FATIA_CICLICA)),
+    orcamento: Math.max(1000, Math.floor((esforco * NOS_POR_ESFORCO) / FATIA_CICLICA)),
+    limite: Math.max(500, Math.floor((esforco * MILISSEGUNDOS_POR_ESFORCO) / FATIA_CICLICA)),
     familia: 'ciclica',
   });
 }
 
-function contarProva(dados, familia) {
-  const nome = familia === 'ciclica' ? 'família cíclica' : 'todas as coleções';
-  const nos = `${milhares(dados.visitados)} nós, ${milhares(dados.candidatos)} candidatos`;
-  switch (dados.desfecho) {
-    case 'minimo':
-      return `<b>${nome}:</b> achou ${milhares(dados.tamanho)} e varreu o resto — ${nos}.`;
-    case 'nada-abaixo':
-      return `<b>${nome}:</b> nada abaixo de ${milhares(dados.tamanho)} existe — ${nos}.`;
-    case 'excedido':
-      return `<b>${nome}:</b> o orçamento acabou antes da resposta — ${nos}. Isto é "não sei", e não "não existe".`;
-    default:
-      return `<b>${nome}:</b> grande demais para varrer neste aparelho.`;
-  }
-}
-
-let linhasDaProva = [];
-
-/*
- * Quando uma varredura melhora a solução, a nova coleção vai ao verificador
- * antes de a sequência continuar. Estas duas guardam onde a sequência parou,
- * para retomá-la quando o verificador responder.
- */
-let familiaPendente = null;
-let dadosPendentes = null;
-
-function receberProva(mensagem) {
-  const { dados, familia } = mensagem;
-  linhasDaProva.push(contarProva(dados, familia));
-  pintarProva(linhasDaProva);
-
-  // Uma varredura que achou algo menor melhora a solução — e a nova solução
-  // volta ao verificador antes de valer, como qualquer outra. É a mesma regra
-  // que vale para a construção: nada é aceito pela palavra de quem produziu.
-  if (dados.desfecho === 'minimo' && dados.cartelas && dados.tamanho < estado.cartelas.length) {
-    estado.cartelas = dados.cartelas;
-    estado.metodo =
-      familia === 'ciclica' ? 'busca exata sobre órbitas' : 'busca exata sobre todos os blocos';
-    $('ex-construcao').innerHTML =
-      `<b>${milhares(dados.tamanho)} cartelas.</b><br><em>Método: ${escapar(estado.metodo)}.</em>`;
-    familiaPendente = familia;
-    dadosPendentes = dados;
-    enviar({ tipo: 'verificar', cartelas: estado.cartelas });
+function seguirDepoisDaProva(familia, dados) {
+  if (estado.parado) {
+    if (familia === 'ciclica') estado.ciclicaFechou = dados.fechou;
+    pintarResultado();
     return;
   }
-
-  seguirDepoisDaProva(familia, dados);
-}
-
-function seguirDepoisDaProva(familia, dados) {
   if (familia === 'ciclica') {
     estado.ciclicaFechou = dados.fechou;
-    pintarProva([...linhasDaProva, '<em>Varrendo todas as coleções…</em>']);
+    pintarProva([...estado.linhasDaProva, '<em>Varrendo todas as coleções…</em>'], true);
     enviar({
       tipo: 'provar',
       teto: estado.cartelas.length,
-      orcamento: esforco,
+      orcamento: esforco * NOS_POR_ESFORCO,
+      limite: esforco * MILISSEGUNDOS_POR_ESFORCO,
       familia: 'livre',
     });
     return;
   }
 
-  estado.livreFechou = dados.fechou;
   if (dados.fechou) {
     // A varredura completa é a afirmação mais forte que existe aqui: o piso
     // passa a ser o próprio tamanho, e a origem passa a ser a exaustão.
     estado.piso = estado.cartelas.length;
     estado.origem = 'exaustão: nenhuma solução menor existe';
-    pintarPiso({ valor: estado.piso, origem: estado.origem }, true);
+    pintarPiso({ valor: estado.piso, origem: estado.origem, fechado: estado.fechado });
   }
   pintarResultado();
+}
+
+function receberProva(mensagem) {
+  const { dados, familia } = mensagem;
+  estado.linhasDaProva.push(contarProva(dados, familia));
+  pintarProva(estado.linhasDaProva, false);
+
+  // Uma varredura que achou algo menor melhora a solução — e a nova solução
+  // volta ao verificador antes de valer, como qualquer outra. É a mesma regra
+  // da construção: nada é aceito pela palavra de quem produziu.
+  if (dados.desfecho === 'minimo' && dados.cartelas && dados.tamanho < estado.cartelas.length) {
+    estado.cartelas = dados.cartelas;
+    estado.metodo =
+      familia === 'ciclica' ? 'busca exata sobre órbitas' : 'busca exata sobre todas as cartelas';
+    estado.familiaPendente = familia;
+    estado.dadosPendentes = dados;
+    enviar({ tipo: 'verificar', cartelas: estado.cartelas });
+    return;
+  }
+
+  seguirDepoisDaProva(familia, dados);
 }
 
 /* ─────────── as respostas do trabalhador ─────────── */
@@ -339,11 +515,11 @@ trabalhador.onmessage = (evento) => {
   if (mensagem.etapa !== etapa) return;
 
   if (mensagem.tipo === 'erro') {
+    esconderTudo();
     $('ex-erro').hidden = false;
     $('ex-erro').innerHTML =
       `<b>O motor recusou o pedido.</b> <em>${escapar(mensagem.mensagem)}</em>`;
-    esconderTudo();
-    $('ex-erro').hidden = false;
+    encerrar();
     return;
   }
 
@@ -354,36 +530,85 @@ trabalhador.onmessage = (evento) => {
       break;
 
     case 'piso':
-      pintarPiso(mensagem.dados, false);
-      enviar({ tipo: 'construir' });
+      pintarPiso(mensagem.dados);
+      $('ex-construcao-cartao').hidden = false;
+      enviar({
+        tipo: 'construir',
+        teto: esforco * TRABALHO_POR_ESFORCO,
+        limite: esforco * MILISSEGUNDOS_POR_ESFORCO,
+      });
+      break;
+
+    case 'construcao-passo':
+      pintarConstrucao(mensagem.dados, false);
       break;
 
     case 'construcao':
-      pintarConstrucao(mensagem.dados);
+      estado.cartelas = mensagem.cartelas;
+      estado.metodo = mensagem.metodo;
+      pintarConstrucao(mensagem.dados, true);
+      if (mensagem.interrompida) {
+        estado.parado = true;
+        avisar('Construção interrompida.');
+      } else if (mensagem.esgotou) {
+        avisar('O orçamento da construção acabou.');
+      }
+      // Mesmo interrompida, a coleção passa pelo verificador antes de aparecer:
+      // uma construção parada no meio é uma construção como outra qualquer, e
+      // nada aqui vale pela palavra de quem produziu.
       enviar({ tipo: 'verificar', cartelas: estado.cartelas });
       break;
 
     case 'verificacao': {
       pintarVerificacao(mensagem.dados);
-      if (familiaPendente) {
-        const familia = familiaPendente;
-        const dados = dadosPendentes;
-        familiaPendente = null;
-        dadosPendentes = null;
+      // Quem mandou parar não quer que o aplicativo siga para o estágio
+      // seguinte por conta própria.
+      if (estado.parado) {
+        pintarProva(
+          ['<b>Interrompido antes da prova.</b> <em>O que está acima continua valendo.</em>'],
+          false
+        );
+        pintarResultado();
+        break;
+      }
+      if (estado.familiaPendente) {
+        const familia = estado.familiaPendente;
+        const dados = estado.dadosPendentes;
+        estado.familiaPendente = null;
+        estado.dadosPendentes = null;
         seguirDepoisDaProva(familia, dados);
       } else {
-        proximoDepoisDaVerificacao();
+        depoisDaVerificacao();
       }
       break;
     }
 
     case 'piso-fundo':
-      pintarPiso(mensagem.dados, true);
-      linhasDaProva = [];
-      proximoDepoisDoPisoFundo();
+      pintarPiso(mensagem.dados);
+      depoisDoPiso();
       break;
 
+    case 'prova-passo': {
+      const { dados, orcamento } = mensagem;
+      const feito = Math.min(1, dados.visitados / Math.max(1, orcamento));
+      $('ex-prova-barra').style.width = `${Math.round(feito * 100)}%`;
+      pintarProva(
+        [
+          ...estado.linhasDaProva,
+          `<em>Varrendo ${
+            mensagem.familia === 'ciclica' ? 'a família cíclica' : 'todas as coleções'
+          }: ${milhares(dados.visitados)} nós, recorde ${milhares(dados.recorde)}.</em>`,
+        ],
+        true
+      );
+      break;
+    }
+
     case 'prova':
+      if (mensagem.interrompida) {
+        estado.parado = true;
+        avisar('Prova interrompida.');
+      }
       receberProva(mensagem);
       break;
   }
@@ -391,14 +616,19 @@ trabalhador.onmessage = (evento) => {
 
 /* ─────────── os botões ─────────── */
 
+$('ex-universo').addEventListener('input', trocarUniverso);
+$('ex-limpar').addEventListener('click', () => {
+  escolhidos.clear();
+  pintarParametros();
+});
+$('ex-todos').addEventListener('click', () => {
+  for (let n = 1; n <= universo; n += 1) escolhidos.add(n);
+  pintarParametros();
+});
 $('ex-resolver').addEventListener('click', comecar);
-
-$('ex-insistir').addEventListener('click', () => {
-  esforco = Math.min(ORCAMENTO_MAXIMO, esforco * MULTIPLICADOR_DA_INSISTENCIA);
-  avisar(`Insistindo com ${milhares(esforco)} nós.`);
-  linhasDaProva = [];
-  $('ex-insistir').hidden = true;
-  proximoDepoisDoPisoFundo();
+$('ex-parar').addEventListener('click', () => {
+  trabalhador.postMessage({ tipo: 'parar' });
+  avisar('Parando…');
 });
 
 $('ex-copiar').addEventListener('click', async () => {
@@ -417,6 +647,13 @@ $('ex-compartilhar').addEventListener('click', async () => {
     /* cancelar não é erro */
   }
 });
+
+// Começa com um pool cheio: quem quiser tirar números tira, e quem só quiser
+// experimentar não precisa marcar vinte e cinco botões antes de ver a tela
+// funcionar.
+montarGrade();
+for (let n = 1; n <= universo; n += 1) escolhidos.add(n);
+pintarParametros();
 
 // O service worker é o que faz o aplicativo abrir sem internet. Registrá-lo
 // daqui é o que garante que quem entrar direto nesta página saia com ele.

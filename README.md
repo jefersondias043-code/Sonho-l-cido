@@ -39,6 +39,13 @@ conta, não há nada saindo do telefone.
 | **Construtor** | qual é a menor estrutura que satisfaz estas regras? |
 | **Construtor Exato** | qual é o mínimo, e como sei que é o mínimo? |
 
+O Construtor Exato recebe os **cinco** números que descrevem um fechamento —
+pool, tamanho do jogo, quantos números são sorteados, quantos deles a cartela
+precisa conter, e quantas cartelas premiadas — e uma grade onde você marca quais
+dezenas vai jogar, para as cartelas saírem com os seus números. Separar o
+sorteio da garantia é o que permite pedir "saem 15, quero garantir 13", que os
+três números de um covering design não conseguem descrever.
+
 A Lotinha parte de um fechamento pronto e conferido, e o motor entra depois para
 tentar superá-lo. O Construtor faz o caminho inverso, para qualquer problema de
 cobertura. O Construtor Exato faz o mesmo caminho **sem apoio nenhum**: ele não
@@ -446,6 +453,12 @@ poda por cotas, dominância e simetria:
 | `C(9,4,2)` | 7 (Schönheim) | **= 8** | varredura completa |
 | `C(10,4,2)` | 8 (contagem) | **= 9** | varredura completa, 24 milhões de nós |
 | `C(11,5,3)` | 18 (Schönheim) | **≥ 20** | `C(10,4,2) = 9`, elevado |
+
+Fora do covering design puro — sorteio diferente da garantia, ou mais de uma
+cartela premiada — **só a cota de contagem vale**, e o aplicativo diz isso na
+tela. Schönheim e a elevação do subproblema falam de cobertura simples com
+`j = t`; esticá-las até ali inventaria um piso, que é o pior erro possível numa
+ferramenta que existe para dizer o que está provado.
 
 A última linha é a que interessa. A recorrência de Schönheim eleva **qualquer
 piso válido** de `C(v−1,k−1,t−1)` até `C(v,k,t)`; alimentada com a própria cota

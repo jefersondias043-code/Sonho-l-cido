@@ -152,15 +152,53 @@ impl Relatorio {
 ///
 /// É o que sobra ao fixar um elemento e olhar só os blocos que passam por ele.
 pub fn subproblema(p: &Problema) -> Option<Problema> {
-    if p.t < 2 {
+    // A recorrência é a de Schönheim, e Schönheim fala de cobertura simples com
+    // sorteio igual à garantia. Fora daí não há recorrência a aplicar — e
+    // aplicá-la assim mesmo produziria um piso que ninguém demonstrou.
+    if !p.e_covering_design() || p.t < 2 {
         return None;
     }
-    Problema::novo(p.v - 1, p.k - 1, p.t - 1).ok()
+    let dentro = Problema::cobertura(p.v - 1, p.k - 1, p.t - 1).ok()?;
+
+    // E só vale entrar se a exaustão tiver chance de fechar lá dentro. Alimentar
+    // a recorrência com a cota fechada do subproblema devolve exatamente a cota
+    // de Schönheim de fora — está provado no teste
+    // `a_elevacao_do_interno_reproduz_schonheim_quando_alimentada_com_schonheim`.
+    // Ou seja: sem exaustão no subproblema, o caminho custa caro e não rende
+    // nada. Num pool de 22 esse "nada" custava minutos de tela parada.
+    if !prova::cabe_a_instancia(&dentro) {
+        return None;
+    }
+
+    // E precisa ser **pequeno**, não só possível. A recorrência desce um nível
+    // por vez até `t = 1`, e em `C(19,16,14)` isso são treze níveis, cada um com
+    // a sua construção e as suas duas varreduras. O caminho inteiro custava
+    // horas para devolver, no fim, exatamente a cota de Schönheim — porque
+    // nenhuma daquelas exaustões tinha como fechar.
+    //
+    // Os casos em que ela de fato rende são miúdos: `C(11,5,3)` melhora porque
+    // `C(10,4,2)` tem 45 alvos e fecha em segundos. O teto guarda esses e
+    // dispensa o resto.
+    if dentro.total_de_alvos() > TETO_DE_ALVOS_DO_SUBPROBLEMA {
+        return None;
+    }
+    Some(dentro)
 }
 
+/// Acima disto o subproblema não é atacado: ele não fecharia, e o caminho só
+/// custaria tempo para devolver a mesma cota que já se tinha.
+pub const TETO_DE_ALVOS_DO_SUBPROBLEMA: usize = 5_000;
+
 pub fn resolver(p: &Problema, esforco: Esforco) -> Relatorio {
-    // 1 · Construir.
-    let mut construcao: Construcao = construtor::construir(p);
+    // 1 · Construir, com o teto de trabalho amarrado ao mesmo orçamento.
+    //
+    // Sem essa amarra a construção usava o teto padrão e podia sozinha custar
+    // minutos, num caminho que quem chamou pediu com pressa.
+    let mut construtor = construtor::Construtor::com_teto(p, esforco.nos_livres.saturating_mul(4));
+    while !construtor.terminou() {
+        construtor.avancar(20_000_000);
+    }
+    let mut construcao: Construcao = construtor.construcao();
 
     // 2 · O piso, sem busca nenhuma.
     let mut piso: LimiteInferior = limites::sem_busca(p);
@@ -266,7 +304,7 @@ mod testes {
     #[test]
     fn o_relatorio_nunca_promete_mais_do_que_provou() {
         for &(v, k, t) in &[(7, 3, 2), (9, 3, 2), (8, 4, 3), (10, 4, 2), (12, 4, 2), (13, 5, 2)] {
-            let p = Problema::novo(v, k, t).unwrap();
+            let p = Problema::cobertura(v, k, t).unwrap();
             let r = resolver(&p, Esforco::rapido());
             assert!(r.verificado, "C({v},{k},{t}): a construção não cobre");
             assert_eq!(r.cartelas.len(), r.encontrado);
@@ -285,7 +323,7 @@ mod testes {
     #[test]
     fn onde_o_minimo_e_alcancavel_ele_e_provado_e_nao_apenas_encontrado() {
         // C(7,3,2) = 7 é o plano de Fano, e a exaustão fecha em milissegundos.
-        let p = Problema::novo(7, 3, 2).unwrap();
+        let p = Problema::cobertura(7, 3, 2).unwrap();
         let r = resolver(&p, Esforco::default());
         assert_eq!(r.encontrado, 7);
         assert_eq!(r.piso, 7);
@@ -310,7 +348,7 @@ mod testes {
         }
 
         // A varredura fecha uma unidade que a contagem não alcançava.
-        let dez = Problema::novo(10, 4, 2).unwrap();
+        let dez = Problema::cobertura(10, 4, 2).unwrap();
         let antes = limites::sem_busca(&dez);
         assert_eq!(antes.valor, 8, "a cota fechada de C(10,4,2)");
         let r = resolver(&dez, Esforco::default());
@@ -320,7 +358,7 @@ mod testes {
 
         // E esse 9, elevado, vira cota de um problema que a exaustão não
         // alcançaria nunca — sem consultar tabela nenhuma.
-        let onze = Problema::novo(11, 5, 3).unwrap();
+        let onze = Problema::cobertura(11, 5, 3).unwrap();
         assert_eq!(limites::sem_busca(&onze).valor, 18, "Schönheim de C(11,5,3)");
         let r = resolver(&onze, Esforco::default());
         assert_eq!(r.piso, 20, "C(10,4,2) = 9 elevado por 11/5 dá 20");
@@ -336,7 +374,7 @@ mod testes {
         // C(13,5,2): o mínimo é 10 e sabe-se disso por trabalho pesado de
         // terceiros. Sozinho, este crate encontra 10 e prova bem menos — e a
         // frase tem de mostrar a distância, não escondê-la.
-        let p = Problema::novo(13, 5, 2).unwrap();
+        let p = Problema::cobertura(13, 5, 2).unwrap();
         let r = resolver(&p, Esforco::rapido());
         assert!(r.verificado);
         assert_ne!(r.veredito, Veredito::Falha);
@@ -351,7 +389,7 @@ mod testes {
     #[test]
     fn um_problema_trivial_e_resolvido_sem_drama() {
         // t = k: cada alvo é uma cartela, e o mínimo é o número de alvos.
-        let p = Problema::novo(8, 3, 3).unwrap();
+        let p = Problema::cobertura(8, 3, 3).unwrap();
         let r = resolver(&p, Esforco::rapido());
         assert_eq!(r.encontrado, r.alvos);
         assert_eq!(r.veredito, Veredito::Minimo);

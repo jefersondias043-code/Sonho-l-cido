@@ -74,17 +74,26 @@ impl LimiteInferior {
     }
 }
 
-/// A cota de contagem: `⌈C(v,t) / C(k,t)⌉`.
+/// A cota de contagem.
 ///
-/// O argumento cabe numa linha: cada bloco cobre no máximo `C(k,t)` alvos, e
-/// existem `C(v,t)` para cobrir. É a mais fraca das cotas e a mais fácil de
-/// explicar — e onde ela encosta numa construção, o mínimo está determinado.
+/// ```text
+/// ⌈ r · (alvos) / (alvos que uma cartela atende) ⌉
+/// ```
+///
+/// O argumento cabe numa linha: cada cartela atende no máximo um tanto de
+/// alvos, cada alvo precisa ser atendido `r` vezes, e não há como as contas
+/// fecharem com menos. É a mais fraca das cotas e a mais fácil de explicar — e
+/// onde ela encosta numa construção, o mínimo está determinado.
+///
+/// Multiplicar por `r` é legítimo aqui, e é o único lugar onde é: a conta é de
+/// unidades de cobertura, e pedir cada alvo `r` vezes multiplica as unidades
+/// exigidas por `r` exatamente.
 pub fn contagem(p: &Problema) -> u64 {
     let por_bloco = p.alvos_por_bloco();
     if por_bloco == 0 {
         return 0;
     }
-    let total = binomial(p.v, p.t);
+    let total = binomial(p.v, p.j) * p.r as u128;
     (total.div_ceil(por_bloco)).min(u64::MAX as u128) as u64
 }
 
@@ -140,6 +149,14 @@ pub fn elevar_do_interno(v: usize, k: usize, interno: u64) -> u64 {
 /// isto", e a afirmação mais forte continua verdadeira.
 pub fn sem_busca(p: &Problema) -> LimiteInferior {
     let conta = LimiteInferior { valor: contagem(p).max(1), origem: Limite::Contagem };
+    if !p.e_covering_design() {
+        // Schönheim fala de cobertura **simples** com sorteio igual à garantia.
+        // Fora disso ela não vale, e não há teorema que autorize multiplicá-la
+        // por `r` nem esticá-la para `j ≠ t`. Usá-la assim inventaria um piso —
+        // e um piso inventado faz o aplicativo dizer "mínimo provado" sobre o
+        // que não é mínimo.
+        return conta;
+    }
     let scho = LimiteInferior { valor: schonheim(p.v, p.k, p.t), origem: Limite::Schonheim };
     conta.melhor(scho)
 }
@@ -161,7 +178,7 @@ mod testes {
         for v in 4..=13usize {
             for k in 2..v {
                 for t in 1..=k.min(3) {
-                    let Ok(p) = Problema::novo(v, k, t) else { continue };
+                    let Ok(p) = Problema::cobertura(v, k, t) else { continue };
                     let c = construtor::construir(&p);
                     assert!(p.cobre(&c.blocos), "C({v},{k},{t}): a construção nem cobre");
                     let piso = sem_busca(&p);
@@ -177,13 +194,55 @@ mod testes {
         }
     }
 
+    /// A mesma invariante onde ela é nova: sorteio diferente da garantia, e
+    /// mais de uma cartela premiada. É aqui que uma cota esticada além do seu
+    /// teorema apareceria.
+    #[test]
+    fn nenhuma_cota_passa_por_cima_de_um_fechamento_com_sorteio_e_premiadas() {
+        for &(v, k, j, t) in
+            &[(9, 4, 3, 2), (10, 5, 4, 3), (9, 3, 4, 2), (11, 5, 4, 2), (8, 4, 5, 3)]
+        {
+            for r in 1..=3usize {
+                let Ok(p) = Problema::novo(v, k, j, t, r) else { continue };
+                let c = construtor::construir(&p);
+                if !p.cobre(&c.blocos) {
+                    continue;
+                }
+                let piso = sem_busca(&p);
+                assert!(
+                    piso.valor <= c.tamanho() as u64,
+                    "({v},{k},{j},{t},r={r}): a cota diz {} ({}) e existe coleção de {}",
+                    piso.valor,
+                    piso.origem,
+                    c.tamanho()
+                );
+            }
+        }
+    }
+
+    /// Fora do covering design puro, só a contagem vale — e a tela precisa
+    /// poder dizer isso com todas as letras.
+    #[test]
+    fn fora_do_covering_design_so_a_contagem_vale() {
+        let parcial = Problema::novo(10, 5, 4, 3, 1).unwrap();
+        assert!(!parcial.e_covering_design());
+        assert_eq!(sem_busca(&parcial).origem, Limite::Contagem);
+
+        let dobrado = Problema::novo(9, 3, 2, 2, 2).unwrap();
+        assert!(!dobrado.e_covering_design());
+        assert_eq!(sem_busca(&dobrado).origem, Limite::Contagem);
+        // E a contagem dobra junto com o pedido.
+        let simples = Problema::novo(9, 3, 2, 2, 1).unwrap();
+        assert_eq!(contagem(&dobrado), 2 * contagem(&simples));
+    }
+
     /// Dois mínimos que não dependem de tabela: o plano de Fano tem 7 blocos e
     /// o sistema de Steiner de ordem 9 tem 12, e ambos são exibíveis.
     #[test]
     fn onde_a_contagem_encosta_num_desenho_conhecido_ela_o_determina() {
-        let fano = Problema::novo(7, 3, 2).unwrap();
+        let fano = Problema::cobertura(7, 3, 2).unwrap();
         assert_eq!(sem_busca(&fano).valor, 7);
-        let steiner = Problema::novo(9, 3, 2).unwrap();
+        let steiner = Problema::cobertura(9, 3, 2).unwrap();
         assert_eq!(sem_busca(&steiner).valor, 12);
     }
 
@@ -220,7 +279,7 @@ mod testes {
         for v in 4..=16usize {
             for k in 2..v {
                 for t in 1..=k.min(4) {
-                    let Ok(p) = Problema::novo(v, k, t) else { continue };
+                    let Ok(p) = Problema::cobertura(v, k, t) else { continue };
                     let _ = contagem(&p);
                     let _ = schonheim(v, k, t);
                     // Nenhuma das duas pode ser zero num problema legítimo: um
@@ -236,7 +295,7 @@ mod testes {
         assert_eq!(schonheim(5, 5, 5), 1);
         assert_eq!(schonheim(3, 5, 2), 0, "k > v não descreve cobertura");
         assert_eq!(elevar_do_interno(9, 0, 5), 0, "k = 0 não descreve cobertura");
-        let p = Problema::novo(6, 6, 3).unwrap();
+        let p = Problema::cobertura(6, 6, 3).unwrap();
         assert_eq!(sem_busca(&p).valor, 1, "um bloco que é o universo inteiro cobre tudo");
     }
 }

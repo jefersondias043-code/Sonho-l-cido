@@ -27,37 +27,58 @@
 
 <main class="painel ativo" id="exato">
 
-  <!-- 1 · entrada ─────────────────────────────────────────────────────── -->
+  <!-- 1 · os números ──────────────────────────────────────────────────── -->
   <div class="cartao">
-    <h2>1 · Parâmetros</h2>
+    <h2>1 · Os seus números</h2>
     <p class="ajuda">
-      Um fechamento mínimo é um problema de cobertura: escolher cartelas de
-      <b>k</b> números, entre <b>v</b>, de modo que quaisquer <b>t</b> números
-      sorteados caiam todos dentro de alguma cartela. Os três números abaixo
-      descrevem o problema inteiro.
+      Marque os números que você vai jogar. As cartelas saem com eles, prontas
+      para usar — e não com posições que você teria de traduzir depois.
     </p>
 
     <label class="campo">
-      <span>v — quantos números existem ao todo</span>
-      <input type="number" id="ex-universo" min="2" max="31" step="1" value="9" inputmode="numeric">
+      <span>Quantos números existem ao todo</span>
+      <input type="number" id="ex-universo" min="2" max="31" step="1" value="25" inputmode="numeric">
     </label>
 
-    <label class="campo">
-      <span>k — quantos números em cada cartela</span>
-      <input type="number" id="ex-cartela" min="1" max="31" step="1" value="3" inputmode="numeric">
-    </label>
+    <div class="grade-numeros" id="ex-grade"></div>
+    <div class="referencia" id="ex-contagem"></div>
+    <div class="acoes-linha">
+      <button class="secundario" id="ex-limpar">Limpar</button>
+      <button class="secundario" id="ex-todos">Marcar todos</button>
+    </div>
+  </div>
+
+  <!-- 2 · as regras ───────────────────────────────────────────────────── -->
+  <div class="cartao">
+    <h2>2 · As regras</h2>
+    <p class="ajuda">
+      <b>Jogo</b> — quantos números em cada cartela.
+    </p>
+    <div class="opcoes" id="ex-jogo"></div>
+
+    <p class="ajuda">
+      <b>Sorteio</b> — quantos números saem. Não precisa ser igual à garantia:
+      é justamente essa diferença que descreve "saem 15, quero garantir 13".
+    </p>
+    <div class="opcoes" id="ex-sorteio"></div>
+
+    <p class="ajuda">
+      <b>Garantia</b> — quantos dos sorteados uma cartela precisa conter.
+    </p>
+    <div class="opcoes" id="ex-garantia"></div>
+
+    <p class="ajuda">
+      <b>Cartelas premiadas</b> — quantas cartelas suas precisam ganhar, e não
+      apenas uma.
+    </p>
+    <div class="opcoes" id="ex-premiadas"></div>
 
     <label class="campo">
-      <span>t — quantos números sorteados a cartela precisa conter</span>
-      <input type="number" id="ex-alvo" min="1" max="31" step="1" value="2" inputmode="numeric">
-    </label>
-
-    <label class="campo">
-      <span>Esforço da prova</span>
+      <span>Esforço — quanto trabalho o aplicativo pode gastar</span>
       <select id="ex-esforco">
-        <option value="1000000">rápido — 1 milhão de nós</option>
-        <option value="20000000" selected>normal — 20 milhões de nós</option>
-        <option value="200000000">fundo — 200 milhões de nós</option>
+        <option value="1">rápido — segundos</option>
+        <option value="4" selected>normal</option>
+        <option value="20">fundo — pode levar minutos</option>
       </select>
     </label>
 
@@ -65,69 +86,75 @@
 
     <div class="controles">
       <button class="principal" id="ex-resolver">Resolver</button>
+      <button class="secundario perigo" id="ex-parar" hidden>Parar</button>
     </div>
   </div>
 
-  <!-- 2 · análise ─────────────────────────────────────────────────────── -->
+  <!-- 3 · análise ─────────────────────────────────────────────────────── -->
   <div class="cartao" id="ex-analise-cartao" hidden>
-    <h2>2 · Análise matemática</h2>
+    <h2>3 · Análise matemática</h2>
     <p class="ajuda">
       O tamanho do problema, antes de qualquer busca. Estes números são
       contagem pura e saem em microssegundos.
     </p>
     <div class="grade" id="ex-analise">
-      <div class="item"><span id="ex-alvos">—</span><small>alvos a cobrir</small></div>
+      <div class="item"><span id="ex-alvos">—</span><small>sorteios a cobrir</small></div>
       <div class="item"><span id="ex-blocos">—</span><small>cartelas possíveis</small></div>
-      <div class="item"><span id="ex-por-bloco">—</span><small>alvos por cartela</small></div>
+      <div class="item"><span id="ex-por-bloco">—</span><small>sorteios por cartela</small></div>
+      <div class="item"><span id="ex-por-alvo">—</span><small>cartelas por sorteio</small></div>
     </div>
   </div>
 
-  <!-- 3 · determinação do mínimo ──────────────────────────────────────── -->
+  <!-- 4 · determinação do mínimo ──────────────────────────────────────── -->
   <div class="cartao" id="ex-piso-cartao" hidden>
-    <h2>3 · Determinação do mínimo</h2>
+    <h2>4 · Determinação do mínimo</h2>
     <p class="ajuda">
       O piso é a afirmação forte: <b>nada menor que isto existe</b>. Ele não
-      depende de procurar nada, e é ele que transforma "achei 32" em "32 é o
-      mínimo". Tudo o que aparece aqui foi calculado neste aparelho.
+      depende de procurar nada. Tudo o que aparece aqui foi calculado neste
+      aparelho.
     </p>
     <div class="referencia" id="ex-piso">calculando…</div>
   </div>
 
-  <!-- 4 · construção ──────────────────────────────────────────────────── -->
+  <!-- 5 · construção ──────────────────────────────────────────────────── -->
   <div class="cartao" id="ex-construcao-cartao" hidden>
-    <h2>4 · Construção</h2>
+    <h2>5 · Construção</h2>
     <p class="ajuda">
       As cartelas, montadas direto a partir das regras — sem partir de nada
-      pronto e sem consultar fechamento de ninguém.
+      pronto e sem consultar fechamento de ninguém. Em pools grandes esta
+      construção é um ponto de partida honesto, e não um recorde: o forte deste
+      aplicativo é o piso e a prova.
     </p>
+    <div class="barra-progresso"><div id="ex-construcao-barra" style="width:0%"></div></div>
     <div class="referencia" id="ex-construcao">construindo…</div>
   </div>
 
-  <!-- 5 · verificação ─────────────────────────────────────────────────── -->
+  <!-- 6 · verificação ─────────────────────────────────────────────────── -->
   <div class="cartao" id="ex-verificacao-cartao" hidden>
-    <h2>5 · Verificação</h2>
+    <h2>6 · Verificação</h2>
     <p class="ajuda">
-      As cartelas voltam ao motor e são conferidas alvo por alvo. Não é a
+      As cartelas voltam ao motor e são conferidas sorteio por sorteio. Não é a
       palavra de quem construiu: é a varredura sobre o que está na tela.
     </p>
     <div class="referencia" id="ex-verificacao">verificando…</div>
   </div>
 
-  <!-- 6 · prova ───────────────────────────────────────────────────────── -->
+  <!-- 7 · prova ───────────────────────────────────────────────────────── -->
   <div class="cartao" id="ex-prova-cartao" hidden>
-    <h2>6 · Prova de ótimo</h2>
+    <h2>7 · Prova de ótimo</h2>
     <p class="ajuda">
       A pergunta que sobra: <b>existe alguma coisa menor?</b> A busca varre o
-      espaço com poda por cotas, dominância e simetria. Se ela terminar sem
-      achar nada, o mínimo está provado; se o orçamento acabar antes, ela diz
-      isso — e "não achei" nunca é escrito como "não existe".
+      espaço com poda por cotas, dominância e simetria. Se terminar sem achar
+      nada, o mínimo está provado; se o orçamento acabar antes, ela diz isso — e
+      "não achei" nunca é escrito como "não existe".
     </p>
-    <div class="referencia" id="ex-prova">provando…</div>
+    <div class="barra-progresso"><div id="ex-prova-barra" style="width:0%"></div></div>
+    <div class="referencia" id="ex-prova">…</div>
   </div>
 
-  <!-- 7 · resultado ───────────────────────────────────────────────────── -->
+  <!-- 8 · resultado ───────────────────────────────────────────────────── -->
   <div class="cartao" id="ex-resultado-cartao" hidden>
-    <h2>7 · Resultado</h2>
+    <h2>8 · Resultado</h2>
     <div class="referencia veredito" id="ex-frase"></div>
     <div class="grade">
       <div class="item"><span id="ex-encontrado">—</span><small>solução encontrada</small></div>
@@ -137,8 +164,8 @@
     <div class="controles">
       <button class="secundario" id="ex-copiar">Copiar</button>
       <button class="secundario" id="ex-compartilhar" hidden>Compartilhar</button>
-      <button class="secundario" id="ex-insistir" hidden>Insistir com mais esforço</button>
     </div>
+    <div class="referencia" id="ex-aviso-cartelas" hidden></div>
     <div id="ex-cartelas"></div>
   </div>
 

@@ -33,7 +33,7 @@ fn main() {
         "C(v,k,t)", "achou", "piso", "veredito", "tempo"
     );
     for &(v, k, t) in casos {
-        let Ok(p) = Problema::novo(v, k, t) else { continue };
+        let Ok(p) = Problema::cobertura(v, k, t) else { continue };
         let inicio = std::time::Instant::now();
         let r = veredito::resolver(&p, Esforco::default());
         assert!(r.verificado, "C({v},{k},{t}) não cobre");
