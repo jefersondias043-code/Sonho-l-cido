@@ -115,7 +115,7 @@ pagina.on('pageerror', (e) => errosDeConsole.push(String(e)));
 console.log('Teste da ferramenta Lotinha\n');
 
 try {
-  await pagina.goto(`http://localhost:${PORTA}/`, { waitUntil: 'networkidle' });
+  await pagina.goto(`http://localhost:${PORTA}/lotinha.html`, { waitUntil: 'networkidle' });
   await pagina.click('.aba[data-painel="lotinha"]');
   await pagina.waitForSelector('#lotinha.ativo');
 

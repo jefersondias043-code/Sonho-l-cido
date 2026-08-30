@@ -208,7 +208,7 @@ const VINTE = Array.from({ length: 20 }, (_, i) => i + 1);
 console.log(`Teste de ponta a ponta — interface no iPhone (servindo em ${BASE})\n`);
 
 try {
-  await pagina.goto(`http://localhost:${PORTA}${BASE}`, { waitUntil: 'networkidle' });
+  await pagina.goto(`http://localhost:${PORTA}${BASE}lotinha.html`, { waitUntil: 'networkidle' });
 
   // ─── 1. o aplicativo é a Lotinha ───
   marcar(await pagina.locator('h1').isVisible(), 'a página carrega');

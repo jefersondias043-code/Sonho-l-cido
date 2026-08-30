@@ -1404,3 +1404,47 @@ details.cartao[open] > summary::after {
   font-size: 13.5px;
   line-height: 1.45;
 }
+
+/* ─────────── a escolha entre aplicativos ─────────── */
+
+/*
+ * Cada aplicativo é um alvo grande e inteiro, e não um título com um link
+ * pequeno ao lado: numa tela de celular o dedo mira o cartão, não a palavra.
+ */
+.aplicativo {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 120ms ease, transform 120ms ease;
+}
+
+.aplicativo:active {
+  transform: scale(0.99);
+  border-color: var(--acento);
+}
+
+.aplicativo h2 {
+  margin-bottom: 4px;
+}
+
+/*
+ * A pergunta que o aplicativo responde, e não o que ele é.
+ *
+ * "Fechamentos da Lotinha" só diz alguma coisa a quem já sabe o que é um
+ * fechamento. "Quais jogos preciso fazer para não perder?" é reconhecível por
+ * quem chegou aqui com o problema na mão e sem o vocabulário.
+ */
+.aplicativo-pergunta {
+  color: var(--texto);
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0 0 8px;
+}
+
+.aplicativo-entrar {
+  display: inline-block;
+  margin-top: 12px;
+  color: var(--acento);
+  font-weight: 600;
+  font-size: 15px;
+}
