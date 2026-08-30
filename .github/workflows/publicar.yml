@@ -111,6 +111,13 @@ jobs:
           # nenhuma.
           node web/testar-construtor.mjs
 
+          # E o Construtor Exato, que faz a mesma afirmação sem apoio nenhum:
+          # ele não consulta tabela de mínimos de ninguém. O que se cobra aqui é
+          # a separação entre encontrar e provar — que ele diga "mínimo exato"
+          # onde a varredura fechou, mostre os dois números onde ela não fechou,
+          # e que a exaustão suba o piso acima da fórmula em C(10,4,2).
+          node web/testar-exato.mjs
+
       - name: Publicar na branch gh-pages
         run: |
           set -euo pipefail

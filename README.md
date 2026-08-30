@@ -29,14 +29,23 @@ apenas uma escolha diferente de números.
 
 ## No celular, sem instalar nada
 
-O aplicativo é a **Lotinha**, e só ela: escolhem-se de 17 a 23 dezenas entre
-25, o fechamento vem pronto e conferido, e o motor entra depois para tentar
-superá-lo. O motor inteiro roda **dentro do seu aparelho**, compilado para
-WebAssembly. Não há servidor, não há conta, não há nada saindo do telefone.
+São **três aplicativos**, e a página inicial é a escolha entre eles. Tudo roda
+**dentro do seu aparelho**, compilado para WebAssembly. Não há servidor, não há
+conta, não há nada saindo do telefone.
 
-Para qualquer outro problema de cobertura — outro universo, outra cartela, outra
-regra — o lugar é a linha de comando, mais abaixo. Ela resolve o caso geral; o
-celular resolve um caso, bem.
+| aplicativo | a pergunta que ele responde |
+|---|---|
+| **Lotinha** | quais jogos preciso fazer para não perder? |
+| **Construtor** | qual é a menor estrutura que satisfaz estas regras? |
+| **Construtor Exato** | qual é o mínimo, e como sei que é o mínimo? |
+
+A Lotinha parte de um fechamento pronto e conferido, e o motor entra depois para
+tentar superá-lo. O Construtor faz o caminho inverso, para qualquer problema de
+cobertura. O Construtor Exato faz o mesmo caminho **sem apoio nenhum**: ele não
+consulta a tabela publicada que os outros dois usam como referência, e por isso
+todo número que ele afirma foi calculado no aparelho — inclusive quando o número
+que ele consegue provar fica abaixo do que a literatura já sabe. A folga aparece
+na tela em vez de ser escondida.
 
 **→ [Abrir o aplicativo](https://jefersondias043-code.github.io/Sonho-l-cido/)**
 
@@ -413,6 +422,45 @@ para sempre uma solução de 9 que não existe.
 de optimalidade — trocá-los faria o aplicativo cravar "ótimo provado" em cima de
 um recorde que ainda pode cair.
 
+### O aplicativo que recusa essa referência
+
+O **Construtor Exato** não usa nada disso, e a recusa é o ponto dele. A tabela
+da La Jolla é trabalho de outras pessoas; um aplicativo que a exibe como
+resposta está mostrando o que sabem, não o que ele sabe. Ali, todo número é
+calculado no aparelho — e onde o cálculo não alcança, os dois números aparecem
+separados:
+
+```
+Solução encontrada: 10 · Mínimo comprovado: ≥ 8
+```
+
+Em `C(13,5,2)` ele encontra as 10 cartelas ótimas sozinho e prova apenas `≥ 8`.
+A diferença de 2 é honestidade: a literatura chegou ao 10 com trabalho
+computacional pesado, e emprestá-lo seria passar por nosso o que é de outros.
+
+O que ele **consegue** provar por conta própria, com uma varredura completa e
+poda por cotas, dominância e simetria:
+
+| caso | cota fechada | o que ele prova | como |
+|---|---|---|---|
+| `C(9,4,2)` | 7 (Schönheim) | **= 8** | varredura completa |
+| `C(10,4,2)` | 8 (contagem) | **= 9** | varredura completa, 24 milhões de nós |
+| `C(11,5,3)` | 18 (Schönheim) | **≥ 20** | `C(10,4,2) = 9`, elevado |
+
+A última linha é a que interessa. A recorrência de Schönheim eleva **qualquer
+piso válido** de `C(v−1,k−1,t−1)` até `C(v,k,t)`; alimentada com a própria cota
+ela se reproduz, mas alimentada com o mínimo exato do subproblema — varrido ali
+mesmo — ela sobe dois degraus de uma vez. É a porta pela qual a exaustão de um
+caso pequeno vira matemática de um caso grande, sem tabela nenhuma no meio.
+
+Duas recorrências plausíveis foram escritas e apagadas ao construí-lo: a de de
+Caen, como eu a redigi, dava 9 para o plano de Fano, que tem 7 blocos; e uma
+elevação por remoção de ponto dava 44 para um problema com solução de 30. Uma
+cota inferior errada é pior que nenhuma — ela faz o programa dizer "mínimo
+provado" sobre o que não é mínimo. Por isso os testes daquele crate não
+consultam tabela: constroem, mandam o verificador conferir alvo por alvo, e
+cobram que nenhuma cota passe por cima da coleção que existe.
+
 ### E para garantias parciais, que é o uso mais comum
 
 Um fechamento de loteria quase nunca é uma cobertura completa: o usual é
@@ -565,13 +613,23 @@ crates/
 │
 ├── motor-persistencia/  banco SQLite de soluções e retomada
 ├── motor-cli/           a linha de comando
-└── motor-web/           a ponte para o navegador, via WebAssembly
+├── motor-web/           a ponte para o navegador, via WebAssembly
+│
+├── motor-exato/         o motor do Construtor Exato — sem dependência dos outros
+│   ├── problema         o modelo formal, e o verificador
+│   ├── limites          só cotas com demonstração escrita: contagem, Schönheim
+│   ├── construtor       partidas múltiplas, alvo mais apertado, ruína e recriação
+│   ├── prova            ramifica-e-poda: existe alguma coisa menor?
+│   └── veredito         onde construção e prova se encontram — ou não
+│
+└── motor-exato-web/     a ponte do Construtor Exato, num módulo separado
 
-web/                     a interface do aplicativo
-├── index.html           as quatro telas
-├── app.js               a interface: só apresentação e ciclo de vida
-├── trabalhador.js       o motor rodando num Web Worker, em lotes
-├── historico.js         os trabalhos salvos no aparelho
+web/                     a interface da plataforma
+├── index.html           a escolha entre os três aplicativos
+├── lotinha.html         a Lotinha, e app.js / trabalhador.js / historico.js
+├── construtor.html      o Construtor, e construtor.js / escada.js
+├── exato.html           o Construtor Exato, e exato.js
+├── exato-veredito.js    a regra do que pode ser afirmado, sem DOM e sem wasm
 └── sw.js                funcionamento sem internet e atualização automática
 ```
 
@@ -718,6 +776,9 @@ node web/testar.mjs /Sonho-l-cido/              # testa sob a subpasta do Pages
 node web/testar-atualizacao.mjs                 # testa a atualização automática
 node web/testar-historico.mjs                   # testa o histórico de trabalhos
 node web/testar-lotinha.mjs                     # testa a ferramenta Lotinha
+node web/testar-checagem.mjs                    # testa a conferência de acertos
+node web/testar-construtor.mjs                  # testa o Construtor
+node web/testar-exato.mjs                       # testa o Construtor Exato
 cargo run --release --example gerar-lotinha     # regera o banco de fechamentos
 
 python3 -m http.server -d site 8000             # experimenta localmente

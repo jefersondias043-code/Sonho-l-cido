@@ -1,0 +1,19 @@
+[package]
+name = "motor-exato-web"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Ponte entre o motor exato e o navegador, via WebAssembly"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# Só o motor exato. Nada de motor-core, nada de motor-busca: este aplicativo
+# não empresta matemática de ninguém, e o módulo compilado mostra isso.
+motor-exato = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+wasm-bindgen = "=0.2.127"

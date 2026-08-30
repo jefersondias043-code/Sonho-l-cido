@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b1020">
+<meta name="description" content="Determina o mínimo, constrói as cartelas, verifica e prova — e diz com todas as letras quando não conseguiu provar">
+
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Exato">
+
+<title>Construtor Exato — Sonho Lúcido</title>
+
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="apple-touch-icon" href="./icone-180.png">
+<link rel="icon" type="image/svg+xml" href="./icone.svg">
+<link rel="stylesheet" href="./estilo.css">
+</head>
+<body>
+
+<header class="topo">
+  <a class="voltar" href="./">‹ aplicativos</a>
+  <h1>Construtor Exato</h1>
+  <p class="subtitulo">encontrar e provar são coisas diferentes</p>
+</header>
+
+<main class="painel ativo" id="exato">
+
+  <!-- 1 · entrada ─────────────────────────────────────────────────────── -->
+  <div class="cartao">
+    <h2>1 · Parâmetros</h2>
+    <p class="ajuda">
+      Um fechamento mínimo é um problema de cobertura: escolher cartelas de
+      <b>k</b> números, entre <b>v</b>, de modo que quaisquer <b>t</b> números
+      sorteados caiam todos dentro de alguma cartela. Os três números abaixo
+      descrevem o problema inteiro.
+    </p>
+
+    <label class="campo">
+      <span>v — quantos números existem ao todo</span>
+      <input type="number" id="ex-universo" min="2" max="31" step="1" value="9" inputmode="numeric">
+    </label>
+
+    <label class="campo">
+      <span>k — quantos números em cada cartela</span>
+      <input type="number" id="ex-cartela" min="1" max="31" step="1" value="3" inputmode="numeric">
+    </label>
+
+    <label class="campo">
+      <span>t — quantos números sorteados a cartela precisa conter</span>
+      <input type="number" id="ex-alvo" min="1" max="31" step="1" value="2" inputmode="numeric">
+    </label>
+
+    <label class="campo">
+      <span>Esforço da prova</span>
+      <select id="ex-esforco">
+        <option value="1000000">rápido — 1 milhão de nós</option>
+        <option value="20000000" selected>normal — 20 milhões de nós</option>
+        <option value="200000000">fundo — 200 milhões de nós</option>
+      </select>
+    </label>
+
+    <div class="referencia" id="ex-erro" hidden></div>
+
+    <div class="controles">
+      <button class="principal" id="ex-resolver">Resolver</button>
+    </div>
+  </div>
+
+  <!-- 2 · análise ─────────────────────────────────────────────────────── -->
+  <div class="cartao" id="ex-analise-cartao" hidden>
+    <h2>2 · Análise matemática</h2>
+    <p class="ajuda">
+      O tamanho do problema, antes de qualquer busca. Estes números são
+      contagem pura e saem em microssegundos.
+    </p>
+    <div class="grade" id="ex-analise">
+      <div class="item"><span id="ex-alvos">—</span><small>alvos a cobrir</small></div>
+      <div class="item"><span id="ex-blocos">—</span><small>cartelas possíveis</small></div>
+      <div class="item"><span id="ex-por-bloco">—</span><small>alvos por cartela</small></div>
+    </div>
+  </div>
+
+  <!-- 3 · determinação do mínimo ──────────────────────────────────────── -->
+  <div class="cartao" id="ex-piso-cartao" hidden>
+    <h2>3 · Determinação do mínimo</h2>
+    <p class="ajuda">
+      O piso é a afirmação forte: <b>nada menor que isto existe</b>. Ele não
+      depende de procurar nada, e é ele que transforma "achei 32" em "32 é o
+      mínimo". Tudo o que aparece aqui foi calculado neste aparelho.
+    </p>
+    <div class="referencia" id="ex-piso">calculando…</div>
+  </div>
+
+  <!-- 4 · construção ──────────────────────────────────────────────────── -->
+  <div class="cartao" id="ex-construcao-cartao" hidden>
+    <h2>4 · Construção</h2>
+    <p class="ajuda">
+      As cartelas, montadas direto a partir das regras — sem partir de nada
+      pronto e sem consultar fechamento de ninguém.
+    </p>
+    <div class="referencia" id="ex-construcao">construindo…</div>
+  </div>
+
+  <!-- 5 · verificação ─────────────────────────────────────────────────── -->
+  <div class="cartao" id="ex-verificacao-cartao" hidden>
+    <h2>5 · Verificação</h2>
+    <p class="ajuda">
+      As cartelas voltam ao motor e são conferidas alvo por alvo. Não é a
+      palavra de quem construiu: é a varredura sobre o que está na tela.
+    </p>
+    <div class="referencia" id="ex-verificacao">verificando…</div>
+  </div>
+
+  <!-- 6 · prova ───────────────────────────────────────────────────────── -->
+  <div class="cartao" id="ex-prova-cartao" hidden>
+    <h2>6 · Prova de ótimo</h2>
+    <p class="ajuda">
+      A pergunta que sobra: <b>existe alguma coisa menor?</b> A busca varre o
+      espaço com poda por cotas, dominância e simetria. Se ela terminar sem
+      achar nada, o mínimo está provado; se o orçamento acabar antes, ela diz
+      isso — e "não achei" nunca é escrito como "não existe".
+    </p>
+    <div class="referencia" id="ex-prova">provando…</div>
+  </div>
+
+  <!-- 7 · resultado ───────────────────────────────────────────────────── -->
+  <div class="cartao" id="ex-resultado-cartao" hidden>
+    <h2>7 · Resultado</h2>
+    <div class="referencia veredito" id="ex-frase"></div>
+    <div class="grade">
+      <div class="item"><span id="ex-encontrado">—</span><small>solução encontrada</small></div>
+      <div class="item"><span id="ex-provado">—</span><small>mínimo comprovado</small></div>
+      <div class="item"><span id="ex-folga">—</span><small>folga que resta</small></div>
+    </div>
+    <div class="controles">
+      <button class="secundario" id="ex-copiar">Copiar</button>
+      <button class="secundario" id="ex-compartilhar" hidden>Compartilhar</button>
+      <button class="secundario" id="ex-insistir" hidden>Insistir com mais esforço</button>
+    </div>
+    <div id="ex-cartelas"></div>
+  </div>
+
+</main>
+
+<div class="aviso" id="ex-aviso" hidden role="status" aria-live="polite"></div>
+
+<script type="module" src="./exato.js"></script>
+</body>
+</html>

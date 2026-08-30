@@ -97,8 +97,8 @@ try {
   await pagina.goto(`http://localhost:${PORTA}/`, { waitUntil: 'networkidle' });
   const aplicativos = await pagina.$$eval('.aplicativo h2', (h) => h.map((x) => x.textContent.trim()));
   marcar(
-    aplicativos.join(' · ') === 'Lotinha · Construtor',
-    'a página inicial oferece os dois aplicativos',
+    aplicativos.join(' · ') === 'Lotinha · Construtor · Construtor Exato',
+    'a página inicial oferece os três aplicativos',
     aplicativos.join(' · ')
   );
 

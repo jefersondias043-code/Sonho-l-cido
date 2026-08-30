@@ -30,6 +30,13 @@ fi
 echo "==> compilando motor-web para wasm32-unknown-unknown"
 cargo build --release --target wasm32-unknown-unknown -p motor-web
 
+# O segundo módulo é do Construtor Matemático Exato, e é separado de propósito:
+# aquele aplicativo não empresta matemática de nenhum outro, e um módulo só
+# tornaria a independência uma promessa em vez de um fato. Quem abre a Lotinha
+# não baixa o motor exato, e quem abre o exato não baixa o da Lotinha.
+echo "==> compilando motor-exato-web para wasm32-unknown-unknown"
+cargo build --release --target wasm32-unknown-unknown -p motor-exato-web
+
 # Recomeça do zero. Sem isto, arquivos de uma construção anterior que já não
 # fazem parte do projeto continuariam sendo publicados junto.
 rm -rf "$destino"
@@ -41,6 +48,12 @@ wasm-bindgen \
     --no-typescript \
     --out-dir "$destino/wasm" \
     target/wasm32-unknown-unknown/release/motor_web.wasm
+
+wasm-bindgen \
+    --target web \
+    --no-typescript \
+    --out-dir "$destino/wasm-exato" \
+    target/wasm32-unknown-unknown/release/motor_exato_web.wasm
 
 echo "==> copiando a interface"
 cp -r web/. "$destino/"
@@ -99,6 +112,7 @@ echo "    versão desta construção: $carimbo"
 touch "$destino/.nojekyll"
 
 tamanho=$(du -h "$destino/wasm/motor_web_bg.wasm" | cut -f1)
+tamanho_exato=$(du -h "$destino/wasm-exato/motor_exato_web_bg.wasm" | cut -f1)
 echo
-echo "==> pronto: $destino/ ($tamanho de WebAssembly)"
+echo "==> pronto: $destino/ (Lotinha $tamanho, Exato $tamanho_exato)"
 echo "    teste local: python3 -m http.server -d $destino 8000"

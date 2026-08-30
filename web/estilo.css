@@ -218,9 +218,37 @@ main { padding: 8px 16px 0; }
   appearance: none;
 }
 
-.campo input:focus {
+.campo input:focus,
+.campo select:focus {
   outline: none;
   border-color: var(--acento);
+}
+
+/* O seletor dentro de um campo se veste como o campo: mesma altura de toque,
+   mesma borda. Sem isto ele aparece com a aparência do sistema, que muda de
+   aparelho para aparelho e destoa da tela inteira. */
+.campo select {
+  width: 100%;
+  min-height: 48px;
+  padding: 10px 14px;
+  font-size: 17px;
+  font-family: inherit;
+  color: var(--texto);
+  background: var(--fundo-campo);
+  border: 1px solid var(--borda);
+  border-radius: 10px;
+}
+
+/* A frase do veredito. É a única linha da tela que pode dizer "mínimo", e por
+   isso ela é a maior: quem só olhar uma coisa vai olhar esta. */
+.referencia.veredito {
+  font-size: 16px;
+  line-height: 1.45;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--fundo-campo);
+  border: 1px solid var(--borda);
+  color: var(--texto);
 }
 
 /*

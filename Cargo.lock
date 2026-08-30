@@ -344,6 +344,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "motor-exato-web"
+version = "0.1.0"
+dependencies = [
+ "motor-exato",
+ "serde",
+ "serde_json",
+ "wasm-bindgen",
+]
+
+[[package]]
 name = "motor-persistencia"
 version = "0.1.0"
 dependencies = [

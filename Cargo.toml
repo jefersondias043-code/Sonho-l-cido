@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "crates/motor-core",
     "crates/motor-exato",
+    "crates/motor-exato-web",
     "crates/motor-busca",
     "crates/motor-persistencia",
     "crates/motor-cli",
@@ -19,6 +20,7 @@ repository = "https://github.com/jefersondias043-code/sonho-l-cido"
 [workspace.dependencies]
 motor-core = { path = "crates/motor-core" }
 motor-exato = { path = "crates/motor-exato" }
+motor-exato-web = { path = "crates/motor-exato-web" }
 motor-busca = { path = "crates/motor-busca" }
 motor-persistencia = { path = "crates/motor-persistencia" }
 
