@@ -1448,3 +1448,54 @@ details.cartao[open] > summary::after {
   font-weight: 600;
   font-size: 15px;
 }
+
+/* ─────────── o Construtor ─────────── */
+
+.voltar {
+  display: inline-block;
+  color: var(--texto-fraco);
+  text-decoration: none;
+  font-size: 14px;
+  margin-bottom: 6px;
+}
+
+.voltar:active { color: var(--acento); }
+
+/*
+ * A régua: o vão entre o que se conseguiu e o que poderia existir.
+ *
+ * É o desenho central do aplicativo, e o que ele mostra não é "quanto falta
+ * terminar" — é quanto do que **havia para ganhar** já foi ganho. Um problema
+ * cujo mínimo já foi alcançado aparece cheio; um com folga aparece pela metade,
+ * e a metade vazia é honesta: pode ser que nada dela caia.
+ */
+.regua { margin: 14px 0 18px; }
+
+.regua-trilho {
+  height: 10px;
+  border-radius: 999px;
+  background: #0e1428;
+  border: 1px solid var(--borda);
+  overflow: hidden;
+}
+
+.regua-cheio {
+  height: 100%;
+  width: 0;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--acento), var(--verde));
+  transition: width 300ms ease;
+}
+
+.regua-pontas {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 6px;
+  font-size: 12.5px;
+  color: var(--texto-fraco);
+  font-variant-numeric: tabular-nums;
+}
+
+/* O veredito muda de cor porque muda de natureza: procurar, provar, ou avisar. */
+.veredito-provado { color: var(--verde); font-weight: 600; }
+.veredito-impossivel { color: var(--vermelho); font-weight: 600; }

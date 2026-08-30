@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b1020">
+<meta name="description" content="Constrói a menor estrutura que satisfaz regras de cobertura, e mostra o quanto falta para o mínimo matemático">
+
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Construtor">
+
+<title>Construtor — Sonho Lúcido</title>
+
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="apple-touch-icon" href="./icone-180.png">
+<link rel="icon" type="image/svg+xml" href="./icone.svg">
+<link rel="stylesheet" href="./estilo.css">
+</head>
+<body>
+
+<header class="topo">
+  <a class="voltar" href="./">‹ aplicativos</a>
+  <h1>Construtor</h1>
+  <p class="subtitulo">a menor estrutura que satisfaz as regras</p>
+</header>
+
+<main class="painel ativo" id="construtor">
+
+  <!-- 1 · o problema ─────────────────────────────────────────────────── -->
+  <div class="cartao">
+    <h2>1 · O problema</h2>
+    <p class="ajuda">
+      Descreva as regras. Não precisa ser loteria: qualquer problema em que um
+      conjunto de escolhas precisa cobrir todos os casos possíveis cabe aqui.
+    </p>
+
+    <label class="campo">
+      <span>Universo — quantos números existem ao todo</span>
+      <input type="number" id="cs-universo" min="2" max="31" step="1" value="13" inputmode="numeric">
+    </label>
+
+    <label class="campo">
+      <span>Cartela — quantos números em cada escolha</span>
+      <input type="number" id="cs-cartela" min="1" max="31" step="1" value="5" inputmode="numeric">
+    </label>
+
+    <label class="campo">
+      <span>Sorteio — quantos números saem</span>
+      <input type="number" id="cs-alvo" min="1" max="31" step="1" value="2" inputmode="numeric">
+    </label>
+
+    <label class="campo">
+      <span>Garantia — quantos deles uma cartela precisa conter</span>
+      <input type="number" id="cs-intersecao" min="1" max="31" step="1" value="2" inputmode="numeric">
+    </label>
+
+    <div class="referencia" id="cs-erro" hidden></div>
+    <div class="referencia" id="cs-medida"></div>
+  </div>
+
+  <!-- 2 · a construção ────────────────────────────────────────────────── -->
+  <div class="cartao">
+    <h2>2 · Construir</h2>
+    <p class="ajuda">
+      O motor monta uma solução do zero, a partir das regras — sem partir de
+      nada pronto. É o primeiro número, e o teto de tudo o que vem depois.
+    </p>
+    <div class="controles">
+      <button class="principal" id="cs-construir">Construir</button>
+      <button class="secundario" id="cs-parar" hidden>Parar</button>
+    </div>
+    <div class="referencia" id="cs-construcao" hidden></div>
+  </div>
+
+  <!-- 3 · a escada ────────────────────────────────────────────────────── -->
+  <div class="cartao" id="cs-escada-cartao" hidden>
+    <h2>3 · Descer</h2>
+    <p class="ajuda">
+      Agora o caminho inverso: fixa um tamanho menor e pergunta se a cobertura
+      fecha com ele. Fechou, o teto desce e ela tenta de novo. Não fechou, ela
+      insiste — quem decide parar é você.
+    </p>
+
+    <div class="regua" id="cs-regua">
+      <div class="regua-trilho"><div class="regua-cheio" id="cs-regua-cheio"></div></div>
+      <div class="regua-pontas">
+        <span id="cs-regua-piso">—</span>
+        <span id="cs-regua-topo">—</span>
+      </div>
+    </div>
+
+    <div class="grade" id="cs-numeros">
+      <div class="item"><span id="cs-melhor">—</span><small>melhor encontrado</small></div>
+      <div class="item"><span id="cs-limite">—</span><small>mínimo possível</small></div>
+      <div class="item"><span id="cs-degrau">—</span><small>tentando agora</small></div>
+      <div class="item"><span id="cs-cobertura">—</span><small>cobertura do degrau</small></div>
+    </div>
+
+    <div class="controles">
+      <button class="principal" id="cs-descer">Descer</button>
+      <button class="secundario" id="cs-parar-escada" hidden>Parar</button>
+    </div>
+    <div class="referencia" id="cs-veredito"></div>
+  </div>
+
+  <!-- 4 · o resultado ─────────────────────────────────────────────────── -->
+  <div class="cartao" id="cs-resultado-cartao" hidden>
+    <h2>4 · O resultado</h2>
+    <div class="referencia" id="cs-ficha"></div>
+    <div class="controles">
+      <button class="secundario" id="cs-copiar">Copiar</button>
+      <button class="secundario" id="cs-compartilhar" hidden>Compartilhar</button>
+    </div>
+    <div id="cs-cartelas"></div>
+  </div>
+
+</main>
+
+<div class="aviso" id="cs-aviso" hidden role="status" aria-live="polite"></div>
+
+<script type="module" src="./construtor.js"></script>
+</body>
+</html>

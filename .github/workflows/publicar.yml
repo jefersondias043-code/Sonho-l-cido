@@ -104,6 +104,13 @@ jobs:
           # nenhuma. Aqui cada faixa de 11 a 15 é montada à mão e cobrada.
           node web/testar-checagem.mjs
 
+          # E o Construtor, que faz a afirmação mais cara de errar do site:
+          # "esta é a menor solução que existe". Aqui ela é cobrada num caso de
+          # mínimo publicado, onde a escada tem de parar exatamente no número
+          # provado — e num caso em aberto, onde ela não pode declarar prova
+          # nenhuma.
+          node web/testar-construtor.mjs
+
       - name: Publicar na branch gh-pages
         run: |
           set -euo pipefail
