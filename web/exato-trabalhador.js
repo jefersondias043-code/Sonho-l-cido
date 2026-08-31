@@ -21,7 +21,7 @@ import init, {
   limitar,
   limitar_por_dentro,
   verificar,
-  ConstrutorExato,
+  EscaladaExata,
   ProvaExata,
 } from './wasm-exato/motor_exato_web.js';
 
@@ -36,6 +36,9 @@ const MAIOR_LOTE = 400_000_000;
 
 /** O primeiro lote, antes de haver qualquer medição. Pequeno de propósito. */
 const LOTE_INICIAL = 200_000;
+
+/** De quanto em quanto tempo o estado volta à tela para ser guardado. */
+const MILISSEGUNDOS_ENTRE_SALVAMENTOS = 4_000;
 
 let pronto = null;
 let parar = false;
@@ -75,47 +78,56 @@ const instantaneos = {
 
 /* ─────────── os estágios longos ─────────── */
 
-async function construir(mensagem) {
-  const construtor = new ConstrutorExato(mensagem.pedido, mensagem.teto ?? 0);
-  const prazo = performance.now() + Math.max(500, Number(mensagem.limite) || 0);
+/*
+ * A escalada de cobertura.
+ *
+ * O teto de cartelas vem de fora — é o piso provado — e nunca é ultrapassado.
+ * Ela roda até fechar em 100% ou até mandarem parar: quem decide a hora é quem
+ * está olhando, e não um orçamento decidido de antemão.
+ *
+ * O estado volta de tempos em tempos para a tela poder guardá-lo. Assim fechar
+ * o aplicativo no meio não custa o trabalho já feito.
+ */
+async function escalar(mensagem) {
+  const escalada = mensagem.estado
+    ? EscaladaExata.retomada(mensagem.estado)
+    : new EscaladaExata(mensagem.pedido, mensagem.teto);
   let lote = LOTE_INICIAL;
-  let passo = null;
-  let esgotou = false;
+  let passo = JSON.parse(escalada.passo());
+  let desdeOSalvamento = 0;
 
   try {
-    for (;;) {
+    while (!passo.fechou && !parar) {
       const comeco = performance.now();
-      passo = JSON.parse(construtor.avancar(lote));
-      lote = calibrar(lote, performance.now() - comeco);
+      passo = JSON.parse(escalada.avancar(lote));
+      const durou = performance.now() - comeco;
+      lote = calibrar(lote, durou);
+
+      desdeOSalvamento += durou;
+      const guardar = desdeOSalvamento >= MILISSEGUNDOS_ENTRE_SALVAMENTOS;
+      if (guardar) desdeOSalvamento = 0;
 
       postMessage({
-        tipo: 'construcao-passo',
+        tipo: 'escalada-passo',
         etapa: mensagem.etapa,
         dados: passo,
-        prazo: Math.max(0, prazo - performance.now()),
+        curva: JSON.parse(escalada.curva()),
+        estado: guardar ? escalada.guardar() : null,
       });
-      if (passo.terminou || parar) break;
-      // O prazo é a promessa que o orçamento em unidades de trabalho não
-      // consegue fazer: uma unidade custa nanossegundos num problema e
-      // microssegundos noutro, e só o relógio vale para os dois.
-      if (performance.now() >= prazo) {
-        esgotou = true;
-        break;
-      }
       await respirar();
     }
 
     postMessage({
-      tipo: 'construcao',
+      tipo: 'escalada',
       etapa: mensagem.etapa,
       dados: passo,
-      metodo: construtor.metodo(),
-      cartelas: JSON.parse(construtor.melhor()),
-      interrompida: parar && !passo.terminou,
-      esgotou,
+      curva: JSON.parse(escalada.curva()),
+      cartelas: JSON.parse(escalada.melhor()),
+      estado: escalada.guardar(),
+      interrompida: parar && !passo.fechou,
     });
   } finally {
-    construtor.free?.();
+    escalada.free?.();
   }
 }
 
@@ -179,8 +191,8 @@ onmessage = async (evento) => {
       postMessage({ ...instantaneo(mensagem), etapa: mensagem.etapa ?? null });
       return;
     }
-    if (mensagem.tipo === 'construir') {
-      await construir(mensagem);
+    if (mensagem.tipo === 'escalar') {
+      await escalar(mensagem);
       return;
     }
     if (mensagem.tipo === 'provar') {

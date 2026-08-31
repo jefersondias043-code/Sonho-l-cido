@@ -15,25 +15,23 @@
  * WebAssembly. Aqui só há pintura e sequência.
  */
 
-import { frase, folga, veredito, MINIMO, FALHA } from './exato-veredito.js';
+import { frase, folga, veredito, MINIMO, PARCIAL, FALHA } from './exato-veredito.js';
 
 const $ = (id) => document.getElementById(id);
 
 const trabalhador = new Worker('./exato-trabalhador.js', { type: 'module' });
 
-/** Quanto trabalho a construção ganha, por unidade de esforço escolhida. */
-const TRABALHO_POR_ESFORCO = 100_000_000;
+/** Onde o trabalho em curso fica guardado, para continuar depois. */
+const CHAVE_DO_TRABALHO = 'sonho-lucido:exato:escalada';
 
 /** Quantos nós a prova ganha, por unidade de esforço escolhida. */
 const NOS_POR_ESFORCO = 10_000_000;
 
 /**
- * Quanto tempo cada estágio longo ganha, por unidade de esforço.
+ * Quanto tempo a prova ganha, por unidade de esforço.
  *
- * O orçamento em unidades de trabalho não consegue prometer nada sobre o
- * relógio: a mesma unidade custa nanossegundos num problema e microssegundos
- * noutro. O prazo é a promessa que importa para quem está olhando — o
- * aplicativo sempre volta, e volta quando disse que voltaria.
+ * Só a prova tem prazo. A escalada não: ela roda até fechar ou até você mandar
+ * parar, porque quem decide a hora é quem está olhando.
  */
 const MILISSEGUNDOS_POR_ESFORCO = 5_000;
 
@@ -162,6 +160,11 @@ function escalaDePremiadas(teto) {
 }
 
 function pintarParametros() {
+  pintarParametrosSem();
+  pintarOfertaDeRetomar();
+}
+
+function pintarParametrosSem() {
   const v = escolhidos.size;
 
   // Os limites de cada parâmetro dependem dos outros, e mostrar opções que não
@@ -240,7 +243,14 @@ function dezenas() {
   return [...escolhidos].sort((a, b) => a - b);
 }
 
-function comecar() {
+/** Os cinco números como estão na tela, sem começar nada. */
+function pedidoDaTela() {
+  const lista = dezenas();
+  if (lista.length === 0 || jogo > lista.length) return null;
+  return { v: lista.length, k: jogo, j: sorteio, t: garantia, r: premiadas };
+}
+
+function comecar(estadoGuardado = null) {
   const lista = dezenas();
   if (lista.length === 0 || jogo > lista.length) return;
 
@@ -261,15 +271,21 @@ function comecar() {
     familiaPendente: null,
     dadosPendentes: null,
     parado: false,
+    escalada: null,
+    guardado: null,
   };
 
   esconderTudo();
+  $('ex-curva-cartao').hidden = true;
   $('ex-parar').hidden = false;
   $('ex-resolver').disabled = true;
   $('ex-analise-cartao').hidden = false;
   for (const id of ['ex-alvos', 'ex-blocos', 'ex-por-bloco', 'ex-por-alvo']) {
     $(id).textContent = '…';
   }
+  estado.guardado = estadoGuardado;
+  $('ex-continuar').hidden = true;
+  $('ex-retomar-aviso').hidden = true;
   trabalhador.postMessage({ tipo: 'retomar' });
   enviar({ tipo: 'analisar' });
 }
@@ -308,16 +324,61 @@ function pintarPiso(dados) {
         'até aqui inventaria um piso.</em>');
 }
 
-function pintarConstrucao(passo, terminou) {
+/** A cobertura como a pessoa lê: uma porcentagem com uma casa. */
+function porcento(fracao) {
+  return `${(fracao * 100).toLocaleString('pt-BR', {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  })}%`;
+}
+
+/*
+ * A curva, cartela por cartela.
+ *
+ * A subida costuma acontecer rápido demais para ser acompanhada ao vivo — num
+ * problema pequeno ela vai de zero ao teto num piscar. Por isso o motor a
+ * **grava**, e aqui ela é só desenhada.
+ */
+function pintarCurva(pontos) {
+  if (!pontos || pontos.length === 0) return;
+  $('ex-curva-cartao').hidden = false;
+  $('ex-curva').innerHTML = pontos
+    .map(([cartelas, cobertura]) => `<b>${milhares(cartelas)}</b> → ${porcento(cobertura)}`)
+    .join(' · ');
+}
+
+/*
+ * A barra é a **cobertura**, e não o tempo.
+ *
+ * É a diferença que dá sentido à tela inteira: o número de cartelas está preso
+ * ao teto, então o que há para acompanhar é o quanto já está coberto. Uma barra
+ * de tempo aqui só diria quanto o aparelho trabalhou, que é o que menos importa.
+ */
+function pintarEscalada(passo, terminou) {
   $('ex-construcao-cartao').hidden = false;
-  const feito = Math.min(1, passo.partidas / Math.max(1, passo.partidas_previstas));
-  $('ex-construcao-barra').style.width = `${Math.round(feito * 100)}%`;
-  $('ex-construcao').innerHTML = terminou
-    ? `<b>${milhares(passo.melhor)} cartelas.</b>` +
-      `<br><em>Método: ${escapar(estado.metodo)} · ${milhares(passo.partidas)} tentativas.</em>`
-    : `<b>${passo.melhor ? `${milhares(passo.melhor)} cartelas` : 'procurando a primeira'}</b>` +
-      ` <em>— tentativa ${milhares(passo.partidas + 1)}, ` +
-      `${milhares(passo.trabalho)} passos dados.</em>`;
+  estado.escalada = passo;
+
+  $('ex-cartelas-agora').textContent = milhares(passo.cartelas);
+  $('ex-teto').textContent = milhares(passo.teto);
+  $('ex-cobertura').textContent = porcento(passo.melhor_cobertura);
+  $('ex-construcao-barra').style.width = `${(passo.melhor_cobertura * 100).toFixed(1)}%`;
+
+  if (passo.fechou) {
+    $('ex-construcao').innerHTML =
+      `<b>Fechou em 100% com ${milhares(passo.melhor_cartelas)} cartelas.</b>` +
+      `<br><em>Exatamente o teto — e o teto é o piso provado.</em>`;
+    return;
+  }
+
+  const fase =
+    passo.fase === 'subindo'
+      ? `subindo — ${milhares(passo.cartelas)} de ${milhares(passo.teto)} cartelas`
+      : `reorganizando as ${milhares(passo.cartelas)}, sem acrescentar nenhuma ` +
+        `(${milhares(passo.rodadas)} rodadas)`;
+
+  $('ex-construcao').innerHTML =
+    `<b>${porcento(passo.melhor_cobertura)} de cobertura</b> <em>— ${escapar(fase)}.</em>` +
+    (terminou ? '<br><em>Parada. O botão continuar retoma daqui.</em>' : '');
 }
 
 function pintarVerificacao(dados) {
@@ -359,22 +420,32 @@ function contarProva(dados, familia) {
   }
 }
 
-function pintarResultado() {
-  const encontrado = estado.cartelas.length;
-  const dados = {
+function dadosDoVeredito() {
+  return {
     verificado: estado.verificado,
-    encontrado,
+    encontrado: estado.cartelas.length,
     piso: estado.piso,
     ciclicaFechou: estado.ciclicaFechou,
     descobertos: estado.descobertos,
+    teto: estado.piso,
+    cobertura: estado.escalada?.melhor_cobertura ?? 0,
   };
+}
+
+function pintarResultado() {
+  const encontrado = estado.cartelas.length;
+  const dados = dadosDoVeredito();
   const qual = veredito(dados);
 
   $('ex-resultado-cartao').hidden = false;
   $('ex-frase').innerHTML = `<b>${escapar(frase(dados))}</b>`;
+  if (qual === MINIMO) esquecerTrabalho();
   $('ex-encontrado').textContent = milhares(encontrado);
   $('ex-provado').textContent = `≥ ${milhares(estado.piso)}`;
-  $('ex-folga').textContent = milhares(folga(encontrado, estado.piso));
+  $('ex-folga').textContent =
+    qual === PARCIAL ? porcento(dados.cobertura) : milhares(folga(encontrado, estado.piso));
+  $('ex-folga').nextElementSibling.textContent =
+    qual === PARCIAL ? 'cobertura alcançada' : 'folga que resta';
   $('ex-compartilhar').hidden = typeof navigator.share !== 'function';
 
   const numeros = dezenas();
@@ -405,13 +476,7 @@ function textoDoResultado() {
   const cabecalho =
     `Pool de ${pedido.v}, jogos de ${pedido.k}, saem ${pedido.j}, garante ${pedido.t}` +
     `${pedido.r > 1 ? `, ${pedido.r} cartelas premiadas` : ''}\n` +
-    `${frase({
-      verificado: estado.verificado,
-      encontrado,
-      piso: estado.piso,
-      ciclicaFechou: estado.ciclicaFechou,
-      descobertos: estado.descobertos,
-    })}\n` +
+    `${frase(dadosDoVeredito())}\n` +
     `Piso: ${estado.origem}\n` +
     `Construção: ${estado.metodo}\n\n`;
   return (
@@ -421,26 +486,116 @@ function textoDoResultado() {
   );
 }
 
-/* ─────────── o que vem depois de cada estágio ─────────── */
+/* ─────────── guardar o trabalho, para continuar depois ─────────── */
 
-function depoisDaVerificacao() {
-  // O piso pelo subproblema é caro e pode dispensar a prova inteira: se ele
-  // encostar na construção, não há o que procurar.
-  enviar({ tipo: 'aprofundar', orcamento: esforco * NOS_POR_ESFORCO });
+/*
+ * O trabalho em curso fica no aparelho, e nada sai daqui.
+ *
+ * Num aparelho fraco, "fazer aos poucos" só significa alguma coisa se fechar o
+ * aplicativo não custar o que já foi feito. As cartelas vão como máscaras — um
+ * número por cartela — então mesmo um conjunto de milhares cabe folgado.
+ */
+function guardarTrabalho(estadoJson) {
+  if (!estadoJson) return;
+  estado.guardado = estadoJson;
+  try {
+    localStorage.setItem(
+      CHAVE_DO_TRABALHO,
+      JSON.stringify({ pedido, escalada: estadoJson, quando: Date.now() })
+    );
+  } catch {
+    // Sem espaço, ou armazenamento desligado. A escalada continua na memória:
+    // perder a chance de retomar é menos grave do que parar de trabalhar.
+  }
 }
 
-function depoisDoPiso() {
+function trabalhoGuardado() {
+  try {
+    const bruto = localStorage.getItem(CHAVE_DO_TRABALHO);
+    if (!bruto) return null;
+    const guardado = JSON.parse(bruto);
+    return guardado?.escalada && guardado?.pedido ? guardado : null;
+  } catch {
+    return null;
+  }
+}
+
+function esquecerTrabalho() {
+  try {
+    localStorage.removeItem(CHAVE_DO_TRABALHO);
+  } catch {
+    /* nada a fazer */
+  }
+}
+
+/** Os mesmos cinco números? Só então faz sentido oferecer retomar. */
+function mesmoPedido(a, b) {
+  if (!a || !b) return false;
+  return ['v', 'k', 'j', 't', 'r'].every((campo) => a[campo] === b[campo]);
+}
+
+/**
+ * Mostra, ou esconde, a oferta de continuar de onde parou.
+ *
+ * Só aparece quando os parâmetros na tela são os mesmos do trabalho guardado —
+ * retomar sobre outra configuração seria continuar o problema errado.
+ */
+function pintarOfertaDeRetomar() {
+  const guardado = trabalhoGuardado();
+  const atual = pedidoDaTela();
+  const serve = Boolean(guardado && atual && mesmoPedido(guardado.pedido, atual));
+  $('ex-continuar').hidden = !serve || rodando;
+  $('ex-retomar-aviso').hidden = !serve || rodando;
+  if (!serve || rodando) return;
+
+  let cartelas = 0;
+  try {
+    const e = JSON.parse(guardado.escalada);
+    cartelas = (e.melhor ?? e.cartelas ?? []).length;
+  } catch {
+    /* envelope estragado: a oferta some na próxima tentativa */
+  }
+  $('ex-retomar-aviso').innerHTML =
+    `<b>Há trabalho guardado para estes números.</b> <em>${
+      cartelas ? `${milhares(cartelas)} cartelas já montadas. ` : ''
+    }Continuar retoma de onde parou, sem repetir nada.</em>`;
+}
+
+/* ─────────── o que vem depois de cada estágio ─────────── */
+
+/** Manda a escalada começar, com o teto que o piso determinou. */
+function comecarEscalada(estadoGuardado = null) {
+  $('ex-construcao-cartao').hidden = false;
+  $('ex-cartelas-agora').textContent = '0';
+  $('ex-teto').textContent = milhares(estado.piso);
+  $('ex-cobertura').textContent = '0,0%';
+  enviar({ tipo: 'escalar', teto: estado.piso, estado: estadoGuardado ?? estado.guardado });
+}
+
+function depoisDaVerificacao() {
   const encontrado = estado.cartelas.length;
   if (!estado.verificado) {
+    // Ela parou antes de fechar: o conjunto cobre uma parte, e é isso que a
+    // tela vai dizer. Não há mínimo a provar sobre uma cobertura parcial.
+    pintarProva(
+      [
+        '<b>Não houve o que provar.</b>',
+        '<em>A cobertura ainda não fechou, e um conjunto que não cobre tudo não ' +
+          'tem mínimo a demonstrar.</em>',
+      ],
+      false
+    );
     pintarResultado();
     return;
   }
   if (encontrado <= estado.piso) {
+    // Fechou dentro do teto, e o teto é o piso: o mínimo está determinado sem
+    // procurar mais nada. É o encontro que o aplicativo existe para produzir.
     pintarProva(
       [
         '<b>Não foi preciso procurar.</b>',
-        `<em>O piso já encosta na construção: ${milhares(encontrado)} cartelas, ` +
-          `e nada menor que ${milhares(estado.piso)} existe.</em>`,
+        `<em>A cobertura fechou com ${milhares(encontrado)} cartelas, e nada menor ` +
+          `que ${milhares(estado.piso)} existe.</em>`,
       ],
       false
     );
@@ -531,30 +686,31 @@ trabalhador.onmessage = (evento) => {
 
     case 'piso':
       pintarPiso(mensagem.dados);
-      $('ex-construcao-cartao').hidden = false;
-      enviar({
-        tipo: 'construir',
-        teto: esforco * TRABALHO_POR_ESFORCO,
-        limite: esforco * MILISSEGUNDOS_POR_ESFORCO,
-      });
+      // O piso é o teto: é ele que limita quantas cartelas podem existir. A
+      // escalada só pode começar depois de saber esse número.
+      enviar({ tipo: 'aprofundar', orcamento: esforco * NOS_POR_ESFORCO });
       break;
 
-    case 'construcao-passo':
-      pintarConstrucao(mensagem.dados, false);
+    case 'escalada-passo':
+      pintarEscalada(mensagem.dados, false);
+      pintarCurva(mensagem.curva);
+      if (mensagem.estado) guardarTrabalho(mensagem.estado);
       break;
 
-    case 'construcao':
+    case 'escalada':
       estado.cartelas = mensagem.cartelas;
-      estado.metodo = mensagem.metodo;
-      pintarConstrucao(mensagem.dados, true);
+      estado.metodo =
+        mensagem.dados.fase === 'subindo'
+          ? 'escalada de cobertura'
+          : 'escalada de cobertura, com reorganização';
+      pintarEscalada(mensagem.dados, true);
+      pintarCurva(mensagem.curva);
+      guardarTrabalho(mensagem.estado);
       if (mensagem.interrompida) {
         estado.parado = true;
-        avisar('Construção interrompida.');
-      } else if (mensagem.esgotou) {
-        avisar('O orçamento da construção acabou.');
+        avisar('Escalada interrompida. O trabalho ficou guardado.');
       }
       // Mesmo interrompida, a coleção passa pelo verificador antes de aparecer:
-      // uma construção parada no meio é uma construção como outra qualquer, e
       // nada aqui vale pela palavra de quem produziu.
       enviar({ tipo: 'verificar', cartelas: estado.cartelas });
       break;
@@ -585,7 +741,7 @@ trabalhador.onmessage = (evento) => {
 
     case 'piso-fundo':
       pintarPiso(mensagem.dados);
-      depoisDoPiso();
+      comecarEscalada();
       break;
 
     case 'prova-passo': {
@@ -625,7 +781,17 @@ $('ex-todos').addEventListener('click', () => {
   for (let n = 1; n <= universo; n += 1) escolhidos.add(n);
   pintarParametros();
 });
-$('ex-resolver').addEventListener('click', comecar);
+$('ex-resolver').addEventListener('click', () => {
+  // Começar de novo abandona o que estava guardado: ou são outros parâmetros,
+  // ou é a mesma configuração recomeçada de propósito.
+  esquecerTrabalho();
+  comecar();
+});
+
+$('ex-continuar').addEventListener('click', () => {
+  const guardado = trabalhoGuardado();
+  if (guardado) comecar(guardado.escalada);
+});
 $('ex-parar').addEventListener('click', () => {
   trabalhador.postMessage({ tipo: 'parar' });
   avisar('Parando…');
@@ -654,6 +820,11 @@ $('ex-compartilhar').addEventListener('click', async () => {
 montarGrade();
 for (let n = 1; n <= universo; n += 1) escolhidos.add(n);
 pintarParametros();
+
+// Guarda o trabalho antes de a página sumir, sem depender de um lote chegar.
+window.addEventListener('pagehide', () => {
+  if (rodando && estado?.guardado) guardarTrabalho(estado.guardado);
+});
 
 // O service worker é o que faz o aplicativo abrir sem internet. Registrá-lo
 // daqui é o que garante que quem entrar direto nesta página saia com ele.

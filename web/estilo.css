@@ -577,6 +577,30 @@ main { padding: 8px 16px 0; }
 /* ─────────── cartões que abrem e fecham ─────────── */
 
 /*
+ * Uma dobra **dentro** de um cartão: a curva de cobertura, que interessa a quem
+ * quer conferir e atrapalharia quem só quer o número. Mesmo alvo de 44 px da
+ * regra abaixo, sem o peso de um cartão inteiro.
+ */
+details.dobra {
+  margin-top: 12px;
+  border-top: 1px dashed var(--borda);
+  padding-top: 8px;
+}
+
+details.dobra > summary {
+  cursor: pointer;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  font-size: 13.5px;
+  color: var(--texto-fraco);
+}
+
+details.dobra > summary:hover {
+  color: var(--texto);
+}
+
+/*
  * O título de um <details> é a única coisa que se toca para abri-lo, e o
  * triângulo sozinho é pequeno demais para o dedo — errar o toque num <details>
  * não dá retorno nenhum, a pessoa só acha que o cartão não abre. Sem esta regra

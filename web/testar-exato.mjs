@@ -211,20 +211,34 @@ try {
     piso.slice(-90)
   );
 
-  // ─── 5. o progresso anda ───
+  // ─── 5. o teto nunca é ultrapassado, e a cobertura é o que anda ───
   //
-  // É o teste que pega a tela muda: o texto da construção precisa **mudar**
-  // enquanto ela trabalha, e o botão de parar precisa estar à mão.
+  // É a regra do aplicativo: o número de cartelas está preso ao piso, e o que
+  // cresce é a cobertura.
+  await pagina.waitForFunction(
+    () => !document.getElementById('ex-construcao-cartao').hidden,
+    undefined,
+    { timeout: 60000 }
+  );
   const leituras = new Set();
+  let passouDoTeto = false;
   for (let i = 0; i < 40; i += 1) {
     const agora = await texto('#ex-construcao');
     if (agora) leituras.add(agora);
+    const cartelas = await numero('#ex-cartelas-agora');
+    const teto = await numero('#ex-teto');
+    if (teto > 0 && cartelas > teto) passouDoTeto = true;
     if (leituras.size >= 2) break;
     await pagina.waitForTimeout(120);
   }
   marcar(
+    !passouDoTeto,
+    'o número de cartelas nunca passa do teto mostrado na tela',
+    `teto ${await numero('#ex-teto')}, cartelas ${await numero('#ex-cartelas-agora')}`
+  );
+  marcar(
     leituras.size >= 2,
-    'a construção mostra progresso que muda enquanto ela trabalha',
+    'a escalada mostra progresso que muda enquanto ela trabalha',
     `${leituras.size} leituras distintas`
   );
   marcar(
@@ -232,62 +246,99 @@ try {
     'e o botão de parar está à mão enquanto ela roda'
   );
 
+  // Ela roda até mandarem parar: quem decide a hora é quem está olhando.
+  await pagina.click('#ex-parar');
   await esperarResultado();
   const parcial = await texto('#ex-frase');
   const achou = await numero('#ex-encontrado');
   const provado = await numero('#ex-provado');
   marcar(
-    achou > 0 && achou >= provado,
-    'a configuração de tamanho real termina, sem travar',
-    `${achou} cartelas contra piso ${provado}`
+    achou > 0 && achou <= provado,
+    'a configuração de tamanho real termina, sem travar e sem passar do teto',
+    `${achou} cartelas com teto ${provado}`
   );
   marcar(
-    !/Mínimo exato/.test(parcial) || achou === provado,
-    'e não chama de mínimo o que só foi encontrado',
-    parcial.slice(0, 80)
+    /a melhor cobertura que alcancei foi/.test(parcial) || /Mínimo exato/.test(parcial),
+    'e diz a cobertura alcançada, deixando claro que piso não é promessa',
+    parcial.slice(0, 110)
   );
   marcar(
-    /Confere\./.test(await texto('#ex-verificacao')),
-    'o verificador confere a coleção que está na tela',
-    (await texto('#ex-verificacao')).slice(0, 70)
+    /→/.test(await texto('#ex-curva')),
+    'a curva registra cartela por cartela quanto foi coberto',
+    (await texto('#ex-curva')).slice(0, 90)
+  );
+  // A cobertura parou abaixo de 100%, e o verificador tem de dizer isso — é
+  // resultado, não defeito.
+  const conferencia = await texto('#ex-verificacao');
+  marcar(
+    /Confere\.|Não confere\./.test(conferencia),
+    'o verificador confere a coleção que está na tela e diz o que encontrou',
+    conferencia.slice(0, 90)
   );
 
   // ─── 6. cartelas premiadas ───
+  //
+  // Pedir duas dobra a cota de contagem, e é o **teto** que dobra junto: o
+  // número de cartelas continua preso ao piso, e o piso subiu.
   await marcarNumeros(25, Array.from({ length: 9 }, (_, i) => i + 1));
   await regras(3, 2, 2, 2);
   await pagina.selectOption('#ex-esforco', '1');
   await pagina.click('#ex-resolver');
+  // Esperar pelo resultado, e não por um número aparecer: o teto da rodada
+  // anterior ainda está na tela, e ler cedo demais leria o problema errado.
   await esperarResultado();
-  const comDuas = await numero('#ex-encontrado');
+  const tetoComDuas = await numero('#ex-teto');
   marcar(
-    comDuas > 12,
-    'pedir duas cartelas premiadas custa mais do que pedir uma',
-    `${comDuas} contra as 12 de uma só`
+    tetoComDuas === 24,
+    'com duas cartelas premiadas o teto dobra, porque a contagem dobra',
+    `teto ${tetoComDuas}`
   );
   marcar(
-    /2 cartelas cada/.test(await texto('#ex-verificacao')),
-    'e o verificador cobra as duas cópias',
-    (await texto('#ex-verificacao')).slice(0, 80)
+    (await numero('#ex-cartelas-agora')) <= tetoComDuas,
+    'e o número de cartelas continua preso a ele',
+    `${await numero('#ex-cartelas-agora')} de ${tetoComDuas}`
   );
-
-  // ─── 7. o botão de parar interrompe de verdade ───
-  await marcarNumeros(25, Array.from({ length: 22 }, (_, i) => i + 1));
-  await regras(17, 15, 15);
-  await pagina.selectOption('#ex-esforco', '20');
-  await pagina.click('#ex-resolver');
-  await pagina.waitForFunction(
-    () => !document.getElementById('ex-construcao-cartao').hidden,
-    undefined,
-    { timeout: 60000 }
-  );
-  await pagina.waitForTimeout(600);
-  await pagina.click('#ex-parar');
-  await esperarResultado(120000);
-  marcar(true, 'o botão de parar interrompe e a tela chega ao resultado assim mesmo');
   marcar(
     await pagina.locator('#ex-parar').isHidden(),
-    'e o botão some quando não há mais o que parar'
+    'o botão de parar some quando não há mais o que parar'
   );
+
+  // ─── 7. fazer aos poucos: fechar e continuar de onde parou ───
+  //
+  // Num aparelho fraco isto é o que faz "aos poucos" significar alguma coisa.
+  await marcarNumeros(25, Array.from({ length: 20 }, (_, i) => i + 1));
+  await regras(17, 15, 15);
+  await pagina.selectOption('#ex-esforco', '1');
+  await pagina.click('#ex-resolver');
+  await pagina.waitForFunction(
+    () => Number(document.getElementById('ex-cartelas-agora').textContent.replace(/\D/g, '')) > 0,
+    undefined,
+    { timeout: 90000 }
+  );
+  await pagina.waitForTimeout(5000);
+  await pagina.click('#ex-parar');
+  await esperarResultado(120000);
+  const guardou = await pagina.evaluate(
+    () => localStorage.getItem('sonho-lucido:exato:escalada') !== null
+  );
+  marcar(guardou, 'o trabalho fica guardado no aparelho quando ela para');
+
+  await pagina.reload({ waitUntil: 'networkidle' });
+  await pagina.waitForSelector('#ex-grade .numero');
+  await marcarNumeros(25, Array.from({ length: 20 }, (_, i) => i + 1));
+  await regras(17, 15, 15);
+  await pagina.waitForTimeout(200);
+  marcar(
+    !(await pagina.locator('#ex-continuar').isHidden()),
+    'e ao voltar com os mesmos números a tela oferece continuar de onde parou',
+    (await texto('#ex-retomar-aviso')).slice(0, 90)
+  );
+
+  // Com outros números a oferta some: retomar sobre outra configuração seria
+  // continuar o problema errado.
+  await regras(17, 15, 13);
+  await pagina.waitForTimeout(200);
+  marcar(await pagina.locator('#ex-continuar').isHidden(), 'e some quando os números mudam');
 
   // ─── 8. o que não é problema é recusado com o motivo ───
   await marcarNumeros(25, Array.from({ length: 25 }, (_, i) => i + 1));
