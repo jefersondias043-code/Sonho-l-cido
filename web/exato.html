@@ -184,6 +184,98 @@
     <div id="ex-cartelas"></div>
   </div>
 
+  <!-- 9 · o dinheiro ──────────────────────────────────────────────────── -->
+  <div class="cartao" id="ex-dinheiro-cartao" hidden>
+    <h2>9 · Quanto custa e quanto paga</h2>
+    <p class="ajuda">
+      O aplicativo não sabe quanto a sua loteria cobra nem quanto ela paga —
+      isso muda de modalidade para modalidade e de concurso para concurso. Diga
+      aqui, e toda conferência abaixo passa a sair com o dinheiro junto. Deixar
+      em branco não quebra nada: as contagens continuam, só o balanço fica de
+      fora.
+    </p>
+
+    <label class="campo">
+      <span>Valor de cada cartela</span>
+      <input type="text" id="ex-custo-unitario" inputmode="decimal"
+             placeholder="2,50" autocomplete="off" spellcheck="false">
+    </label>
+
+    <div class="referencia" id="ex-custo-total"></div>
+
+    <p class="ajuda">
+      <b>Prêmio por faixa</b> — quanto vale <em>uma</em> cartela em cada faixa
+      de acertos. As faixas saem dos seus cinco números: ninguém acerta mais que
+      o menor entre o jogo e o sorteio, e a garantia entra sempre que couber.
+    </p>
+    <div class="precos" id="ex-premios"></div>
+
+    <div class="acoes-linha">
+      <button class="secundario" id="ex-limpar-precos">Limpar valores</button>
+    </div>
+  </div>
+
+  <!-- 10 · conferência ─────────────────────────────────────────────────── -->
+  <div class="cartao" id="ex-conferir-cartao" hidden>
+    <h2>10 · Conferir um resultado</h2>
+    <p class="ajuda">
+      As cartelas conferidas são as que estão na tela — nada é montado de novo
+      aqui. Digite o resultado oficial, ou peça um sorteio simulado.
+    </p>
+
+    <textarea id="ex-resultado" rows="2" spellcheck="false" inputmode="numeric"
+              placeholder="digite os números sorteados"></textarea>
+
+    <div id="ex-origem-cartao" hidden>
+      <p class="ajuda">
+        <b>De onde sai o sorteio simulado</b> — a garantia do fechamento só vale
+        quando o sorteio cai inteiro dentro dos números que você marcou. Sorteando
+        do universo todo, o resultado é realista e costuma ser bem pior; é a
+        diferença entre o que o fechamento promete e o que a loteria faz.
+      </p>
+      <div class="opcoes" id="ex-origem"></div>
+    </div>
+
+    <div class="controles">
+      <button class="principal" id="ex-conferir">Conferir</button>
+      <button class="secundario" id="ex-sortear">Simular sorteio</button>
+    </div>
+    <div class="referencia" id="ex-conferir-erro" hidden></div>
+  </div>
+
+  <div class="cartao destaque" id="ex-conferencia-cartao" hidden>
+    <div class="rotulo">Resultado conferido</div>
+    <div class="dezenas-sorteadas" id="ex-sorteio-saiu"></div>
+    <div id="ex-conferencia-topo"></div>
+    <div class="rolagem"><table class="matriz" id="ex-conferencia-faixas"></table></div>
+    <div id="ex-balanco"></div>
+    <p class="ajuda" id="ex-conferencia-nota"></p>
+  </div>
+
+  <div class="cartao" id="ex-premiadas-cartao" hidden>
+    <div class="rotulo">As cartelas de cada faixa</div>
+    <div class="opcoes" id="ex-faixa-botoes"></div>
+    <div class="cartelas" id="ex-faixa-cartelas"></div>
+    <button class="secundario" id="ex-faixa-mais" hidden>Mostrar mais cartelas</button>
+  </div>
+
+  <!-- 11 · muitos sorteios ─────────────────────────────────────────────── -->
+  <details class="cartao" id="ex-simulacao-cartao" hidden>
+    <summary>11 · Simular vários sorteios</summary>
+    <p class="ajuda">
+      Cada sorteio é gerado do zero, com a mesma chance para toda combinação.
+      <b>Isto é simulação, não previsão:</b> descreve como o fechamento se
+      comporta, não o que vai sair no próximo concurso.
+    </p>
+    <div class="opcoes" id="ex-quantos"></div>
+    <button class="principal" id="ex-simular">Simular</button>
+    <div class="referencia" id="ex-simulacao-andamento" hidden></div>
+    <div class="rolagem" hidden id="ex-simulacao-rolagem">
+      <table class="matriz" id="ex-simulacao-faixas"></table>
+    </div>
+    <div id="ex-simulacao-dinheiro"></div>
+  </details>
+
 </main>
 
 <div class="aviso" id="ex-aviso" hidden role="status" aria-live="polite"></div>

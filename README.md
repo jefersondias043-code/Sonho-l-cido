@@ -79,6 +79,41 @@ melhor cobertura que alcancei foi 86,4%. O piso diz que nada menor que 160
 existe — não diz que 160 basta."* O trabalho fica guardado no aparelho, e voltar
 depois continua de onde parou.
 
+### Conferir, e o dinheiro
+
+Saber o mínimo responde "quantas cartelas preciso". A pergunta que vem logo
+depois é "e daí?" — quanto custou comprá-las, quantas foram premiadas neste
+concurso, quanto pagaram, e se o dinheiro voltou.
+
+Com as cartelas prontas o aplicativo abre três estágios a mais. Você informa o
+valor de cada cartela e o prêmio de cada faixa de acertos; ele calcula o custo
+do fechamento inteiro e, a cada conferência, mostra faixa por faixa quantas
+cartelas foram premiadas, quanto vale cada uma, quanto deu a faixa, o total das
+premiações e o resultado líquido. O resultado pode ser digitado — o oficial do
+concurso — ou sorteado ali mesmo. E dá para simular dez mil sorteios de uma vez
+e ver o desempenho ao longo deles: quanto saiu, quanto voltou, em quantos
+sorteios houve lucro, o melhor e o pior.
+
+As faixas não são fixas em 11 a 15: elas saem dos seus cinco números. Ninguém
+acerta mais que o menor entre o jogo e o sorteio, e a faixa que o fechamento
+garante entra sempre que couber. No formato da Lotinha isso dá exatamente 11 a
+15 — a generalização contém o caso conhecido.
+
+Dois cuidados que a tela toma, e que são o motivo de ela existir:
+
+- **A garantia vale para sorteios que caiam inteiros dentro dos números
+  marcados.** Quando um resultado traz números de fora, a tela diz quais foram —
+  em vez de deixar parecer que o fechamento falhou.
+- **Simular só entre os seus números mostra lucro em todos os sorteios**, e isso
+  é verdade sobre aquele cenário e mentira sobre a loteria. Junto do resultado
+  vem a chance de o cenário acontecer: com 18 marcados de 25 e sorteio de 15,
+  **0,025% dos concursos — um em quatro mil**.
+
+Os valores informados ficam guardados no aparelho, e trocar o preço de uma faixa
+refaz o balanço de uma simulação de dez mil sorteios na hora, sem repeti-la. Os
+prêmios são os que **você** informa: o aplicativo não consulta premiação de
+lugar nenhum e não sabe quanto a sua loteria pagou.
+
 A Lotinha parte de um fechamento pronto e conferido, e o motor entra depois para
 tentar superá-lo. O Construtor faz o caminho inverso, para qualquer problema de
 cobertura. O Construtor Exato faz o mesmo caminho **sem apoio nenhum**: ele não
@@ -676,6 +711,9 @@ web/                     a interface da plataforma
 ├── lotinha.html         a Lotinha, e app.js / trabalhador.js / historico.js
 ├── construtor.html      o Construtor, e construtor.js / escada.js
 ├── exato.html           o Construtor Exato, e exato.js
+├── exato-checagem.js    a aritmética da conferência e do dinheiro, sem DOM
+├── exato-conferencia.js a tela da conferência: faixas, balanço e simulações
+├── exato-checador.js    o trabalhador das simulações longas do Exato
 ├── exato-veredito.js    a regra do que pode ser afirmado, sem DOM e sem wasm
 └── sw.js                funcionamento sem internet e atualização automática
 ```
@@ -826,6 +864,7 @@ node web/testar-lotinha.mjs                     # testa a ferramenta Lotinha
 node web/testar-checagem.mjs                    # testa a conferência de acertos
 node web/testar-construtor.mjs                  # testa o Construtor
 node web/testar-exato.mjs                       # testa o Construtor Exato
+node web/testar-exato-checagem.mjs              # a aritmética do dinheiro, sem navegador
 cargo run --release --example gerar-lotinha     # regera o banco de fechamentos
 
 python3 -m http.server -d site 8000             # experimenta localmente

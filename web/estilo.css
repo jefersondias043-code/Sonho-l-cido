@@ -1036,7 +1036,8 @@ details.cartao[open] > summary::after {
   border-color: var(--acento);
 }
 
-#chk-resultado {
+#chk-resultado,
+#ex-resultado {
   width: 100%;
   margin-top: 10px;
   padding: 12px;
@@ -1051,7 +1052,8 @@ details.cartao[open] > summary::after {
   resize: vertical;
 }
 
-#chk-resultado:focus {
+#chk-resultado:focus,
+#ex-resultado:focus {
   outline: none;
   border-color: var(--acento);
 }
@@ -1551,3 +1553,101 @@ details.cartao[open] > summary::after {
 /* O veredito muda de cor porque muda de natureza: procurar, provar, ou avisar. */
 .veredito-provado { color: var(--verde); font-weight: 600; }
 .veredito-impossivel { color: var(--vermelho); font-weight: 600; }
+
+/* ─────────── a conferência do Construtor Exato ─────────── */
+
+/* Os preços por faixa. Duas colunas em tela larga porque são até dez campos, e
+   uma coluna só faria a pessoa rolar dez vezes para preencher um cenário. */
+.precos {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+@media (min-width: 480px) {
+  .precos { grid-template-columns: 1fr 1fr; }
+}
+
+.precos label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border: 1px solid var(--borda);
+  border-radius: 10px;
+  background: var(--fundo-campo);
+}
+
+.precos label span {
+  flex: 0 0 auto;
+  font-size: 13.5px;
+  color: var(--texto-fraco);
+  font-variant-numeric: tabular-nums;
+}
+
+/* A faixa que o fechamento garante é a que a pessoa procura na lista. */
+.precos label.garantida span { color: var(--ouro); font-weight: 600; }
+
+.precos input {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 40px;
+  padding: 6px 8px;
+  /* 17px evita o zoom automático do Safari no iOS ao focar o campo. */
+  font-size: 17px;
+  font-family: inherit;
+  text-align: right;
+  color: var(--texto);
+  background: transparent;
+  border: none;
+  font-variant-numeric: tabular-nums;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.precos input:focus { outline: none; }
+.precos label:focus-within { border-color: var(--acento); }
+
+#ex-conferencia-faixas td:not(:first-child),
+#ex-simulacao-faixas td:not(:first-child) {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+#ex-conferencia-faixas .faixa-garantida td { color: var(--ouro); font-weight: 600; }
+#ex-conferencia-faixas .faixa-vazia td { color: var(--texto-fraco); }
+#ex-conferencia-faixas .faixa-resto td { color: var(--texto-fraco); font-size: 13px; }
+#ex-simulacao-faixas .faixa-garantida td { color: var(--ouro); font-weight: 600; }
+
+#ex-conferencia-faixas caption,
+#ex-simulacao-faixas caption {
+  caption-side: top;
+  text-align: left;
+  color: var(--texto-fraco);
+  font-size: 13px;
+  padding-bottom: 6px;
+}
+
+/* O balanço: as três linhas que respondem "valeu a pena?". O líquido ganha
+   cor porque é a única cuja resposta é sim ou não. */
+.balanco {
+  margin-top: 14px;
+  border-top: 1px solid var(--borda);
+  padding-top: 10px;
+}
+
+.balanco > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 5px 0;
+  font-size: 14.5px;
+}
+
+.balanco span { color: var(--texto-fraco); }
+.balanco b { font-variant-numeric: tabular-nums; font-weight: 600; }
+.balanco .liquido { border-top: 1px solid var(--borda); margin-top: 4px; padding-top: 9px; }
+.balanco .liquido span { color: var(--texto); }
+.balanco .liquido b { font-size: 17px; }
+.balanco .positivo b { color: var(--verde); }
+.balanco .negativo b { color: var(--vermelho); }

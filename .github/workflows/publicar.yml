@@ -78,6 +78,13 @@ jobs:
         # internet cobrir todo o site. Nenhum teste de navegador as alcança.
         run: ./testar-construcao.sh
 
+      - name: Testar a aritmética da conferência
+        # Roda em node puro, sem navegador, e por isso vem antes: aritmética
+        # errada numa ferramenta que diz quanto você ganhou é pior do que
+        # ferramenta nenhuma, e não faz sentido instalar um navegador para
+        # descobrir que a multiplicação está errada.
+        run: node web/testar-exato-checagem.mjs
+
       - name: Testar a interface num navegador
         run: |
           # Sob a mesma subpasta em que o GitHub Pages serve. Um caminho
@@ -115,7 +122,8 @@ jobs:
           # ele não consulta tabela de mínimos de ninguém. O que se cobra aqui é
           # a separação entre encontrar e provar — que ele diga "mínimo exato"
           # onde a varredura fechou, mostre os dois números onde ela não fechou,
-          # e que a exaustão suba o piso acima da fórmula em C(10,4,2).
+          # e que a exaustão suba o piso acima da fórmula em C(10,4,2). E, desde
+          # a conferência, que o dinheiro na tela seja o que a aritmética diz.
           node web/testar-exato.mjs
 
       - name: Publicar na branch gh-pages

@@ -16,6 +16,7 @@
  */
 
 import { frase, folga, veredito, MINIMO, PARCIAL, FALHA } from './exato-veredito.js';
+import { definirFechamento, esquecerFechamento } from './exato-conferencia.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -465,6 +466,14 @@ function pintarResultado() {
       .join('')}</div>`;
 
   if (qual === MINIMO || qual === FALHA) $('ex-prova-barra').style.width = '100%';
+
+  // As cartelas existem: a conferência passa a ter o que conferir.
+  //
+  // Vale mesmo quando a cobertura ficou abaixo de 100%. Um fechamento parcial
+  // é o que a pessoa tem na mão, e saber quanto ele rendeu num sorteio é
+  // justamente a pergunta que sobra quando a garantia não foi alcançada.
+  definirFechamento({ cartelas: estado.cartelas, numeros, pedido });
+
   encerrar();
 }
 
@@ -785,12 +794,15 @@ $('ex-resolver').addEventListener('click', () => {
   // Começar de novo abandona o que estava guardado: ou são outros parâmetros,
   // ou é a mesma configuração recomeçada de propósito.
   esquecerTrabalho();
+  esquecerFechamento();
   comecar();
 });
 
 $('ex-continuar').addEventListener('click', () => {
   const guardado = trabalhoGuardado();
-  if (guardado) comecar(guardado.escalada);
+  if (!guardado) return;
+  esquecerFechamento();
+  comecar(guardado.escalada);
 });
 $('ex-parar').addEventListener('click', () => {
   trabalhador.postMessage({ tipo: 'parar' });

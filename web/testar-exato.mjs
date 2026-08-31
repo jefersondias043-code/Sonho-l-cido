@@ -340,7 +340,208 @@ try {
   await pagina.waitForTimeout(200);
   marcar(await pagina.locator('#ex-continuar').isHidden(), 'e some quando os números mudam');
 
-  // ─── 8. o que não é problema é recusado com o motivo ───
+  // ─── 8. conferir, e o dinheiro ───
+  //
+  // Um fechamento pequeno e comprovado, para que a conferência possa ser
+  // cobrada contra números que se conhecem de cor: 18 dezenas, jogos de 17,
+  // garante 15, mínimo 16 cartelas.
+  await pagina.reload({ waitUntil: 'networkidle' });
+  await pagina.waitForSelector('#ex-grade .numero');
+  await marcarNumeros(25, Array.from({ length: 18 }, (_, i) => i + 1));
+  await regras(17, 15, 15);
+  await pagina.selectOption('#ex-esforco', '1');
+  await pagina.click('#ex-resolver');
+  await esperarResultado(180000);
+
+  marcar(
+    (await pagina.locator('#ex-dinheiro-cartao').isVisible()) &&
+      (await pagina.locator('#ex-conferir-cartao').isVisible()),
+    'com as cartelas prontas, a conferência e o controle financeiro aparecem'
+  );
+
+  const faixasNaTela = await pagina.$$eval('#ex-premios input[data-faixa]', (campos) =>
+    campos.map((c) => Number(c.dataset.faixa))
+  );
+  marcar(
+    faixasNaTela.join(',') === '15,14,13,12,11',
+    'há um campo de prêmio para cada faixa de acertos, do topo para baixo',
+    faixasNaTela.join(', ')
+  );
+
+  // O custo total é aritmética que a pessoa confere de cabeça: 16 × 2,50 = 40.
+  await pagina.fill('#ex-custo-unitario', '2,50');
+  const custo = await texto('#ex-custo-total');
+  marcar(
+    /R\$\s*40,00/.test(custo) && /16 cartelas/.test(custo),
+    'o custo total é o número de cartelas vezes o valor de cada uma',
+    custo
+  );
+
+  for (const [faixa, valor] of [
+    [11, '6'],
+    [12, '12'],
+    [13, '30'],
+    [14, '1500'],
+    [15, '60000'],
+  ]) {
+    await pagina.fill(`#ex-premio-${faixa}`, valor);
+  }
+
+  // Um sorteio tirado só dos números marcados: a garantia é uma afirmação
+  // sobre exatamente estes, e tem de aparecer cumprida.
+  await pagina.click('#ex-origem .opcao[data-origem="meus"]');
+  await pagina.click('#ex-sortear');
+  await pagina.waitForSelector('#ex-conferencia-cartao:not([hidden])');
+
+  const sorteados = await pagina.$$eval('#ex-sorteio-saiu span', (e) =>
+    e.map((x) => Number(x.textContent))
+  );
+  marcar(
+    sorteados.length === 15 &&
+      new Set(sorteados).size === 15 &&
+      sorteados.every((n) => n >= 1 && n <= 18),
+    'um sorteio simulado dentro dos meus números não traz nenhum de fora',
+    sorteados.join(' ')
+  );
+
+  marcar(
+    /🎯/.test(await texto('#ex-conferencia-topo')),
+    'e a garantia aparece cumprida, porque é sobre estes números que ela vale',
+    (await texto('#ex-conferencia-topo')).slice(0, 90)
+  );
+
+  // A soma da tabela tem de fechar com o total: nenhuma cartela pode sumir
+  // entre as faixas mostradas e a linha de baixo.
+  const somaDaTabela = await pagina.$$eval('#ex-conferencia-faixas tbody tr', (linhas) =>
+    linhas.reduce(
+      (s, l) => s + Number((l.children[1].textContent || '0').replace(/\D/g, '')),
+      0
+    )
+  );
+  marcar(somaDaTabela === 16, 'a tabela de faixas fecha com o total de cartelas', `${somaDaTabela} de 16`);
+
+  // O balanço: as três linhas que respondem "valeu a pena?".
+  const balanco = await texto('#ex-balanco');
+  marcar(
+    /Custo do fechamento/.test(balanco) &&
+      /Total das premiações/.test(balanco) &&
+      /Resultado líquido/.test(balanco) &&
+      /R\$\s*40,00/.test(balanco),
+    'o balanço mostra custo, premiação e líquido, com o custo do fechamento inteiro',
+    balanco.slice(0, 110)
+  );
+
+  // Cada faixa mostra quantidade, valor e o produto — separada das outras, que
+  // é como o pedido descreve.
+  const linhaDoTopo = await pagina.$eval('#ex-conferencia-faixas tbody tr', (l) =>
+    [...l.children].map((c) => c.textContent.trim())
+  );
+  const quantasNoTopo = Number(linhaDoTopo[1].replace(/\D/g, ''));
+  marcar(
+    linhaDoTopo.length === 4 &&
+      /15 acertos/.test(linhaDoTopo[0]) &&
+      new RegExp(`${(quantasNoTopo * 60000).toLocaleString('pt-BR')}`).test(linhaDoTopo[3]),
+    'cada faixa mostra quantidade × prêmio = total, na própria linha',
+    linhaDoTopo.join(' | ')
+  );
+
+  // As cartelas premiadas podem ser vistas, e não só contadas.
+  marcar(
+    (await pagina.locator('#ex-premiadas-cartao').isVisible()) &&
+      (await pagina.locator('#ex-faixa-cartelas .cartela').count()) > 0,
+    'e dá para ver quais cartelas foram premiadas, e não só quantas',
+    `${await pagina.locator('#ex-faixa-cartelas .cartela').count()} desenhadas`
+  );
+
+  // Um resultado digitado com números de fora: a garantia não se aplica, e a
+  // tela precisa dizer o motivo certo em vez do motivo genérico.
+  await pagina.fill('#ex-resultado', '01 02 03 04 05 06 07 08 09 10 11 12 13 22 23');
+  await pagina.click('#ex-conferir');
+  const comForasteiros = await texto('#ex-conferencia-topo');
+  marcar(
+    /2 de fora/.test(comForasteiros) && /22, 23/.test(comForasteiros),
+    'um resultado com números que não foram marcados é conferido, e a tela diz quais ficaram de fora',
+    comForasteiros.slice(0, 120)
+  );
+
+  await pagina.fill('#ex-resultado', '1 2 3');
+  await pagina.click('#ex-conferir');
+  marcar(
+    /15 números, e você digitou 3/.test(await texto('#ex-conferir-erro')),
+    'e uma entrada errada é recusada com uma frase que explica o quê',
+    await texto('#ex-conferir-erro')
+  );
+
+  // ─── 9. muitos sorteios, e o desempenho financeiro ao longo deles ───
+  await pagina.click('#ex-origem .opcao[data-origem="universo"]');
+  await pagina.evaluate(() => {
+    document.getElementById('ex-simulacao-cartao').open = true;
+  });
+  await pagina.click('#ex-quantos .opcao[data-quantos="1000"]');
+  await pagina.click('#ex-simular');
+  await pagina.waitForSelector('#ex-simulacao-rolagem:not([hidden])', { timeout: 120000 });
+
+  const tabelaDaSimulacao = await texto('#ex-simulacao-faixas');
+  marcar(
+    /1.000 sorteios do universo inteiro/.test(tabelaDaSimulacao) &&
+      (await pagina.locator('#ex-simulacao-faixas tbody tr').count()) === 5,
+    'a simulação relata cada faixa ao longo de mil sorteios',
+    tabelaDaSimulacao.slice(0, 80)
+  );
+
+  const financeiro = await texto('#ex-simulacao-dinheiro');
+  marcar(
+    /Investido em 1.000 sorteios/.test(financeiro) &&
+      /Recebido no total/.test(financeiro) &&
+      /Sorteios com lucro/.test(financeiro) &&
+      /R\$\s*40.000,00/.test(financeiro),
+    'e o balanço da simulação diz quanto saiu, quanto voltou e em quantos sorteios houve lucro',
+    financeiro.slice(0, 120)
+  );
+
+  // A promessa que faz a tela valer: experimentar outro cenário de premiação
+  // não custa outra simulação.
+  const antes = financeiro;
+  await pagina.fill('#ex-premio-11', '12');
+  await pagina.waitForTimeout(150);
+  const depois = await texto('#ex-simulacao-dinheiro');
+  marcar(
+    antes !== depois && /Recebido no total/.test(depois),
+    'mudar um prêmio refaz o balanço na hora, sem repetir a simulação'
+  );
+
+  // O aviso que impede a leitura errada do cenário mais bonito.
+  await pagina.click('#ex-origem .opcao[data-origem="meus"]');
+  await pagina.click('#ex-quantos .opcao[data-quantos="100"]');
+  await pagina.click('#ex-simular');
+  await pagina.waitForFunction(
+    () => /Leia com esta ressalva/.test(document.getElementById('ex-simulacao-dinheiro').textContent),
+    undefined,
+    { timeout: 60000 }
+  );
+  const ressalva = await texto('#ex-simulacao-dinheiro');
+  marcar(
+    /0,025%/.test(ressalva) && /1 em 4.006/.test(ressalva),
+    'simular só entre os meus números vem com a chance de isso acontecer de verdade',
+    ressalva.slice(ressalva.indexOf('Leia com'), ressalva.indexOf('Leia com') + 130)
+  );
+
+  // Os preços sobrevivem a fechar o aplicativo: ninguém redigita cinco faixas.
+  await pagina.reload({ waitUntil: 'networkidle' });
+  await pagina.waitForSelector('#ex-grade .numero');
+  await marcarNumeros(25, Array.from({ length: 18 }, (_, i) => i + 1));
+  await regras(17, 15, 15);
+  await pagina.selectOption('#ex-esforco', '1');
+  await pagina.click('#ex-resolver');
+  await esperarResultado(180000);
+  marcar(
+    (await pagina.inputValue('#ex-custo-unitario')).replace('.', ',') === '2,5' &&
+      (await pagina.inputValue('#ex-premio-15')) === '60000',
+    'os valores informados sobrevivem a fechar e reabrir o aplicativo',
+    `cartela ${await pagina.inputValue('#ex-custo-unitario')} · 15 acertos ${await pagina.inputValue('#ex-premio-15')}`
+  );
+
+  // ─── 10. o que não é problema é recusado com o motivo ───
   await marcarNumeros(25, Array.from({ length: 25 }, (_, i) => i + 1));
   await regras(12, 15, 11);
   await pagina.click('#ex-resolver');
