@@ -51,6 +51,34 @@ isso é de propósito: ela descreve cobertura **simples**, e um covering design
 não entrega duas cartelas premiadas por sorteio. Mostrá-la ali convidaria a
 comparar o seu resultado com um número que resolve outro problema.
 
+### A escalada de cobertura
+
+O Construtor Exato não monta uma solução grande para depois encolher. A lógica é
+a inversa:
+
+> **O número de cartelas é limitado pelo mínimo matemático. A variável que
+> evolui é a cobertura.**
+
+Ele começa com uma cartela e mede quanto ela cobre; acrescenta a segunda e mede
+de novo; e sobe assim até o teto — que é o piso provado, e **nunca é
+ultrapassado**. Em nove números com jogos de 3 garantindo 2:
+
+```
+1 → 8,3% · 2 → 16,7% · 3 → 25,0% · 4 → 33,3% · 5 → 41,7% · 6 → 50,0%
+· 7 → 58,3% · 8 → 66,7% · 9 → 75,0% · 10 → 80,6% · 11 → 88,9% · 12 → 94,4%
+```
+
+A subida sozinha para em 94,4% com as doze cartelas. Chegando ao teto sem
+fechar, ele **não acrescenta a décima terceira**: mantém o número e passa a
+reorganizar o conjunto — troca uma por outra, derruba várias e repõe várias,
+reestrutura inteiro. Foi a reorganização que levou aquelas mesmas doze de 94,4%
+a 100%, e é por isso que doze é o mínimo, provado.
+
+Quando o teto não basta, a tela diz com todas as letras: *"Com 160 cartelas, a
+melhor cobertura que alcancei foi 86,4%. O piso diz que nada menor que 160
+existe — não diz que 160 basta."* O trabalho fica guardado no aparelho, e voltar
+depois continua de onde parou.
+
 A Lotinha parte de um fechamento pronto e conferido, e o motor entra depois para
 tentar superá-lo. O Construtor faz o caminho inverso, para qualquer problema de
 cobertura. O Construtor Exato faz o mesmo caminho **sem apoio nenhum**: ele não
@@ -636,7 +664,8 @@ crates/
 ├── motor-exato/         o motor do Construtor Exato — sem dependência dos outros
 │   ├── problema         o modelo formal, e o verificador
 │   ├── limites          só cotas com demonstração escrita: contagem, Schönheim
-│   ├── construtor       partidas múltiplas, alvo mais apertado, ruína e recriação
+│   ├── escalada         a cobertura sobe; o número de cartelas para no piso
+│   ├── construtor       usado só nos subproblemas de que o piso precisa
 │   ├── prova            ramifica-e-poda: existe alguma coisa menor?
 │   └── veredito         onde construção e prova se encontram — ou não
 │
