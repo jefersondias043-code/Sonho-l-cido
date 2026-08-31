@@ -85,6 +85,13 @@ Saber o mínimo responde "quantas cartelas preciso". A pergunta que vem logo
 depois é "e daí?" — quanto custou comprá-las, quantas foram premiadas neste
 concurso, quanto pagaram, e se o dinheiro voltou.
 
+O resultado mostra três cartelas de amostra e um botão — *"Ver todas as 1.537
+cartelas"* — em vez da lista inteira. As ferramentas ficam depois do resultado,
+e com a lista aberta chegar até elas custava rolar o fechamento inteiro. Fechada,
+o cartão de resultado tem a mesma altura com 16 cartelas e com 1.537; aberta,
+ela é montada em levas que o navegador só desenha quando chegam perto da janela
+— a primeira aparece em 37 ms, e as 1.537 em menos de meio segundo.
+
 Com as cartelas prontas o aplicativo abre três estágios a mais. Você informa o
 valor de cada cartela e o prêmio de cada faixa de acertos; ele calcula o custo
 do fechamento inteiro e, a cada conferência, mostra faixa por faixa quantas

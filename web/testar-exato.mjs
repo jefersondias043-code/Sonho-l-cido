@@ -91,6 +91,19 @@ async function regras(jogo, sorteio, garantia, premiadas = 1) {
   if (premiadas > 1) await escolher('ex-premiadas', premiadas);
 }
 
+/** A altura do cartão de resultado, que é o que empurra as ferramentas para baixo. */
+async function alturaDoResultado() {
+  const caixa = await pagina.locator('#ex-resultado-cartao').boundingBox();
+  return Math.round(caixa.height);
+}
+
+/** Quanto se rola do topo do resultado até a conferência. É a queixa, medida. */
+async function vaoAteAConferencia() {
+  const a = await pagina.locator('#ex-resultado-cartao').boundingBox();
+  const b = await pagina.locator('#ex-conferir-cartao').boundingBox();
+  return Math.round(b.y - a.y);
+}
+
 async function esperarResultado(limite = 180000) {
   await pagina.waitForFunction(
     () =>
@@ -172,7 +185,12 @@ try {
   );
 
   // As cartelas precisam sair com os números marcados, e não com posições.
-  const primeira = await texto('#ex-cartelas .cartela:first-child');
+  //
+  // A lista completa fica fechada até alguém pedir, e esta verificação quer
+  // varrer o fechamento inteiro — então ela pede.
+  await pagina.click('#ex-ver-cartelas');
+  await pagina.waitForTimeout(300);
+  const primeira = await texto('#ex-previa .cartela:first-child');
   const usados = (await pagina.$$eval('#ex-cartelas .cartela span:last-child', (s) =>
     s.flatMap((x) => x.textContent.trim().split(/\s+/).map(Number))
   )).sort((a, b) => a - b);
@@ -323,6 +341,11 @@ try {
   );
   marcar(guardou, 'o trabalho fica guardado no aparelho quando ela para');
 
+  // A altura do cartão de resultado com um fechamento grande. Serve de
+  // comparação para o caso pequeno, mais abaixo.
+  const cartelasGrandes = await numero('#ex-encontrado');
+  const alturaComMuitas = await alturaDoResultado();
+
   await pagina.reload({ waitUntil: 'networkidle' });
   await pagina.waitForSelector('#ex-grade .numero');
   await marcarNumeros(25, Array.from({ length: 20 }, (_, i) => i + 1));
@@ -357,6 +380,63 @@ try {
     (await pagina.locator('#ex-dinheiro-cartao').isVisible()) &&
       (await pagina.locator('#ex-conferir-cartao').isVisible()),
     'com as cartelas prontas, a conferência e o controle financeiro aparecem'
+  );
+
+  // ─── a lista de cartelas não pode ficar entre o resultado e as ferramentas ───
+  //
+  // Era o defeito: as cartelas saíam todas na tela, e chegar à conferência num
+  // fechamento de mil custava mil cartelas de rolagem.
+  marcar(
+    (await pagina.locator('#ex-previa .cartela').count()) === 3 &&
+      (await pagina.locator('#ex-cartelas').isHidden()) &&
+      (await pagina.locator('#ex-cartelas .cartela').count()) === 0,
+    'o resultado mostra uma amostra de três cartelas, e não a lista inteira',
+    await texto('#ex-aviso-cartelas')
+  );
+
+  marcar(
+    /Ver todas as 16 cartelas/.test(await texto('#ex-ver-cartelas')),
+    'e um botão diz quantas existem e o que ele faz',
+    await texto('#ex-ver-cartelas')
+  );
+
+  const vaoFechado = await vaoAteAConferencia();
+  const alturaComPoucas = await alturaDoResultado();
+  marcar(
+    vaoFechado < 2500,
+    'com a lista fechada, a conferência fica a poucas telas de distância',
+    `${vaoFechado} px até o estágio 10`
+  );
+
+  // A promessa que o pedido faz por escrito: 20, 100, 500 ou 1.000 cartelas dão
+  // a mesma página. Se a altura do resultado não muda entre um fechamento de
+  // 16 e um de 160, ela não vai mudar num de 1.000.
+  marcar(
+    Math.abs(alturaComMuitas - alturaComPoucas) < 80,
+    'e o tamanho da página não cresce com o tamanho do fechamento',
+    `${cartelasGrandes} cartelas: ${alturaComMuitas} px · 16 cartelas: ${alturaComPoucas} px`
+  );
+
+  await pagina.click('#ex-ver-cartelas');
+  await pagina.waitForTimeout(400);
+  marcar(
+    (await pagina.locator('#ex-cartelas .cartela').count()) === 16 &&
+      /Ocultar as cartelas/.test(await texto('#ex-ver-cartelas')),
+    'tocar no botão abre a listagem completa, e ele passa a oferecer fechá-la',
+    `${await pagina.locator('#ex-cartelas .cartela').count()} cartelas desenhadas`
+  );
+
+  marcar(
+    (await vaoAteAConferencia()) > vaoFechado,
+    'e a página cresce só enquanto ela está aberta',
+    `${await vaoAteAConferencia()} px abertas contra ${vaoFechado} px fechadas`
+  );
+
+  await pagina.click('#ex-ver-cartelas');
+  await pagina.waitForTimeout(200);
+  marcar(
+    await pagina.locator('#ex-cartelas').isHidden(),
+    'tocar de novo fecha a listagem'
   );
 
   const faixasNaTela = await pagina.$$eval('#ex-premios input[data-faixa]', (campos) =>

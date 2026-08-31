@@ -39,8 +39,28 @@ const MILISSEGUNDOS_POR_ESFORCO = 5_000;
 /** A busca cíclica varre um espaço muito menor: recebe uma fração dos nós. */
 const FATIA_CICLICA = 4;
 
-/** Acima disto as cartelas não são todas desenhadas — só copiadas. */
-const CARTELAS_DESENHADAS = 500;
+/**
+ * Quantas cartelas aparecem antes de alguém pedir para ver o resto.
+ *
+ * A lista inteira ficava aberta entre o resultado e as ferramentas que vêm
+ * depois dele — o dinheiro e a conferência. Num fechamento de mil cartelas,
+ * chegar à conferência custava mil cartelas de rolagem, e a ferramenta que a
+ * pessoa mais quer usar era a mais longe de alcançar.
+ *
+ * Três, e não uma: uma cartela sozinha parece defeito de desenho, três leem-se
+ * como amostra.
+ */
+const CARTELAS_NA_PREVIA = 3;
+
+/**
+ * O tamanho da leva, quando a lista inteira é aberta.
+ *
+ * Mesmo número que a Lotinha usa, e pelo mesmo motivo — está explicado em
+ * `.cartelas.em-levas` no CSS: 60 divide 1, 2, 3 e 4 colunas, então toda leva
+ * fecha um número inteiro de linhas em qualquer tela, e marcar 50 fronteiras
+ * em vez de 3.000 mantém a rolagem no mesmo custo de antes.
+ */
+const CARTELAS_POR_LEVA = 60;
 
 /*
  * Cada execução tem um número. Respostas de execuções anteriores chegam depois
@@ -450,20 +470,7 @@ function pintarResultado() {
   $('ex-compartilhar').hidden = typeof navigator.share !== 'function';
 
   const numeros = dezenas();
-  const mostradas = estado.cartelas.slice(0, CARTELAS_DESENHADAS);
-  $('ex-aviso-cartelas').hidden = estado.cartelas.length <= CARTELAS_DESENHADAS;
-  $('ex-aviso-cartelas').innerHTML =
-    `<em>Desenhando as primeiras ${milhares(CARTELAS_DESENHADAS)} de ` +
-    `${milhares(estado.cartelas.length)} — o botão Copiar leva todas.</em>`;
-
-  $('ex-cartelas').innerHTML =
-    `<div class="cartelas">${mostradas
-      .map(
-        (c, i) =>
-          `<div class="cartela"><span class="indice">${String(i + 1).padStart(2, '0')}</span>` +
-          `<span>${c.map((p) => String(numeros[p - 1]).padStart(2, '0')).join(' ')}</span></div>`
-      )
-      .join('')}</div>`;
+  pintarPreviaDasCartelas(numeros);
 
   if (qual === MINIMO || qual === FALHA) $('ex-prova-barra').style.width = '100%';
 
@@ -475,6 +482,105 @@ function pintarResultado() {
   definirFechamento({ cartelas: estado.cartelas, numeros, pedido });
 
   encerrar();
+}
+
+/* ─────────── as cartelas: uma amostra, e o resto sob demanda ─────────── */
+
+/*
+ * A lista completa só existe no DOM depois que alguém pede.
+ *
+ * Não é só rolagem: montar mil cartelas custa mil elementos, e pagá-los a cada
+ * resultado — inclusive de quem nunca vai olhar a lista — atrasa a tela no
+ * momento em que ela deveria estar respondendo. `abertas` guarda se a lista já
+ * foi montada, para o segundo toque no botão ser só mostrar e esconder.
+ */
+let cartelasAbertas = false;
+let cartelasMontadas = false;
+
+/** Uma cartela desenhada, com o índice e os números que a pessoa marcou. */
+function desenharCartela(cartela, i, numeros) {
+  return (
+    `<div class="cartela"><span class="indice">${String(i + 1).padStart(2, '0')}</span>` +
+    `<span>${cartela.map((p) => String(numeros[p - 1]).padStart(2, '0')).join(' ')}</span></div>`
+  );
+}
+
+/** A amostra que fica sempre visível, e a legenda que diz quantas existem. */
+function pintarPreviaDasCartelas(numeros) {
+  const total = estado.cartelas.length;
+  const quantas = Math.min(total, CARTELAS_NA_PREVIA);
+
+  // Toda vez que um resultado novo chega a lista volta a ficar fechada: as
+  // cartelas de antes não são mais as da tela, e deixá-las abertas mostraria o
+  // fechamento errado.
+  cartelasAbertas = false;
+  cartelasMontadas = false;
+  $('ex-cartelas').hidden = true;
+  $('ex-cartelas').innerHTML = '';
+
+  $('ex-previa').innerHTML =
+    `<div class="cartelas">${estado.cartelas
+      .slice(0, quantas)
+      .map((c, i) => desenharCartela(c, i, numeros))
+      .join('')}</div>`;
+
+  $('ex-aviso-cartelas').innerHTML =
+    total > quantas
+      ? `<b>${milhares(total)} cartelas.</b> <em>Mostrando ${
+          quantas === 1 ? 'a primeira' : `as ${quantas} primeiras`
+        } — o botão abaixo abre a lista inteira, e o Copiar leva todas.</em>`
+      : `<b>${milhares(total)} cartela${total === 1 ? '' : 's'}.</b> <em>São todas.</em>`;
+
+  const botao = $('ex-ver-cartelas');
+  botao.hidden = total <= quantas;
+  botao.textContent = `Ver todas as ${milhares(total)} cartelas`;
+}
+
+/**
+ * Monta a lista inteira, em levas.
+ *
+ * A primeira leva entra de imediato e o resto no quadro seguinte. Num aparelho
+ * fraco — que é o aparelho para o qual este aplicativo foi feito — montar mil
+ * cartelas de uma vez seguraria o toque por décimos de segundo, e um botão que
+ * demora a responder é indistinguível de um botão que não funcionou.
+ */
+function montarListaDeCartelas() {
+  const numeros = dezenas();
+  const total = estado.cartelas.length;
+  const alvo = $('ex-cartelas');
+
+  alvo.innerHTML = '<div class="cartelas em-levas"></div>';
+  const caixa = alvo.firstElementChild;
+
+  const leva = (inicio) => {
+    const fim = Math.min(total, inicio + CARTELAS_POR_LEVA);
+    const partes = [];
+    for (let i = inicio; i < fim; i += 1) {
+      partes.push(desenharCartela(estado.cartelas[i], i, numeros));
+    }
+    caixa.insertAdjacentHTML('beforeend', `<div class="leva">${partes.join('')}</div>`);
+    return fim;
+  };
+
+  let feito = leva(0);
+  const seguir = () => {
+    if (feito >= total) return;
+    feito = leva(feito);
+    requestAnimationFrame(seguir);
+  };
+  requestAnimationFrame(seguir);
+
+  cartelasMontadas = true;
+}
+
+/** O botão que abre e fecha a lista. */
+function alternarCartelas() {
+  cartelasAbertas = !cartelasAbertas;
+  if (cartelasAbertas && !cartelasMontadas) montarListaDeCartelas();
+  $('ex-cartelas').hidden = !cartelasAbertas;
+  $('ex-ver-cartelas').textContent = cartelasAbertas
+    ? 'Ocultar as cartelas'
+    : `Ver todas as ${milhares(estado.cartelas.length)} cartelas`;
 }
 
 /* ─────────── o texto que sai do aplicativo ─────────── */
@@ -808,6 +914,8 @@ $('ex-parar').addEventListener('click', () => {
   trabalhador.postMessage({ tipo: 'parar' });
   avisar('Parando…');
 });
+
+$('ex-ver-cartelas').addEventListener('click', alternarCartelas);
 
 $('ex-copiar').addEventListener('click', async () => {
   try {
