@@ -23,7 +23,7 @@
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
 
-use motor_exato::construtor::{self, Construtor};
+use motor_exato::escalada::{Escalada, EstadoSalvo};
 use motor_exato::limites;
 use motor_exato::problema::{Bloco, Problema};
 use motor_exato::prova::{self, BuscaExata, Desfecho, Instancia};
@@ -96,15 +96,6 @@ struct Verificacao {
     descobertos: usize,
     alvos: usize,
     premiadas: usize,
-}
-
-#[derive(Serialize)]
-struct PassoDaConstrucao {
-    partidas: usize,
-    partidas_previstas: usize,
-    melhor: usize,
-    trabalho: u64,
-    terminou: bool,
 }
 
 #[derive(Serialize)]
@@ -238,48 +229,90 @@ pub fn verificar_com(pedido_json: &str, cartelas_json: &str) -> Result<String, S
 
 /* ─────────── o que demora ─────────── */
 
-/// A construção, com estado, andando por orçamento.
+/// A escalada de cobertura, com estado, andando por orçamento.
+///
+/// O teto de cartelas vem de fora — é o piso que o aplicativo provou — e nunca
+/// é ultrapassado. O que cresce é a cobertura.
 #[wasm_bindgen]
-pub struct ConstrutorExato {
-    interno: Construtor,
+pub struct EscaladaExata {
+    interno: Escalada,
     v: usize,
 }
 
+#[derive(Serialize)]
+struct PassoDaEscalada {
+    cartelas: usize,
+    teto: usize,
+    cobertura: f64,
+    melhor_cobertura: f64,
+    melhor_cartelas: usize,
+    fase: String,
+    trabalho: u64,
+    rodadas: u64,
+    fechou: bool,
+}
+
+fn passo_em_json(passo: &motor_exato::escalada::Passo) -> PassoDaEscalada {
+    PassoDaEscalada {
+        cartelas: passo.cartelas,
+        teto: passo.teto,
+        cobertura: passo.cobertura,
+        melhor_cobertura: passo.melhor_cobertura,
+        melhor_cartelas: passo.melhor_cartelas,
+        fase: passo.fase.to_string(),
+        trabalho: passo.trabalho,
+        rodadas: passo.rodadas,
+        fechou: passo.fechou,
+    }
+}
+
 #[wasm_bindgen]
-impl ConstrutorExato {
+impl EscaladaExata {
     #[wasm_bindgen(constructor)]
-    pub fn novo(pedido_json: &str, teto_de_trabalho: f64) -> Result<ConstrutorExato, JsValue> {
+    pub fn nova(pedido_json: &str, teto: u32) -> Result<EscaladaExata, JsValue> {
         let pedido = ler(pedido_json).map_err(|e| JsValue::from_str(&e))?;
         let p = pedido.problema().map_err(|e| JsValue::from_str(&e))?;
-        let teto = if teto_de_trabalho > 0.0 {
-            teto_de_trabalho as u64
-        } else {
-            construtor::TRABALHO_DE_UMA_CONSTRUCAO
-        };
-        Ok(ConstrutorExato { interno: Construtor::com_teto(&p, teto), v: p.v })
+        Ok(EscaladaExata { interno: Escalada::nova(&p, teto.max(1) as usize), v: p.v })
+    }
+
+    /// Retoma um trabalho guardado, de onde ele parou.
+    pub fn retomada(estado_json: &str) -> Result<EscaladaExata, JsValue> {
+        let estado: EstadoSalvo =
+            serde_json::from_str(estado_json).map_err(|e| JsValue::from_str(&e.to_string()))?;
+        let interno =
+            Escalada::retomar(&estado).map_err(|e| JsValue::from_str(&e.to_string()))?;
+        Ok(EscaladaExata { interno, v: estado.v })
     }
 
     /// Trabalha uma fatia e devolve onde parou.
     pub fn avancar(&mut self, fatia: f64) -> Result<String, JsValue> {
-        let a = self.interno.avancar(fatia.max(1.0) as u64);
-        json(&PassoDaConstrucao {
-            partidas: a.partidas,
-            partidas_previstas: a.partidas_previstas,
-            melhor: a.melhor,
-            trabalho: a.trabalho,
-            terminou: a.terminou,
-        })
-        .map_err(|e| JsValue::from_str(&e))
+        let passo = self.interno.avancar(fatia.max(1.0) as u64);
+        json(&passo_em_json(&passo)).map_err(|e| JsValue::from_str(&e))
     }
 
-    /// As cartelas da melhor construção até agora.
+    /// Onde ela está, sem trabalhar nada.
+    pub fn passo(&self) -> Result<String, JsValue> {
+        json(&passo_em_json(&self.interno.passo())).map_err(|e| JsValue::from_str(&e))
+    }
+
+    /// As cartelas do melhor conjunto já alcançado.
     pub fn melhor(&self) -> Result<String, JsValue> {
         json(&cartelas(self.interno.melhor(), self.v)).map_err(|e| JsValue::from_str(&e))
     }
 
-    /// De que método veio a melhor construção até agora.
-    pub fn metodo(&self) -> String {
-        self.interno.construcao().metodo.to_string()
+    /// A curva de cobertura: por quantas cartelas, quanto já estava coberto.
+    ///
+    /// É a resposta a "1 cartela → quanto? 2 cartelas → quanto?", e existe como
+    /// dado guardado, e não como efeito do instante em que a tela olhou — a
+    /// subida costuma acontecer rápido demais para ser vista ao vivo.
+    pub fn curva(&self) -> Result<String, JsValue> {
+        let pontos: Vec<(u32, f32)> = self.interno.curva().to_vec();
+        json(&pontos).map_err(|e| JsValue::from_str(&e))
+    }
+
+    /// O estado inteiro, para guardar e continuar depois.
+    pub fn guardar(&self) -> Result<String, JsValue> {
+        json(&self.interno.guardar()).map_err(|e| JsValue::from_str(&e))
     }
 }
 
@@ -549,15 +582,23 @@ mod testes {
         assert_eq!(premiadas["valor"], 228, "a contagem dobra com o pedido");
     }
 
+    /// Sobe a escalada até fechar, e devolve o que ela achou.
+    fn escalar_ate_fechar(pedido: &str, teto: u32) -> EscaladaExata {
+        let mut e = EscaladaExata::nova(pedido, teto).unwrap();
+        for _ in 0..10_000 {
+            let passo: serde_json::Value =
+                serde_json::from_str(&e.avancar(1_000_000.0).unwrap()).unwrap();
+            if passo["fechou"].as_bool().unwrap() {
+                break;
+            }
+        }
+        e
+    }
+
     #[test]
     fn o_verificador_reprova_o_que_nao_cobre_e_aprova_o_que_cobre() {
         let pedido = r#"{"v":7,"k":3,"j":2,"t":2,"r":1}"#;
-        let mut c = ConstrutorExato::novo(pedido, 0.0).unwrap();
-        while !serde_json::from_str::<serde_json::Value>(&c.avancar(1_000_000.0).unwrap()).unwrap()
-            ["terminou"]
-            .as_bool()
-            .unwrap()
-        {}
+        let c = escalar_ate_fechar(pedido, 7);
         let lista = c.melhor().unwrap();
         let saida = verificar_com(pedido, &lista).unwrap();
         assert!(saida.contains("\"cobre\":true"), "{saida}");
@@ -576,27 +617,86 @@ mod testes {
         assert!(erro.contains("fora do pool"), "{erro}");
     }
 
-    /// **A garantia contra a tela muda**, do lado da ponte: o andamento precisa
-    /// andar entre uma fatia e outra, e terminar.
+    /// **A regra do aplicativo, do lado da ponte:** o número de cartelas nunca
+    /// passa do teto, em nenhuma fatia.
     #[test]
-    fn a_construcao_anda_em_fatias_e_termina() {
-        let mut c = ConstrutorExato::novo(r#"{"v":10,"k":4,"j":2,"t":2,"r":1}"#, 0.0).unwrap();
-        let primeiro: serde_json::Value =
-            serde_json::from_str(&c.avancar(5_000.0).unwrap()).unwrap();
-        assert!(primeiro["trabalho"].as_u64().unwrap() > 0);
-
-        let mut anterior = primeiro;
-        for _ in 0..200_000 {
-            let agora: serde_json::Value =
-                serde_json::from_str(&c.avancar(5_000.0).unwrap()).unwrap();
-            assert!(agora["trabalho"].as_u64().unwrap() >= anterior["trabalho"].as_u64().unwrap());
-            if agora["terminou"].as_bool().unwrap() {
-                assert!(agora["melhor"].as_u64().unwrap() > 0);
-                return;
-            }
-            anterior = agora;
+    fn a_escalada_nunca_passa_do_teto() {
+        let mut e = EscaladaExata::nova(r#"{"v":10,"k":4,"j":2,"t":2,"r":1}"#, 6).unwrap();
+        for _ in 0..500 {
+            let passo: serde_json::Value =
+                serde_json::from_str(&e.avancar(5_000.0).unwrap()).unwrap();
+            assert!(passo["cartelas"].as_u64().unwrap() <= 6, "{passo}");
+            assert_eq!(passo["teto"], 6);
         }
-        panic!("a construção não terminou");
+        let cartelas: Vec<Vec<u32>> = serde_json::from_str(&e.melhor().unwrap()).unwrap();
+        assert!(cartelas.len() <= 6);
+    }
+
+    /// A cobertura sobe, e a melhor nunca regride — é o que a barra desenha.
+    #[test]
+    fn a_cobertura_sobe_e_a_melhor_nunca_regride() {
+        let mut e = EscaladaExata::nova(r#"{"v":9,"k":3,"j":2,"t":2,"r":1}"#, 12).unwrap();
+        let mut anterior = 0.0;
+        let mut subiu = false;
+        for _ in 0..500 {
+            let passo: serde_json::Value =
+                serde_json::from_str(&e.avancar(5_000.0).unwrap()).unwrap();
+            let melhor = passo["melhor_cobertura"].as_f64().unwrap();
+            assert!(melhor >= anterior - 1e-12, "a melhor cobertura caiu");
+            if melhor > anterior {
+                subiu = true;
+            }
+            anterior = melhor;
+        }
+        assert!(subiu, "a cobertura precisa subir");
+        assert!(anterior > 0.0);
+    }
+
+    /// A curva atravessa a ponte, com a forma que a tela desenha.
+    #[test]
+    fn a_curva_atravessa_a_ponte() {
+        let e = escalar_ate_fechar(r#"{"v":9,"k":3,"j":2,"t":2,"r":1}"#, 12);
+        let curva: Vec<(u32, f32)> = serde_json::from_str(&e.curva().unwrap()).unwrap();
+        assert_eq!(curva.len(), 12, "um ponto por cartela");
+        assert_eq!(curva[0].0, 1);
+        assert!((curva[0].1 - 3.0 / 36.0).abs() < 1e-5, "primeiro ponto: {}", curva[0].1);
+    }
+
+    /// Guardar e retomar: o trabalho continua de onde parou.
+    #[test]
+    fn a_escalada_guarda_e_retoma() {
+        let pedido = r#"{"v":10,"k":4,"j":3,"t":2,"r":1}"#;
+        let mut e = EscaladaExata::nova(pedido, 10).unwrap();
+        for _ in 0..30 {
+            e.avancar(5_000.0).unwrap();
+        }
+        let antes: serde_json::Value = serde_json::from_str(&e.passo().unwrap()).unwrap();
+        let salvo = e.guardar().unwrap();
+
+        let retomada = EscaladaExata::retomada(&salvo).unwrap();
+        let depois: serde_json::Value = serde_json::from_str(&retomada.passo().unwrap()).unwrap();
+        assert_eq!(antes["cartelas"], depois["cartelas"]);
+        assert_eq!(antes["fase"], depois["fase"]);
+        assert_eq!(antes["trabalho"], depois["trabalho"]);
+        assert_eq!(e.melhor().unwrap(), retomada.melhor().unwrap());
+        assert_eq!(e.curva().unwrap(), retomada.curva().unwrap());
+    }
+
+    /// Onde o piso é alcançável, a escalada fecha exatamente nele — e o que ela
+    /// devolve passa pelo verificador.
+    #[test]
+    fn onde_o_piso_e_alcancavel_a_ponte_fecha_nele() {
+        let pedido = r#"{"v":18,"k":17,"j":15,"t":15,"r":1}"#;
+        let piso: serde_json::Value = serde_json::from_str(&limitar_com(pedido).unwrap()).unwrap();
+        assert_eq!(piso["valor"], 16);
+
+        let e = escalar_ate_fechar(pedido, 16);
+        let passo: serde_json::Value = serde_json::from_str(&e.passo().unwrap()).unwrap();
+        assert_eq!(passo["fechou"], true, "{passo}");
+        assert_eq!(passo["melhor_cartelas"], 16);
+
+        let conferido = verificar_com(pedido, &e.melhor().unwrap()).unwrap();
+        assert!(conferido.contains("\"cobre\":true"), "{conferido}");
     }
 
     #[test]
