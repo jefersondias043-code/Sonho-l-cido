@@ -44,11 +44,13 @@
 //! linhas, e em troca a matemática do aplicativo se lê num lugar só.
 
 pub mod construtor;
+pub mod escalada;
 pub mod limites;
 pub mod prova;
 pub mod problema;
 pub mod veredito;
 
 pub use limites::{Limite, LimiteInferior};
+pub use escalada::{Escalada, EstadoSalvo, Fase, Passo};
 pub use problema::{Bloco, Problema};
 pub use veredito::{Relatorio, Veredito};
