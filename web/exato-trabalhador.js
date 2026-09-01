@@ -215,6 +215,10 @@ onmessage = async (evento) => {
       tipo: 'erro',
       etapa: mensagem.etapa ?? null,
       estagio: mensagem.tipo,
+      // O pedido volta junto pelo mesmo motivo da prévia: a recusa precisa ser
+      // atribuída à configuração que a provocou, e não à que estiver na tela
+      // quando ela chegar.
+      pedido: mensagem.pedido,
       mensagem: String(erro?.message ?? erro),
     });
   }

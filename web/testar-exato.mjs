@@ -442,6 +442,30 @@ try {
     outraEscala
   );
 
+  // Uma configuração que o motor vai recusar é dita na hora de escolher, e não
+  // depois de tocar em Resolver — que é justamente para isso que a prévia
+  // existe.
+  await marcarNumeros(25, Array.from({ length: 25 }, (_, i) => i + 1));
+  await regras(12, 15, 11);
+  await pagina.waitForFunction(
+    () => /não cabe/.test(document.getElementById('ex-escala').textContent),
+    undefined,
+    { timeout: 20000 }
+  );
+  marcar(
+    /teto é 4000000/.test(await texto('#ex-escala')),
+    'e um pedido grande demais é recusado já na escolha, com o número',
+    (await texto('#ex-escala')).slice(0, 100)
+  );
+
+  await marcarNumeros(25, Array.from({ length: 18 }, (_, i) => i + 1));
+  await regras(17, 15, 15);
+  await pagina.waitForFunction(
+    () => / 16 cartelas/.test(document.getElementById('ex-escala').textContent),
+    undefined,
+    { timeout: 20000 }
+  );
+
   await pagina.selectOption('#ex-esforco', '1');
   await pagina.click('#ex-resolver');
   await esperarResultado(180000);

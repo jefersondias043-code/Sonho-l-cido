@@ -79,6 +79,16 @@ melhor cobertura que alcancei foi 86,4%. O piso diz que nada menor que 160
 existe — não diz que 160 basta."* O trabalho fica guardado no aparelho, e voltar
 depois continua de onde parou.
 
+### Saber o tamanho do trabalho antes de começá-lo
+
+A diferença entre 18 números e 25 números com jogos de 17 é a diferença entre
+**16 cartelas e 27.124** — entre segundos e minutos enchendo o aparelho. Até
+então a única forma de descobrir isso era resolver.
+
+Agora o estágio 2 diz quanto o pedido custa enquanto você escolhe, e diz também
+quando ele não cabe. O cálculo é contagem pura, não busca, e leva
+microssegundos.
+
 ### O histórico: os fechamentos ficam guardados
 
 O Construtor Exato tem duas abas, e a segunda é a área de gerenciamento dos
@@ -751,6 +761,7 @@ web/                     a interface da plataforma
 ├── exato-checador.js    o trabalhador das simulações longas do Exato
 ├── exato-historico.js   os fechamentos guardados, com o estado do motor junto
 ├── exato-sessao.js      o arquivo de fechamento: exportar e importar
+├── exato-veredito.js    o que os dois números autorizam a afirmar
 ├── exato-veredito.js    a regra do que pode ser afirmado, sem DOM e sem wasm
 └── sw.js                funcionamento sem internet e atualização automática
 ```
@@ -903,6 +914,7 @@ node web/testar-construtor.mjs                  # testa o Construtor
 node web/testar-exato.mjs                       # testa o Construtor Exato
 node web/testar-exato-checagem.mjs              # a aritmética do dinheiro, sem navegador
 node web/testar-exato-historico.mjs             # o histórico e o arquivo, sem navegador
+node web/testar-exato-veredito.mjs              # o que ele tem direito de afirmar
 cargo run --release --example gerar-lotinha     # regera o banco de fechamentos
 
 python3 -m http.server -d site 8000             # experimenta localmente

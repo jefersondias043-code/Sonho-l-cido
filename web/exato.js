@@ -234,9 +234,11 @@ function pintarParametrosSem() {
   $('ex-contagem').innerHTML =
     v === 0
       ? '<b>Nenhum número marcado.</b> <em>Marque os que você vai jogar.</em>'
-      : `<b>${v} de ${universo} marcados.</b> <em>São ${milhares(
-          combinacoes(v, sorteio)
-        )} sorteios possíveis dentro deles.</em>`;
+      : `<b>${v} de ${universo} marcados.</b> <em>${
+          combinacoes(v, sorteio) === 1
+            ? 'Há um único sorteio possível dentro deles.'
+            : `São ${milhares(combinacoes(v, sorteio))} sorteios possíveis dentro deles.`
+        }</em>`;
 
   const ateV = (limite) => {
     const lista = [];
@@ -302,6 +304,13 @@ function pedirAEscala() {
     escalaPedida = JSON.stringify(atual);
     trabalhador.postMessage({ tipo: 'previa', pedido: escalaPedida });
   }, 250);
+}
+
+/** O motor recusou o pedido — e é melhor saber disso agora que depois. */
+function pintarEscalaRecusada(motivo, doPedido) {
+  if (rodando || doPedido !== JSON.stringify(pedidoDaTela())) return;
+  $('ex-escala').innerHTML =
+    `<b>Este pedido não cabe neste aparelho.</b> <em>${escapar(motivo)}</em>`;
 }
 
 function pintarEscala(dados, doPedido) {
@@ -1033,6 +1042,20 @@ function depoisDaVerificacao() {
     pintarResultado();
     return;
   }
+  /*
+   * Daqui para baixo não se chega — e é de propósito.
+   *
+   * A escalada monta no máximo `piso` cartelas, então `encontrado > piso` é
+   * impossível: fechar a cobertura é fechar exatamente no mínimo. A varredura
+   * abaixo resolvia o problema do desenho anterior, em que a construção podia
+   * passar do piso e era preciso provar que nada menor existia.
+   *
+   * Fica de pé porque `ProvaExata` continua sendo o alicerce da busca cíclica
+   * planejada — escolher órbitas em vez de cartelas —, e porque o Rust dela é
+   * testado. O que **não** pode ficar é a tela prometendo uma busca que não
+   * acontece: o rótulo do esforço e o texto do estágio 7 falam do que de fato
+   * roda, que é o aprofundamento do piso.
+   */
   estado.linhasDaProva = [];
   pintarProva(['<em>Varrendo a família cíclica…</em>'], true);
   enviar({
@@ -1106,6 +1129,14 @@ trabalhador.onmessage = (evento) => {
     return;
   }
 
+  // Um pedido que o motor recusa também é uma resposta sobre a escala, e é a
+  // mais útil de todas: dizê-la aqui evita que a pessoa escolha, toque em
+  // Resolver e só então descubra que o problema não cabe no aparelho.
+  if (mensagem.tipo === 'erro' && mensagem.estagio === 'previa') {
+    pintarEscalaRecusada(mensagem.mensagem, mensagem.pedido ?? '');
+    return;
+  }
+
   if (mensagem.etapa !== etapa) return;
 
   if (mensagem.tipo === 'erro') {
@@ -1169,7 +1200,11 @@ trabalhador.onmessage = (evento) => {
       // seguinte por conta própria.
       if (estado.parado) {
         pintarProva(
-          ['<b>Interrompido antes da prova.</b> <em>O que está acima continua valendo.</em>'],
+          [
+            '<b>Interrompido.</b>',
+            '<em>Tudo o que está acima continua valendo, e o trabalho ficou ' +
+              'guardado no histórico.</em>',
+          ],
           false
         );
         pintarResultado();
