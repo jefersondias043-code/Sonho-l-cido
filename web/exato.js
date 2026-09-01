@@ -387,6 +387,8 @@ function comecar(estadoGuardado = null, sessao = null) {
     escalada: null,
     guardado: null,
     curva: sessao?.curva ?? [],
+    melhorCobertura: -1,
+    desdeAMelhora: Date.now(),
   };
 
   esconderTudo();
@@ -470,9 +472,27 @@ function pintarCurva(pontos) {
  * ao teto, então o que há para acompanhar é o quanto já está coberto. Uma barra
  * de tempo aqui só diria quanto o aparelho trabalhou, que é o que menos importa.
  */
+/** "2 min 30 s", "45 s" — quanto tempo faz, escrito para ser lido de relance. */
+function haQuanto(milissegundos) {
+  const segundos = Math.max(0, Math.round(milissegundos / 1000));
+  if (segundos < 60) return `${segundos} s`;
+  const minutos = Math.floor(segundos / 60);
+  const resto = segundos % 60;
+  return resto ? `${minutos} min ${resto} s` : `${minutos} min`;
+}
+
 function pintarEscalada(passo, terminou) {
   $('ex-construcao-cartao').hidden = false;
   estado.escalada = passo;
+
+  // Quando a cobertura melhorou pela última vez. Na reorganização é o único
+  // número que responde à pergunta que a pessoa está fazendo — "ainda vale a
+  // pena deixar isso rodando?" —, e o motor não o entrega: as rodadas sobem
+  // sempre, melhorando ou não.
+  if (passo.melhor_cobertura > (estado.melhorCobertura ?? -1)) {
+    estado.melhorCobertura = passo.melhor_cobertura;
+    estado.desdeAMelhora = Date.now();
+  }
 
   $('ex-cartelas-agora').textContent = milhares(passo.cartelas);
   $('ex-teto').textContent = milhares(passo.teto);
@@ -486,15 +506,42 @@ function pintarEscalada(passo, terminou) {
     return;
   }
 
-  const fase =
-    passo.fase === 'subindo'
-      ? `subindo — ${milhares(passo.cartelas)} de ${milhares(passo.teto)} cartelas`
-      : `reorganizando as ${milhares(passo.cartelas)}, sem acrescentar nenhuma ` +
-        `(${milhares(passo.rodadas)} rodadas)`;
+  if (terminou) {
+    $('ex-construcao').innerHTML =
+      `<b>${porcento(passo.melhor_cobertura)} de cobertura, com ${emCartelas(
+        passo.cartelas
+      )}.</b> <em>Parada. O botão continuar retoma daqui.</em>`;
+    return;
+  }
 
+  /*
+   * Subindo e reorganizando são dois trabalhos diferentes, e a diferença
+   * importa para quem está olhando.
+   *
+   * Subindo, há um fim à vista: faltam tantas cartelas para o teto. Na
+   * reorganização não há — ela roda até fechar ou até mandarem parar, e foi
+   * assim que se pediu. Mas a tela dizia só "reorganizando (12.345 rodadas)", e
+   * as rodadas sobem sempre, melhorando ou não: quem olhava não tinha como
+   * distinguir progresso de teimosia, nem sabia que aquilo não ia terminar
+   * sozinho. Uma configuração comum — 20 dezenas, jogos de 17 — chega ao teto
+   * em 86,4% e reorganiza para sempre, e o primeiro encontro com isso é uma
+   * tela que parece travada.
+   */
+  if (passo.fase === 'subindo') {
+    $('ex-construcao').innerHTML =
+      `<b>${porcento(passo.melhor_cobertura)} de cobertura</b> ` +
+      `<em>— subindo: ${milhares(passo.cartelas)} de ${milhares(passo.teto)} cartelas.</em>`;
+    return;
+  }
+
+  const parado = haQuanto(Date.now() - (estado.desdeAMelhora ?? Date.now()));
   $('ex-construcao').innerHTML =
-    `<b>${porcento(passo.melhor_cobertura)} de cobertura</b> <em>— ${escapar(fase)}.</em>` +
-    (terminou ? '<br><em>Parada. O botão continuar retoma daqui.</em>' : '');
+    `<b>${porcento(passo.melhor_cobertura)} de cobertura</b> ` +
+    `<em>— no teto de ${milhares(passo.teto)} cartelas, reorganizando sem acrescentar ` +
+    `nenhuma (${milhares(passo.rodadas)} rodadas).</em>` +
+    `<br><em>Sem melhorar há <b>${parado}</b>. Ela não para sozinha: toque em ` +
+    `<b>Parar</b> quando o que está aí já servir — o resultado fica guardado, e ` +
+    `dá para continuar depois.</em>`;
 }
 
 function pintarVerificacao(dados) {

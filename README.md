@@ -74,6 +74,13 @@ reorganizar o conjunto — troca uma por outra, derruba várias e repõe várias
 reestrutura inteiro. Foi a reorganização que levou aquelas mesmas doze de 94,4%
 a 100%, e é por isso que doze é o mínimo, provado.
 
+Quando o teto não basta, a escalada **não termina sozinha** — foi assim que se
+pediu, e é a única fase sem fim do aplicativo. Por isso a tela diz, enquanto ela
+roda, as duas coisas que decidem se vale seguir: que ela não para por conta
+própria, e há quanto tempo a cobertura não melhora. Sem isso, o primeiro
+encontro com um problema que não fecha é uma tela que parece travada — 20
+dezenas com jogos de 17 chegam ao teto em 86,4% e reorganizam indefinidamente.
+
 Quando o teto não basta, a tela diz com todas as letras: *"Com 160 cartelas, a
 melhor cobertura que alcancei foi 86,4%. O piso diz que nada menor que 160
 existe — não diz que 160 basta."* O trabalho fica guardado no aparelho, e voltar

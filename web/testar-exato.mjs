@@ -342,6 +342,23 @@ try {
     { timeout: 90000 }
   );
   await pagina.waitForTimeout(5000);
+
+  // Esta configuração chega ao teto em 86,4% e reorganiza para sempre — foi
+  // assim que se pediu, e é a única fase sem fim do aplicativo. A tela precisa
+  // dizer as duas coisas que decidem se vale seguir: que ela não para sozinha, e
+  // há quanto tempo não melhora. Sem isso, o primeiro encontro com um problema
+  // que não fecha é uma tela que parece travada.
+  const durante = await texto('#ex-construcao');
+  marcar(
+    /não para sozinha/.test(durante) && /Parar/.test(durante),
+    'a fase sem fim diz que não termina sozinha, e o que fazer a respeito',
+    durante.slice(durante.indexOf('Sem melhorar'), durante.indexOf('Sem melhorar') + 80)
+  );
+  marcar(
+    /Sem melhorar há \d+/.test(durante),
+    'e há quanto tempo a cobertura não melhora, que é o que decide se vale seguir'
+  );
+
   await pagina.click('#ex-parar');
   await esperarResultado(120000);
   const guardado = await pagina.evaluate(() => {
