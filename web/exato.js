@@ -1,11 +1,13 @@
 /*
  * A tela do Construtor Matemático Exato.
  *
- * O aplicativo tem oito estágios e mostra os oito. A tentação seria uma chamada
- * só que devolvesse um número no fim de dois minutos — e ela esconderia
- * justamente o que há para ver: que determinar o mínimo, construir, verificar e
- * provar são quatro trabalhos diferentes, e que só o encontro dos dois últimos
- * autoriza a palavra "mínimo".
+ * Onze estágios, e ele mostra os onze. A tentação seria uma chamada só que
+ * devolvesse um número no fim de dois minutos — e ela esconderia justamente o
+ * que há para ver: que determinar o mínimo, construir, verificar e provar são
+ * quatro trabalhos diferentes, e que só o encontro dos dois últimos autoriza a
+ * palavra "mínimo". Depois deles vêm o dinheiro, a conferência e a simulação,
+ * que respondem o "e daí?"; e ao lado, numa aba própria, o histórico dos
+ * fechamentos.
  *
  * Todo estágio longo mostra progresso ao vivo e pode ser parado. A versão
  * anterior não mostrava nada, e uma tela parada é indistinguível de uma tela
@@ -109,6 +111,14 @@ function escapar(texto) {
 
 const milhares = (n) => Number(n).toLocaleString('pt-BR');
 
+/**
+ * "1 cartela", "16 cartelas".
+ *
+ * O singular acontece de verdade: 18 números com jogos de 17 garantindo 13 tem
+ * mínimo de uma cartela só, e a tela dizia "custa 1 cartelas".
+ */
+const emCartelas = (n) => `${milhares(n)} cartela${Number(n) === 1 ? '' : 's'}`;
+
 /** Números grandes vêm do motor como texto, porque não cabem num `Number`. */
 function grande(texto) {
   const n = Number(texto);
@@ -201,6 +211,7 @@ function escalaDePremiadas(teto) {
 function pintarParametros() {
   pintarParametrosSem();
   pintarOfertaDeRetomar();
+  pedirAEscala();
 }
 
 function pintarParametrosSem() {
@@ -259,6 +270,56 @@ function trocarUniverso() {
   for (const n of [...escolhidos]) if (n > universo) escolhidos.delete(n);
   montarGrade();
   pintarParametros();
+}
+
+/* ─────────── a escala do problema, antes de começar ─────────── */
+
+/*
+ * Quantas cartelas este pedido vai custar — perguntado antes de resolver.
+ *
+ * Sem isto, a única forma de saber se uma configuração dá 16 cartelas ou 27.000
+ * é resolvê-la. São dois problemas de naturezas completamente diferentes — um
+ * termina em segundos, o outro enche o aparelho — e escolher entre eles às
+ * cegas é o tipo de coisa que faz alguém desistir da ferramenta.
+ *
+ * O cálculo é o mesmo do estágio 4 e leva microssegundos: é contagem, não
+ * busca. O que ele responde é o **piso**, que aqui é também o teto — o número
+ * de cartelas que a escalada vai montar.
+ */
+let relogioDaEscala = null;
+let escalaPedida = null;
+
+function pedirAEscala() {
+  const atual = pedidoDaTela();
+  $('ex-escala').innerHTML = '';
+  if (!atual || rodando) return;
+
+  // Enquanto o dedo desliza pelas opções, o pedido muda várias vezes por
+  // segundo. Perguntar a cada mudança seria dezenas de idas ao motor para
+  // mostrar um número que já mudou.
+  clearTimeout(relogioDaEscala);
+  relogioDaEscala = setTimeout(() => {
+    escalaPedida = JSON.stringify(atual);
+    trabalhador.postMessage({ tipo: 'previa', pedido: escalaPedida });
+  }, 250);
+}
+
+function pintarEscala(dados, doPedido) {
+  // A resposta pode chegar depois de a pessoa já ter mudado de ideia.
+  if (rodando || doPedido !== JSON.stringify(pedidoDaTela())) return;
+
+  const quantas = dados.valor;
+  const porte =
+    quantas <= 100
+      ? 'termina em segundos'
+      : quantas <= 2_000
+        ? 'leva algum tempo, e cabe folgado no aparelho'
+        : 'é um fechamento grande — vai levar minutos e ocupar bastante espaço';
+
+  $('ex-escala').innerHTML =
+    `<b>Este pedido custa ${emCartelas(quantas)}.</b> ` +
+    `<em>É o mínimo matemático, e também o teto: a escalada monta até aí e não ` +
+    `passa. ${porte}.</em>`;
 }
 
 /* ─────────── a sequência ─────────── */
@@ -360,7 +421,7 @@ function pintarPiso(dados) {
   estado.fechado = dados.fechado;
   $('ex-piso-cartao').hidden = false;
   $('ex-piso').innerHTML =
-    `<b>Nada menor que ${milhares(dados.valor)} cartelas existe.</b>` +
+    `<b>Nada menor que ${emCartelas(dados.valor)} existe.</b>` +
     `<br><em>De onde vem: ${escapar(dados.origem)}.</em>` +
     (dados.fechado
       ? ''
@@ -411,7 +472,7 @@ function pintarEscalada(passo, terminou) {
 
   if (passo.fechou) {
     $('ex-construcao').innerHTML =
-      `<b>Fechou em 100% com ${milhares(passo.melhor_cartelas)} cartelas.</b>` +
+      `<b>Fechou em 100% com ${emCartelas(passo.melhor_cartelas)}.</b>` +
       `<br><em>Exatamente o teto — e o teto é o piso provado.</em>`;
     return;
   }
@@ -541,6 +602,7 @@ function pintarPreviaDasCartelas(numeros) {
   cartelasMontadas = false;
   $('ex-cartelas').hidden = true;
   $('ex-cartelas').innerHTML = '';
+  $('ex-ver-cartelas').classList.remove('aberto');
 
   $('ex-previa').innerHTML =
     `<div class="cartelas">${estado.cartelas
@@ -550,10 +612,10 @@ function pintarPreviaDasCartelas(numeros) {
 
   $('ex-aviso-cartelas').innerHTML =
     total > quantas
-      ? `<b>${milhares(total)} cartelas.</b> <em>Mostrando ${
+      ? `<b>${emCartelas(total)}.</b> <em>Mostrando ${
           quantas === 1 ? 'a primeira' : `as ${quantas} primeiras`
         } — o botão abaixo abre a lista inteira, e o Copiar leva todas.</em>`
-      : `<b>${milhares(total)} cartela${total === 1 ? '' : 's'}.</b> <em>São todas.</em>`;
+      : `<b>${emCartelas(total)}.</b> <em>São todas.</em>`;
 
   const botao = $('ex-ver-cartelas');
   botao.hidden = total <= quantas;
@@ -602,9 +664,20 @@ function alternarCartelas() {
   cartelasAbertas = !cartelasAbertas;
   if (cartelasAbertas && !cartelasMontadas) montarListaDeCartelas();
   $('ex-cartelas').hidden = !cartelasAbertas;
-  $('ex-ver-cartelas').textContent = cartelasAbertas
+
+  const botao = $('ex-ver-cartelas');
+  botao.textContent = cartelasAbertas
     ? 'Ocultar as cartelas'
     : `Ver todas as ${milhares(estado.cartelas.length)} cartelas`;
+  // Aberto, ele gruda no rodapé: a lista de um fechamento grande passa de
+  // 800.000 px, e sem isto quem rola para dentro dela não tem como voltar.
+  botao.classList.toggle('aberto', cartelasAbertas);
+
+  // Fechar de dentro da lista deixaria a página rolada num ponto que já não
+  // existe. Voltar ao botão é voltar ao lugar de onde se saiu.
+  if (!cartelasAbertas) {
+    botao.scrollIntoView({ block: 'center', behavior: 'instant' });
+  }
 }
 
 /* ─────────── o texto que sai do aplicativo ─────────── */
@@ -648,7 +721,7 @@ function guardarTrabalho(estadoJson) {
     piso: estado.piso,
     origem: estado.origem,
     fechado: estado.fechado,
-    cartelas: estado.cartelas,
+    cartelasContadas: estado.cartelas.length,
     escalada: estadoJson,
     curva: estado.curva ?? [],
     cobertura: estado.escalada?.melhor_cobertura ?? 0,
@@ -692,8 +765,10 @@ function pintarOfertaDeRetomar() {
 
   $('ex-retomar-aviso').innerHTML =
     `<b>Há trabalho guardado para estes números.</b> <em>${
-      guardado.cartelas.length
-        ? `${milhares(guardado.cartelas.length)} cartelas, ${porcento(guardado.cobertura)} de ` +
+      historico.contarCartelas(guardado)
+        ? `${milhares(historico.contarCartelas(guardado))} cartelas, ${porcento(
+            guardado.cobertura
+          )} de ` +
           'cobertura. '
         : ''
     }Continuar retoma de onde parou, sem repetir nada.</em>`;
@@ -704,7 +779,11 @@ function pintarOfertaDeRetomar() {
 /** O selo de cada linha: o que aquele fechamento alcançou. */
 function seloDaSessao(sessao) {
   if (sessao.emCurso) return '<span class="sessao-marca viva">trabalhando</span>';
-  if (sessao.verificado && sessao.cartelas.length <= sessao.piso && sessao.piso > 0) {
+  if (
+    sessao.verificado &&
+    historico.contarCartelas(sessao) <= sessao.piso &&
+    sessao.piso > 0
+  ) {
     return '<span class="sessao-marca otima">★ mínimo</span>';
   }
   return '';
@@ -729,8 +808,10 @@ function pintarHistorico() {
       (s) =>
         `<div class="sessao${s.emCurso ? ' em-andamento' : ''}" data-sessao="${escapar(s.id)}">` +
         `<div class="sessao-topo">` +
-        `<span class="sessao-quantia">${milhares(s.cartelas.length)}</span>` +
-        `<span class="sessao-unidade">cartela${s.cartelas.length === 1 ? '' : 's'}</span>` +
+        `<span class="sessao-quantia">${milhares(historico.contarCartelas(s))}</span>` +
+        `<span class="sessao-unidade">cartela${
+          historico.contarCartelas(s) === 1 ? '' : 's'
+        }</span>` +
         seloDaSessao(s) +
         `</div>` +
         `<div class="sessao-config">${escapar(historico.descrever(s.pedido))}` +
@@ -772,7 +853,7 @@ function pintarInterrompido() {
   if (!mostrar) return;
 
   $('ex-hist-interrompido').innerHTML =
-    `<div class="referencia"><b>${milhares(viva.cartelas.length)} cartelas em ${escapar(
+    `<div class="referencia"><b>${emCartelas(historico.contarCartelas(viva))} em ${escapar(
       historico.descrever(viva.pedido)
     )}.</b> <em>${porcento(viva.cobertura)} de cobertura, trabalhado ${escapar(
       historico.quando(viva.atualizadaEm)
@@ -823,7 +904,7 @@ function excluirSessao(id) {
   if (!sessao) return;
   if (
     !globalThis.confirm(
-      `Excluir o fechamento de ${milhares(sessao.cartelas.length)} cartelas em ` +
+      `Excluir o fechamento de ${emCartelas(historico.contarCartelas(sessao))} em ` +
         `${historico.descrever(sessao.pedido)}? Isto não tem volta.`
     )
   ) {
@@ -841,7 +922,10 @@ function exportarSessao(id) {
   const sessao = historico.obter(id);
   if (!sessao) return;
 
-  const pacote = arquivoDeSessao.empacotar(sessao, { versao: CARIMBO });
+  const pacote = arquivoDeSessao.empacotar(sessao, {
+    versao: CARIMBO,
+    cartelas: historico.cartelasDaSessao(sessao),
+  });
   const texto = JSON.stringify(pacote, null, 1);
   const nome = arquivoDeSessao.nomeDoArquivo(pacote);
   const endereco = URL.createObjectURL(new Blob([texto], { type: 'application/json' }));
@@ -892,7 +976,7 @@ async function lerArquivoEscolhido(entrada) {
   $('ex-hist-confirmar-cartao').hidden = false;
   const r = lido.resumo;
   previa.innerHTML =
-    `<b>${milhares(r.cartelas)} cartelas em ${escapar(historico.descrever(r.pedido))}.</b> ` +
+    `<b>${emCartelas(r.cartelas)} em ${escapar(historico.descrever(r.pedido))}.</b> ` +
     `<em>${porcento(r.cobertura)} de cobertura, teto ${milhares(r.teto)}${
       r.verificado ? ', já verificado' : ''
     }.${r.criadoEm ? ` Exportado em ${escapar(r.criadoEm.slice(0, 10))}.` : ''}</em>`;
@@ -905,7 +989,7 @@ function confirmarImportacao() {
   $('ex-hist-confirmar-cartao').hidden = true;
   $('ex-hist-previa').hidden = true;
   pintarHistorico();
-  avisar(`Guardado: ${milhares(sessao.cartelas.length)} cartelas.`);
+  avisar(`Guardado: ${emCartelas(historico.contarCartelas(sessao))}.`);
 }
 
 /* ─────────── o que vem depois de cada estágio ─────────── */
@@ -1014,6 +1098,14 @@ function receberProva(mensagem) {
 
 trabalhador.onmessage = (evento) => {
   const mensagem = evento.data ?? {};
+
+  // A prévia da escala não pertence a execução nenhuma: ela responde enquanto a
+  // pessoa escolhe, e por isso passa antes da conferência de etapa.
+  if (mensagem.tipo === 'previa') {
+    pintarEscala(mensagem.dados, mensagem.pedido ?? '');
+    return;
+  }
+
   if (mensagem.etapa !== etapa) return;
 
   if (mensagem.tipo === 'erro') {

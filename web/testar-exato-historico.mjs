@@ -53,9 +53,24 @@ function marcar(certo, descricao, detalhe = '') {
   console.log(`${certo ? '  ✓' : '  ✗'} ${descricao}${detalhe ? ` — ${detalhe}` : ''}`);
 }
 
-/** Um estado do motor com a forma que o Rust grava. */
+/**
+ * Um estado do motor com a forma que o Rust grava.
+ *
+ * As cartelas são **máscaras de bits**, como o motor as guarda: o bit `i`
+ * ligado quer dizer "contém a posição `i+1`". Uma cartela de `k` posições entre
+ * `v` é uma máscara com `k` bits ligados, e é assim que ela tem de ser aqui —
+ * um número qualquer decodifica para uma cartela que o aplicativo nunca
+ * produziria, e o teste passaria a cobrar outra coisa.
+ */
 function estadoDoMotor({ v = 18, k = 17, j = 15, t = 15, r = 1, teto = 16, quantas = 16 } = {}) {
-  const blocos = Array.from({ length: quantas }, (_, i) => i + 1);
+  const todos = (1 << v) - 1;
+  const blocos = Array.from({ length: quantas }, (_, i) => {
+    // Tira `v - k` posições diferentes a cada cartela: máscaras distintas, com
+    // exatamente `k` bits, dentro do pool.
+    let mascara = todos;
+    for (let f = 0; f < v - k; f += 1) mascara &= ~(1 << ((i + f * 7) % v));
+    return mascara >>> 0;
+  });
   return JSON.stringify({
     v, k, j, t, r, teto,
     cartelas: blocos,
@@ -82,9 +97,7 @@ function sessaoDeTeste(ajustes = {}) {
     piso: 16,
     origem: 'cota de contagem',
     fechado: true,
-    cartelas: Array.from({ length: quantas }, () =>
-      Array.from({ length: pedido.k }, (_, i) => i + 1)
-    ),
+    cartelasContadas: quantas,
     escalada: ajustes.escalada ?? estadoDoMotor({ ...pedido, quantas }),
     curva: [[1, 0.06], [16, 1]],
     cobertura: 1,
@@ -103,9 +116,9 @@ console.log('Teste do histórico do Construtor Exato\n');
 historico.limpar();
 const a = historico.criar(sessaoDeTeste());
 marcar(
-  historico.quantidade() === 1 && historico.obter(a.id)?.cartelas.length === 16,
+  historico.quantidade() === 1 && historico.contarCartelas(historico.obter(a.id)) === 16,
   'um fechamento guardado volta com a mesma quantidade de cartelas',
-  `${historico.obter(a.id)?.cartelas.length} cartelas`
+  `${historico.contarCartelas(historico.obter(a.id))} cartelas`
 );
 
 const b = historico.criar(sessaoDeTeste({ pedido: { v: 20, k: 17, j: 15, t: 15, r: 1 }, quantas: 160 }));
@@ -114,7 +127,7 @@ marcar(
   'o mais recente aparece primeiro na lista'
 );
 
-historico.atualizar(a.id, { cobertura: 0.5, cartelas: [] });
+historico.atualizar(a.id, { cobertura: 0.5 });
 marcar(
   historico.obter(a.id).cobertura === 0.5 && historico.listar()[0].id === a.id,
   'atualizar mexe no conteúdo e traz o trabalho para o topo'
@@ -143,7 +156,7 @@ const ruins = [
   }],
   ['sem os números da grade', { ...sessaoDeTeste(), id: 'x', numeros: [] }],
   ['sem o estado do motor', { ...sessaoDeTeste(), id: 'x', escalada: '' }],
-  ['com cartela do tamanho errado', {
+  ['com cartela do tamanho errado, gravada por uma versão antiga', {
     ...sessaoDeTeste(), id: 'x', cartelas: [[1, 2, 3]],
   }],
   ['com cartela apontando fora do pool', {
@@ -227,7 +240,11 @@ marcar(historico.interrompida() === null, 'e some da lista de interrompidos ao s
 
 historico.limpar();
 const original = historico.criar(sessaoDeTeste({ quantas: 16 }));
-const pacote = arquivo.empacotar(original, { versao: 'abc123' });
+const cartelasDecodificadas = historico.cartelasDaSessao(original);
+const pacote = arquivo.empacotar(original, {
+  versao: 'abc123',
+  cartelas: cartelasDecodificadas,
+});
 const texto = JSON.stringify(pacote);
 const lido = arquivo.interpretar(texto);
 
@@ -240,12 +257,12 @@ marcar(
 
 const devolta = arquivo.paraSessao(lido.pacote);
 marcar(
-  devolta.cartelas.length === original.cartelas.length &&
+  historico.contarCartelas(devolta) === historico.contarCartelas(original) &&
     devolta.escalada === original.escalada &&
     JSON.stringify(devolta.pedido) === JSON.stringify(original.pedido) &&
     JSON.stringify(devolta.numeros) === JSON.stringify(original.numeros),
   'a ida e volta pelo arquivo preserva as cartelas, os números e o estado do motor',
-  `${devolta.cartelas.length} cartelas, estado de ${devolta.escalada.length} bytes`
+  `${historico.contarCartelas(devolta)} cartelas, estado de ${devolta.escalada.length} bytes`
 );
 marcar(
   devolta.emCurso === false,
@@ -255,6 +272,28 @@ marcar(
   /^sonho-lucido-exato-18-17-15-\d{4}-\d{2}-\d{2}\.json$/.test(arquivo.nomeDoArquivo(pacote)),
   'o nome do arquivo diz o que tem dentro',
   arquivo.nomeDoArquivo(pacote)
+);
+
+/* ─── 7b. as cartelas saem do estado, e não de uma cópia ─── */
+
+marcar(
+  cartelasDecodificadas.length === 16 &&
+    cartelasDecodificadas.every((c) => c.length === 17),
+  'as cartelas são decodificadas das máscaras do motor, sem cópia guardada',
+  `${cartelasDecodificadas.length} cartelas de ${cartelasDecodificadas[0]?.length} posições`
+);
+marcar(
+  cartelasDecodificadas.every((c) =>
+    c.every((posicao, i) => posicao >= 1 && posicao <= 18 && (i === 0 || posicao > c[i - 1]))
+  ),
+  'e cada uma sai com as posições em ordem, dentro do pool',
+  cartelasDecodificadas[0]?.join(' ')
+);
+marcar(
+  JSON.stringify(historico.obter(original.id)).length < 3000 &&
+    !('cartelas' in historico.obter(original.id)),
+  'a sessão guardada não carrega a lista de cartelas',
+  `${JSON.stringify(historico.obter(original.id)).length} bytes por sessão`
 );
 
 /* ─── 8. a invariante: a ficha e o estado contam a mesma história ─── */

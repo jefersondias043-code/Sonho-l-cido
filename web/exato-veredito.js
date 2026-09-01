@@ -72,20 +72,61 @@ export function frase({
   })}%`;
   switch (veredito({ verificado, encontrado, piso, ciclicaFechou, teto })) {
     case PARCIAL:
-      return (
-        `Com ${teto} cartelas, a melhor cobertura que alcancei foi ${alcancado}. ` +
-        `O piso diz que nada menor que ${piso} existe — não diz que ${piso} basta.`
-      );
+      return fraseParcial(encontrado, piso, teto, alcancado);
     case FALHA:
-      return `A construção deixou ${descobertos} alvos descobertos.`;
+      return `A construção deixou ${milhar(descobertos)} alvos descobertos.`;
     case MINIMO:
-      return `Mínimo exato: ${encontrado} cartelas — provado, nada menor existe.`;
+      return `Mínimo exato: ${milhar(encontrado)} cartelas — provado, nada menor existe.`;
     case MINIMO_CICLICO:
       return (
-        `Solução encontrada: ${encontrado} · Mínimo comprovado: ≥ ${piso} · ` +
+        `Solução encontrada: ${milhar(encontrado)} · Mínimo comprovado: ≥ ${milhar(piso)} · ` +
         `Nenhuma solução com simetria de rotação é menor.`
       );
     default:
-      return `Solução encontrada: ${encontrado} · Mínimo comprovado: ≥ ${piso}`;
+      return `Solução encontrada: ${milhar(encontrado)} · Mínimo comprovado: ≥ ${milhar(piso)}`;
   }
+}
+
+/**
+ * A cobertura não fechou — e há duas razões muito diferentes para isso.
+ *
+ * **Parou no meio.** Alguém mandou parar antes de a escalada chegar ao teto. O
+ * conjunto tem menos cartelas do que ainda pode ter, e a cobertura baixa é
+ * consequência disso: faltam cartelas a acrescentar. Não há conclusão
+ * matemática nenhuma aqui, só trabalho interrompido.
+ *
+ * **Encostou no teto e não bastou.** A escalada usou todas as cartelas que o
+ * piso permite e a cobertura ainda não fechou. Aí sim há o que afirmar: nada
+ * menor que o piso existe, e o piso não basta.
+ *
+ * A versão anterior escrevia a segunda frase nos dois casos, sempre com o
+ * **teto** no lugar da quantidade de cartelas. Quem parasse com 911 de um teto
+ * de 1.537 lia "Com 1537 cartelas, a melhor cobertura que alcancei foi 58,7%" —
+ * o aplicativo afirmando que a pessoa tinha 626 cartelas que ela não tinha, e
+ * apresentando trabalho interrompido como conclusão. Num aplicativo que existe
+ * para nunca afirmar o que não pode provar, é o pior tipo de defeito.
+ */
+function fraseParcial(encontrado, piso, teto, alcancado) {
+  if (teto > 0 && encontrado < teto) {
+    return (
+      `Parei com ${milhar(encontrado)} cartelas de um teto de ${milhar(teto)}, ` +
+      `cobrindo ${alcancado}. Ainda há cartelas a acrescentar — continuar retoma daqui.`
+    );
+  }
+  return (
+    `Com ${milhar(encontrado)} cartelas — o teto —, a melhor cobertura que alcancei ` +
+    `foi ${alcancado}. O piso diz que nada menor que ${milhar(piso)} existe; ` +
+    `não diz que ${milhar(piso)} basta.`
+  );
+}
+
+/**
+ * Números como o resto da tela os escreve.
+ *
+ * Sem isto a frase mais lida do aplicativo dizia "27124 cartelas" logo acima de
+ * um quadro que dizia "27.124" — o mesmo número em duas grafias, na única linha
+ * que alguém lê se for ler uma só.
+ */
+function milhar(n) {
+  return Number(n).toLocaleString('pt-BR');
 }

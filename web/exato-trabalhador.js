@@ -65,6 +65,10 @@ function respirar() {
 
 const instantaneos = {
   analisar: (m) => ({ tipo: 'analise', dados: JSON.parse(analisar(m.pedido)) }),
+  // A prévia é o mesmo cálculo do piso, com outro nome. O nome separado é o que
+  // permite consultá-la enquanto a pessoa mexe nos parâmetros sem que a
+  // resposta seja confundida com o estágio 4 de uma execução.
+  previa: (m) => ({ tipo: 'previa', dados: JSON.parse(limitar(m.pedido)) }),
   limitar: (m) => ({ tipo: 'piso', dados: JSON.parse(limitar(m.pedido)) }),
   aprofundar: (m) => ({
     tipo: 'piso-fundo',
@@ -188,7 +192,14 @@ onmessage = async (evento) => {
 
     const instantaneo = instantaneos[mensagem.tipo];
     if (instantaneo) {
-      postMessage({ ...instantaneo(mensagem), etapa: mensagem.etapa ?? null });
+      // O pedido volta junto: a prévia da escala precisa saber de qual
+      // configuração a resposta fala, porque a pessoa pode ter mudado de ideia
+      // enquanto o motor contava.
+      postMessage({
+        ...instantaneo(mensagem),
+        etapa: mensagem.etapa ?? null,
+        pedido: mensagem.pedido,
+      });
       return;
     }
     if (mensagem.tipo === 'escalar') {

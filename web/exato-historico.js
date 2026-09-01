@@ -78,6 +78,58 @@ function ler() {
 }
 
 /**
+ * As cartelas de uma sessão, decodificadas do estado do motor.
+ *
+ * O motor guarda cada cartela como máscara de bits num inteiro — o bit `i`
+ * ligado quer dizer "contém a posição `i+1`" —, e é assim que ela viaja dentro
+ * de `escalada`. Guardar **também** a lista de posições era escrever a mesma
+ * informação duas vezes: medido, um fechamento de 27.124 cartelas ocupava
+ * 1,68 MB, dos quais 1,21 MB eram essa cópia. Com o `localStorage` em 5 MB,
+ * duas execuções enchiam o aparelho e o teto de 40 sessões era ficção.
+ *
+ * Decodificar custa uma passada por cartela, e só acontece quando as cartelas
+ * são de fato necessárias — exportar um fechamento. A lista do histórico usa
+ * `cartelasContadas`, que é um número.
+ *
+ * A ordem é a mesma que o motor entrega (`cartelas()` em motor-exato-web
+ * ordena as listas), para o arquivo exportado e a tela falarem do mesmo
+ * fechamento na mesma ordem.
+ */
+export function cartelasDaSessao(sessao) {
+  // Sessões gravadas antes desta mudança ainda trazem a lista pronta.
+  if (Array.isArray(sessao?.cartelas) && sessao.cartelas.length) return sessao.cartelas;
+
+  let estado;
+  try {
+    estado = JSON.parse(sessao?.escalada ?? '');
+  } catch {
+    return [];
+  }
+  const mascaras = Array.isArray(estado?.melhor) ? estado.melhor : [];
+  const v = sessao?.pedido?.v ?? 0;
+
+  const saida = mascaras.map((mascara) => {
+    const cartela = [];
+    for (let i = 0; i < v; i += 1) if ((mascara >>> i) & 1) cartela.push(i + 1);
+    return cartela;
+  });
+  saida.sort((a, b) => {
+    for (let i = 0; i < Math.min(a.length, b.length); i += 1) {
+      if (a[i] !== b[i]) return a[i] - b[i];
+    }
+    return a.length - b.length;
+  });
+  return saida;
+}
+
+/** Quantas cartelas uma sessão tem, sem decodificar nenhuma. */
+export function contarCartelas(sessao) {
+  if (Number.isInteger(sessao?.cartelasContadas)) return sessao.cartelasContadas;
+  if (Array.isArray(sessao?.cartelas)) return sessao.cartelas.length;
+  return 0;
+}
+
+/**
  * Se esta sessão pode ser **usada**, e não apenas se tem a forma de uma.
  *
  * Conferir aqui é conferir uma vez, no único ponto por onde tudo entra. Uma
@@ -99,13 +151,21 @@ export function ehSessaoValida(sessao) {
 
   if (typeof sessao.escalada !== 'string' || !sessao.escalada) return false;
 
-  if (!Array.isArray(sessao.cartelas)) return false;
-  return sessao.cartelas.every(
-    (cartela) =>
-      Array.isArray(cartela) &&
-      cartela.length === p.k &&
-      cartela.every((posicao) => Number.isInteger(posicao) && posicao >= 1 && posicao <= p.v)
-  );
+  // A contagem é o que a lista mostra, e o que o arquivo confere contra o
+  // estado do motor. As cartelas em si são decodificadas de `escalada` quando
+  // alguém precisa delas.
+  if (!Number.isInteger(contarCartelas(sessao)) || contarCartelas(sessao) < 0) return false;
+
+  // Sessões antigas trazem a lista pronta; se trouxerem, ela tem de fechar.
+  if (Array.isArray(sessao.cartelas) && sessao.cartelas.length) {
+    return sessao.cartelas.every(
+      (cartela) =>
+        Array.isArray(cartela) &&
+        cartela.length === p.k &&
+        cartela.every((posicao) => Number.isInteger(posicao) && posicao >= 1 && posicao <= p.v)
+    );
+  }
+  return true;
 }
 
 /**
@@ -171,8 +231,23 @@ function gravar(sessoes) {
   return false;
 }
 
+/**
+ * O instante de agora, garantidamente depois do anterior.
+ *
+ * `Date.now()` tem resolução de milissegundo, e duas gravações no mesmo
+ * milissegundo empatam. A lista ordena por `atualizadaEm`, então um empate
+ * deixa a ordem dos dois trabalhos ao acaso — quem acabou de mexer num deles
+ * pode vê-lo em segundo lugar. Foi o que apareceu como uma falha intermitente
+ * no teste, e intermitente aqui quer dizer "acontece no aparelho de alguém".
+ *
+ * Avançar um milissegundo no empate mantém a ordem verdadeira e continua sendo
+ * um relógio: só desloca quando duas gravações caem no mesmo instante, e entre
+ * dois salvamentos de uma escalada passam quatro segundos.
+ */
+let ultimoInstante = 0;
 function agora() {
-  return Date.now();
+  ultimoInstante = Math.max(Date.now(), ultimoInstante + 1);
+  return ultimoInstante;
 }
 
 function novoIdentificador() {
@@ -302,7 +377,9 @@ function camposDaSessao(dados) {
     piso: dados.piso ?? 0,
     origem: dados.origem ?? '',
     fechado: dados.fechado ?? false,
-    cartelas: dados.cartelas ?? [],
+    // A contagem, e não as cartelas: elas já estão dentro de `escalada`, como
+    // máscaras, e guardá-las de novo custava três quartos do tamanho da sessão.
+    cartelasContadas: dados.cartelasContadas ?? dados.cartelas?.length ?? 0,
     escalada: dados.escalada ?? '',
     curva: dados.curva ?? [],
     cobertura: dados.cobertura ?? 0,
@@ -361,7 +438,7 @@ export function migrarDoSlotUnico() {
       universo: p.v,
       piso: estado.teto ?? 0,
       origem: 'trabalho guardado pela versão anterior',
-      cartelas: [],
+      cartelasContadas: cartelas.length,
       escalada: antigo.escalada,
       cobertura: 0,
       fase: estado.fase ?? 'subindo',

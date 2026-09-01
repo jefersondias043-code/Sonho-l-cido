@@ -1651,3 +1651,40 @@ details.cartao[open] > summary::after {
 .balanco .liquido b { font-size: 17px; }
 .balanco .positivo b { color: var(--verde); }
 .balanco .negativo b { color: var(--vermelho); }
+
+/*
+ * O botão que fecha a lista de cartelas, quando ela está aberta.
+ *
+ * Aberta num fechamento grande, a lista faz a página passar de 800.000 px —
+ * medido, 27.124 cartelas dão 827.626 px. O botão que a fecha fica no topo
+ * dela, e depois de rolar algumas telas para dentro não há como voltar sem
+ * rolar tudo de volta. Grudado embaixo, ele continua ao alcance do polegar em
+ * qualquer ponto da lista, que é o que faz abrir deixar de ser um caminho sem
+ * volta.
+ *
+ * Só enquanto está aberta: fechada, ele é um botão comum no fluxo da página.
+ */
+#ex-ver-cartelas.aberto {
+  /*
+   * Fixo, e não `sticky`. `sticky` com `bottom` só segura um elemento que está
+   * **abaixo** de quem lê; descendo pela lista, o botão fica para trás e some
+   * como qualquer outro — medido, ele parava 20.218 px acima da janela. Fixo,
+   * ele acompanha, que é o que a situação pede.
+   *
+   * Pílula estreita e centrada, em vez da barra larga que ele é fechado: aberto
+   * ele flutua sobre as cartelas, e uma barra de ponta a ponta esconderia uma
+   * linha inteira delas em cada tela.
+   */
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(env(safe-area-inset-bottom) + 14px);
+  z-index: 20;
+  width: auto;
+  min-width: 200px;
+  padding: 0 24px;
+  margin: 0;
+  border-color: var(--acento);
+  background: var(--fundo-cartao);
+  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.6);
+}

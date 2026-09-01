@@ -78,6 +78,13 @@ jobs:
         # internet cobrir todo o site. Nenhum teste de navegador as alcança.
         run: ./testar-construcao.sh
 
+      - name: Testar o veredito
+        # O módulo que decide o que o aplicativo tem direito de afirmar. Era o
+        # único sem teste próprio, e foi por isso que um defeito grave
+        # sobreviveu: parar no meio fazia a tela relatar cartelas que não
+        # existiam.
+        run: node web/testar-exato-veredito.mjs
+
       - name: Testar o histórico e o arquivo de fechamento
         # Também em node puro. Um histórico que perde trabalho é pior do que não
         # ter histórico: quem não tem sabe que precisa anotar.

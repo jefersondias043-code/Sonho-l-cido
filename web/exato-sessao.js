@@ -40,7 +40,14 @@ export const FORMATO = 1;
 
 const CAMPOS_DO_PEDIDO = ['v', 'k', 'j', 't', 'r'];
 
-/** Monta o arquivo a partir de uma sessão do histórico. */
+/**
+ * Monta o arquivo a partir de uma sessão do histórico.
+ *
+ * As cartelas vêm de fora, já decodificadas: a sessão guarda só a contagem, e
+ * quem sabe transformar as máscaras do motor em posições é o módulo do
+ * histórico. O arquivo as leva por extenso de propósito — quem o recebe precisa
+ * poder lê-lo sem o motor.
+ */
 export function empacotar(sessao, contexto = {}) {
   return {
     aplicativo: MARCA,
@@ -55,7 +62,7 @@ export function empacotar(sessao, contexto = {}) {
       piso: sessao.piso,
       origem: sessao.origem,
       fechado: sessao.fechado,
-      cartelas: sessao.cartelas,
+      cartelas: contexto.cartelas ?? sessao.cartelas ?? [],
       escalada: sessao.escalada,
       curva: sessao.curva,
       cobertura: sessao.cobertura,
@@ -158,7 +165,9 @@ export function paraSessao(pacote) {
     piso: f.piso ?? 0,
     origem: f.origem ?? '',
     fechado: f.fechado ?? false,
-    cartelas: f.cartelas,
+    // Só a contagem: as cartelas voltam do estado do motor quando alguém
+    // precisar delas, e guardá-las de novo custaria três quartos da sessão.
+    cartelasContadas: f.cartelas.length,
     escalada: f.escalada,
     curva: Array.isArray(f.curva) ? f.curva : [],
     cobertura: numeroSeguro(f.cobertura),

@@ -348,7 +348,9 @@ try {
     const bruto = localStorage.getItem('sonho-lucido:exato:historico');
     const lista = bruto ? JSON.parse(bruto) : [];
     const desta = lista.find((s) => s.pedido?.v === 20 && s.pedido?.t === 15);
-    return desta ? { cartelas: desta.cartelas.length, temEstado: Boolean(desta.escalada) } : null;
+    return desta
+      ? { cartelas: desta.cartelasContadas, temEstado: Boolean(desta.escalada) }
+      : null;
   });
   marcar(
     Boolean(guardado?.temEstado) && guardado.cartelas > 0,
@@ -403,6 +405,43 @@ try {
   await pagina.waitForSelector('#ex-grade .numero');
   await marcarNumeros(25, Array.from({ length: 18 }, (_, i) => i + 1));
   await regras(17, 15, 15);
+
+  // Quanto custa este pedido, **antes** de mandar resolver. Sem isto, a única
+  // forma de saber se uma configuração dá 16 cartelas ou 27.000 era resolvê-la.
+  await pagina.waitForFunction(
+    () => document.getElementById('ex-escala').textContent.trim() !== '',
+    undefined,
+    { timeout: 20000 }
+  );
+  marcar(
+    /16 cartelas/.test(await texto('#ex-escala')),
+    'a tela diz quantas cartelas o pedido custa antes de resolver',
+    await texto('#ex-escala')
+  );
+  await regras(17, 15, 13);
+  // Esperar por "sem 16 cartelas" pegaria também o instante em que a linha está
+  // vazia, entre a mudança do parâmetro e a resposta do motor.
+  await pagina.waitForFunction(
+    () => {
+      const t = document.getElementById('ex-escala').textContent;
+      return /cartela/.test(t) && !/ 16 cartelas/.test(t);
+    },
+    undefined,
+    { timeout: 20000 }
+  );
+  const outraEscala = await texto('#ex-escala');
+  await regras(17, 15, 15);
+  await pagina.waitForFunction(
+    () => /16 cartelas/.test(document.getElementById('ex-escala').textContent),
+    undefined,
+    { timeout: 20000 }
+  );
+  marcar(
+    !/ 16 cartelas/.test(outraEscala) && /cartela/.test(outraEscala),
+    'e o número acompanha a configuração, sem precisar rodar nada',
+    outraEscala
+  );
+
   await pagina.selectOption('#ex-esforco', '1');
   await pagina.click('#ex-resolver');
   await esperarResultado(180000);
@@ -462,6 +501,21 @@ try {
     'e a página cresce só enquanto ela está aberta',
     `${await vaoAteAConferencia()} px abertas contra ${vaoFechado} px fechadas`
   );
+
+  // Aberta num fechamento grande a lista passa de 800.000 px, e o botão que a
+  // fecha nasce no topo dela. Sem acompanhar, abrir vira um caminho sem volta.
+  await pagina.evaluate(() => window.scrollTo(0, document.body.scrollHeight * 0.6));
+  await pagina.waitForTimeout(200);
+  const alcance = await pagina.evaluate(() => {
+    const r = document.getElementById('ex-ver-cartelas').getBoundingClientRect();
+    return { dentro: r.top >= 0 && r.bottom <= window.innerHeight, topo: Math.round(r.top) };
+  });
+  marcar(
+    alcance.dentro,
+    'e o botão de fechar continua ao alcance de dentro da lista',
+    `a ${alcance.topo} px do topo da janela`
+  );
+  await pagina.evaluate(() => window.scrollTo(0, 0));
 
   await pagina.click('#ex-ver-cartelas');
   await pagina.waitForTimeout(200);
@@ -789,6 +843,24 @@ try {
   await pagina.click('#ex-parar');
   await esperarResultado(150000);
   const guardadas = await numero('#ex-encontrado');
+
+  // A frase do resultado nunca pode falar de cartelas que a pessoa não tem.
+  // Parar no meio dizia "Com 1537 cartelas..." para quem tinha 911 — o
+  // aplicativo afirmando 626 cartelas inexistentes, e apresentando trabalho
+  // interrompido como conclusão matemática.
+  const fraseDoParcial = await texto('#ex-frase');
+  const numerosNaFrase = (fraseDoParcial.match(/[\d.]+(?= cartelas)/g) ?? []).map((n) =>
+    Number(n.replace(/\./g, ''))
+  );
+  marcar(
+    numerosNaFrase.length > 0 && numerosNaFrase[0] === guardadas,
+    'a frase do resultado fala das cartelas que existem, e não do teto',
+    `tem ${guardadas} · a frase diz ${numerosNaFrase[0]} — "${fraseDoParcial.slice(0, 60)}…"`
+  );
+  marcar(
+    !/\d{4,}/.test(fraseDoParcial),
+    'e escreve os números com separador de milhar, como o resto da tela'
+  );
 
   await pagina.reload({ waitUntil: 'networkidle' });
   await pagina.waitForSelector('#ex-grade .numero');
