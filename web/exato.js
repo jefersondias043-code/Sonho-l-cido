@@ -1671,7 +1671,11 @@ pintarHistorico();
 // também quem sabe o carimbo desta construção, que vai dentro do arquivo
 // exportado.
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('./sw.js').catch(() => {});
+  // `updateViaCache: 'none'` é o que impede o próprio `sw.js` de vir do cache
+  // do navegador. Sem ele, quem entrasse direto nesta página podia ficar com
+  // uma cópia velha do service worker e nunca perceber que havia versão nova
+  // — as outras três telas já registravam assim, e esta tinha ficado de fora.
+  navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).catch(() => {});
   navigator.serviceWorker.addEventListener('message', ({ data }) => {
     if (data?.tipo === 'versao') CARIMBO = String(data.versao ?? '');
   });

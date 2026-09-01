@@ -142,6 +142,14 @@ Três coisas que valem saber antes de usar:
   iteração sequer —, e o estado inteiro da otimização continua na memória, de
   modo que voltar não custa progresso nenhum.
 
+A tela de **Configurações**, no rodapé de qualquer uma das quatro páginas, reúne
+o que dá para saber sobre a instalação: qual carimbo de versão está rodando neste
+aparelho, quanto ele ocupa, quantos fechamentos estão guardados, e um botão
+**Buscar atualizações** que vai ao servidor e compara os dois carimbos. Quando
+não dá para perguntar — sem internet, servidor fora —, ela diz isso, e não que
+está tudo em dia: a diferença entre "conferi" e "não consegui conferir" é a razão
+de o botão existir.
+
 Para buscas longas, o computador continua sendo o lugar certo — e é para isso
 que existe a linha de comando abaixo.
 

@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b1020">
+<meta name="description" content="A versão que está rodando neste aparelho, o que está guardado nele, e como buscar atualizações">
+
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Configurações">
+
+<title>Configurações — Sonho Lúcido</title>
+
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="apple-touch-icon" href="./icone-180.png">
+<link rel="icon" type="image/svg+xml" href="./icone.svg">
+<link rel="stylesheet" href="./estilo.css">
+</head>
+<body>
+
+<header class="topo">
+  <a class="voltar" href="./">‹ aplicativos</a>
+  <h1>Configurações</h1>
+  <p class="subtitulo">a plataforma, esta versão, e o que está guardado aqui</p>
+</header>
+
+<main class="painel ativo" id="configuracoes">
+
+<!-- 1 · a versão e a atualização ────────────────────────────────────────── -->
+<div class="cartao">
+  <h2>Esta versão</h2>
+
+  <p class="marca-versao">
+    <span class="chave">rodando neste aparelho</span>
+    <span class="valor" id="cfg-versao">—</span>
+  </p>
+
+  <button class="principal" id="cfg-buscar">Buscar atualizações</button>
+
+  <!--
+    A resposta é `aria-live`: quem usa leitor de tela precisa ouvir o resultado
+    sem sair do botão que acabou de tocar.
+  -->
+  <p class="resposta" id="cfg-resultado" role="status" aria-live="polite" hidden></p>
+
+  <button class="secundario" id="cfg-atualizar" hidden>Atualizar agora</button>
+
+  <p class="ajuda">
+    Esse código de doze letras é o resumo do conteúdo desta construção: se
+    qualquer arquivo do aplicativo mudou, ele muda junto. É como se confere, sem
+    adivinhação, se uma correção publicada chegou até aqui.
+  </p>
+  <p class="ajuda" id="cfg-ultima" hidden></p>
+</div>
+
+<!-- 2 · o menu ──────────────────────────────────────────────────────────── -->
+<div class="cartao">
+  <h2>Ir para</h2>
+  <div class="atalhos">
+    <a class="atalho" href="./lotinha.html">Lotinha</a>
+    <a class="atalho" href="./construtor.html">Construtor</a>
+    <a class="atalho" href="./exato.html">Construtor Exato</a>
+  </div>
+  <p class="ajuda">
+    Os três rodam inteiros no seu aparelho e não conversam entre si: cada um tem
+    o próprio motor, o próprio histórico e o próprio arquivo de exportação.
+  </p>
+</div>
+
+<!-- 3 · uso sem internet ────────────────────────────────────────────────── -->
+<div class="cartao">
+  <h2>Uso sem internet</h2>
+
+  <p class="linha-dado">
+    <span>Aplicativo guardado</span>
+    <b id="cfg-offline">—</b>
+  </p>
+  <p class="linha-dado">
+    <span>Espaço ocupado ao todo</span>
+    <b id="cfg-espaco">—</b>
+  </p>
+  <p class="linha-dado">
+    <span>Proteção dos dados</span>
+    <b id="cfg-persistencia">—</b>
+  </p>
+
+  <button class="secundario" id="cfg-proteger" hidden>Proteger os dados guardados</button>
+
+  <p class="ajuda">
+    Depois da primeira visita com internet, os três aplicativos abrem e
+    funcionam sem rede nenhuma — inclusive os motores, que são a parte pesada.
+    Quando o espaço do aparelho aperta, porém, o navegador pode apagar o que
+    guardou sem avisar; pedir proteção reduz essa chance, e instalar o
+    aplicativo na tela de início costuma bastar para o pedido ser aceito.
+  </p>
+</div>
+
+<!-- 4 · o trabalho guardado ─────────────────────────────────────────────── -->
+<div class="cartao">
+  <h2>O que está guardado</h2>
+
+  <p class="linha-dado">
+    <span>Fechamentos da Lotinha</span>
+    <b id="cfg-hist-lotinha">—</b>
+  </p>
+  <p class="linha-dado">
+    <span>Fechamentos do Construtor Exato</span>
+    <b id="cfg-hist-exato">—</b>
+  </p>
+  <p class="linha-dado">
+    <span>Ocupando</span>
+    <b id="cfg-espaco-trabalho">—</b>
+  </p>
+
+  <p class="ajuda">
+    Cada aplicativo administra o próprio histórico, e é lá que se abre, se
+    continua e se apaga um fechamento: no da
+    <a href="./lotinha.html">Lotinha</a> ou no do
+    <a href="./exato.html">Construtor Exato</a>. Nada disso sai do aparelho — o
+    arquivo exportado é o que sobrevive a limpar os dados do navegador ou a
+    trocar de celular.
+  </p>
+</div>
+
+<!-- 5 · o aparelho ──────────────────────────────────────────────────────── -->
+<div class="cartao">
+  <h2>Este aparelho</h2>
+
+  <p class="linha-dado">
+    <span>Núcleos disponíveis</span>
+    <b id="cfg-nucleos">—</b>
+  </p>
+  <p class="linha-dado">
+    <span>WebAssembly</span>
+    <b id="cfg-wasm">—</b>
+  </p>
+  <!-- "Como está aberto" em vez de "Instalado?": a resposta negativa útil não é
+       "não", é "no navegador" — que é uma situação, e não a ausência de uma. -->
+  <p class="linha-dado">
+    <span>Como está aberto</span>
+    <b id="cfg-instalado">—</b>
+  </p>
+
+  <p class="ajuda">
+    Os motores são compilados para WebAssembly e rodam num trabalhador
+    separado, o que mantém a tela respondendo enquanto a busca trabalha. Sem
+    WebAssembly nenhum dos três funciona — e não há versão de reserva em
+    JavaScript, porque ela seria lenta a ponto de enganar.
+  </p>
+</div>
+
+<p class="rodape-nota">
+  Tudo roda no seu aparelho: nada é enviado para lugar nenhum, e não há conta,
+  cadastro nem medição de uso.
+  <br>
+  Limites inferiores publicados: La Jolla Covering Repository, D. M. Gordon
+  (CC BY 4.0).
+</p>
+
+</main>
+
+<div class="aviso" id="cfg-aviso" hidden role="status" aria-live="polite"></div>
+
+<script type="module" src="./configuracoes.js"></script>
+</body>
+</html>

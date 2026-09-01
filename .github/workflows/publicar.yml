@@ -109,6 +109,13 @@ jobs:
           # publicada chegue de fato ao aparelho de quem já usava o aplicativo.
           node web/testar-atualizacao.mjs
 
+          # E a tela de Configurações, que é onde o usuário pergunta "estou na
+          # versão mais nova?" e recebe uma resposta. As três situações são
+          # servidas de propósito — nada novo, versão nova publicada, e sem
+          # internet —, porque um botão que sempre diz "tudo em dia" é pior do
+          # que botão nenhum.
+          node web/testar-configuracoes.mjs
+
           # E o histórico: nenhum trabalho pode se perder, e continuar um
           # trabalho tem de atualizar o registro dele, não criar outro ao lado.
           node web/testar-historico.mjs

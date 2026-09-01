@@ -85,6 +85,19 @@ self.addEventListener('fetch', (evento) => {
   const url = new URL(requisicao.url);
   if (url.origin !== self.location.origin) return;
 
+  // O service worker nunca serve a si mesmo.
+  //
+  // A tela de Configurações verifica se há versão nova buscando este arquivo e
+  // lendo o carimbo de dentro dele. Se a busca passasse por aqui, `redePrimeiro`
+  // devolveria a cópia guardada quando a rede falhasse — e a tela compararia o
+  // carimbo local com ele mesmo, anunciando "em dia" para quem está sem
+  // internet. É a única resposta que não se pode dar sem perguntar ao servidor,
+  // e sair da frente é o que garante que ela nunca seja dada por engano.
+  //
+  // Não se perde nada: o navegador busca este arquivo por fora do cache do
+  // service worker de qualquer maneira, que é como ele percebe uma versão nova.
+  if (url.pathname.endsWith('/sw.js')) return;
+
   evento.respondWith(
     ehDoAplicativo(url) ? redePrimeiro(requisicao) : cachePrimeiro(requisicao)
   );
@@ -135,4 +148,9 @@ self.addEventListener('message', (evento) => {
   if (evento.data?.tipo === 'versao') {
     evento.source?.postMessage({ tipo: 'versao', versao: VERSAO });
   }
+
+  // Rede de segurança do botão "Atualizar agora". O `skipWaiting` acima já roda
+  // durante a instalação, então esta versão quase nunca fica esperando — mas se
+  // ficar, quem tocou no botão veria a tela parada sem explicação nenhuma.
+  if (evento.data?.tipo === 'assumir') self.skipWaiting();
 });
