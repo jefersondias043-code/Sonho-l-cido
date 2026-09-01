@@ -104,6 +104,14 @@ cartelas — resolver outro problema não apaga o anterior — e a linha traz a
 quantidade de cartelas, as regras que a produziram, a cobertura alcançada e
 quando foi mexida pela última vez.
 
+Cada linha tem **Abrir** e **Continuar**, e a diferença importa. Abrir repõe o
+fechamento na tela sem acionar o motor — as cartelas são decodificadas das
+máscaras que a sessão guarda, e o veredito é remontado do que ficou salvo, em
+dezenas de milissegundos. É o caminho para rever as cartelas, conferir um
+resultado ou simular sorteios sem pôr o aparelho a calcular. Antes disso só
+existia Continuar, e ele sempre retoma a escalada: quem só queria olhar um
+fechamento que não fecha deixava o aparelho trabalhando **para sempre**.
+
 **Continuar** retoma exatamente de onde parou. Não é uma reconstrução: o que fica
 guardado é o estado do motor, e `Escalada::retomar` reconstrói pelo teto salvo e
 pelo conjunto salvo. Medido num perfil de iPhone: uma escalada de 22 números

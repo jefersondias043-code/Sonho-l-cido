@@ -470,8 +470,9 @@ try {
     { timeout: 20000 }
   );
   marcar(
-    /teto é 4000000/.test(await texto('#ex-escala')),
-    'e um pedido grande demais é recusado já na escolha, com o número',
+    /teto é 4\.000\.000/.test(await texto('#ex-escala')) &&
+      /5\.200\.300/.test(await texto('#ex-escala')),
+    'e um pedido grande demais é recusado já na escolha, com o número legível',
     (await texto('#ex-escala')).slice(0, 100)
   );
 
@@ -836,7 +837,49 @@ try {
     (await texto('#ex-hist-previa')).slice(0, 120)
   );
 
-  // ─── 11. continuar de onde parou, com a mesma quantidade de cartelas ───
+  // ─── 11. abrir só para olhar, sem pôr o motor para trabalhar ───
+  //
+  // "Continuar" era o único jeito de abrir um fechamento, e ele sempre retoma a
+  // escalada. Quem quisesse apenas rever as cartelas ou conferir um resultado
+  // punha o aparelho a calcular — e num fechamento que não fecha, a calcular
+  // para sempre, já que a escalada só para quando mandam.
+  marcar(
+    (await pagina.locator('#ex-hist-lista [data-ver]').count()) > 0 &&
+      (await pagina.locator('#ex-hist-lista [data-abrir]').count()) > 0,
+    'a linha do histórico separa abrir de continuar',
+    await pagina.$$eval('#ex-hist-lista .sessao-acoes button', (b) =>
+      b.map((x) => x.textContent.trim()).join(' | ')
+    )
+  );
+
+  const relogioDoAbrir = Date.now();
+  await pagina.click('#ex-hist-lista [data-ver]');
+  await esperarResultado(60000);
+  const abriuEm = Date.now() - relogioDoAbrir;
+  marcar(
+    (await numero('#ex-encontrado')) === 16 && abriuEm < 20000,
+    'abrir devolve o fechamento guardado na hora, sem refazer nada',
+    `${await numero('#ex-encontrado')} cartelas em ${abriuEm} ms`
+  );
+  marcar(
+    await pagina.locator('#ex-parar').isHidden(),
+    'e o motor não é acionado: não há o que parar'
+  );
+  await pagina.waitForTimeout(2500);
+  marcar(
+    (await pagina.locator('#ex-parar').isHidden()) &&
+      /não foi acionado/.test(await texto('#ex-prova')),
+    'nem passa a trabalhar sozinho depois',
+    (await texto('#ex-prova')).slice(0, 70)
+  );
+  marcar(
+    (await pagina.locator('#ex-conferir-cartao').isVisible()) &&
+      (await pagina.locator('#ex-previa .cartela').count()) === 3,
+    'e as cartelas e a conferência ficam à mão, que é para isso que se abre'
+  );
+
+  // ─── 12. continuar de onde parou, com a mesma quantidade de cartelas ───
+  await pagina.click('#ex-aba-historico');
   const relogio = Date.now();
   await pagina.click('#ex-hist-lista [data-abrir]');
   await esperarResultado(180000);
@@ -867,7 +910,7 @@ try {
     `${antesDeExcluir} → ${await pagina.locator('#ex-hist-lista .sessao').count()}`
   );
 
-  // ─── 12. retomar uma escalada que ficou no meio ───
+  // ─── 13. retomar uma escalada que ficou no meio ───
   //
   // O caso do pedido: um fechamento grande, interrompido, reaberto depois — e
   // retomado do ponto em que estava, sem recomeçar a montagem.
@@ -928,7 +971,7 @@ try {
   await pagina.click('#ex-parar');
   await esperarResultado(150000);
 
-  // ─── 13. o que não é problema é recusado com o motivo ───
+  // ─── 14. o que não é problema é recusado com o motivo ───
   await marcarNumeros(25, Array.from({ length: 25 }, (_, i) => i + 1));
   await regras(12, 15, 11);
   await pagina.click('#ex-resolver');

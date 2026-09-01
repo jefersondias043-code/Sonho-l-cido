@@ -874,15 +874,19 @@ function pintarHistorico() {
         `<br>${porcento(s.cobertura)} de cobertura · piso ${milhares(s.piso)} · ` +
         `${escapar(historico.quando(s.atualizadaEm))}</div>` +
         `<div class="sessao-acoes">` +
+        `<button data-ver="${escapar(s.id)}">Abrir</button>` +
         `<button class="continuar" data-abrir="${escapar(s.id)}">Continuar</button>` +
         `<button data-exportar="${escapar(s.id)}">Exportar</button>` +
-        `<button class="excluir" data-excluir="${escapar(s.id)}">Excluir</button>` +
+        `<button class="excluir" data-excluir="${escapar(s.id)}">✕</button>` +
         `</div></div>`
     )
     .join('');
 
+  for (const botao of lista.querySelectorAll('[data-ver]')) {
+    botao.addEventListener('click', () => abrirParaVer(botao.dataset.ver));
+  }
   for (const botao of lista.querySelectorAll('[data-abrir]')) {
-    botao.addEventListener('click', () => abrirSessao(botao.dataset.abrir));
+    botao.addEventListener('click', () => continuarSessao(botao.dataset.abrir));
   }
   for (const botao of lista.querySelectorAll('[data-exportar]')) {
     botao.addEventListener('click', () => exportarSessao(botao.dataset.exportar));
@@ -925,18 +929,12 @@ function pintarInterrompido() {
  * o estado ao motor. O piso salvo evita refazer os estágios 3 e 4, que no
  * esforço fundo levam minutos para chegar ao mesmo número.
  */
-function abrirSessao(id) {
-  const sessao = historico.obter(id);
-  if (!sessao) {
-    avisar('Este fechamento já não está guardado.');
-    pintarHistorico();
-    return;
-  }
-  if (rodando) {
-    avisar('Pare o trabalho em curso antes de abrir outro.');
-    return;
-  }
-
+/**
+ * Repõe na tela os números e as regras de um fechamento guardado.
+ *
+ * Comum aos dois jeitos de abri-lo: só olhar, e continuar de onde parou.
+ */
+function reporOsParametros(sessao) {
   universo = Math.max(sessao.universo || 0, ...sessao.numeros);
   $('ex-universo').value = String(universo);
   montarGrade();
@@ -948,10 +946,106 @@ function abrirSessao(id) {
   premiadas = sessao.pedido.r;
   $('ex-esforco').value = String(sessao.esforco ?? 4);
   pintarParametrosSem();
-
   sessaoEmCurso = sessao.id;
   mostrarPainel('exato');
   esquecerFechamento();
+}
+
+/** O fechamento guardado que a tela pode abrir agora, ou uma frase dizendo por quê não. */
+function sessaoParaAbrir(id) {
+  const sessao = historico.obter(id);
+  if (!sessao) {
+    avisar('Este fechamento já não está guardado.');
+    pintarHistorico();
+    return null;
+  }
+  if (rodando) {
+    avisar('Pare o trabalho em curso antes de abrir outro.');
+    return null;
+  }
+  return sessao;
+}
+
+/**
+ * Abre um fechamento guardado **sem pôr o motor para trabalhar**.
+ *
+ * Este é o caminho que faltava, e a falta era cara: "Continuar" era o único
+ * jeito de abrir um fechamento, e ele sempre retoma a escalada. Quem quisesse
+ * apenas rever as cartelas, conferir um resultado ou simular sorteios punha o
+ * aparelho a calcular — e num fechamento que não fecha, a calcular **para
+ * sempre**, já que a escalada só para quando mandam.
+ *
+ * Aqui não há motor nenhum. As cartelas são decodificadas das máscaras que a
+ * sessão guarda, e o veredito é remontado dos números que ela também guarda:
+ * abrir passa a ser instantâneo, e o aparelho fica quieto.
+ */
+function abrirParaVer(id) {
+  const sessao = sessaoParaAbrir(id);
+  if (!sessao) return;
+
+  reporOsParametros(sessao);
+
+  etapa += 1;
+  pedido = { ...sessao.pedido };
+  esforco = sessao.esforco ?? 4;
+  estado = {
+    piso: sessao.piso,
+    origem: sessao.origem,
+    fechado: sessao.fechado,
+    cartelas: historico.cartelasDaSessao(sessao),
+    metodo: 'fechamento guardado',
+    verificado: sessao.verificado,
+    descobertos: sessao.descobertos,
+    ciclicaFechou: false,
+    linhasDaProva: [],
+    familiaPendente: null,
+    dadosPendentes: null,
+    parado: true,
+    // O passo que o veredito e a barra leem. Não veio do motor agora: veio de
+    // quando este fechamento foi trabalhado, e é exatamente o que foi salvo.
+    escalada: {
+      cartelas: historico.contarCartelas(sessao),
+      teto: sessao.piso,
+      melhor_cobertura: sessao.cobertura,
+      melhor_cartelas: historico.contarCartelas(sessao),
+      fase: sessao.fase,
+      rodadas: 0,
+      fechou: sessao.verificado,
+    },
+    guardado: sessao.escalada,
+    curva: sessao.curva ?? [],
+    melhorCobertura: sessao.cobertura,
+    desdeAMelhora: Date.now(),
+  };
+
+  esconderTudo();
+  $('ex-piso-cartao').hidden = false;
+  pintarPiso({ valor: sessao.piso, origem: sessao.origem, fechado: sessao.fechado });
+  pintarEscalada(estado.escalada, true);
+  pintarCurva(estado.curva);
+  pintarVerificacao({
+    cobre: sessao.verificado,
+    descobertos: sessao.descobertos,
+    alvos: combinacoes(pedido.v, pedido.j),
+    premiadas: pedido.r,
+  });
+  pintarProva(
+    [
+      '<b>Fechamento guardado, aberto para consulta.</b>',
+      '<em>O motor não foi acionado: o que está na tela é o que ficou salvo. ' +
+        'Para retomar a escalada, use Continuar no histórico.</em>',
+    ],
+    false
+  );
+  pintarResultado();
+  avisar('Fechamento aberto. O motor não está trabalhando.');
+}
+
+/** Abre um fechamento guardado e **retoma a escalada** de onde ela parou. */
+function continuarSessao(id) {
+  const sessao = sessaoParaAbrir(id);
+  if (!sessao) return;
+  reporOsParametros(sessao);
   comecar(sessao.escalada, sessao);
 }
 
@@ -1340,7 +1434,7 @@ $('ex-hist-cancelar').addEventListener('click', () => {
 
 $('ex-hist-retomar').addEventListener('click', (e) => {
   const id = e.currentTarget.dataset.sessao;
-  if (id) abrirSessao(id);
+  if (id) continuarSessao(id);
 });
 
 $('ex-hist-dispensar').addEventListener('click', () => {
@@ -1410,7 +1504,7 @@ $('ex-resolver').addEventListener('click', () => {
 $('ex-continuar').addEventListener('click', () => {
   const atual = pedidoDaTela();
   const guardado = atual ? historico.paraOPedido(atual) : null;
-  if (guardado) abrirSessao(guardado.id);
+  if (guardado) continuarSessao(guardado.id);
 });
 $('ex-parar').addEventListener('click', () => {
   trabalhador.postMessage({ tipo: 'parar' });

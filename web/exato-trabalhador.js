@@ -99,6 +99,7 @@ async function escalar(mensagem) {
   let lote = LOTE_INICIAL;
   let passo = JSON.parse(escalada.passo());
   let desdeOSalvamento = 0;
+  let primeiroLote = true;
 
   try {
     while (!passo.fechou && !parar) {
@@ -108,8 +109,14 @@ async function escalar(mensagem) {
       lote = calibrar(lote, durou);
 
       desdeOSalvamento += durou;
-      const guardar = desdeOSalvamento >= MILISSEGUNDOS_ENTRE_SALVAMENTOS;
+      // O primeiro lote sempre volta com o estado, e não só depois de quatro
+      // segundos: é ele que faz a linha aparecer no histórico. Esperando o
+      // primeiro salvamento comum, a aba Histórico dizia "nenhum fechamento
+      // guardado ainda" durante os primeiros quatro segundos de uma execução
+      // que estava visivelmente rodando ao lado.
+      const guardar = primeiroLote || desdeOSalvamento >= MILISSEGUNDOS_ENTRE_SALVAMENTOS;
       if (guardar) desdeOSalvamento = 0;
+      primeiroLote = false;
 
       postMessage({
         tipo: 'escalada-passo',

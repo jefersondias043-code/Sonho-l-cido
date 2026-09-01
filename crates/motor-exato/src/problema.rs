@@ -117,16 +117,38 @@ impl std::fmt::Display for ErroDoProblema {
             ),
             ErroDoProblema::AlvosDemais { quantos } => write!(
                 f,
-                "são {quantos} sorteios possíveis a cobrir, e o teto é {TETO_DE_ALVOS} — o \
-                 problema é grande demais para caber neste aparelho"
+                "são {} sorteios possíveis a cobrir, e o teto é {} — o problema é grande \
+                 demais para caber neste aparelho",
+                milhares(*quantos),
+                milhares(TETO_DE_ALVOS as u128)
             ),
             ErroDoProblema::BlocosDemais { quantos } => write!(
                 f,
-                "são {quantos} cartelas possíveis para escolher, e o teto é {TETO_DE_BLOCOS} — o \
-                 problema é grande demais para caber neste aparelho"
+                "são {} cartelas possíveis para escolher, e o teto é {} — o problema é grande \
+                 demais para caber neste aparelho",
+                milhares(*quantos),
+                milhares(TETO_DE_BLOCOS as u128)
             ),
         }
     }
+}
+
+/// Um número como se escreve em português: 5.200.300, e não 5200300.
+///
+/// Estas mensagens vão direto para a tela, e sete dígitos seguidos num aviso de
+/// recusa são exatamente o tipo de coisa que faz alguém ler duas vezes sem
+/// entender o tamanho do problema. O resto do aplicativo já separa os milhares;
+/// aqui era o último lugar que não separava.
+fn milhares(n: u128) -> String {
+    let digitos = n.to_string();
+    let mut saida = String::with_capacity(digitos.len() + digitos.len() / 3);
+    for (i, d) in digitos.chars().enumerate() {
+        if i > 0 && (digitos.len() - i) % 3 == 0 {
+            saida.push('.');
+        }
+        saida.push(d);
+    }
+    saida
 }
 
 impl Problema {

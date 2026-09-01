@@ -965,6 +965,9 @@ details.cartao[open] > summary::after {
 .sessao-acoes,
 .bloco-acoes {
   display: flex;
+  /* Quatro ações numa tela de 320 px não cabem numa linha só. Quebrando, cada
+     uma mantém o alvo de toque em vez de encolher até o texto se espremer. */
+  flex-wrap: wrap;
   gap: 8px;
   margin-top: 12px;
 }
