@@ -826,33 +826,40 @@ mod testes {
         }
     }
 
-    /// **A regra que substitui a anterior.** O teto só sobe depois de a
-    /// reorganização atravessar [`RODADAS_NO_PISO`] sem uma única melhoria.
+    /// **O teto nunca sobe sozinho.** Passar do piso troca um mínimo provado
+    /// por uma solução que apenas funciona, e essa troca é de quem está olhando.
     ///
-    /// Antes disto o teto era imóvel, e a consequência era grave: para as
-    /// configurações em que o piso é inatingível — a maioria das complexas — a
-    /// reorganização tentava o impossível para sempre e a garantia nunca era
-    /// cumprida. O que não pode voltar é o teto subir **cedo**, desistindo de um
-    /// mínimo que estava ao alcance.
+    /// O que o motor faz por conta própria é **avisar**: esgotada a paciência de
+    /// [`RODADAS_NO_PISO`] sem uma única melhoria, `piso_esgotado` fica
+    /// verdadeiro e a tela oferece a construção avançada.
     #[test]
-    fn o_teto_so_sobe_depois_de_o_piso_se_esgotar() {
+    fn o_teto_nunca_sobe_sozinho_e_o_motor_avisa_quando_o_piso_se_esgota() {
         let p = Problema::novo(13, 4, 4, 2, 1).unwrap();
         let piso = limites::sem_busca(&p).valor as usize;
         let mut escalada = Escalada::nova(&p, piso);
 
-        // Um lote de cada vez, para saber em que rodada o teto subiu — e não
-        // apenas que subiu em algum ponto de um lote grande.
         let mut passo = escalada.avancar(20_000);
-        while !passo.alem_do_piso && passo.rodadas < 400_000 {
+        while !passo.piso_esgotado && passo.rodadas < 200_000 {
             passo = escalada.avancar(20_000);
         }
-        assert!(passo.alem_do_piso, "o teto precisava ter subido em algum momento");
+        assert!(passo.piso_esgotado, "o motor precisava avisar que o piso se esgotou");
         assert!(
             passo.rodadas >= RODADAS_NO_PISO as u64,
-            "o teto subiu na rodada {}, e a paciência no piso é de {RODADAS_NO_PISO}",
+            "avisou na rodada {}, e a paciência é de {RODADAS_NO_PISO}",
             passo.rodadas
         );
-        assert!(passo.teto > passo.piso && passo.piso == piso);
+
+        // E continua sem passar do piso, por mais que trabalhe.
+        for _ in 0..50 {
+            passo = escalada.avancar(20_000);
+            assert!(!passo.alem_do_piso, "passou do piso sem ninguém mandar");
+            assert_eq!(passo.teto, piso);
+        }
+
+        // Mandado, ele passa.
+        escalada.liberar_o_teto();
+        let depois = escalada.avancar(20_000);
+        assert!(depois.alem_do_piso && depois.teto > piso && depois.piso == piso);
     }
 
     /// **O que o modo avançado existe para entregar.** Onde o piso é
@@ -867,8 +874,16 @@ mod testes {
         let piso = limites::sem_busca(&p).valor as usize;
         let mut escalada = Escalada::nova(&p, piso);
 
+        // Esgota a paciência no piso, e então liga a construção avançada — que
+        // é o que a tela faz quando alguém toca no botão.
         let mut passo = escalada.avancar(50_000);
-        while !passo.fechou && passo.rodadas < 400_000 {
+        while !passo.piso_esgotado && passo.rodadas < 200_000 {
+            passo = escalada.avancar(50_000);
+        }
+        assert!(passo.piso_esgotado, "o piso precisava ter se esgotado");
+        escalada.liberar_o_teto();
+
+        while !passo.fechou && passo.rodadas < 600_000 {
             passo = escalada.avancar(200_000);
         }
 
@@ -1076,15 +1091,20 @@ mod testes {
         assert_eq!(escalada.melhor().len(), 1);
         assert!((passo.melhor_cobertura - 3.0 / 36.0).abs() < 1e-9);
 
-        // Passada a paciência, o teto sobe: uma cartela não cobre `C(9,2)`, e
-        // insistir nela seria tentar o impossível para sempre. O que continua
-        // valendo em toda rodada é o teto **em vigor**.
+        // Uma cartela não cobre `C(9,2)`, e o motor acaba avisando que o piso
+        // se esgotou — mas **não** passa dele sozinho. Uma cartela continua
+        // sendo uma cartela por quanto tempo for preciso.
         for _ in 0..400 {
             let passo = escalada.avancar(5_000);
-            assert!(passo.cartelas <= passo.teto);
+            assert_eq!(passo.cartelas, 1, "passou do teto sem ninguém mandar");
+            assert_eq!(passo.teto, 1);
             assert_eq!(passo.piso, 1, "o piso é o que foi provado, e não muda");
         }
-        let fim = escalada.passo();
+        assert!(escalada.passo().piso_esgotado, "precisava ter avisado");
+
+        // Mandado, aí sim.
+        escalada.liberar_o_teto();
+        let fim = escalada.avancar(5_000);
         assert!(fim.alem_do_piso && fim.teto > 1);
     }
 
