@@ -139,10 +139,16 @@
       tem, trocando e reestruturando.
       <br><br>
       <b>Se nem assim fechar</b>, é porque o piso não basta: ele diz que nada
-      menor existe, e não que aquele tamanho é suficiente. Aí entra a
+      menor existe, e não que aquele tamanho é suficiente. Aí a tela oferece a
       <b>construção avançada</b>, que volta a acrescentar cartelas até a garantia
-      ser cumprida de verdade. A partir desse ponto o resultado deixa de ser o
-      mínimo — e a tela passa a mostrar os dois números separados.
+      ser cumprida de verdade. Ela é ligada por você, e não sozinha: passar do
+      piso troca um mínimo provado por uma solução que apenas funciona, e a
+      partir daí a tela mostra os dois números separados.
+      <br><br>
+      Cumprida a garantia, aparece a <b>otimização</b>: ela tenta cobrir tudo com
+      uma cartela a menos, e outra, e outra, enquanto você deixar. O fechamento
+      que já cumpre a garantia fica guardado o tempo todo — apertar só pode
+      melhorar o número, nunca estragar o que você já tem.
     </p>
 
     <div class="grade">
@@ -153,6 +159,13 @@
 
     <div class="barra-progresso"><div id="ex-construcao-barra" style="width:0%"></div></div>
     <div class="referencia" id="ex-construcao">começando…</div>
+
+    <button class="principal" id="ex-avancar" hidden>
+      Ativar construção avançada
+    </button>
+    <button class="principal" id="ex-otimizar" hidden>
+      Ativar otimização — reduzir o número de cartelas
+    </button>
 
     <details class="dobra" id="ex-curva-cartao" hidden>
       <summary>A curva: cartela por cartela, quanto foi coberto</summary>

@@ -98,6 +98,8 @@ pub enum Fase {
     Subindo,
     /// No teto, reescrevendo o conjunto sem mudar o tamanho.
     Reorganizando,
+    /// Cobertura fechada, procurando fechar de novo com uma cartela a menos.
+    Otimizando,
     /// A cobertura fechou. Não há mais o que fazer.
     Fechada,
 }
@@ -107,6 +109,7 @@ impl std::fmt::Display for Fase {
         match self {
             Fase::Subindo => write!(f, "subindo"),
             Fase::Reorganizando => write!(f, "reorganizando"),
+            Fase::Otimizando => write!(f, "otimizando"),
             Fase::Fechada => write!(f, "fechada"),
         }
     }
@@ -128,6 +131,17 @@ pub struct Passo {
     /// que se tem é uma solução — boa, completa, e **não** comprovadamente
     /// mínima —, e a tela é obrigada a dizer isso.
     pub alem_do_piso: bool,
+    /// A reorganização no piso já atravessou a paciência sem melhorar nada.
+    ///
+    /// É o sinal de que o piso provavelmente não basta — e é o momento de
+    /// oferecer a construção avançada. Quem decide ligá-la é quem está olhando:
+    /// passar do piso troca um mínimo provado por uma solução que apenas
+    /// funciona, e essa troca não se faz pelas costas de ninguém.
+    pub piso_esgotado: bool,
+    /// Quantas cartelas tem a menor coleção **completa** já encontrada.
+    ///
+    /// Zero enquanto nenhuma fechou. É o número que a otimização faz cair.
+    pub completo: usize,
     /// Cobertura do conjunto atual, de 0 a 1.
     pub cobertura: f64,
     /// A melhor cobertura já alcançada, de 0 a 1.
@@ -165,6 +179,10 @@ pub struct EstadoSalvo {
     /// avançado existir: ali teto e piso eram a mesma coisa.
     #[serde(default)]
     pub piso: usize,
+    /// A menor coleção completa já encontrada. Sem ela, retomar depois de
+    /// fechar perderia a única coisa que cumpria a garantia.
+    #[serde(default)]
+    pub melhor_completo: Vec<Bloco>,
     pub semente: u64,
     #[serde(default)]
     pub curva: Vec<(u32, f32)>,
@@ -203,6 +221,13 @@ pub struct Escalada {
     cartelas: Vec<Bloco>,
     melhor: Vec<Bloco>,
     melhor_entregues: u64,
+    /// A menor coleção que **cobre tudo**, entre as já vistas.
+    ///
+    /// Separada de `melhor` porque as duas respondem perguntas diferentes:
+    /// `melhor` é a de maior cobertura, e durante a otimização a cobertura cai
+    /// de propósito. Sem guardar a completa à parte, apertar o conjunto
+    /// destruiria a única coleção que cumpria a garantia.
+    melhor_completo: Vec<Bloco>,
 
     fase: Fase,
     trabalho: u64,
@@ -242,6 +267,7 @@ impl Escalada {
             cartelas: Vec::new(),
             melhor: Vec::new(),
             melhor_entregues: 0,
+            melhor_completo: Vec::new(),
             fase: Fase::Subindo,
             trabalho: 0,
             rodadas: 0,
@@ -293,6 +319,10 @@ impl Escalada {
             teto: self.teto,
             piso: self.piso,
             alem_do_piso: self.teto > self.piso,
+            piso_esgotado: self.fase == Fase::Reorganizando
+                && self.teto <= self.piso
+                && self.sem_ganho >= RODADAS_NO_PISO,
+            completo: self.melhor_completo.len(),
             cobertura: self.fracao(self.entregues),
             melhor_cobertura: self.fracao(self.melhor_entregues),
             melhor_cartelas: self.melhor.len(),
@@ -313,6 +343,7 @@ impl Escalada {
             match self.fase {
                 Fase::Subindo => self.subir_um_degrau(),
                 Fase::Reorganizando => self.reorganizar_uma_rodada(),
+                Fase::Otimizando => self.otimizar_uma_rodada(),
                 Fase::Fechada => break,
             }
         }
@@ -453,10 +484,7 @@ impl Escalada {
         if self.entregues >= self.exigidas {
             self.registrar();
             self.fase = Fase::Fechada;
-            return;
         }
-
-        self.avancar_se_o_piso_se_esgotou();
     }
 
     /* ─────────── fase 3: construção avançada ─────────── */
@@ -475,8 +503,8 @@ impl Escalada {
     /// de ser candidata a mínima — e é por isso que [`Passo::alem_do_piso`]
     /// existe: quem mostra o resultado precisa parar de falar em mínimo no
     /// momento exato em que isso deixa de ser verdade.
-    fn avancar_se_o_piso_se_esgotou(&mut self) {
-        if self.sem_ganho < RODADAS_NO_PISO || self.teto >= self.teto_absoluto {
+    pub fn liberar_o_teto(&mut self) {
+        if self.teto >= self.teto_absoluto || self.fase == Fase::Fechada {
             return;
         }
         // O teto sai de vez, e não sobe de cartela em cartela.
@@ -489,6 +517,90 @@ impl Escalada {
         self.teto = self.teto_absoluto;
         self.sem_ganho = 0;
         self.fase = Fase::Subindo;
+    }
+
+    /* ─────────── fase 4: otimização ─────────── */
+
+    /// Começa a apertar: tenta cobrir tudo com uma cartela a menos, e outra.
+    ///
+    /// Só faz sentido depois de a garantia estar cumprida, e é por isso que
+    /// existe separada da escalada: a subida responde "consigo cobrir tudo?", e
+    /// a otimização responde "consigo com menos?". Fechar acima do piso deixa
+    /// uma folga grande — em 20 números com jogos de 17 a subida livre fecha com
+    /// 344 cartelas e o melhor fechamento conhecido tem 240 —, e é essa folga
+    /// que ela come.
+    ///
+    /// Ligar é decisão de quem está olhando. A coleção completa já encontrada
+    /// fica guardada em `melhor_completo` e **nunca** é perdida: apertar só
+    /// pode melhorar o número, nunca estragar o que já cumpria a garantia.
+    pub fn otimizar(&mut self) {
+        if self.melhor_completo.is_empty() || self.melhor_completo.len() <= 1 {
+            return;
+        }
+        let completo = self.melhor_completo.clone();
+        self.trocar_conjunto(completo);
+        self.tirar_a_menos_util();
+        self.teto = self.cartelas.len();
+        self.sem_ganho = 0;
+        self.fase = Fase::Otimizando;
+    }
+
+    /// Uma rodada de otimização: fechou neste tamanho? aperta mais um.
+    fn otimizar_uma_rodada(&mut self) {
+        if self.entregues >= self.exigidas {
+            self.registrar();
+            if self.cartelas.len() <= 1 {
+                self.fase = Fase::Fechada;
+                return;
+            }
+            self.tirar_a_menos_util();
+            self.teto = self.cartelas.len();
+            self.sem_ganho = 0;
+            return;
+        }
+        // Ainda não cobre neste tamanho: reorganizar é exatamente o trabalho de
+        // procurar uma disposição que cubra sem crescer.
+        self.reorganizar_uma_rodada();
+        // Cobrir de novo no tamanho menor **não** encerra a otimização: é o
+        // sucesso dela, e a próxima rodada guarda o resultado e aperta mais um.
+        // Sem isto, o primeiro sucesso pararia o aperto onde ele começou a valer.
+        if self.fase != Fase::Otimizando {
+            self.fase = Fase::Otimizando;
+        }
+    }
+
+    /// Tira a cartela cuja saída custa menos cobertura.
+    ///
+    /// Tirar ao acaso funcionaria e convergiria muito mais devagar: numa
+    /// coleção completa a maioria das cartelas é insubstituível, e algumas são
+    /// pura redundância. A que custa zero sai de graça — a garantia continua
+    /// cumprida com uma cartela a menos, sem nenhuma reorganização.
+    fn tirar_a_menos_util(&mut self) {
+        if self.cartelas.is_empty() {
+            return;
+        }
+        let alvo_r = self.p.r as u16;
+        let mut pior = 0usize;
+        let mut menor_perda = u64::MAX;
+        for (i, &b) in self.cartelas.iter().enumerate() {
+            let mut perda = 0u64;
+            self.do_bloco.para_cada(&self.p, b, &mut |a| {
+                let posicao = self.colex.posicao(a) as usize;
+                if self.vezes[posicao] <= alvo_r {
+                    perda += 1;
+                }
+            });
+            if perda < menor_perda {
+                menor_perda = perda;
+                pior = i;
+                if perda == 0 {
+                    break;
+                }
+            }
+        }
+        let fora = self.cartelas.swap_remove(pior);
+        self.tirar(fora);
+        self.trabalho = self.trabalho.saturating_add(self.cartelas.len() as u64);
     }
 
     /* ─────────── a contabilidade da cobertura ─────────── */
@@ -566,9 +678,25 @@ impl Escalada {
     /// sair de um platô, e sem esta cópia à parte a tela veria a cobertura
     /// piorar sozinha.
     fn registrar(&mut self) {
-        if self.entregues > self.melhor_entregues || self.melhor.is_empty() {
+        // Mais cobertura é melhor; com a mesma cobertura, menos cartelas é
+        // melhor. Sem a segunda metade a otimização não teria como registrar
+        // nada: ela fecha de novo com uma cartela a menos, e "de novo" é
+        // cobertura igual, não maior.
+        let melhorou = self.melhor.is_empty()
+            || self.entregues > self.melhor_entregues
+            || (self.entregues == self.melhor_entregues
+                && self.cartelas.len() < self.melhor.len());
+        if melhorou {
             self.melhor_entregues = self.entregues;
             self.melhor = self.cartelas.clone();
+        }
+
+        // A menor coleção que cumpre a garantia, guardada à parte para a
+        // otimização poder desmontar a atual sem risco de perdê-la.
+        if self.entregues >= self.exigidas
+            && (self.melhor_completo.is_empty() || self.cartelas.len() < self.melhor_completo.len())
+        {
+            self.melhor_completo = self.cartelas.clone();
         }
     }
 
@@ -611,6 +739,7 @@ impl Escalada {
             rodadas: self.rodadas,
             sem_ganho: self.sem_ganho,
             piso: self.piso,
+            melhor_completo: self.melhor_completo.clone(),
             semente: self.semente,
             curva: self.curva.clone(),
             passo_da_curva: self.passo_da_curva,
@@ -634,6 +763,7 @@ impl Escalada {
         escalada.sem_ganho = estado.sem_ganho;
         // Estado gravado antes do modo avançado: ali o teto era o piso.
         escalada.piso = if estado.piso > 0 { estado.piso } else { estado.teto };
+        escalada.melhor_completo.clone_from(&estado.melhor_completo);
         escalada.semente = estado.semente;
         escalada.curva.clone_from(&estado.curva);
         escalada.passo_da_curva = estado.passo_da_curva.max(1);

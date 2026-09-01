@@ -413,6 +413,7 @@ function enviar(mensagem) {
 function encerrar() {
   rodando = false;
   $('ex-parar').hidden = true;
+  $('ex-avancar').hidden = true;
   encerrarASessao();
   pintarParametros();
 }
@@ -481,9 +482,31 @@ function haQuanto(milissegundos) {
   return resto ? `${minutos} min ${resto} s` : `${minutos} min`;
 }
 
+/**
+ * Quais dos dois comandos manuais fazem sentido agora.
+ *
+ * A construção avançada aparece quando a reorganização esgota a paciência no
+ * piso — antes disso ainda há chance de fechar no mínimo, e oferecer o
+ * contrário seria convidar a desistir cedo. A otimização aparece quando a
+ * garantia já está cumprida acima do piso, que é o único caso em que há folga
+ * para comer.
+ */
+function pintarOsComandos(passo, terminou) {
+  const podeAvancar = Boolean(passo?.piso_esgotado) && !passo.fechou && !terminou;
+  const podeOtimizar =
+    Boolean(passo?.fechou) && Boolean(passo?.alem_do_piso) && (passo.completo ?? 0) > 1;
+
+  $('ex-avancar').hidden = !podeAvancar;
+  $('ex-otimizar').hidden = !podeOtimizar;
+  $('ex-otimizar').textContent = terminou
+    ? `Ativar otimização — tentar menos de ${milhares(passo.completo)} cartelas`
+    : 'Ativar otimização — reduzir o número de cartelas';
+}
+
 function pintarEscalada(passo, terminou) {
   $('ex-construcao-cartao').hidden = false;
   estado.escalada = passo;
+  pintarOsComandos(passo, terminou);
 
   // Quando a cobertura melhorou pela última vez. Na reorganização é o único
   // número que responde à pergunta que a pessoa está fazendo — "ainda vale a
@@ -504,6 +527,17 @@ function pintarEscalada(passo, terminou) {
     : 'piso — o teto da escalada';
   $('ex-cobertura').textContent = porcento(passo.melhor_cobertura);
   $('ex-construcao-barra').style.width = `${(passo.melhor_cobertura * 100).toFixed(1)}%`;
+
+  if (passo.fase === 'otimizando') {
+    $('ex-construcao').innerHTML =
+      `<b>Garantia cumprida com ${emCartelas(passo.completo)}.</b> ` +
+      `<em>Otimizando: procurando cobrir tudo com ${milhares(
+        Math.max(0, passo.cartelas)
+      )} — uma a menos. O fechamento que você já tem fica guardado.</em>` +
+      `<br><em>Cada sucesso aperta mais um. Toque em <b>Parar</b> quando o ` +
+      `número já servir.</em>`;
+    return;
+  }
 
   if (passo.fechou) {
     // Fechar no piso e fechar acima dele são resultados diferentes, e o
@@ -575,9 +609,12 @@ function pintarEscalada(passo, terminou) {
     `<b>${porcento(passo.melhor_cobertura)} de cobertura</b> ` +
     `<em>— no piso de ${milhares(passo.teto)} cartelas, reorganizando sem acrescentar ` +
     `nenhuma (${milhares(passo.rodadas)} rodadas).</em>` +
-    `<br><em>Sem melhorar há <b>${parado}</b>. Se o piso não bastar, ela passa ` +
-    `sozinha à construção avançada e acrescenta cartelas até fechar. Parar ` +
-    `agora guarda o que está aí.</em>`;
+    `<br><em>Sem melhorar há <b>${parado}</b>.${
+      passo.piso_esgotado
+        ? ' O piso provavelmente não basta — o botão abaixo acrescenta cartelas ' +
+          'até a garantia ser cumprida.'
+        : ''
+    } Parar agora guarda o que está aí.</em>`;
 }
 
 function pintarVerificacao(dados) {
@@ -1182,6 +1219,26 @@ function confirmarImportacao() {
 /* ─────────── o que vem depois de cada estágio ─────────── */
 
 /** Manda a escalada começar, com o teto que o piso determinou. */
+/** Retoma o fechamento que está na tela, já em modo de otimização. */
+function comecarAOtimizacao() {
+  if (!estado?.guardado) {
+    avisar('Não há estado guardado para otimizar.');
+    return;
+  }
+  etapa += 1;
+  rodando = true;
+  $('ex-parar').hidden = false;
+  $('ex-resolver').disabled = true;
+  estado.parado = false;
+  trabalhador.postMessage({ tipo: 'retomar' });
+  enviar({
+    tipo: 'escalar',
+    teto: estado.piso,
+    estado: estado.guardado,
+    otimizar: true,
+  });
+}
+
 function comecarEscalada(estadoGuardado = null) {
   $('ex-construcao-cartao').hidden = false;
   $('ex-cartelas-agora').textContent = '0';
@@ -1546,6 +1603,24 @@ $('ex-continuar').addEventListener('click', () => {
 $('ex-parar').addEventListener('click', () => {
   trabalhador.postMessage({ tipo: 'parar' });
   avisar('Parando…');
+});
+
+$('ex-avancar').addEventListener('click', () => {
+  $('ex-avancar').hidden = true;
+  trabalhador.postMessage({ tipo: 'avancar-alem-do-piso' });
+  avisar('Construção avançada ligada.');
+});
+
+$('ex-otimizar').addEventListener('click', () => {
+  $('ex-otimizar').hidden = true;
+  if (rodando) {
+    trabalhador.postMessage({ tipo: 'otimizar' });
+  } else {
+    // A escalada já terminou e o motor foi liberado: retomar com o estado
+    // guardado é o que permite continuar apertando o mesmo fechamento.
+    comecarAOtimizacao();
+  }
+  avisar('Otimização ligada.');
 });
 
 $('ex-ver-cartelas').addEventListener('click', alternarCartelas);

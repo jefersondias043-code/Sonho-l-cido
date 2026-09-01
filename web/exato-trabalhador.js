@@ -43,6 +43,17 @@ const MILISSEGUNDOS_ENTRE_SALVAMENTOS = 4_000;
 let pronto = null;
 let parar = false;
 
+/*
+ * Os dois comandos que chegam **durante** a escalada.
+ *
+ * Ela roda num laço, e um worker só recebe mensagens entre tarefas: por isso os
+ * pedidos viram bandeiras aqui e são aplicados entre um lote e outro, no mesmo
+ * ponto em que a parada é sentida. Ligar a construção avançada e ligar a
+ * otimização são decisões de quem está olhando, e precisam valer na hora.
+ */
+let pedidoDeAvancar = false;
+let pedidoDeOtimizar = false;
+
 async function garantirWasm() {
   pronto = pronto ?? init();
   await pronto;
@@ -100,9 +111,28 @@ async function escalar(mensagem) {
   let passo = JSON.parse(escalada.passo());
   let desdeOSalvamento = 0;
   let primeiroLote = true;
+  let otimizando = Boolean(mensagem.otimizar);
+
+  // Retomar já em otimização: o botão da tela manda escalar de novo com o
+  // estado guardado e este pedido junto.
+  if (mensagem.otimizar) {
+    escalada.otimizar();
+  }
 
   try {
-    while (!passo.fechou && !parar) {
+    // A otimização continua trabalhando depois de a cobertura fechar: fechar é
+    // o começo dela, e não o fim. Fora dela, fechar encerra.
+    while (!parar && (!passo.fechou || otimizando)) {
+      if (pedidoDeAvancar) {
+        escalada.liberar_o_teto();
+        pedidoDeAvancar = false;
+      }
+      if (pedidoDeOtimizar) {
+        escalada.otimizar();
+        pedidoDeOtimizar = false;
+        otimizando = true;
+      }
+
       const comeco = performance.now();
       passo = JSON.parse(escalada.avancar(lote));
       const durou = performance.now() - comeco;
@@ -135,7 +165,7 @@ async function escalar(mensagem) {
       curva: JSON.parse(escalada.curva()),
       cartelas: JSON.parse(escalada.melhor()),
       estado: escalada.guardar(),
-      interrompida: parar && !passo.fechou,
+      interrompida: parar && (!passo.fechou || otimizando),
     });
   } finally {
     escalada.free?.();
@@ -191,6 +221,16 @@ onmessage = async (evento) => {
   }
   if (mensagem.tipo === 'retomar') {
     parar = false;
+    pedidoDeAvancar = false;
+    pedidoDeOtimizar = false;
+    return;
+  }
+  if (mensagem.tipo === 'avancar-alem-do-piso') {
+    pedidoDeAvancar = true;
+    return;
+  }
+  if (mensagem.tipo === 'otimizar') {
+    pedidoDeOtimizar = true;
     return;
   }
 

@@ -354,10 +354,15 @@ try {
     'reorganizando, a tela diz há quanto tempo a cobertura não melhora',
     durante.slice(durante.indexOf('Sem melhorar'), durante.indexOf('Sem melhorar') + 60)
   );
+  // A dica da construção avançada não aparece aqui de propósito: ela só entra
+  // quando a paciência no piso se esgota, junto com o botão que a liga. Quatro
+  // segundos depois de começar ainda há chance de fechar no mínimo, e sugerir o
+  // contrário seria convidar a desistir cedo. O oferecimento no momento certo é
+  // cobrado no estágio 7b.
   marcar(
-    /construção avançada/.test(durante) && /piso não bastar/.test(durante),
-    'e diz o que acontece se o piso não bastar, em vez de deixar a espera sem fim',
-    durante.slice(-110)
+    /Parar agora guarda o que está aí/.test(durante),
+    'e diz que parar não perde o trabalho, para a espera ser uma escolha',
+    durante.slice(-70)
   );
 
   await pagina.click('#ex-parar');
@@ -414,31 +419,43 @@ try {
     (await texto('#ex-retomar-aviso')).slice(0, 80)
   );
 
-  // ─── 7b. a construção avançada: a garantia é cumprida de verdade ───
+  // ─── 7b. os três estágios, cada um ligado à mão ───
   //
   // O caso que antes não terminava nunca. Em 20 números com jogos de 17 o piso
   // vale 160 e o melhor fechamento conhecido tem 240: **nenhuma** disposição de
-  // 160 cartelas cobre tudo. A reorganização ficava tentando o impossível para
-  // sempre, e a garantia nunca era cumprida.
+  // 160 cartelas cobre tudo. Cumprir a garantia exige passar do piso, e passar
+  // do piso troca um mínimo provado por uma solução que apenas funciona — é uma
+  // troca que não se faz pelas costas de ninguém.
   await pagina.reload({ waitUntil: 'networkidle' });
   await pagina.waitForSelector('#ex-grade .numero');
   await marcarNumeros(25, Array.from({ length: 20 }, (_, i) => i + 1));
   await regras(17, 15, 15);
   await pagina.selectOption('#ex-esforco', '1');
   await pagina.click('#ex-resolver');
-  // Sem tocar em Parar: quem tem de terminar é ele.
-  await esperarResultado(300000);
 
+  await pagina.waitForSelector('#ex-avancar:not([hidden])', { timeout: 240000 });
+  marcar(
+    (await numero('#ex-cartelas-agora')) === 160,
+    'esgotado o piso, a tela oferece a construção avançada em vez de decidir sozinha',
+    `${await numero('#ex-cartelas-agora')} cartelas, ${await texto('#ex-cobertura')}`
+  );
+
+  // E não passa do piso enquanto ninguém mandar.
+  await pagina.waitForTimeout(6000);
+  marcar(
+    (await numero('#ex-cartelas-agora')) <= 160 &&
+      !(await pagina.locator('#ex-avancar').isHidden()),
+    'e não passa do piso sozinha, por mais que ela continue trabalhando',
+    `${await numero('#ex-cartelas-agora')} cartelas depois de 6 s esperando`
+  );
+
+  await pagina.click('#ex-avancar');
+  await esperarResultado(300000);
   const cartelasAvancadas = await numero('#ex-encontrado');
   marcar(
-    /Confere\./.test(await texto('#ex-verificacao')),
-    'onde o piso não basta, a escalada termina sozinha com a garantia cumprida',
-    `${cartelasAvancadas} cartelas · ${(await texto('#ex-verificacao')).slice(0, 60)}`
-  );
-  marcar(
-    cartelasAvancadas > 160,
-    'passando do piso, porque fechar em 160 é impossível',
-    `${cartelasAvancadas} cartelas contra um piso de 160`
+    cartelasAvancadas > 160 && /Confere\./.test(await texto('#ex-verificacao')),
+    'ligada à mão, ela passa do piso e cumpre a garantia de verdade',
+    `${cartelasAvancadas} cartelas · ${(await texto('#ex-verificacao')).slice(0, 55)}`
   );
   const vereditoAvancado = await texto('#ex-frase');
   marcar(
@@ -446,16 +463,47 @@ try {
     'e o resultado nunca é chamado de mínimo: mostra os dois números',
     vereditoAvancado
   );
+
+  // ─── 7c. a otimização, também à mão ───
   marcar(
-    /construção avançada/.test(await texto('#ex-construcao')) &&
-      /não é o mínimo/.test(await texto('#ex-construcao')),
-    'a tela nomeia a construção avançada e diz o que ela custa',
-    (await texto('#ex-construcao')).slice(0, 110)
+    !(await pagina.locator('#ex-otimizar').isHidden()) &&
+      new RegExp(`menos de ${cartelasAvancadas.toLocaleString('pt-BR')}`).test(
+        await texto('#ex-otimizar')
+      ),
+    'cumprida a garantia, a tela oferece apertar o número',
+    await texto('#ex-otimizar')
+  );
+
+  await pagina.click('#ex-otimizar');
+  await pagina.waitForFunction(
+    () => /Otimizando/.test(document.getElementById('ex-construcao').textContent),
+    undefined,
+    { timeout: 60000 }
   );
   marcar(
-    /já ultrapassado/.test(await pagina.textContent('#ex-teto + small')),
-    'e o quadro do piso avisa que ele ficou para trás',
-    (await pagina.textContent('#ex-teto + small')).trim()
+    /Garantia cumprida com/.test(await texto('#ex-construcao')),
+    'e enquanto aperta, diz que o fechamento que já existe está guardado',
+    (await texto('#ex-construcao')).slice(0, 100)
+  );
+
+  await pagina.waitForTimeout(30000);
+  await pagina.click('#ex-parar');
+  await pagina.waitForFunction(
+    (antes) =>
+      Number(document.getElementById('ex-encontrado').textContent.replace(/\D/g, '')) !== antes,
+    cartelasAvancadas,
+    { timeout: 240000 }
+  );
+  const apertado = await numero('#ex-encontrado');
+  marcar(
+    apertado < cartelasAvancadas,
+    'apertar reduz o número de cartelas',
+    `${cartelasAvancadas} → ${apertado}`
+  );
+  marcar(
+    /Confere\./.test(await texto('#ex-verificacao')),
+    'e o que sobra continua cumprindo a garantia — apertar nunca estraga o que já valia',
+    (await texto('#ex-verificacao')).slice(0, 60)
   );
 
   // ─── 8. conferir, e o dinheiro ───

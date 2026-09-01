@@ -248,6 +248,12 @@ struct PassoDaEscalada {
     /// Se a construção já passou do piso — e portanto deixou de ser candidata
     /// a mínima. A tela é obrigada a dizer isso.
     alem_do_piso: bool,
+    /// A reorganização no piso esgotou a paciência sem melhorar nada: é a hora
+    /// de oferecer a construção avançada.
+    piso_esgotado: bool,
+    /// Quantas cartelas tem a menor coleção completa. Zero enquanto nenhuma
+    /// cumpriu a garantia; é o número que a otimização faz cair.
+    completo: usize,
     cobertura: f64,
     melhor_cobertura: f64,
     melhor_cartelas: usize,
@@ -263,6 +269,8 @@ fn passo_em_json(passo: &motor_exato::escalada::Passo) -> PassoDaEscalada {
         teto: passo.teto,
         piso: passo.piso,
         alem_do_piso: passo.alem_do_piso,
+        piso_esgotado: passo.piso_esgotado,
+        completo: passo.completo,
         cobertura: passo.cobertura,
         melhor_cobertura: passo.melhor_cobertura,
         melhor_cartelas: passo.melhor_cartelas,
@@ -312,6 +320,22 @@ impl EscaladaExata {
     /// É a resposta a "1 cartela → quanto? 2 cartelas → quanto?", e existe como
     /// dado guardado, e não como efeito do instante em que a tela olhou — a
     /// subida costuma acontecer rápido demais para ser vista ao vivo.
+    /// Liga a construção avançada: o teto sai e a subida recomeça.
+    ///
+    /// Manual de propósito. Passar do piso troca um mínimo provado por uma
+    /// solução que apenas funciona, e quem faz essa troca é quem está olhando.
+    pub fn liberar_o_teto(&mut self) {
+        self.interno.liberar_o_teto();
+    }
+
+    /// Liga a otimização: procura cobrir tudo com uma cartela a menos, e outra.
+    ///
+    /// Só tem efeito depois de a garantia estar cumprida. A coleção completa já
+    /// encontrada fica guardada e nunca é perdida.
+    pub fn otimizar(&mut self) {
+        self.interno.otimizar();
+    }
+
     pub fn curva(&self) -> Result<String, JsValue> {
         let pontos: Vec<(u32, f32)> = self.interno.curva().to_vec();
         json(&pontos).map_err(|e| JsValue::from_str(&e))
@@ -641,18 +665,79 @@ mod testes {
         }
     }
 
+    /// Os três estágios, ligados à mão como a tela os liga.
+    ///
+    /// O que se cobra é a ordem e a propriedade que a torna segura: a
+    /// construção avançada só entra quando alguém manda, a otimização só depois
+    /// de a garantia estar cumprida, e apertar **nunca** devolve uma coleção
+    /// que não cobre — a completa fica guardada à parte.
+    #[test]
+    fn os_tres_estagios_sao_ligados_a_mao() {
+        let pedido = r#"{"v":10,"k":4,"j":2,"t":2,"r":1}"#;
+        let mut e = EscaladaExata::nova(pedido, 1).unwrap();
+
+        // Uma cartela não cobre os 45 pares: o piso se esgota e fica esperando.
+        let mut passo: serde_json::Value = serde_json::from_str(&e.passo().unwrap()).unwrap();
+        for _ in 0..4_000 {
+            passo = serde_json::from_str(&e.avancar(20_000.0).unwrap()).unwrap();
+            if passo["piso_esgotado"].as_bool().unwrap() {
+                break;
+            }
+        }
+        assert_eq!(passo["piso_esgotado"], true, "{passo}");
+        assert_eq!(passo["alem_do_piso"], false, "não passa do piso sem mandarem");
+        assert_eq!(passo["fechou"], false);
+
+        // Ligada à mão, a construção avançada fecha.
+        e.liberar_o_teto();
+        for _ in 0..4_000 {
+            passo = serde_json::from_str(&e.avancar(20_000.0).unwrap()).unwrap();
+            if passo["fechou"].as_bool().unwrap() {
+                break;
+            }
+        }
+        assert_eq!(passo["fechou"], true, "{passo}");
+        assert_eq!(passo["alem_do_piso"], true);
+        let completo = passo["completo"].as_u64().unwrap();
+        assert!(completo > 1);
+
+        // Ligada à mão, a otimização aperta — e o que ela devolve continua
+        // cobrindo tudo.
+        e.otimizar();
+        for _ in 0..4_000 {
+            passo = serde_json::from_str(&e.avancar(20_000.0).unwrap()).unwrap();
+        }
+        let apertado = passo["completo"].as_u64().unwrap();
+        assert!(apertado <= completo, "a otimização não pode piorar o número");
+        let cartelas: Vec<Vec<u32>> = serde_json::from_str(&e.melhor().unwrap()).unwrap();
+        assert_eq!(cartelas.len() as u64, apertado, "o melhor é a menor coleção completa");
+        let conferido: serde_json::Value =
+            serde_json::from_str(&verificar_com(pedido, &e.melhor().unwrap()).unwrap()).unwrap();
+        assert_eq!(conferido["cobre"], true, "apertar devolveu algo que não cobre");
+    }
+
     /// A ponte precisa entregar os dois números, e a diferença entre eles é o
     /// que autoriza — ou proíbe — a palavra "mínimo" na tela.
     #[test]
     fn a_ponte_entrega_o_piso_e_o_modo_avancado() {
-        // Uma cartela não cobre os 45 pares de dez números: o piso de 1 se
-        // esgota, o modo avançado entra, e a cobertura fecha.
+        // Uma cartela não cobre os 45 pares de dez números. O piso se esgota, e
+        // a escalada **fica lá**: passar dele é decisão de quem está olhando, e
+        // sem essa decisão ela não passa por conta própria.
         let mut e = EscaladaExata::nova(r#"{"v":10,"k":4,"j":2,"t":2,"r":1}"#, 1).unwrap();
         let mut passo: serde_json::Value =
             serde_json::from_str(&e.avancar(50_000.0).unwrap()).unwrap();
         assert_eq!(passo["piso"], 1);
         assert_eq!(passo["alem_do_piso"], false);
 
+        for _ in 0..2_000 {
+            passo = serde_json::from_str(&e.avancar(50_000.0).unwrap()).unwrap();
+        }
+        assert_eq!(passo["fechou"], false, "não pode fechar sem passar do piso");
+        assert_eq!(passo["alem_do_piso"], false, "e não passa do piso sozinha");
+        assert_eq!(passo["piso_esgotado"], true, "mas avisa que o piso se esgotou");
+
+        // Mandada, ela passa — e aí sim fecha.
+        e.liberar_o_teto();
         for _ in 0..2_000 {
             passo = serde_json::from_str(&e.avancar(50_000.0).unwrap()).unwrap();
             if passo["fechou"].as_bool().unwrap() {

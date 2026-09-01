@@ -91,18 +91,32 @@ Onde ele é atingível, a escalada fecha nele e o mínimo está provado. Onde n�
 nenhuma disposição daquele tamanho cobre tudo — e a versão anterior ficava
 reorganizando o impossível para sempre, sem nunca cumprir a garantia.
 
-Agora, quando a reorganização atravessa cinco mil rodadas sem uma única
-melhoria, o teto sai e a subida recomeça até fechar de verdade. A paciência não
-é arbitrária: medindo os casos em que o piso **é** alcançável, a reorganização
-fecha cedo — 273 rodadas em 19 números com jogos de 17, 793 em 20 com jogos de
-18, zero em 18 com jogos de 17, que fecha ainda na subida. Onde não é, ela
-atravessa milhões sem melhorar uma vez.
+Quando a reorganização atravessa cinco mil rodadas sem uma única melhoria, a
+tela **oferece** a construção avançada — e espera. A paciência não é arbitrária:
+medindo os casos em que o piso **é** alcançável, a reorganização fecha cedo —
+273 rodadas em 19 números com jogos de 17, 793 em 20 com jogos de 18, zero em 18
+com jogos de 17, que fecha ainda na subida. Onde não é, ela atravessa milhões sem
+melhorar uma vez.
 
-Medido, com o caminho completo: 20 números com jogos de 17 fecha em 100% com
-**344 cartelas em 31 segundos**, contra as 240 do melhor fechamento conhecido. A
-garantia passa a ser cumprida; o preço é que aquilo deixa de ser o mínimo — e é
-exatamente isso que a tela passa a dizer, trocando *"Mínimo exato"* por
-*"Solução encontrada: 344 · Mínimo comprovado: ≥ 160"*.
+São três estágios, e **cada transição é sua**:
+
+1. **Escalada** — sobe até o piso e reorganiza. Fechando aqui, o mínimo está
+   provado e não há mais nada a fazer.
+2. **Construção avançada** — o teto sai e a subida recomeça até a garantia ser
+   cumprida. Ligada por você: passar do piso troca um mínimo provado por uma
+   solução que apenas funciona.
+3. **Otimização** — tenta cobrir tudo com uma cartela a menos, e outra, enquanto
+   você deixar. O fechamento que já cumpre a garantia fica guardado o tempo
+   todo: apertar só pode melhorar o número, nunca estragar o que você já tem.
+
+Medido pela tela, em 20 números com jogos de 17: a escalada para em 160 cartelas
+com 86,4%; a construção avançada fecha em 100% com **342**; a otimização leva
+esse número a **317 em trinta segundos**, e continua caindo enquanto rodar. O
+melhor fechamento conhecido para essa configuração tem 240.
+
+O preço de passar do piso é deixar de ser o mínimo, e é exatamente isso que a
+tela passa a dizer, trocando *"Mínimo exato"* por *"Solução encontrada: 317 ·
+Mínimo comprovado: ≥ 160"*.
 
 **→ [Abrir o aplicativo](https://jefersondias043-code.github.io/Sonho-l-cido/)**
 
