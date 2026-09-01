@@ -139,13 +139,14 @@
       tem, trocando e reestruturando.
       <br><br>
       <b>Se nem assim fechar</b>, é porque o piso não basta: ele diz que nada
-      menor existe, e não que aquele tamanho é suficiente. Aí a tela oferece a
-      <b>construção avançada</b>, que volta a acrescentar cartelas até a garantia
-      ser cumprida de verdade. Ela é ligada por você, e não sozinha: passar do
-      piso troca um mínimo provado por uma solução que apenas funciona, e a
-      partir daí a tela mostra os dois números separados.
+      menor existe, e não que aquele tamanho é suficiente. Para esse caso existe
+      a <b>construção avançada</b>, que volta a acrescentar cartelas até a
+      garantia ser cumprida de verdade. Ela fica disponível o tempo todo, e quem
+      liga é você: passar do piso troca um mínimo provado por uma solução que
+      apenas funciona, e a partir daí a tela mostra os dois números separados. A
+      tela diz quando o piso parece esgotado, mas a hora de mudar é sua.
       <br><br>
-      Cumprida a garantia, aparece a <b>otimização</b>: ela tenta cobrir tudo com
+      Cumprida a garantia, entra a <b>otimização</b>: ela tenta cobrir tudo com
       uma cartela a menos, e outra, e outra, enquanto você deixar. O fechamento
       que já cumpre a garantia fica guardado o tempo todo — apertar só pode
       melhorar o número, nunca estragar o que você já tem.
@@ -159,6 +160,12 @@
 
     <div class="barra-progresso"><div id="ex-construcao-barra" style="width:0%"></div></div>
     <div class="referencia" id="ex-construcao">começando…</div>
+
+    <!-- A nota acompanha os comandos e muda com o que está acontecendo. Ela
+         existe porque o botão deixou de ser uma porta que abre na hora certa:
+         estando sempre disponível, é o texto que passa a dizer se agora é uma
+         boa hora — e quem decide continua sendo quem está olhando. -->
+    <p class="ajuda" id="ex-comandos-nota" hidden></p>
 
     <button class="principal" id="ex-avancar" hidden>
       Ativar construção avançada

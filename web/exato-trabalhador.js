@@ -113,8 +113,15 @@ async function escalar(mensagem) {
   let primeiroLote = true;
   let otimizando = Boolean(mensagem.otimizar);
 
-  // Retomar já em otimização: o botão da tela manda escalar de novo com o
-  // estado guardado e este pedido junto.
+  // Retomar já com um comando ligado: os botões da tela mandam escalar de novo
+  // com o estado guardado e o pedido junto.
+  //
+  // É o que faz um comando valer mesmo quando o laço anterior já acabou. O laço
+  // vive dentro de uma chamada desta função, e o motor vai embora com ela: uma
+  // bandeira levantada depois disso seria levantada para ninguém.
+  if (mensagem.avancar) {
+    escalada.liberar_o_teto();
+  }
   if (mensagem.otimizar) {
     escalada.otimizar();
   }

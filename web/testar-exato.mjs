@@ -433,11 +433,25 @@ try {
   await pagina.selectOption('#ex-esforco', '1');
   await pagina.click('#ex-resolver');
 
-  await pagina.waitForSelector('#ex-avancar:not([hidden])', { timeout: 240000 });
+  // O comando já está à mão, e o motor mal começou.
+  //
+  // Esta é a regressão do defeito que deixava a tela sem saída. A construção
+  // avançada só era oferecida depois de a reorganização atravessar cinco mil
+  // rodadas **seguidas** sem um ganho sequer; em 25 dezenas com jogos de 17 o
+  // motor faz cinco rodadas por segundo, e qualquer melhora isolada zerava a
+  // contagem. O botão não chegava nunca, justamente nas configurações grandes,
+  // que são as que mais precisam dele.
+  //
+  // A verificação é pelo rótulo, e não pelo relógio: o rótulo só ganha o aviso
+  // "o piso não está bastando" quando o motor esgota a paciência, que era a
+  // única condição em que o botão aparecia antes. Vê-lo sem o aviso prova que
+  // ele deixou de depender dela.
+  await pagina.waitForSelector('#ex-avancar:not([hidden])', { timeout: 120000 });
+  const rotuloCedo = await texto('#ex-avancar');
   marcar(
-    (await numero('#ex-cartelas-agora')) === 160,
-    'esgotado o piso, a tela oferece a construção avançada em vez de decidir sozinha',
-    `${await numero('#ex-cartelas-agora')} cartelas, ${await texto('#ex-cobertura')}`
+    rotuloCedo === 'Ativar construção avançada',
+    'a construção avançada fica à mão antes de o motor dizer que o piso se esgotou',
+    `${await numero('#ex-cartelas-agora')} cartelas · "${rotuloCedo}"`
   );
 
   // E não passa do piso enquanto ninguém mandar.
@@ -449,61 +463,69 @@ try {
     `${await numero('#ex-cartelas-agora')} cartelas depois de 6 s esperando`
   );
 
-  await pagina.click('#ex-avancar');
-  await esperarResultado(300000);
-  const cartelasAvancadas = await numero('#ex-encontrado');
-  marcar(
-    cartelasAvancadas > 160 && /Confere\./.test(await texto('#ex-verificacao')),
-    'ligada à mão, ela passa do piso e cumpre a garantia de verdade',
-    `${cartelasAvancadas} cartelas · ${(await texto('#ex-verificacao')).slice(0, 55)}`
+  // O que o motor sabe vira conselho, e não porta: esgotada a paciência no
+  // piso, o rótulo muda e a nota recomenda — mas o botão já estava lá.
+  await pagina.waitForFunction(
+    () => /não está bastando/.test(document.getElementById('ex-avancar')?.textContent ?? ''),
+    undefined,
+    { timeout: 180000 }
   );
-  const vereditoAvancado = await texto('#ex-frase');
   marcar(
-    !/[Mm]ínimo exato/.test(vereditoAvancado) && /≥ 160/.test(vereditoAvancado),
-    'e o resultado nunca é chamado de mínimo: mostra os dois números',
-    vereditoAvancado
+    /piso se esgotou/.test(await texto('#ex-comandos-nota')),
+    'e quando o piso se esgota, a tela recomenda em vez de destrancar',
+    (await texto('#ex-comandos-nota')).slice(0, 80)
   );
 
-  // ─── 7c. a otimização, também à mão ───
+  await pagina.click('#ex-avancar');
+
+  // ─── 7c. a otimização, também à mão, e valendo na hora ───
+  //
+  // O botão é tocado no **instante** em que aparece, que é o momento em que a
+  // garantia acaba de ser cumprida e o resto do pipeline — verificação, prova —
+  // ainda está correndo. Era exatamente aí que o toque não fazia nada: a tela
+  // decidia pelo `rodando`, que segue verdadeiro durante aqueles estágios, e
+  // levantava uma bandeira dentro do laço da escalada, que já tinha acabado.
+  await pagina.waitForSelector('#ex-otimizar:not([hidden])', { timeout: 300000 });
+  const rotuloOtimizar = await texto('#ex-otimizar');
+  const cartelasAvancadas = Number(rotuloOtimizar.replace(/\D/g, ''));
   marcar(
-    !(await pagina.locator('#ex-otimizar').isHidden()) &&
-      new RegExp(`menos de ${cartelasAvancadas.toLocaleString('pt-BR')}`).test(
-        await texto('#ex-otimizar')
-      ),
-    'cumprida a garantia, a tela oferece apertar o número',
-    await texto('#ex-otimizar')
+    cartelasAvancadas > 160,
+    'cumprida a garantia acima do piso, a tela oferece apertar o número',
+    rotuloOtimizar
   );
 
   await pagina.click('#ex-otimizar');
   await pagina.waitForFunction(
     () => /Otimizando/.test(document.getElementById('ex-construcao').textContent),
     undefined,
-    { timeout: 60000 }
+    { timeout: 90000 }
   );
   marcar(
     /Garantia cumprida com/.test(await texto('#ex-construcao')),
-    'e enquanto aperta, diz que o fechamento que já existe está guardado',
+    'tocada no instante em que aparece, a otimização entra mesmo assim',
     (await texto('#ex-construcao')).slice(0, 100)
   );
 
   await pagina.waitForTimeout(30000);
   await pagina.click('#ex-parar');
-  await pagina.waitForFunction(
-    (antes) =>
-      Number(document.getElementById('ex-encontrado').textContent.replace(/\D/g, '')) !== antes,
-    cartelasAvancadas,
-    { timeout: 240000 }
-  );
+  await esperarResultado(300000);
   const apertado = await numero('#ex-encontrado');
   marcar(
-    apertado < cartelasAvancadas,
-    'apertar reduz o número de cartelas',
-    `${cartelasAvancadas} → ${apertado}`
+    apertado < cartelasAvancadas && apertado > 160,
+    'apertar reduz o número de cartelas, e nunca abaixo do piso',
+    `${cartelasAvancadas} → ${apertado}, piso 160`
   );
   marcar(
     /Confere\./.test(await texto('#ex-verificacao')),
     'e o que sobra continua cumprindo a garantia — apertar nunca estraga o que já valia',
     (await texto('#ex-verificacao')).slice(0, 60)
+  );
+
+  const vereditoAvancado = await texto('#ex-frase');
+  marcar(
+    !/[Mm]ínimo exato/.test(vereditoAvancado) && /≥ 160/.test(vereditoAvancado),
+    'e o resultado nunca é chamado de mínimo: mostra os dois números',
+    vereditoAvancado
   );
 
   // ─── 8. conferir, e o dinheiro ───

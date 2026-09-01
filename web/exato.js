@@ -89,6 +89,19 @@ const CARTELAS_POR_LEVA = 60;
  */
 let etapa = 0;
 let rodando = false;
+
+/*
+ * Se o laço da escalada está vivo neste instante.
+ *
+ * Diferente de `rodando`, que cobre o pipeline inteiro — verificação e prova
+ * inclusive. A distinção não é preciosismo: os dois comandos manuais são
+ * bandeiras aplicadas **entre lotes da escalada**, e quando o laço já terminou
+ * não há entre-lotes nenhum. Um toque em "otimizar" no exato instante em que a
+ * garantia fechou levantava a bandeira num laço que já não existia, e o botão
+ * não fazia absolutamente nada. Sabendo que o laço morreu, a tela retoma o
+ * motor com o pedido junto em vez de falar sozinha.
+ */
+let escalandoAgora = false;
 let pedido = null;
 let esforco = 4;
 let estado = null;
@@ -412,6 +425,7 @@ function enviar(mensagem) {
 
 function encerrar() {
   rodando = false;
+  escalandoAgora = false;
   $('ex-parar').hidden = true;
   $('ex-avancar').hidden = true;
   encerrarASessao();
@@ -485,22 +499,95 @@ function haQuanto(milissegundos) {
 /**
  * Quais dos dois comandos manuais fazem sentido agora.
  *
- * A construção avançada aparece quando a reorganização esgota a paciência no
- * piso — antes disso ainda há chance de fechar no mínimo, e oferecer o
- * contrário seria convidar a desistir cedo. A otimização aparece quando a
- * garantia já está cumprida acima do piso, que é o único caso em que há folga
- * para comer.
+ * ## Por que a paciência do motor não manda mais aqui
+ *
+ * A construção avançada só aparecia depois de a reorganização atravessar
+ * `RODADAS_NO_PISO` — cinco mil rodadas sem um ganho sequer — e a ideia era não
+ * convidar ninguém a desistir de um mínimo que ainda estava ao alcance.
+ *
+ * Medido, o efeito era o oposto do pretendido. Em 25 dezenas com jogos de 17, o
+ * motor faz cerca de cinco rodadas por segundo: cinco mil rodadas **seguidas**
+ * sem melhora levariam uns dezessete minutos, e qualquer ganho isolado no meio
+ * do caminho zera a contagem e recomeça tudo. Na prática o botão não chegava
+ * nunca, e a tela ficava sem saída — em cima justamente das configurações
+ * grandes, que são as que mais precisam do modo avançado.
+ *
+ * Uma trava automática na frente de um comando manual é uma contradição. Agora
+ * os dois comandos ficam disponíveis enquanto fizerem sentido, e o que o motor
+ * sabe vira **conselho**, não porta: a nota abaixo dos números diz se agora é
+ * uma boa hora, e a hora é de quem está olhando.
+ *
+ * O que continua sendo condição, porque é matemática e não opinião:
+ *
+ * - avançar só faz sentido enquanto o teto ainda é o piso e a garantia não foi
+ *   cumprida — passado o piso, já se está no modo avançado;
+ * - otimizar só faz sentido havendo uma coleção completa **maior que o piso**.
+ *   No piso não há folga: ele é cota inferior provada, e apertar dali seria
+ *   esperar por algo que não existe.
  */
 function pintarOsComandos(passo, terminou) {
-  const podeAvancar = Boolean(passo?.piso_esgotado) && !passo.fechou && !terminou;
+  const podeAvancar =
+    Boolean(passo) && !passo.alem_do_piso && !passo.fechou && !terminou;
+
+  const otimizando = passo?.fase === 'otimizando' && !terminou;
+  const completo = passo?.completo ?? 0;
   const podeOtimizar =
-    Boolean(passo?.fechou) && Boolean(passo?.alem_do_piso) && (passo.completo ?? 0) > 1;
+    Boolean(passo) && !otimizando && completo > 1 && completo > (passo.piso ?? 0);
 
   $('ex-avancar').hidden = !podeAvancar;
   $('ex-otimizar').hidden = !podeOtimizar;
-  $('ex-otimizar').textContent = terminou
-    ? `Ativar otimização — tentar menos de ${milhares(passo.completo)} cartelas`
-    : 'Ativar otimização — reduzir o número de cartelas';
+
+  // O rótulo carrega o conselho do motor. Com o botão sempre à mão, é ele que
+  // distingue "dá para fazer" de "é hora de fazer".
+  $('ex-avancar').textContent = passo?.piso_esgotado
+    ? 'Ativar construção avançada — o piso não está bastando'
+    : 'Ativar construção avançada';
+
+  $('ex-otimizar').textContent = `Ativar otimização — tentar menos de ${milhares(
+    completo
+  )} cartelas`;
+
+  pintarANotaDosComandos(passo, podeAvancar, podeOtimizar);
+}
+
+/**
+ * A frase que acompanha os comandos.
+ *
+ * Ela carrega o que a antiga trava carregava calada: se o piso ainda pode
+ * bastar, se ele já se esgotou, e o que se perde ao passar dele. Dizer isso é
+ * mais útil do que esconder o botão — quem lê decide, e quem não lê pelo menos
+ * não fica preso.
+ */
+function pintarANotaDosComandos(passo, podeAvancar, podeOtimizar) {
+  const nota = $('ex-comandos-nota');
+  if (!nota) return;
+
+  const partes = [];
+
+  if (podeAvancar) {
+    partes.push(
+      passo.piso_esgotado
+        ? `<b>O piso se esgotou:</b> ${milhares(passo.rodadas)} rodadas, e nenhuma ` +
+          `disposição de ${emCartelas(passo.piso)} cobriu tudo. A construção ` +
+          'avançada é o caminho para os 100%.'
+        : `A escalada ainda está tentando fechar com ${emCartelas(passo.piso)}, que é ` +
+          'o piso provado. A construção avançada passa desse número e vai até a ' +
+          'garantia ser cumprida — o resultado deixa de ser o mínimo. Enquanto a ' +
+          'cobertura sobe, vale esperar.'
+    );
+  }
+
+  if (podeOtimizar) {
+    partes.push(
+      `<b>A garantia já está cumprida com ${emCartelas(passo.completo)}.</b> A ` +
+        'otimização tira uma cartela de cada vez e refaz a cobertura; o fechamento ' +
+        'que você já tem fica guardado, e parar a qualquer momento devolve o melhor ' +
+        'número alcançado.'
+    );
+  }
+
+  nota.innerHTML = partes.join('<br><br>');
+  nota.hidden = partes.length === 0;
 }
 
 function pintarEscalada(passo, terminou) {
@@ -609,12 +696,10 @@ function pintarEscalada(passo, terminou) {
     `<b>${porcento(passo.melhor_cobertura)} de cobertura</b> ` +
     `<em>— no piso de ${milhares(passo.teto)} cartelas, reorganizando sem acrescentar ` +
     `nenhuma (${milhares(passo.rodadas)} rodadas).</em>` +
-    `<br><em>Sem melhorar há <b>${parado}</b>.${
-      passo.piso_esgotado
-        ? ' O piso provavelmente não basta — o botão abaixo acrescenta cartelas ' +
-          'até a garantia ser cumprida.'
-        : ''
-    } Parar agora guarda o que está aí.</em>`;
+    // O conselho sobre o piso esgotado mora na nota dos comandos, junto do
+    // botão que o atende. Dito aqui também, virava a mesma frase duas vezes
+    // com palavras diferentes, a três linhas de distância.
+    `<br><em>Sem melhorar há <b>${parado}</b>. Parar agora guarda o que está aí.</em>`;
 }
 
 function pintarVerificacao(dados) {
@@ -1219,14 +1304,20 @@ function confirmarImportacao() {
 /* ─────────── o que vem depois de cada estágio ─────────── */
 
 /** Manda a escalada começar, com o teto que o piso determinou. */
-/** Retoma o fechamento que está na tela, já em modo de otimização. */
-function comecarAOtimizacao() {
+/**
+ * Retoma o fechamento que está na tela com um comando já ligado.
+ *
+ * `retomar` limpa as bandeiras do trabalhador de propósito, então o pedido não
+ * pode ser mandado por fora: ele viaja dentro da própria mensagem de escalar.
+ */
+function retomarComPedido(pedidoJunto) {
   if (!estado?.guardado) {
-    avisar('Não há estado guardado para otimizar.');
-    return;
+    avisar('Não há trabalho guardado para continuar.');
+    return false;
   }
   etapa += 1;
   rodando = true;
+  escalandoAgora = true;
   $('ex-parar').hidden = false;
   $('ex-resolver').disabled = true;
   estado.parado = false;
@@ -1235,11 +1326,13 @@ function comecarAOtimizacao() {
     tipo: 'escalar',
     teto: estado.piso,
     estado: estado.guardado,
-    otimizar: true,
+    ...pedidoJunto,
   });
+  return true;
 }
 
 function comecarEscalada(estadoGuardado = null) {
+  escalandoAgora = true;
   $('ex-construcao-cartao').hidden = false;
   $('ex-cartelas-agora').textContent = '0';
   $('ex-teto').textContent = milhares(estado.piso);
@@ -1412,6 +1505,7 @@ trabalhador.onmessage = (evento) => {
       break;
 
     case 'escalada':
+      escalandoAgora = false;
       estado.cartelas = mensagem.cartelas;
       estado.metodo =
         mensagem.dados.fase === 'subindo'
@@ -1605,22 +1699,33 @@ $('ex-parar').addEventListener('click', () => {
   avisar('Parando…');
 });
 
+/*
+ * Os dois comandos manuais.
+ *
+ * Cada um tem dois caminhos, e a escolha entre eles é `escalandoAgora`: com o
+ * laço vivo, uma bandeira aplicada entre lotes; com o laço encerrado, uma
+ * retomada do motor já com o pedido junto. Antes, o segundo caminho era
+ * escolhido por `rodando`, que continua verdadeiro durante a verificação e a
+ * prova — e tocar em otimizar naquela janela não fazia nada.
+ */
 $('ex-avancar').addEventListener('click', () => {
   $('ex-avancar').hidden = true;
-  trabalhador.postMessage({ tipo: 'avancar-alem-do-piso' });
-  avisar('Construção avançada ligada.');
+  if (escalandoAgora) {
+    trabalhador.postMessage({ tipo: 'avancar-alem-do-piso' });
+    avisar('Construção avançada ligada.');
+  } else if (retomarComPedido({ avancar: true })) {
+    avisar('Construção avançada ligada.');
+  }
 });
 
 $('ex-otimizar').addEventListener('click', () => {
   $('ex-otimizar').hidden = true;
-  if (rodando) {
+  if (escalandoAgora) {
     trabalhador.postMessage({ tipo: 'otimizar' });
-  } else {
-    // A escalada já terminou e o motor foi liberado: retomar com o estado
-    // guardado é o que permite continuar apertando o mesmo fechamento.
-    comecarAOtimizacao();
+    avisar('Otimização ligada.');
+  } else if (retomarComPedido({ otimizar: true })) {
+    avisar('Otimização ligada.');
   }
-  avisar('Otimização ligada.');
 });
 
 $('ex-ver-cartelas').addEventListener('click', alternarCartelas);
