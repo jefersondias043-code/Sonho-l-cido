@@ -20,6 +20,29 @@ algum deles". É o **sistema de Turán T(v, b, a)**, e a diferença de tamanho �
 brutal: em 20 dezenas com jogos de 17 são 1.140 trincas em vez de cartelas de
 dezessete elementos, e a simetria cíclica passa a ser trivial de escrever.
 
+## Onde chegou
+
+    configuração   publicado   protótipo   razão
+    pool 19 j 17          51          51   1,00×
+    pool 20 j 18          40          40   1,00×
+    pool 21 j 19          34          34   1,00×
+    pool 22 j 20          30          30   1,00×
+    pool 20 j 17         240         240   1,00×
+    pool 21 j 18         182         212   1,16×
+    pool 22 j 19         126         160   1,27×
+
+O motor que está no aplicativo, nos mesmos casos: 55, 46, 34, 31, 328, 246, 194.
+
+Cinco dos sete saem exatamente no melhor fechamento publicado, e a razão média
+cai de 1,19× para 1,06×.
+
+Os dois que faltam não são falta de orçamento: dez órbitas em pool 21 deixam 126
+alvos descobertos depois de três buscas longas, e onze dão 231. Em Z₂₁ um
+conjunto de três só é fixado por rotação se for `{i, i+7, i+14}` — sete deles,
+uma órbita de sete —, então toda união de órbitas tem `21k` ou `21k + 7`
+cartelas, e 182 não é nenhum dos dois. Onde o fechamento publicado é cíclico,
+esta busca o encontra; onde não é, ela para na melhor solução cíclica.
+
 ## As abordagens em teste
 
 - **guloso** — a cada passo, o conjunto de maior ganho entre todos. É o
@@ -32,6 +55,15 @@ dezessete elementos, e a simetria cíclica passa a ser trivial de escrever.
 - **cíclico e depois guloso** — órbitas enquanto elas rendem, guloso para
   terminar. Órbitas inteiras acertam a estrutura mas exageram no fim.
 - **poda** — depois de fechar, tira o que já não faz falta.
+- **pesos** — a busca que fecha a conta: encarecer o alvo que resiste até que
+  deixá-lo descoberto doa mais do que estragar a vizinhança para cobri-lo.
+- **recursão de Turán** — `T(n,b,a) ≤ T(n−1,b−1,a−1) + T(n−1,b,a)`, construção
+  que não depende de simetria nenhuma. **Um nível**: descendo até o fundo, cada
+  nível acumula a folga do anterior e o resultado piora.
+
+Nenhuma ganha sozinha, e é por isso que o motor roda duas e fica com a menor: a
+busca orbital vence onde o fechamento publicado é cíclico, a recursão vence onde
+ele não é.
 
     cargo run --release --example prototipo
 */
@@ -1302,6 +1334,38 @@ fn resolver_direto(v: usize, a: usize, b: usize, esforco: usize) -> Vec<u32> {
     t.escolhidos.clone()
 }
 
+/// Pergunta direta: `m` órbitas cobrem, ou não?
+///
+/// Existe para separar duas coisas que a descida confunde. Quando a busca para
+/// em onze órbitas, isso pode querer dizer "dez são impossíveis" ou "dez são
+/// possíveis e eu não achei" — e a diferença decide se o próximo passo é mais
+/// orçamento ou outra ideia. Perguntando por um `m` fixo, com todo o orçamento
+/// concentrado nele, a resposta fica muito mais firme.
+fn sonda_orbital(v: usize, a: usize, b: usize, m: usize, trabalho: usize, tentativas: usize) {
+    let mut base = Turan::novo(v, a, b);
+    base.preparar();
+    let mut o = Orbital::novo(&base);
+    let total = o.cobre.len();
+    let por_orbita = o.cobre.iter().map(|c| c.len()).sum::<usize>() / total.max(1);
+    let rodadas = (trabalho / por_orbita.max(1).saturating_mul(2)).clamp(500, 20_000_000);
+
+    for tentativa in 1..=tentativas {
+        o.semente = o.semente.wrapping_add(tentativa as u64 * 7_919);
+        if o.tenta(m, rodadas) {
+            println!(
+                "  T({v},{b},{a}) com {m} órbitas: COBRE, {} cartelas (tentativa {tentativa})",
+                o.cartelas()
+            );
+            return;
+        }
+    }
+    println!(
+        "  T({v},{b},{a}) com {m} órbitas: não achou em {tentativas} tentativas de {rodadas} rodadas \
+         (faltaram {} alvos)",
+        o.descobertos
+    );
+}
+
 fn main() {
     // `CASO=20,17` isola uma configuração; `DUROS=1` corre só a folga de 3.
     let um_so = std::env::var("CASO").ok();
@@ -1320,17 +1384,49 @@ fn main() {
     let fundo_da_recursao: usize = std::env::var("FUNDO")
         .ok()
         .and_then(|s| s.parse().ok())
-        .unwrap_or(18);
+        .unwrap_or(0);
     let movimentos: usize = std::env::var("MOVIMENTOS")
         .ok()
         .and_then(|s| s.parse().ok())
         .unwrap_or(2_000_000);
 
+    // `DIRETO=v,a,b` resolve um sistema de Turán qualquer, fora da família.
+    //
+    // Serve para medir os pedaços de uma recursão: `T(21,6,3)` sai de
+    // `T(20,5,2) + T(20,6,3)`, e o segundo não corresponde a nenhuma
+    // configuração de sorteio 15 — não está na tabela, mas é resolvível.
+    if let Ok(pedido) = std::env::var("DIRETO") {
+        let n: Vec<usize> = pedido.split(',').filter_map(|s| s.parse().ok()).collect();
+        if n.len() == 3 {
+            let (v, a, b) = (n[0], n[1], n[2]);
+            let comeco = Instant::now();
+            let conjuntos = resolver_direto(v, a, b, movimentos);
+            println!(
+                "\n  T({v},{b},{a}) = {} conjuntos  ({:.1}s)\n",
+                conjuntos.len(),
+                comeco.elapsed().as_secs_f64()
+            );
+            return;
+        }
+    }
+
+    // `SONDA=21,18,9` pergunta se nove órbitas cobrem aquele caso.
+    if let Ok(pedido) = std::env::var("SONDA") {
+        let n: Vec<usize> = pedido.split(',').filter_map(|s| s.parse().ok()).collect();
+        if n.len() == 3 {
+            let (pool, jogo, m) = (n[0], n[1], n[2]);
+            println!();
+            sonda_orbital(pool, pool - jogo, pool - 15, m, 20_000_000_000, 3);
+            println!();
+            return;
+        }
+    }
+
     println!("\nProtótipo — construção em T(v, b, a), contra os melhores conhecidos\n");
     println!(
-        "  {:<14} {:>4} {:>8} {:>8} {:>8} {:>8} {:>10} {:>9} {:>7} {:>12} {:>8}",
+        "  {:<14} {:>4} {:>8} {:>8} {:>8} {:>8} {:>10} {:>9} {:>7} {:>11} {:>7} {:>6} {:>8}",
         "configuração", "ref", "guloso", "cíclico", "misto", "orbital", "combinado", "recozido",
-        "pesos", "recursivo", "tempo"
+        "pesos", "recursivo", "MELHOR", "razão", "tempo"
     );
 
     for &(pool, jogo, conhecido) in REFERENCIA {
@@ -1396,15 +1492,27 @@ fn main() {
         };
 
         // A recursão de Turán, e depois a mesma descida sobre o que ela deu.
+        //
+        // **Um nível, e não até o fundo.** Medido: descendo até o pool 18, a
+        // recursão deu 238 cartelas em pool 21 com jogos de 18 — pior que as 231
+        // da busca orbital, porque cada nível acrescenta a folga do nível
+        // anterior. Parando no primeiro degrau e deixando o motor resolver as
+        // duas metades, a mesma recursão dá 212. A construção não era ruim;
+        // recursar fundo é que era.
+        let fundo = if fundo_da_recursao > 0 {
+            fundo_da_recursao
+        } else {
+            v - 1
+        };
         let n_recursivo = {
-            let conjuntos = recursivo(v, a, b, movimentos / 4, fundo_da_recursao);
+            let conjuntos = recursivo(v, a, b, movimentos, fundo);
             let mut r = Turan::novo(v, a, b);
             r.preparar();
             r.refazer(conjuntos);
             r.podar();
             let bruto = r.escolhidos.len();
             descer_com_pesos(&mut r, movimentos, tentativas);
-            format!("{bruto}→{}", r.escolhidos.len())
+            (bruto, r.escolhidos.len())
         };
 
         // O caminho completo: órbitas para a estrutura, poda, e recozimento em
@@ -1451,8 +1559,17 @@ fn main() {
             r.escolhidos.len()
         };
 
+        // O que o motor entregaria: o menor entre os dois caminhos. Rodar os
+        // dois custa o dobro e é o que garante não perder nenhum dos dois — a
+        // busca orbital ganha onde o fechamento publicado é cíclico, a recursão
+        // ganha onde ele não é, e nenhuma das duas ganha sempre.
+        let melhor = n_pesos.min(n_recursivo.1);
+        let razao = melhor as f64 / conhecido as f64;
+
         println!(
-            "  pool {pool} jogo {jogo}  {conhecido:>4} {n_guloso:>8} {n_ciclico:>8} {n_misto:>8} {n_orbital:>8} {n_combinado:>10} {n_recozido:>9} {n_pesos:>7} {n_recursivo:>12} {:>7.1}s",
+            "  pool {pool} jogo {jogo}  {conhecido:>4} {n_guloso:>8} {n_ciclico:>8} {n_misto:>8} {n_orbital:>8} {n_combinado:>10} {n_recozido:>9} {n_pesos:>7} {:>5}→{:<5} {melhor:>7} {razao:>5.2}× {:>7.1}s",
+            n_recursivo.0,
+            n_recursivo.1,
             comeco.elapsed().as_secs_f64()
         );
     }
