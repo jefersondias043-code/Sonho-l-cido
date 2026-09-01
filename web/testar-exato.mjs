@@ -878,6 +878,45 @@ try {
     'e as cartelas e a conferência ficam à mão, que é para isso que se abre'
   );
 
+  // ─── 11b. as três vistas das cartelas contam a mesma coisa ───
+  //
+  // A tela desenha posições traduzidas pelos números marcados; o Copiar monta o
+  // texto por outro caminho; o arquivo exportado guarda posições e a lista de
+  // números para quem o receber traduzir. São três traduções independentes da
+  // mesma coleção, e um erro em qualquer uma entrega à pessoa cartelas que ela
+  // não tem — sem que nada quebre, e sem que nada avise.
+  // A lista foi fechada mais acima; abre de novo para ler o que ela desenhou.
+  if (await pagina.locator('#ex-cartelas').isHidden()) {
+    await pagina.click('#ex-ver-cartelas');
+    await pagina.waitForTimeout(400);
+  }
+  const daTela = await pagina.$$eval('#ex-cartelas .cartela span:last-child', (celulas) =>
+    celulas.map((x) => x.textContent.trim().split(/\s+/).map(Number))
+  );
+  const doArquivo = exportado.fechamento.cartelas.map((c) =>
+    c.map((posicao) => exportado.fechamento.numeros[posicao - 1])
+  );
+  const emOrdem = (listas) =>
+    listas
+      .map((c) => [...c].sort((a, b) => a - b).join(' '))
+      .sort()
+      .join(' | ');
+  marcar(
+    daTela.length === 16 && emOrdem(daTela) === emOrdem(doArquivo),
+    'as cartelas na tela e as do arquivo exportado são a mesma coleção',
+    `${daTela.length} de cada lado`
+  );
+
+  const marcados = new Set(exportado.fechamento.numeros);
+  marcar(
+    daTela.every((cartela) => cartela.every((n) => marcados.has(n))),
+    'e nenhuma cartela usa um número que não foi marcado na grade',
+    `números usados: ${[...new Set(daTela.flat())].sort((a, b) => a - b).join(' ')}`
+  );
+  await pagina.click('#ex-ver-cartelas');
+  await pagina.waitForTimeout(200);
+
+
   // ─── 12. continuar de onde parou, com a mesma quantidade de cartelas ───
   await pagina.click('#ex-aba-historico');
   const relogio = Date.now();
