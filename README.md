@@ -118,6 +118,43 @@ O preço de passar do piso é deixar de ser o mínimo, e é exatamente isso que 
 tela passa a dizer, trocando *"Mínimo exato"* por *"Solução encontrada: 317 ·
 Mínimo comprovado: ≥ 160"*.
 
+### Como se mede se o motor melhorou
+
+Rodar uma configuração grande para descobrir se uma mudança ajudou custa minutos
+e devolve um número só. O custo desestimula medir, e sem medida a única forma de
+saber é a impressão de quem olhou.
+
+`crates/motor-exato/tests/qualidade.rs` faz o contrário: doze configurações
+**pequenas** cuja resposta é conhecida — os melhores fechamentos publicados, os
+mesmos que a Lotinha distribui —, medidas em meia dúzia de segundos. A saída é a
+razão entre o que o motor entrega e a referência, e é ela que se projeta para as
+escalas que ninguém tem tempo de rodar:
+
+| regime | configurações | razão |
+|---|---|---|
+| folga de 1 e 2 entre pool e jogo | 18/17, 20/18, 21/19, 22/20 … | **1,00×** — o motor acerta o melhor conhecido |
+| folga de 3 | 20/17, 21/18, 22/19, 23/20 | **1,30× a 1,67×** |
+
+A família varre o eixo de que a dificuldade depende, e é isso que autoriza a
+projeção. Três mudanças já passaram por ela e duas foram reprovadas:
+
+- **varrer o que sobrou** depois de fechar — cartelas que a ordem de chegada
+  deixou e que já não fazem falta: **fica**;
+- **movimento fino** na otimização, trocando uma dezena em vez de cartelas
+  inteiras: **fica**, e entrega a mesma qualidade com um décimo do trabalho;
+- **guloso mais largo**, escolhendo entre as candidatas de vinte e quatro alvos:
+  **sai** — a razão média não se moveu e pool 20 com jogos de 18, que saía exato
+  em 40 cartelas, passou a sair com 46;
+- **recozimento simulado** com temperatura auto-calibrada: **sai** — piorou em
+  toda a família. O motivo é o custo do movimento: em pool 23 com jogos de 20
+  cada cartela cobre 15.504 alvos, uma troca custa trinta e um mil varreduras, e
+  o orçamento inteiro dá seis mil movimentos. Recozimento com seis mil
+  movimentos é um passeio aleatório sem tempo de voltar.
+
+A folga que resta no regime duro é conhecida e tem endereço: os valores
+publicados para essas configurações vêm de construções **simétricas** — buscar
+órbitas de um grupo em vez de cartelas soltas —, e é por aí que se fecha.
+
 **→ [Abrir o aplicativo](https://jefersondias043-code.github.io/Sonho-l-cido/)**
 
 No iPhone, para virar um aplicativo de verdade: abra o link no Safari, toque no

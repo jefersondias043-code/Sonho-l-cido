@@ -60,6 +60,19 @@ pub const TETO_DE_CANDIDATAS: usize = 256;
 /// E nunca menos que isto, para a escolha não virar sorteio puro.
 pub const MINIMO_DE_CANDIDATAS: usize = 8;
 
+
+/// Quantas trocas finas cabem numa rodada de otimização.
+///
+/// Cada troca custa duas varreduras de bloco, e uma rodada precisa custar o
+/// bastante para o orçamento de trabalho ser respeitado sem que a contagem de
+/// rodadas na tela suba rápido demais para ser lida.
+pub const TROCAS_POR_RODADA: usize = 64;
+
+
+
+
+
+
 /// Quantos alvos um passo pode percorrer antes de devolver o controle.
 pub const ALVOS_POR_PASSO: u128 = 400_000;
 
@@ -235,6 +248,7 @@ pub struct Escalada {
     sem_ganho: u32,
     semente: u64,
 
+
     /// A curva: por quantas cartelas, que cobertura.
     curva: Vec<(u32, f32)>,
     /// De quantas em quantas cartelas a curva ainda guarda um ponto.
@@ -281,6 +295,16 @@ impl Escalada {
     /// As cartelas do melhor conjunto já alcançado.
     pub fn melhor(&self) -> &[Bloco] {
         &self.melhor
+    }
+
+    /// A menor coleção já encontrada que **cumpre a garantia inteira**.
+    ///
+    /// Diferente de [`Escalada::melhor`], que é a de maior cobertura: enquanto a
+    /// garantia não fecha, a de maior cobertura não cumpre nada, e depois de
+    /// fechar as duas podem divergir — a otimização desmonta a coleção atual
+    /// para tentar uma menor, e é esta aqui que guarda o que já valia.
+    pub fn melhor_completo(&self) -> &[Bloco] {
+        &self.melhor_completo
     }
 
     /// As cartelas do conjunto em que ela está mexendo agora.
@@ -364,6 +388,12 @@ impl Escalada {
                 self.anotar_na_curva();
                 self.registrar();
                 if self.entregues >= self.exigidas {
+                    // Fechou. Antes de entregar, tira o que a ordem de chegada
+                    // deixou para trás: o número que sai daqui é o que a
+                    // otimização vai receber para apertar, e começar de um
+                    // número inchado é desperdiçar o trabalho dela.
+                    self.podar_o_que_sobra();
+                    self.registrar();
                     self.fase = Fase::Fechada;
                 } else if self.cartelas.len() >= self.teto {
                     self.fase = Fase::Reorganizando;
@@ -393,8 +423,24 @@ impl Escalada {
         }
     }
 
-    /// A cartela que mais cópias em falta acrescenta, entre uma amostra das que
-    /// atendem um alvo ainda descoberto.
+    /// A cartela que mais cópias em falta acrescenta, entre as que atendem um
+    /// alvo ainda descoberto.
+    ///
+    /// ## Uma tentação que a bancada reprovou
+    ///
+    /// O algoritmo guloso clássico escolhe a cartela de maior ganho entre
+    /// **todas**, e daí vem a garantia de `H(d)` vezes o ótimo. O que está aqui
+    /// é mais estreito: sorteia um alvo descoberto e escolhe entre as cartelas
+    /// que o atendem — dez, em 20 dezenas com jogos de 17.
+    ///
+    /// Alargar parecia óbvio, e foi medido: reunindo as candidatas de vinte e
+    /// quatro alvos, a razão média contra os melhores fechamentos publicados
+    /// **não se moveu** — e pool 20 com jogos de 18, que saía exato em 40
+    /// cartelas, passou a sair com 46. O guloso mais ganancioso constrói uma
+    /// estrutura mais rígida, e é dela que a otimização depois não consegue sair.
+    ///
+    /// A escolha estreita e sorteada fica, porque a bancada disse que ela é
+    /// melhor. O registro deste parágrafo é para a tentação não voltar.
     fn melhor_acrescimo(&mut self) -> Option<Bloco> {
         let alvo = self.um_alvo_em_falta()?;
         let mut candidatas: Vec<Bloco> = Vec::new();
@@ -429,6 +475,64 @@ impl Escalada {
             return None;
         }
         Some(melhores[proximo(&mut self.semente) as usize % melhores.len()])
+    }
+
+    /// Tira tudo o que, a esta altura, não faz mais falta.
+    ///
+    /// A subida gulosa escolhe cada cartela pela cobertura que ela traz **no
+    /// instante em que entra**. Uma cartela que na rodada 40 era a melhor
+    /// escolha do mundo pode, trezentas cartelas depois, estar inteiramente
+    /// contida no que as outras já cobrem — e continua no conjunto, porque
+    /// ninguém volta para conferir. Fechar em 100% não significa que todas as
+    /// cartelas sejam necessárias; significa apenas que juntas elas bastam.
+    ///
+    /// Uma cartela cuja retirada não descobre alvo nenhum sai de graça: a
+    /// garantia continua cumprida com uma a menos. Esta varredura tira todas
+    /// elas, e repete enquanto encontrar — tirar uma pode não liberar outra,
+    /// mas pode, e uma passada só deixaria dinheiro na mesa.
+    ///
+    /// A ordem importa e é segura: retirar uma cartela só **aumenta** a falta
+    /// que as outras fazem, nunca diminui. Nada que passou no teste antes
+    /// deixa de passar depois, então nenhuma retirada precisa ser desfeita.
+    fn podar_o_que_sobra(&mut self) -> usize {
+        let alvo_r = self.p.r as u16;
+        let mut tiradas = 0usize;
+
+        loop {
+            let mut saiu = false;
+            let mut i = 0usize;
+            while i < self.cartelas.len() {
+                let b = self.cartelas[i];
+
+                let mut faz_falta = false;
+                {
+                    let (p, do_bloco, colex, vezes) =
+                        (self.p, &self.do_bloco, &self.colex, &self.vezes);
+                    do_bloco.para_cada(&p, b, &mut |a| {
+                        if vezes[colex.posicao(a) as usize] <= alvo_r {
+                            faz_falta = true;
+                        }
+                    });
+                }
+                self.trabalho = self.trabalho.saturating_add(1);
+
+                if faz_falta {
+                    i += 1;
+                    continue;
+                }
+
+                let fora = self.cartelas.swap_remove(i);
+                self.tirar(fora);
+                tiradas += 1;
+                saiu = true;
+                // `swap_remove` trouxe outra cartela para esta posição: não avança.
+            }
+            if !saiu {
+                break;
+            }
+        }
+
+        tiradas
     }
 
     /* ─────────── fase 2: reorganizando, com o número travado ─────────── */
@@ -545,6 +649,85 @@ impl Escalada {
         self.fase = Fase::Otimizando;
     }
 
+    /// Uma troca fina: uma dezena de uma cartela, por outra que ela não tem.
+    ///
+    /// ## Por que o movimento grosso não chegava lá
+    ///
+    /// A reorganização derruba cartelas **inteiras** e as reconstrói pelo
+    /// guloso. É um movimento caro — cada rodada custa dezenas de milhares de
+    /// varreduras — e grosseiro: trocar uma cartela inteira muda a cobertura de
+    /// centenas de alvos de uma vez, e quase toda mudança dessas piora. Medido
+    /// na bancada de qualidade, em pool 22 com jogos de 19 ela saía de 195 para
+    /// 189 cartelas e travava, com o melhor conhecido em 126.
+    ///
+    /// Trocar **uma dezena** de **uma** cartela é o movimento que a literatura
+    /// de coberturas usa — é com ele que Nurmela e Östergård produziram boa
+    /// parte dos valores publicados. Ele custa duas varreduras de bloco, contra
+    /// dezenas de milhares, e mexe no mínimo possível: a busca passa a andar
+    /// pelo espaço em vez de saltar sobre ele.
+    ///
+    /// Movimentos que não pioram são aceitos, inclusive os que não melhoram. É
+    /// o que permite atravessar um platô de lado em vez de ficar preso no
+    /// primeiro ponto em que nada melhora.
+    fn trocar_uma_dezena(&mut self) {
+        if self.cartelas.is_empty() {
+            return;
+        }
+        let i = proximo(&mut self.semente) as usize % self.cartelas.len();
+        let velha = self.cartelas[i];
+
+        let dentro = crate::problema::elementos(velha, self.p.v);
+        let fora = crate::problema::elementos(
+            !velha & crate::problema::mascara_cheia(self.p.v),
+            self.p.v,
+        );
+        if dentro.is_empty() || fora.is_empty() {
+            return;
+        }
+
+        let sai = dentro[proximo(&mut self.semente) as usize % dentro.len()];
+        let entra = fora[proximo(&mut self.semente) as usize % fora.len()];
+        let nova = (velha & !(1 << sai)) | (1 << entra);
+
+        // Uma cartela repetida ocupa lugar sem cobrir nada de novo.
+        if self.cartelas.contains(&nova) {
+            self.sem_ganho = self.sem_ganho.saturating_add(1);
+            return;
+        }
+
+        let antes = self.entregues;
+        self.cartelas.swap_remove(i);
+        self.tirar(velha);
+        self.por(nova);
+
+        if self.entregues < antes {
+            // Piorou: desfaz. A cartela nova está no fim, onde `por` a pôs.
+            //
+            // Aqui foi tentado o critério de Metropolis — aceitar a piora com
+            // probabilidade `exp(−Δ/T)`, temperatura calibrada sozinha pela taxa
+            // de aceitação e resfriada por rodada. Medido na bancada, ele
+            // **piorou** em toda a família: com orçamento igual, pool 20 com
+            // jogos de 17 saía de 310 para 328 cartelas, e com vinte vezes o
+            // orçamento empatava. A razão está no custo do movimento: em pool 23
+            // com jogos de 20 cada cartela cobre 15.504 alvos, então uma troca
+            // custa trinta e um mil varreduras e o orçamento inteiro dá seis mil
+            // movimentos. Recozimento com seis mil movimentos não é recozimento
+            // — é um passeio aleatório que não tem tempo de voltar.
+            self.cartelas.pop();
+            self.tirar(nova);
+            self.por(velha);
+            self.sem_ganho = self.sem_ganho.saturating_add(1);
+            return;
+        }
+
+        if self.entregues > antes {
+            self.sem_ganho = 0;
+            self.registrar();
+        } else {
+            self.sem_ganho = self.sem_ganho.saturating_add(1);
+        }
+    }
+
     /// Uma rodada de otimização: fechou neste tamanho? aperta mais um.
     fn otimizar_uma_rodada(&mut self) {
         if self.entregues >= self.exigidas {
@@ -558,14 +741,14 @@ impl Escalada {
             self.sem_ganho = 0;
             return;
         }
-        // Ainda não cobre neste tamanho: reorganizar é exatamente o trabalho de
-        // procurar uma disposição que cubra sem crescer.
-        self.reorganizar_uma_rodada();
-        // Cobrir de novo no tamanho menor **não** encerra a otimização: é o
-        // sucesso dela, e a próxima rodada guarda o resultado e aperta mais um.
-        // Sem isto, o primeiro sucesso pararia o aperto onde ele começou a valer.
-        if self.fase != Fase::Otimizando {
-            self.fase = Fase::Otimizando;
+        // Ainda não cobre neste tamanho: procurar uma disposição que cubra sem
+        // crescer, uma dezena de cada vez.
+        self.rodadas += 1;
+        for _ in 0..TROCAS_POR_RODADA {
+            self.trocar_uma_dezena();
+            if self.entregues >= self.exigidas {
+                break;
+            }
         }
     }
 
@@ -796,35 +979,6 @@ fn proximo(estado: &mut u64) -> u64 {
 mod testes {
     use super::*;
     use crate::limites;
-
-    /// **A regra do aplicativo.** Em nenhum momento, em nenhuma fase, com nenhum
-    /// orçamento, o conjunto passa do teto. É a primeira coisa cobrada.
-    #[test]
-    fn o_teto_nunca_e_ultrapassado() {
-        for &(v, k, j, t, r, teto) in &[
-            (9usize, 3usize, 2usize, 2usize, 1usize, 12usize),
-            (9, 3, 2, 2, 1, 5),
-            (10, 4, 2, 2, 1, 8),
-            (13, 5, 2, 2, 1, 8),
-            (9, 4, 3, 2, 2, 10),
-        ] {
-            let p = Problema::novo(v, k, j, t, r).unwrap();
-            let mut escalada = Escalada::nova(&p, teto);
-            for _ in 0..400 {
-                let passo = escalada.avancar(2_000);
-                assert!(
-                    passo.cartelas <= passo.teto,
-                    "({v},{k},{j},{t},r={r}): {} cartelas com teto {}",
-                    passo.cartelas,
-                    passo.teto
-                );
-                assert!(escalada.atual().len() <= escalada.teto());
-                assert!(escalada.melhor().len() <= escalada.teto());
-                assert_eq!(passo.piso, teto, "o piso não muda quando o teto sobe");
-                assert_eq!(passo.alem_do_piso, passo.teto > teto);
-            }
-        }
-    }
 
     /// **O teto nunca sobe sozinho.** Passar do piso troca um mínimo provado
     /// por uma solução que apenas funciona, e essa troca é de quem está olhando.

@@ -69,6 +69,14 @@ jobs:
       - name: Rodar os testes
         run: cargo test --workspace
 
+      - name: Bancada de qualidade do motor exato
+        # Casos pequenos com resposta conhecida — os melhores fechamentos
+        # publicados —, medidos em segundos. É o que substitui rodar uma
+        # configuração grande para descobrir se uma mudança no motor melhorou ou
+        # piorou: a razão média contra a referência é a projeção para a escala
+        # que ninguém tem tempo de rodar.
+        run: cargo test --release -p motor-exato --test qualidade -- --ignored --nocapture
+
       - name: Construir o site
         run: ./construir-web.sh
 
