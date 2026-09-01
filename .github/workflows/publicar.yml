@@ -78,6 +78,11 @@ jobs:
         # internet cobrir todo o site. Nenhum teste de navegador as alcança.
         run: ./testar-construcao.sh
 
+      - name: Testar o histórico e o arquivo de fechamento
+        # Também em node puro. Um histórico que perde trabalho é pior do que não
+        # ter histórico: quem não tem sabe que precisa anotar.
+        run: node web/testar-exato-historico.mjs
+
       - name: Testar a aritmética da conferência
         # Roda em node puro, sem navegador, e por isso vem antes: aritmética
         # errada numa ferramenta que diz quanto você ganhou é pior do que

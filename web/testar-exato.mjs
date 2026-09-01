@@ -22,6 +22,8 @@ import { chromium, devices } from 'playwright';
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
+import { tmpdir } from 'node:os';
+import { writeFile } from 'node:fs/promises';
 
 const RAIZ = new URL('../site/', import.meta.url).pathname;
 const PORTA = 8143;
@@ -61,12 +63,18 @@ function marcar(certo, descricao, detalhe = '') {
 
 const servidor = await servir();
 const navegador = await chromium.launch();
-const contexto = await navegador.newContext({ ...devices['iPhone 13'] });
+const contexto = await navegador.newContext({
+  ...devices['iPhone 13'],
+  // Exportar um fechamento entrega um arquivo, e sem isto o Playwright o recusa.
+  acceptDownloads: true,
+});
 const pagina = await contexto.newPage();
 
 const errosDeConsole = [];
 pagina.on('console', (m) => m.type() === 'error' && errosDeConsole.push(m.text()));
 pagina.on('pageerror', (e) => errosDeConsole.push(String(e)));
+// Excluir e apagar tudo pedem confirmação. Aceitar é o caminho que o teste quer.
+pagina.on('dialog', (caixa) => caixa.accept());
 
 const texto = (sel) => pagina.textContent(sel).then((t) => (t ?? '').replace(/\s+/g, ' ').trim());
 const numero = async (sel) => Number((await texto(sel)).replace(/\D/g, ''));
@@ -336,10 +344,17 @@ try {
   await pagina.waitForTimeout(5000);
   await pagina.click('#ex-parar');
   await esperarResultado(120000);
-  const guardou = await pagina.evaluate(
-    () => localStorage.getItem('sonho-lucido:exato:escalada') !== null
+  const guardado = await pagina.evaluate(() => {
+    const bruto = localStorage.getItem('sonho-lucido:exato:historico');
+    const lista = bruto ? JSON.parse(bruto) : [];
+    const desta = lista.find((s) => s.pedido?.v === 20 && s.pedido?.t === 15);
+    return desta ? { cartelas: desta.cartelas.length, temEstado: Boolean(desta.escalada) } : null;
+  });
+  marcar(
+    Boolean(guardado?.temEstado) && guardado.cartelas > 0,
+    'o trabalho fica guardado no aparelho quando ela para, com o estado do motor junto',
+    `${guardado?.cartelas} cartelas guardadas`
   );
-  marcar(guardou, 'o trabalho fica guardado no aparelho quando ela para');
 
   // A altura do cartão de resultado com um fechamento grande. Serve de
   // comparação para o caso pequeno, mais abaixo.
@@ -357,11 +372,27 @@ try {
     (await texto('#ex-retomar-aviso')).slice(0, 90)
   );
 
-  // Com outros números a oferta some: retomar sobre outra configuração seria
-  // continuar o problema errado.
+  // Numa configuração nunca trabalhada a oferta some: retomar sobre outra
+  // configuração seria continuar o problema errado. A garantia 14 é escolhida
+  // de propósito — nenhuma outra parte desta suíte a resolve, e com o histórico
+  // guardando todos os trabalhos, mudar para algo já feito passou a oferecer
+  // continuar, que é justamente o que ele existe para fazer.
+  await regras(17, 15, 14);
+  await pagina.waitForTimeout(200);
+  marcar(
+    await pagina.locator('#ex-continuar').isHidden(),
+    'e some numa configuração que nunca foi trabalhada'
+  );
+
+  // E volta a aparecer numa que foi: é o histórico funcionando, e não um
+  // resquício da versão de um trabalho só.
   await regras(17, 15, 13);
   await pagina.waitForTimeout(200);
-  marcar(await pagina.locator('#ex-continuar').isHidden(), 'e some quando os números mudam');
+  marcar(
+    !(await pagina.locator('#ex-continuar').isHidden()),
+    'e reaparece numa configuração trabalhada antes, mesmo depois de outras no meio',
+    (await texto('#ex-retomar-aviso')).slice(0, 80)
+  );
 
   // ─── 8. conferir, e o dinheiro ───
   //
@@ -621,7 +652,170 @@ try {
     `cartela ${await pagina.inputValue('#ex-custo-unitario')} · 15 acertos ${await pagina.inputValue('#ex-premio-15')}`
   );
 
-  // ─── 10. o que não é problema é recusado com o motivo ───
+  // ─── 10. o histórico: guardar, abrir, exportar, importar ───
+  //
+  // A promessa do pedido, e a única que importa aqui: **abrir um fechamento
+  // salvo devolve exatamente a quantidade de cartelas que estava registrada, e
+  // retoma daquele estado.**
+  await pagina.click('#ex-aba-historico');
+  const linhas = await pagina.locator('#ex-hist-lista .sessao').count();
+  marcar(
+    linhas >= 1,
+    'o fechamento resolvido aparece no histórico, sem ninguém pedir',
+    `${linhas} no histórico`
+  );
+
+  const cartelasNaLinha = await pagina
+    .locator('#ex-hist-lista .sessao .sessao-quantia')
+    .first()
+    .textContent();
+  marcar(
+    Number(cartelasNaLinha.replace(/\D/g, '')) === 16,
+    'e a linha diz quantas cartelas ele tem',
+    `${cartelasNaLinha} cartelas`
+  );
+  marcar(
+    /18 números · jogos de 17 · garante 15/.test(await texto('#ex-hist-lista .sessao-config')),
+    'com as regras que o produziram, em português',
+    (await texto('#ex-hist-lista .sessao-config')).slice(0, 70)
+  );
+
+  // Exportar: o arquivo tem de sair, e tem de trazer o fechamento inteiro.
+  const [entregue] = await Promise.all([
+    pagina.waitForEvent('download', { timeout: 20000 }),
+    pagina.click('#ex-hist-lista [data-exportar]'),
+  ]);
+  const caminhoDoArquivo = join(tmpdir(), entregue.suggestedFilename());
+  await entregue.saveAs(caminhoDoArquivo);
+  const exportado = JSON.parse(await readFile(caminhoDoArquivo, 'utf8'));
+  marcar(
+    exportado.aplicativo === 'sonho-lucido/exato' &&
+      exportado.fechamento.cartelas.length === 16 &&
+      typeof exportado.fechamento.escalada === 'string' &&
+      exportado.fechamento.escalada.length > 0,
+    'exportar entrega um arquivo com as cartelas e o estado do motor dentro',
+    `${entregue.suggestedFilename()} · ${exportado.fechamento.cartelas.length} cartelas`
+  );
+
+  // Fechar e reabrir o aplicativo: o histórico é o que não pode se perder.
+  await pagina.reload({ waitUntil: 'networkidle' });
+  await pagina.waitForSelector('#ex-grade .numero');
+  await pagina.click('#ex-aba-historico');
+  marcar(
+    (await pagina.locator('#ex-hist-lista .sessao').count()) === linhas,
+    'fechar e reabrir o aplicativo não perde nada do histórico'
+  );
+
+  // Importar o mesmo arquivo de volta: a prévia diz o que tem dentro antes de
+  // guardar, e o que entra é o que estava lá.
+  await pagina.setInputFiles('#ex-hist-arquivo', caminhoDoArquivo);
+  await pagina.waitForSelector('#ex-hist-confirmar-cartao:not([hidden])', { timeout: 15000 });
+  marcar(
+    /16 cartelas/.test(await texto('#ex-hist-previa')),
+    'importar mostra o que o arquivo traz antes de guardá-lo',
+    (await texto('#ex-hist-previa')).slice(0, 80)
+  );
+  await pagina.click('#ex-hist-confirmar');
+  marcar(
+    (await pagina.locator('#ex-hist-lista .sessao').count()) === linhas + 1,
+    'e guardar acrescenta o fechamento importado ao histórico'
+  );
+
+  // Um arquivo que não serve é recusado com a frase que explica o quê, e nada
+  // entra no histórico por causa dele.
+  const arquivoRuim = join(tmpdir(), 'fechamento-remendado.json');
+  const remendado = JSON.parse(await readFile(caminhoDoArquivo, 'utf8'));
+  remendado.fechamento.cartelas = remendado.fechamento.cartelas.slice(0, 9);
+  await writeFile(arquivoRuim, JSON.stringify(remendado));
+  await pagina.setInputFiles('#ex-hist-arquivo', arquivoRuim);
+  await pagina.waitForFunction(
+    () => /não serve/.test(document.getElementById('ex-hist-previa').textContent),
+    undefined,
+    { timeout: 15000 }
+  );
+  marcar(
+    /16 cartelas/.test(await texto('#ex-hist-previa')) &&
+      /9/.test(await texto('#ex-hist-previa')) &&
+      (await pagina.locator('#ex-hist-confirmar-cartao').isHidden()),
+    'um arquivo cujo estado discorda da ficha é recusado, com os dois números',
+    (await texto('#ex-hist-previa')).slice(0, 120)
+  );
+
+  // ─── 11. continuar de onde parou, com a mesma quantidade de cartelas ───
+  const relogio = Date.now();
+  await pagina.click('#ex-hist-lista [data-abrir]');
+  await esperarResultado(180000);
+  marcar(
+    (await numero('#ex-encontrado')) === 16 && (await numero('#ex-teto')) === 16,
+    'abrir um fechamento guardado devolve exatamente a mesma quantidade de cartelas',
+    `${await numero('#ex-encontrado')} cartelas, teto ${await numero('#ex-teto')}`
+  );
+  marcar(
+    /Mínimo exato: 16 cartelas/.test(await texto('#ex-frase')),
+    'e o veredito continua sendo o mesmo',
+    (await texto('#ex-frase')).slice(0, 60)
+  );
+  marcar(
+    Date.now() - relogio < 60000,
+    'sem refazer a determinação do mínimo, que o fechamento guardado já trazia',
+    `${Math.round((Date.now() - relogio) / 100) / 10} s até o resultado`
+  );
+
+  // Excluir uma linha tira uma, e não todas.
+  await pagina.click('#ex-aba-historico');
+  const antesDeExcluir = await pagina.locator('#ex-hist-lista .sessao').count();
+  await pagina.click('#ex-hist-lista [data-excluir]');
+  await pagina.waitForTimeout(300);
+  marcar(
+    (await pagina.locator('#ex-hist-lista .sessao').count()) === antesDeExcluir - 1,
+    'excluir tira exatamente o fechamento pedido',
+    `${antesDeExcluir} → ${await pagina.locator('#ex-hist-lista .sessao').count()}`
+  );
+
+  // ─── 12. retomar uma escalada que ficou no meio ───
+  //
+  // O caso do pedido: um fechamento grande, interrompido, reaberto depois — e
+  // retomado do ponto em que estava, sem recomeçar a montagem.
+  await pagina.click('#ex-aba-construtor');
+  await marcarNumeros(25, Array.from({ length: 20 }, (_, i) => i + 1));
+  await regras(17, 15, 15);
+  await pagina.selectOption('#ex-esforco', '1');
+  await pagina.click('#ex-resolver');
+  await pagina.waitForFunction(
+    () => Number(document.getElementById('ex-cartelas-agora').textContent.replace(/\D/g, '')) > 30,
+    undefined,
+    { timeout: 120000 }
+  );
+  await pagina.click('#ex-parar');
+  await esperarResultado(150000);
+  const guardadas = await numero('#ex-encontrado');
+
+  await pagina.reload({ waitUntil: 'networkidle' });
+  await pagina.waitForSelector('#ex-grade .numero');
+  await pagina.click('#ex-aba-historico');
+  await pagina.click('#ex-hist-lista [data-abrir]');
+  await pagina.waitForFunction(
+    () =>
+      !document.getElementById('ex-construcao-cartao').hidden &&
+      Number(document.getElementById('ex-cartelas-agora').textContent.replace(/\D/g, '')) > 0,
+    undefined,
+    { timeout: 120000 }
+  );
+  const retomadas = await numero('#ex-cartelas-agora');
+  marcar(
+    retomadas >= guardadas,
+    'uma escalada interrompida retoma do ponto em que estava, e não do zero',
+    `parou com ${guardadas} cartelas, retomou com ${retomadas}`
+  );
+  marcar(
+    (await numero('#ex-teto')) === 160,
+    'e com o mesmo teto que estava salvo',
+    `teto ${await numero('#ex-teto')}`
+  );
+  await pagina.click('#ex-parar');
+  await esperarResultado(150000);
+
+  // ─── 13. o que não é problema é recusado com o motivo ───
   await marcarNumeros(25, Array.from({ length: 25 }, (_, i) => i + 1));
   await regras(12, 15, 11);
   await pagina.click('#ex-resolver');

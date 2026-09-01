@@ -17,13 +17,31 @@
 
 import { frase, folga, veredito, MINIMO, PARCIAL, FALHA } from './exato-veredito.js';
 import { definirFechamento, esquecerFechamento } from './exato-conferencia.js';
+import * as historico from './exato-historico.js';
+import * as arquivoDeSessao from './exato-sessao.js';
 
 const $ = (id) => document.getElementById(id);
 
 const trabalhador = new Worker('./exato-trabalhador.js', { type: 'module' });
 
-/** Onde o trabalho em curso fica guardado, para continuar depois. */
-const CHAVE_DO_TRABALHO = 'sonho-lucido:exato:escalada';
+/*
+ * Qual linha do histórico este trabalho está escrevendo.
+ *
+ * O aplicativo guardava um trabalho só, numa chave fixa, e começar outro
+ * apagava o anterior sem aviso. Agora cada escalada tem a sua linha, e é este
+ * identificador que diz qual atualizar — nasce no primeiro estado que o motor
+ * devolve e vive até a escalada terminar.
+ */
+let sessaoEmCurso = null;
+
+/*
+ * O carimbo da construção que está rodando neste aparelho.
+ *
+ * Vai dentro do arquivo exportado. Não muda nada no que ele carrega, e serve
+ * para uma pergunta que aparece quando algo dá errado meses depois: qual versão
+ * produziu este fechamento. Quem responde é o service worker, que é quem sabe.
+ */
+let CARIMBO = '';
 
 /** Quantos nós a prova ganha, por unidade de esforço escolhida. */
 const NOS_POR_ESFORCO = 10_000_000;
@@ -271,7 +289,7 @@ function pedidoDaTela() {
   return { v: lista.length, k: jogo, j: sorteio, t: garantia, r: premiadas };
 }
 
-function comecar(estadoGuardado = null) {
+function comecar(estadoGuardado = null, sessao = null) {
   const lista = dezenas();
   if (lista.length === 0 || jogo > lista.length) return;
 
@@ -280,9 +298,13 @@ function comecar(estadoGuardado = null) {
   pedido = { v: lista.length, k: jogo, j: sorteio, t: garantia, r: premiadas };
   esforco = Number($('ex-esforco').value) || 1;
   estado = {
-    piso: 0,
-    origem: '',
-    fechado: false,
+    // Um fechamento guardado já traz o piso e de onde ele veio. Reaproveitá-lo
+    // é o que faz "continuar" continuar: no esforço fundo a determinação do
+    // mínimo leva minutos, e refazê-la para chegar ao mesmo número seria
+    // recomeçar o trabalho que se mandou não recomeçar.
+    piso: sessao?.piso ?? 0,
+    origem: sessao?.origem ?? '',
+    fechado: sessao?.fechado ?? false,
     cartelas: [],
     metodo: '',
     verificado: false,
@@ -294,6 +316,7 @@ function comecar(estadoGuardado = null) {
     parado: false,
     escalada: null,
     guardado: null,
+    curva: sessao?.curva ?? [],
   };
 
   esconderTudo();
@@ -318,6 +341,7 @@ function enviar(mensagem) {
 function encerrar() {
   rodando = false;
   $('ex-parar').hidden = true;
+  encerrarASessao();
   pintarParametros();
 }
 
@@ -362,6 +386,7 @@ function porcento(fracao) {
  */
 function pintarCurva(pontos) {
   if (!pontos || pontos.length === 0) return;
+  estado.curva = pontos;
   $('ex-curva-cartao').hidden = false;
   $('ex-curva').innerHTML = pontos
     .map(([cartelas, cobertura]) => `<b>${milhares(cartelas)}</b> → ${porcento(cobertura)}`)
@@ -460,7 +485,6 @@ function pintarResultado() {
 
   $('ex-resultado-cartao').hidden = false;
   $('ex-frase').innerHTML = `<b>${escapar(frase(dados))}</b>`;
-  if (qual === MINIMO) esquecerTrabalho();
   $('ex-encontrado').textContent = milhares(encontrado);
   $('ex-provado').textContent = `≥ ${milhares(estado.piso)}`;
   $('ex-folga').textContent =
@@ -607,73 +631,281 @@ function textoDoResultado() {
  * O trabalho em curso fica no aparelho, e nada sai daqui.
  *
  * Num aparelho fraco, "fazer aos poucos" só significa alguma coisa se fechar o
- * aplicativo não custar o que já foi feito. As cartelas vão como máscaras — um
- * número por cartela — então mesmo um conjunto de milhares cabe folgado.
+ * aplicativo não custar o que já foi feito. O que é guardado não é a lista de
+ * cartelas e sim o estado do motor: com ele `Escalada::retomar` reconstrói pelo
+ * **teto salvo** e pelo conjunto salvo, e continuar devolve exatamente a mesma
+ * quantidade de cartelas em vez de recomeçar a montagem.
  */
 function guardarTrabalho(estadoJson) {
   if (!estadoJson) return;
   estado.guardado = estadoJson;
-  try {
-    localStorage.setItem(
-      CHAVE_DO_TRABALHO,
-      JSON.stringify({ pedido, escalada: estadoJson, quando: Date.now() })
-    );
-  } catch {
-    // Sem espaço, ou armazenamento desligado. A escalada continua na memória:
-    // perder a chance de retomar é menos grave do que parar de trabalhar.
+
+  const dados = {
+    pedido,
+    numeros: dezenas(),
+    universo,
+    esforco,
+    piso: estado.piso,
+    origem: estado.origem,
+    fechado: estado.fechado,
+    cartelas: estado.cartelas,
+    escalada: estadoJson,
+    curva: estado.curva ?? [],
+    cobertura: estado.escalada?.melhor_cobertura ?? 0,
+    fase: estado.escalada?.fase ?? 'subindo',
+    verificado: estado.verificado,
+    descobertos: estado.descobertos,
+    emCurso: rodando,
+  };
+
+  // A linha nasce no primeiro estado que o motor devolve, e não quando alguém
+  // toca em Resolver: uma escalada abandonada antes de produzir qualquer coisa
+  // não é um fechamento, e encheria o histórico de linhas vazias.
+  if (sessaoEmCurso && historico.obter(sessaoEmCurso)) {
+    historico.atualizar(sessaoEmCurso, dados);
+  } else {
+    sessaoEmCurso = historico.criar(dados).id;
   }
+  pintarHistorico();
 }
 
-function trabalhoGuardado() {
-  try {
-    const bruto = localStorage.getItem(CHAVE_DO_TRABALHO);
-    if (!bruto) return null;
-    const guardado = JSON.parse(bruto);
-    return guardado?.escalada && guardado?.pedido ? guardado : null;
-  } catch {
-    return null;
-  }
-}
-
-function esquecerTrabalho() {
-  try {
-    localStorage.removeItem(CHAVE_DO_TRABALHO);
-  } catch {
-    /* nada a fazer */
-  }
-}
-
-/** Os mesmos cinco números? Só então faz sentido oferecer retomar. */
-function mesmoPedido(a, b) {
-  if (!a || !b) return false;
-  return ['v', 'k', 'j', 't', 'r'].every((campo) => a[campo] === b[campo]);
+/** Fecha a linha do histórico: o motor não está mais trabalhando nela. */
+function encerrarASessao() {
+  if (!sessaoEmCurso) return;
+  historico.encerrar(sessaoEmCurso);
+  pintarHistorico();
 }
 
 /**
  * Mostra, ou esconde, a oferta de continuar de onde parou.
  *
- * Só aparece quando os parâmetros na tela são os mesmos do trabalho guardado —
- * retomar sobre outra configuração seria continuar o problema errado.
+ * Só aparece quando os cinco números na tela são os mesmos de algum fechamento
+ * guardado — retomar sobre outra configuração seria continuar o problema errado.
  */
 function pintarOfertaDeRetomar() {
-  const guardado = trabalhoGuardado();
   const atual = pedidoDaTela();
-  const serve = Boolean(guardado && atual && mesmoPedido(guardado.pedido, atual));
-  $('ex-continuar').hidden = !serve || rodando;
-  $('ex-retomar-aviso').hidden = !serve || rodando;
-  if (!serve || rodando) return;
+  const guardado = atual ? historico.paraOPedido(atual) : null;
+  const serve = Boolean(guardado) && !rodando;
+  $('ex-continuar').hidden = !serve;
+  $('ex-retomar-aviso').hidden = !serve;
+  if (!serve) return;
 
-  let cartelas = 0;
-  try {
-    const e = JSON.parse(guardado.escalada);
-    cartelas = (e.melhor ?? e.cartelas ?? []).length;
-  } catch {
-    /* envelope estragado: a oferta some na próxima tentativa */
-  }
   $('ex-retomar-aviso').innerHTML =
     `<b>Há trabalho guardado para estes números.</b> <em>${
-      cartelas ? `${milhares(cartelas)} cartelas já montadas. ` : ''
+      guardado.cartelas.length
+        ? `${milhares(guardado.cartelas.length)} cartelas, ${porcento(guardado.cobertura)} de ` +
+          'cobertura. '
+        : ''
     }Continuar retoma de onde parou, sem repetir nada.</em>`;
+}
+
+/* ─────────── a tela do histórico ─────────── */
+
+/** O selo de cada linha: o que aquele fechamento alcançou. */
+function seloDaSessao(sessao) {
+  if (sessao.emCurso) return '<span class="sessao-marca viva">trabalhando</span>';
+  if (sessao.verificado && sessao.cartelas.length <= sessao.piso && sessao.piso > 0) {
+    return '<span class="sessao-marca otima">★ mínimo</span>';
+  }
+  return '';
+}
+
+function pintarHistorico() {
+  const sessoes = historico.listar();
+  const lista = $('ex-hist-lista');
+
+  $('ex-hist-limpar').hidden = sessoes.length === 0;
+
+  if (sessoes.length === 0) {
+    lista.innerHTML =
+      '<div class="historico-vazio">Nenhum fechamento guardado ainda. ' +
+      'O primeiro aparece aqui assim que a escalada começar a montar cartelas.</div>';
+    pintarInterrompido();
+    return;
+  }
+
+  lista.innerHTML = sessoes
+    .map(
+      (s) =>
+        `<div class="sessao${s.emCurso ? ' em-andamento' : ''}" data-sessao="${escapar(s.id)}">` +
+        `<div class="sessao-topo">` +
+        `<span class="sessao-quantia">${milhares(s.cartelas.length)}</span>` +
+        `<span class="sessao-unidade">cartela${s.cartelas.length === 1 ? '' : 's'}</span>` +
+        seloDaSessao(s) +
+        `</div>` +
+        `<div class="sessao-config">${escapar(historico.descrever(s.pedido))}` +
+        `<br>${porcento(s.cobertura)} de cobertura · piso ${milhares(s.piso)} · ` +
+        `${escapar(historico.quando(s.atualizadaEm))}</div>` +
+        `<div class="sessao-acoes">` +
+        `<button class="continuar" data-abrir="${escapar(s.id)}">Continuar</button>` +
+        `<button data-exportar="${escapar(s.id)}">Exportar</button>` +
+        `<button class="excluir" data-excluir="${escapar(s.id)}">Excluir</button>` +
+        `</div></div>`
+    )
+    .join('');
+
+  for (const botao of lista.querySelectorAll('[data-abrir]')) {
+    botao.addEventListener('click', () => abrirSessao(botao.dataset.abrir));
+  }
+  for (const botao of lista.querySelectorAll('[data-exportar]')) {
+    botao.addEventListener('click', () => exportarSessao(botao.dataset.exportar));
+  }
+  for (const botao of lista.querySelectorAll('[data-excluir]')) {
+    botao.addEventListener('click', () => excluirSessao(botao.dataset.excluir));
+  }
+
+  pintarInterrompido();
+}
+
+/*
+ * O trabalho que ficou em andamento quando o aplicativo fechou.
+ *
+ * Responde à pergunta que aparece ao reabrir depois de uma noite: o motor
+ * estava rodando? O sistema pode ter encerrado a página por bateria, por
+ * memória, ou porque a pessoa passou tempo demais noutro aplicativo — e em
+ * nenhum desses casos o aplicativo teve chance de anotar que parou.
+ */
+function pintarInterrompido() {
+  const viva = historico.interrompida();
+  const mostrar = Boolean(viva) && viva.id !== sessaoEmCurso;
+  $('ex-hist-interrompido-cartao').hidden = !mostrar;
+  if (!mostrar) return;
+
+  $('ex-hist-interrompido').innerHTML =
+    `<div class="referencia"><b>${milhares(viva.cartelas.length)} cartelas em ${escapar(
+      historico.descrever(viva.pedido)
+    )}.</b> <em>${porcento(viva.cobertura)} de cobertura, trabalhado ${escapar(
+      historico.quando(viva.atualizadaEm)
+    )}. O motor estava rodando quando o aplicativo fechou.</em></div>`;
+  $('ex-hist-retomar').dataset.sessao = viva.id;
+}
+
+/**
+ * Abre um fechamento guardado e continua de onde ele parou.
+ *
+ * Repõe a grade e as regras a partir do que foi salvo — as cartelas são
+ * posições, e sem os números marcados elas não voltam a ser números — e entrega
+ * o estado ao motor. O piso salvo evita refazer os estágios 3 e 4, que no
+ * esforço fundo levam minutos para chegar ao mesmo número.
+ */
+function abrirSessao(id) {
+  const sessao = historico.obter(id);
+  if (!sessao) {
+    avisar('Este fechamento já não está guardado.');
+    pintarHistorico();
+    return;
+  }
+  if (rodando) {
+    avisar('Pare o trabalho em curso antes de abrir outro.');
+    return;
+  }
+
+  universo = Math.max(sessao.universo || 0, ...sessao.numeros);
+  $('ex-universo').value = String(universo);
+  montarGrade();
+  escolhidos.clear();
+  for (const n of sessao.numeros) escolhidos.add(n);
+  jogo = sessao.pedido.k;
+  sorteio = sessao.pedido.j;
+  garantia = sessao.pedido.t;
+  premiadas = sessao.pedido.r;
+  $('ex-esforco').value = String(sessao.esforco ?? 4);
+  pintarParametrosSem();
+
+  sessaoEmCurso = sessao.id;
+  mostrarPainel('exato');
+  esquecerFechamento();
+  comecar(sessao.escalada, sessao);
+}
+
+function excluirSessao(id) {
+  const sessao = historico.obter(id);
+  if (!sessao) return;
+  if (
+    !globalThis.confirm(
+      `Excluir o fechamento de ${milhares(sessao.cartelas.length)} cartelas em ` +
+        `${historico.descrever(sessao.pedido)}? Isto não tem volta.`
+    )
+  ) {
+    return;
+  }
+  if (sessaoEmCurso === id) sessaoEmCurso = null;
+  historico.remover(id);
+  pintarHistorico();
+  avisar('Fechamento excluído.');
+}
+
+/* ─────────── o arquivo, para fora e para dentro ─────────── */
+
+function exportarSessao(id) {
+  const sessao = historico.obter(id);
+  if (!sessao) return;
+
+  const pacote = arquivoDeSessao.empacotar(sessao, { versao: CARIMBO });
+  const texto = JSON.stringify(pacote, null, 1);
+  const nome = arquivoDeSessao.nomeDoArquivo(pacote);
+  const endereco = URL.createObjectURL(new Blob([texto], { type: 'application/json' }));
+
+  const link = document.createElement('a');
+  link.href = endereco;
+  link.download = nome;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  // Um quadro depois: revogar na mesma volta do laço cancela o download em
+  // alguns navegadores antes de ele começar.
+  setTimeout(() => URL.revokeObjectURL(endereco), 4000);
+  avisar(`Exportado: ${nome}`);
+}
+
+/** O que o arquivo escolhido trouxe, esperando confirmação. */
+let importacaoPendente = null;
+
+async function lerArquivoEscolhido(entrada) {
+  const arquivo = entrada.files?.[0];
+  // Sempre limpo: escolher o mesmo arquivo duas vezes seguidas não dispara
+  // `change` se o valor continuar lá.
+  entrada.value = '';
+  if (!arquivo) return;
+
+  const previa = $('ex-hist-previa');
+  previa.hidden = false;
+  previa.innerHTML = '<em>Lendo o arquivo…</em>';
+
+  let texto;
+  try {
+    texto = await arquivo.text();
+  } catch {
+    previa.innerHTML = '<b>Não deu para ler o arquivo.</b>';
+    return;
+  }
+
+  const lido = arquivoDeSessao.interpretar(texto);
+  if (!lido.ok) {
+    importacaoPendente = null;
+    $('ex-hist-confirmar-cartao').hidden = true;
+    previa.innerHTML = `<b>Este arquivo não serve.</b> <em>${escapar(lido.erro)}</em>`;
+    return;
+  }
+
+  importacaoPendente = lido.pacote;
+  $('ex-hist-confirmar-cartao').hidden = false;
+  const r = lido.resumo;
+  previa.innerHTML =
+    `<b>${milhares(r.cartelas)} cartelas em ${escapar(historico.descrever(r.pedido))}.</b> ` +
+    `<em>${porcento(r.cobertura)} de cobertura, teto ${milhares(r.teto)}${
+      r.verificado ? ', já verificado' : ''
+    }.${r.criadoEm ? ` Exportado em ${escapar(r.criadoEm.slice(0, 10))}.` : ''}</em>`;
+}
+
+function confirmarImportacao() {
+  if (!importacaoPendente) return;
+  const sessao = historico.importar(arquivoDeSessao.paraSessao(importacaoPendente));
+  importacaoPendente = null;
+  $('ex-hist-confirmar-cartao').hidden = true;
+  $('ex-hist-previa').hidden = true;
+  pintarHistorico();
+  avisar(`Guardado: ${milhares(sessao.cartelas.length)} cartelas.`);
 }
 
 /* ─────────── o que vem depois de cada estágio ─────────── */
@@ -800,6 +1032,15 @@ trabalhador.onmessage = (evento) => {
       break;
 
     case 'piso':
+      // Um fechamento guardado já traz o piso, e ele foi determinado com o
+      // mesmo esforço. Refazer a varredura para chegar ao mesmo número custaria
+      // minutos no esforço fundo — e continuar um trabalho não pode começar
+      // repetindo a parte mais cara do que já foi feito.
+      if (estado.piso > 0 && estado.origem) {
+        pintarPiso({ valor: estado.piso, origem: estado.origem, fechado: estado.fechado });
+        comecarEscalada();
+        break;
+      }
       pintarPiso(mensagem.dados);
       // O piso é o teto: é ele que limita quantas cartelas podem existir. A
       // escalada só pode começar depois de saber esse número.
@@ -885,6 +1126,93 @@ trabalhador.onmessage = (evento) => {
   }
 };
 
+/* ─────────── as abas ─────────── */
+
+/**
+ * Troca o painel visível.
+ *
+ * Mesma mecânica da Lotinha, e é `.painel.ativo` no CSS que faz o trabalho. As
+ * abas existem para o histórico não virar o décimo segundo cartão de uma página
+ * que já é longa: ele é outro lugar, não outra etapa.
+ */
+function mostrarPainel(qual) {
+  for (const painel of document.querySelectorAll('main > .painel')) {
+    painel.classList.toggle('ativo', painel.id === qual);
+  }
+  for (const aba of document.querySelectorAll('.aba[data-painel]')) {
+    const ativa = aba.dataset.painel === qual;
+    aba.classList.toggle('ativa', ativa);
+    aba.setAttribute('aria-selected', String(ativa));
+    aba.tabIndex = ativa ? 0 : -1;
+  }
+  if (qual === 'exato-historico') pintarHistorico();
+  window.scrollTo({ top: 0, behavior: 'instant' });
+}
+
+for (const aba of document.querySelectorAll('.aba[data-painel]')) {
+  aba.addEventListener('click', () => mostrarPainel(aba.dataset.painel));
+}
+
+/* ─────────── os botões do histórico ─────────── */
+
+$('ex-hist-importar').addEventListener('click', () => $('ex-hist-arquivo').click());
+$('ex-hist-arquivo').addEventListener('change', (e) => lerArquivoEscolhido(e.target));
+$('ex-hist-confirmar').addEventListener('click', confirmarImportacao);
+$('ex-hist-cancelar').addEventListener('click', () => {
+  importacaoPendente = null;
+  $('ex-hist-confirmar-cartao').hidden = true;
+  $('ex-hist-previa').hidden = true;
+});
+
+$('ex-hist-retomar').addEventListener('click', (e) => {
+  const id = e.currentTarget.dataset.sessao;
+  if (id) abrirSessao(id);
+});
+
+$('ex-hist-dispensar').addEventListener('click', () => {
+  const viva = historico.interrompida();
+  if (viva) historico.encerrar(viva.id);
+  pintarHistorico();
+});
+
+$('ex-hist-limpar').addEventListener('click', () => {
+  const quantos = historico.quantidade();
+  if (
+    !globalThis.confirm(
+      `Apagar ${quantos} fechamento${quantos === 1 ? '' : 's'} guardado${
+        quantos === 1 ? '' : 's'
+      }? Isto não tem volta, e o que não foi exportado se perde.`
+    )
+  ) {
+    return;
+  }
+  historico.limpar();
+  sessaoEmCurso = null;
+  pintarHistorico();
+  avisar('Histórico apagado.');
+});
+
+/*
+ * Ficar sem espaço não pode acontecer em silêncio.
+ *
+ * Descartar os fechamentos mais antigos é melhor do que perder o que está sendo
+ * feito agora, mas fazer isso calado é apagar trabalho pelas costas de quem o
+ * guardou — e a pessoa só descobriria ao ir procurar e não achar.
+ */
+historico.quandoFaltarEspaco(({ descartadas, guardou }) => {
+  const aviso = $('ex-hist-aviso');
+  aviso.hidden = false;
+  aviso.innerHTML =
+    `<b>O aparelho ficou sem espaço.</b> <em>${milhares(descartadas)} fechamento${
+      descartadas === 1 ? '' : 's'
+    } mais antigo${descartadas === 1 ? '' : 's'} ${
+      descartadas === 1 ? 'precisou' : 'precisaram'
+    } sair para caber o de agora${
+      guardou ? '' : ', e mesmo assim não coube'
+    }. Exporte o que quiser manter.</em>`;
+  avisar('Sem espaço: fechamentos antigos foram descartados.');
+});
+
 /* ─────────── os botões ─────────── */
 
 $('ex-universo').addEventListener('input', trocarUniverso);
@@ -897,18 +1225,18 @@ $('ex-todos').addEventListener('click', () => {
   pintarParametros();
 });
 $('ex-resolver').addEventListener('click', () => {
-  // Começar de novo abandona o que estava guardado: ou são outros parâmetros,
-  // ou é a mesma configuração recomeçada de propósito.
-  esquecerTrabalho();
+  // Começar de novo abre uma linha nova no histórico, e não sobrescreve a
+  // anterior: o trabalho de antes continua guardado, que é o ponto de haver
+  // histórico.
+  sessaoEmCurso = null;
   esquecerFechamento();
   comecar();
 });
 
 $('ex-continuar').addEventListener('click', () => {
-  const guardado = trabalhoGuardado();
-  if (!guardado) return;
-  esquecerFechamento();
-  comecar(guardado.escalada);
+  const atual = pedidoDaTela();
+  const guardado = atual ? historico.paraOPedido(atual) : null;
+  if (guardado) abrirSessao(guardado.id);
 });
 $('ex-parar').addEventListener('click', () => {
   trabalhador.postMessage({ tipo: 'parar' });
@@ -946,8 +1274,30 @@ window.addEventListener('pagehide', () => {
   if (rodando && estado?.guardado) guardarTrabalho(estado.guardado);
 });
 
+/*
+ * O trabalho guardado pela versão de um fechamento só entra no histórico.
+ *
+ * Sem isto, quem tem uma escalada salva agora a veria sumir nesta atualização —
+ * exatamente o oposto do que o histórico existe para garantir.
+ */
+const migrado = historico.migrarDoSlotUnico();
+if (migrado) {
+  avisar('O trabalho que estava guardado foi para o histórico.');
+}
+pintarHistorico();
+
 // O service worker é o que faz o aplicativo abrir sem internet. Registrá-lo
-// daqui é o que garante que quem entrar direto nesta página saia com ele.
+// daqui é o que garante que quem entrar direto nesta página saia com ele. Ele é
+// também quem sabe o carimbo desta construção, que vai dentro do arquivo
+// exportado.
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('./sw.js').catch(() => {});
+  navigator.serviceWorker.addEventListener('message', ({ data }) => {
+    if (data?.tipo === 'versao') CARIMBO = String(data.versao ?? '');
+  });
+  navigator.serviceWorker.ready
+    .then((registro) => {
+      (navigator.serviceWorker.controller ?? registro.active)?.postMessage({ tipo: 'versao' });
+    })
+    .catch(() => {});
 }

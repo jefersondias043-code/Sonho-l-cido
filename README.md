@@ -79,6 +79,34 @@ melhor cobertura que alcancei foi 86,4%. O piso diz que nada menor que 160
 existe — não diz que 160 basta."* O trabalho fica guardado no aparelho, e voltar
 depois continua de onde parou.
 
+### O histórico: os fechamentos ficam guardados
+
+O Construtor Exato tem duas abas, e a segunda é a área de gerenciamento dos
+trabalhos. Cada escalada abre uma linha própria assim que começa a montar
+cartelas — resolver outro problema não apaga o anterior — e a linha traz a
+quantidade de cartelas, as regras que a produziram, a cobertura alcançada e
+quando foi mexida pela última vez.
+
+**Continuar** retoma exatamente de onde parou. Não é uma reconstrução: o que fica
+guardado é o estado do motor, e `Escalada::retomar` reconstrói pelo teto salvo e
+pelo conjunto salvo. Medido num perfil de iPhone: uma escalada de 22 números
+interrompida com 911 cartelas voltou com as 911, teto 1.537 preservado, **376 ms
+depois do toque** — e seguiu subindo em vez de recomeçar. O piso também vai
+guardado, então reabrir pula a determinação do mínimo, que no esforço fundo leva
+minutos para chegar ao mesmo número.
+
+**Exportar** entrega um arquivo com tudo dentro: as regras, os números marcados,
+as cartelas, o estado do motor e a curva. **Importar** confere o arquivo antes de
+guardá-lo e diz o que ele traz. A conferência que importa é a do acordo entre as
+duas metades — a ficha foi escrita pela tela, o estado veio do motor —, e quando
+elas discordam o arquivo é recusado com os dois números: *"o estado do motor traz
+16 cartelas e a ficha registra 9"*. Um arquivo que abre e devolve outra
+quantidade de cartelas seria pior do que um que não abre, porque mente em
+silêncio.
+
+Tudo fica no aparelho. Apagar os dados do navegador leva o histórico junto — o
+arquivo exportado é o que sobrevive a isso, e é por isso que ele existe.
+
 ### Conferir, e o dinheiro
 
 Saber o mínimo responde "quantas cartelas preciso". A pergunta que vem logo
@@ -721,6 +749,8 @@ web/                     a interface da plataforma
 ├── exato-checagem.js    a aritmética da conferência e do dinheiro, sem DOM
 ├── exato-conferencia.js a tela da conferência: faixas, balanço e simulações
 ├── exato-checador.js    o trabalhador das simulações longas do Exato
+├── exato-historico.js   os fechamentos guardados, com o estado do motor junto
+├── exato-sessao.js      o arquivo de fechamento: exportar e importar
 ├── exato-veredito.js    a regra do que pode ser afirmado, sem DOM e sem wasm
 └── sw.js                funcionamento sem internet e atualização automática
 ```
@@ -872,6 +902,7 @@ node web/testar-checagem.mjs                    # testa a conferência de acerto
 node web/testar-construtor.mjs                  # testa o Construtor
 node web/testar-exato.mjs                       # testa o Construtor Exato
 node web/testar-exato-checagem.mjs              # a aritmética do dinheiro, sem navegador
+node web/testar-exato-historico.mjs             # o histórico e o arquivo, sem navegador
 cargo run --release --example gerar-lotinha     # regera o banco de fechamentos
 
 python3 -m http.server -d site 8000             # experimenta localmente

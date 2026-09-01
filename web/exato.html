@@ -25,7 +25,16 @@
   <p class="subtitulo">encontrar e provar são coisas diferentes</p>
 </header>
 
-<main class="painel ativo" id="exato">
+<nav class="abas" role="tablist" aria-label="Seções do Construtor Exato">
+  <button class="aba ativa" role="tab" id="ex-aba-construtor" aria-controls="exato"
+          aria-selected="true" data-painel="exato">Construtor</button>
+  <button class="aba" role="tab" id="ex-aba-historico" aria-controls="exato-historico"
+          aria-selected="false" tabindex="-1" data-painel="exato-historico">Histórico</button>
+</nav>
+
+<main>
+
+<section class="painel ativo" id="exato" role="tabpanel" aria-labelledby="ex-aba-construtor">
 
   <!-- 1 · os números ──────────────────────────────────────────────────── -->
   <div class="cartao">
@@ -277,6 +286,58 @@
     </div>
     <div id="ex-simulacao-dinheiro"></div>
   </details>
+
+</section>
+
+<!-- ══════════════════ HISTÓRICO ══════════════════ -->
+<section class="painel" id="exato-historico" role="tabpanel" aria-labelledby="ex-aba-historico">
+
+  <div class="cartao">
+    <h2>Os seus fechamentos</h2>
+    <p class="ajuda">
+      Cada trabalho fica guardado neste aparelho, com as cartelas e o estado do
+      motor. <b>Continuar</b> retoma exatamente de onde parou — mesma quantidade
+      de cartelas, mesma cobertura —, sem refazer nada do que já foi feito.
+    </p>
+    <div class="referencia" id="ex-hist-aviso" hidden></div>
+  </div>
+
+  <div class="cartao" id="ex-hist-interrompido-cartao" hidden>
+    <div class="rotulo">Ficou trabalhando quando o aplicativo fechou</div>
+    <div id="ex-hist-interrompido"></div>
+    <div class="controles">
+      <button class="principal" id="ex-hist-retomar">Continuar de onde parou</button>
+      <button class="secundario" id="ex-hist-dispensar">Agora não</button>
+    </div>
+  </div>
+
+  <div id="ex-hist-lista"></div>
+
+  <div class="cartao">
+    <h2>Trazer um fechamento de fora</h2>
+    <p class="ajuda">
+      Um arquivo exportado deste aplicativo, de qualquer aparelho. Ele traz as
+      cartelas, as regras e o estado do motor — e é conferido antes de entrar.
+    </p>
+    <input type="file" id="ex-hist-arquivo" accept="application/json,.json" hidden>
+    <button class="secundario" id="ex-hist-importar">Escolher arquivo</button>
+    <div class="referencia" id="ex-hist-previa" hidden></div>
+    <div class="controles" id="ex-hist-confirmar-cartao" hidden>
+      <button class="principal" id="ex-hist-confirmar">Guardar no histórico</button>
+      <button class="secundario" id="ex-hist-cancelar">Cancelar</button>
+    </div>
+  </div>
+
+  <button class="secundario perigo" id="ex-hist-limpar" hidden>
+    Apagar todos os fechamentos
+  </button>
+
+  <p class="rodape-nota">
+    Tudo fica no seu aparelho, e nada é enviado para lugar nenhum. Apagar os
+    dados do navegador leva o histórico junto — o arquivo exportado é o que
+    sobrevive a isso.
+  </p>
+</section>
 
 </main>
 
