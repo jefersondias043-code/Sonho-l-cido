@@ -12,10 +12,15 @@
  *   MINIMO_CICLICO   nenhuma solução com simetria de rotação é menor. Fora da
  *                    simetria, não se sabe — e a frase diz isso.
  *   INTERVALO        achou X, provou ≥ Y, e sobrou distância.
- *   PARCIAL          a cobertura não fechou dentro do teto. **Não é defeito**:
- *                    o número de cartelas está preso ao piso, e o piso diz
- *                    "nada menor existe", não "isto basta". A frase mostra a
- *                    cobertura alcançada e essa distinção, com todas as letras.
+ *   PARCIAL          a cobertura não fechou. Tem três leituras, e a frase
+ *                    distingue as três: parou no meio da subida ao piso; chegou
+ *                    ao piso e ele não bastou; ou já estava na construção
+ *                    avançada, acrescentando cartelas acima do piso. Só a
+ *                    segunda autoriza concluir alguma coisa.
+ *
+ * Passando do piso, a coleção deixa de ser candidata a mínima e o veredito cai
+ * para INTERVALO — "encontrado 344, mínimo comprovado ≥ 160" —, que é a verdade
+ * e a única coisa que pode ser dita ali.
  *
  * O quinto, FALHA, é para quando não havia teto e a coleção mesmo assim não
  * cobre: aí é defeito, e aparece em vez de ser engolido.
@@ -65,6 +70,7 @@ export function frase({
   descobertos = 0,
   teto = 0,
   cobertura = 0,
+  alemDoPiso = false,
 }) {
   const alcancado = `${(cobertura * 100).toLocaleString('pt-BR', {
     minimumFractionDigits: 1,
@@ -72,7 +78,7 @@ export function frase({
   })}%`;
   switch (veredito({ verificado, encontrado, piso, ciclicaFechou, teto })) {
     case PARCIAL:
-      return fraseParcial(encontrado, piso, teto, alcancado);
+      return fraseParcial(encontrado, piso, teto, alcancado, alemDoPiso);
     case FALHA:
       return `A construção deixou ${milhar(descobertos)} alvos descobertos.`;
     case MINIMO:
@@ -106,7 +112,17 @@ export function frase({
  * apresentando trabalho interrompido como conclusão. Num aplicativo que existe
  * para nunca afirmar o que não pode provar, é o pior tipo de defeito.
  */
-function fraseParcial(encontrado, piso, teto, alcancado) {
+function fraseParcial(encontrado, piso, teto, alcancado, alemDoPiso) {
+  // Na construção avançada não há teto: o piso se esgotou e a subida voltou a
+  // acrescentar cartelas até fechar. Falar em teto aqui seria inventar um
+  // limite que não existe mais.
+  if (alemDoPiso) {
+    return (
+      `Parei com ${milhar(encontrado)} cartelas, cobrindo ${alcancado}. ` +
+      `O piso de ${milhar(piso)} não bastou, e a construção avançada estava ` +
+      `acrescentando cartelas — continuar retoma daqui.`
+    );
+  }
   if (teto > 0 && encontrado < teto) {
     return (
       `Parei com ${milhar(encontrado)} cartelas de um teto de ${milhar(teto)}, ` +

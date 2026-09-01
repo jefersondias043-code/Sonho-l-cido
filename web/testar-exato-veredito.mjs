@@ -120,6 +120,43 @@ marcar(
   'e as duas situações nunca são descritas com a mesma frase'
 );
 
+/* ─── 3b. a construção avançada ─── */
+
+const avancadaParada = frase({
+  verificado: false,
+  encontrado: 250,
+  piso: 160,
+  teto: 4000000,
+  cobertura: 0.95,
+  alemDoPiso: true,
+});
+marcar(
+  /250 cartelas/.test(avancadaParada) && !/teto de/.test(avancadaParada),
+  'parar na construção avançada não fala em teto, porque ali não há teto',
+  avancadaParada
+);
+marcar(
+  /piso de 160 não bastou/.test(avancadaParada),
+  'e diz por que a construção passou do piso'
+);
+
+const avancadaFechou = frase({
+  verificado: true,
+  encontrado: 344,
+  piso: 160,
+  teto: 4000000,
+  alemDoPiso: true,
+});
+marcar(
+  !/[Mm]ínimo exato/.test(avancadaFechou) && /344/.test(avancadaFechou) && /≥ 160/.test(avancadaFechou),
+  'fechar acima do piso nunca é chamado de mínimo: mostra os dois números',
+  avancadaFechou
+);
+marcar(
+  veredito({ verificado: true, encontrado: 344, piso: 160, teto: 4000000 }) === INTERVALO,
+  'e o veredito correspondente é o intervalo, não o mínimo'
+);
+
 /* ─── 4. os números são escritos como no resto da tela ─── */
 
 const grandes = [

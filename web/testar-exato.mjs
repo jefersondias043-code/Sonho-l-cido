@@ -343,20 +343,21 @@ try {
   );
   await pagina.waitForTimeout(5000);
 
-  // Esta configuração chega ao teto em 86,4% e reorganiza para sempre — foi
-  // assim que se pediu, e é a única fase sem fim do aplicativo. A tela precisa
-  // dizer as duas coisas que decidem se vale seguir: que ela não para sozinha, e
-  // há quanto tempo não melhora. Sem isso, o primeiro encontro com um problema
-  // que não fecha é uma tela que parece travada.
+  // Esta configuração chega ao piso em 86,4% e reorganiza. A tela precisa dizer
+  // as duas coisas que decidem se vale esperar: há quanto tempo a cobertura não
+  // melhora, e o que vem a seguir se ela não melhorar. Antes da construção
+  // avançada esta fase não terminava nunca, e o primeiro encontro com um
+  // problema que não fecha era uma tela que parecia travada.
   const durante = await texto('#ex-construcao');
   marcar(
-    /não para sozinha/.test(durante) && /Parar/.test(durante),
-    'a fase sem fim diz que não termina sozinha, e o que fazer a respeito',
-    durante.slice(durante.indexOf('Sem melhorar'), durante.indexOf('Sem melhorar') + 80)
+    /Sem melhorar há \d+/.test(durante),
+    'reorganizando, a tela diz há quanto tempo a cobertura não melhora',
+    durante.slice(durante.indexOf('Sem melhorar'), durante.indexOf('Sem melhorar') + 60)
   );
   marcar(
-    /Sem melhorar há \d+/.test(durante),
-    'e há quanto tempo a cobertura não melhora, que é o que decide se vale seguir'
+    /construção avançada/.test(durante) && /piso não bastar/.test(durante),
+    'e diz o que acontece se o piso não bastar, em vez de deixar a espera sem fim',
+    durante.slice(-110)
   );
 
   await pagina.click('#ex-parar');
@@ -411,6 +412,50 @@ try {
     !(await pagina.locator('#ex-continuar').isHidden()),
     'e reaparece numa configuração trabalhada antes, mesmo depois de outras no meio',
     (await texto('#ex-retomar-aviso')).slice(0, 80)
+  );
+
+  // ─── 7b. a construção avançada: a garantia é cumprida de verdade ───
+  //
+  // O caso que antes não terminava nunca. Em 20 números com jogos de 17 o piso
+  // vale 160 e o melhor fechamento conhecido tem 240: **nenhuma** disposição de
+  // 160 cartelas cobre tudo. A reorganização ficava tentando o impossível para
+  // sempre, e a garantia nunca era cumprida.
+  await pagina.reload({ waitUntil: 'networkidle' });
+  await pagina.waitForSelector('#ex-grade .numero');
+  await marcarNumeros(25, Array.from({ length: 20 }, (_, i) => i + 1));
+  await regras(17, 15, 15);
+  await pagina.selectOption('#ex-esforco', '1');
+  await pagina.click('#ex-resolver');
+  // Sem tocar em Parar: quem tem de terminar é ele.
+  await esperarResultado(300000);
+
+  const cartelasAvancadas = await numero('#ex-encontrado');
+  marcar(
+    /Confere\./.test(await texto('#ex-verificacao')),
+    'onde o piso não basta, a escalada termina sozinha com a garantia cumprida',
+    `${cartelasAvancadas} cartelas · ${(await texto('#ex-verificacao')).slice(0, 60)}`
+  );
+  marcar(
+    cartelasAvancadas > 160,
+    'passando do piso, porque fechar em 160 é impossível',
+    `${cartelasAvancadas} cartelas contra um piso de 160`
+  );
+  const vereditoAvancado = await texto('#ex-frase');
+  marcar(
+    !/[Mm]ínimo exato/.test(vereditoAvancado) && /≥ 160/.test(vereditoAvancado),
+    'e o resultado nunca é chamado de mínimo: mostra os dois números',
+    vereditoAvancado
+  );
+  marcar(
+    /construção avançada/.test(await texto('#ex-construcao')) &&
+      /não é o mínimo/.test(await texto('#ex-construcao')),
+    'a tela nomeia a construção avançada e diz o que ela custa',
+    (await texto('#ex-construcao')).slice(0, 110)
+  );
+  marcar(
+    /já ultrapassado/.test(await pagina.textContent('#ex-teto + small')),
+    'e o quadro do piso avisa que ele ficou para trás',
+    (await pagina.textContent('#ex-teto + small')).trim()
   );
 
   // ─── 8. conferir, e o dinheiro ───

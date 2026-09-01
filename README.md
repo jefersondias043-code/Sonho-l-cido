@@ -74,113 +74,35 @@ reorganizar o conjunto — troca uma por outra, derruba várias e repõe várias
 reestrutura inteiro. Foi a reorganização que levou aquelas mesmas doze de 94,4%
 a 100%, e é por isso que doze é o mínimo, provado.
 
-Quando o teto não basta, a escalada **não termina sozinha** — foi assim que se
-pediu, e é a única fase sem fim do aplicativo. Por isso a tela diz, enquanto ela
-roda, as duas coisas que decidem se vale seguir: que ela não para por conta
-própria, e há quanto tempo a cobertura não melhora. Sem isso, o primeiro
-encontro com um problema que não fecha é uma tela que parece travada — 20
-dezenas com jogos de 17 chegam ao teto em 86,4% e reorganizam indefinidamente.
+### Quando o piso não basta: a construção avançada
 
-Quando o teto não basta, a tela diz com todas as letras: *"Com 160 cartelas, a
-melhor cobertura que alcancei foi 86,4%. O piso diz que nada menor que 160
-existe — não diz que 160 basta."* O trabalho fica guardado no aparelho, e voltar
-depois continua de onde parou.
+O piso é uma cota **inferior**. Ele diz que nada menor existe — não que aquele
+tamanho seja suficiente. Para muitas configurações ele é inatingível:
 
-### Saber o tamanho do trabalho antes de começá-lo
+| pool, jogo | piso | melhor fechamento conhecido |
+|---|---|---|
+| 18, 17 | 16 | **16** — o piso é atingível |
+| 19, 17 | 51 | **51** |
+| 20, 18 | 40 | **40** |
+| 20, 17 | 160 | **240** |
+| 22, 17 | 1.537 | **3.454** |
 
-A diferença entre 18 números e 25 números com jogos de 17 é a diferença entre
-**16 cartelas e 27.124** — entre segundos e minutos enchendo o aparelho. Até
-então a única forma de descobrir isso era resolver.
+Onde ele é atingível, a escalada fecha nele e o mínimo está provado. Onde não é,
+nenhuma disposição daquele tamanho cobre tudo — e a versão anterior ficava
+reorganizando o impossível para sempre, sem nunca cumprir a garantia.
 
-Agora o estágio 2 diz quanto o pedido custa enquanto você escolhe, e diz também
-quando ele não cabe. O cálculo é contagem pura, não busca, e leva
-microssegundos.
+Agora, quando a reorganização atravessa cinco mil rodadas sem uma única
+melhoria, o teto sai e a subida recomeça até fechar de verdade. A paciência não
+é arbitrária: medindo os casos em que o piso **é** alcançável, a reorganização
+fecha cedo — 273 rodadas em 19 números com jogos de 17, 793 em 20 com jogos de
+18, zero em 18 com jogos de 17, que fecha ainda na subida. Onde não é, ela
+atravessa milhões sem melhorar uma vez.
 
-### O histórico: os fechamentos ficam guardados
-
-O Construtor Exato tem duas abas, e a segunda é a área de gerenciamento dos
-trabalhos. Cada escalada abre uma linha própria assim que começa a montar
-cartelas — resolver outro problema não apaga o anterior — e a linha traz a
-quantidade de cartelas, as regras que a produziram, a cobertura alcançada e
-quando foi mexida pela última vez.
-
-Cada linha tem **Abrir** e **Continuar**, e a diferença importa. Abrir repõe o
-fechamento na tela sem acionar o motor — as cartelas são decodificadas das
-máscaras que a sessão guarda, e o veredito é remontado do que ficou salvo, em
-dezenas de milissegundos. É o caminho para rever as cartelas, conferir um
-resultado ou simular sorteios sem pôr o aparelho a calcular. Antes disso só
-existia Continuar, e ele sempre retoma a escalada: quem só queria olhar um
-fechamento que não fecha deixava o aparelho trabalhando **para sempre**.
-
-**Continuar** retoma exatamente de onde parou. Não é uma reconstrução: o que fica
-guardado é o estado do motor, e `Escalada::retomar` reconstrói pelo teto salvo e
-pelo conjunto salvo. Medido num perfil de iPhone: uma escalada de 22 números
-interrompida com 911 cartelas voltou com as 911, teto 1.537 preservado, **376 ms
-depois do toque** — e seguiu subindo em vez de recomeçar. O piso também vai
-guardado, então reabrir pula a determinação do mínimo, que no esforço fundo leva
-minutos para chegar ao mesmo número.
-
-**Exportar** entrega um arquivo com tudo dentro: as regras, os números marcados,
-as cartelas, o estado do motor e a curva. **Importar** confere o arquivo antes de
-guardá-lo e diz o que ele traz. A conferência que importa é a do acordo entre as
-duas metades — a ficha foi escrita pela tela, o estado veio do motor —, e quando
-elas discordam o arquivo é recusado com os dois números: *"o estado do motor traz
-16 cartelas e a ficha registra 9"*. Um arquivo que abre e devolve outra
-quantidade de cartelas seria pior do que um que não abre, porque mente em
-silêncio.
-
-Tudo fica no aparelho. Apagar os dados do navegador leva o histórico junto — o
-arquivo exportado é o que sobrevive a isso, e é por isso que ele existe.
-
-### Conferir, e o dinheiro
-
-Saber o mínimo responde "quantas cartelas preciso". A pergunta que vem logo
-depois é "e daí?" — quanto custou comprá-las, quantas foram premiadas neste
-concurso, quanto pagaram, e se o dinheiro voltou.
-
-O resultado mostra três cartelas de amostra e um botão — *"Ver todas as 1.537
-cartelas"* — em vez da lista inteira. As ferramentas ficam depois do resultado,
-e com a lista aberta chegar até elas custava rolar o fechamento inteiro. Fechada,
-o cartão de resultado tem a mesma altura com 16 cartelas e com 1.537; aberta,
-ela é montada em levas que o navegador só desenha quando chegam perto da janela
-— a primeira aparece em 37 ms, e as 1.537 em menos de meio segundo.
-
-Com as cartelas prontas o aplicativo abre três estágios a mais. Você informa o
-valor de cada cartela e o prêmio de cada faixa de acertos; ele calcula o custo
-do fechamento inteiro e, a cada conferência, mostra faixa por faixa quantas
-cartelas foram premiadas, quanto vale cada uma, quanto deu a faixa, o total das
-premiações e o resultado líquido. O resultado pode ser digitado — o oficial do
-concurso — ou sorteado ali mesmo. E dá para simular dez mil sorteios de uma vez
-e ver o desempenho ao longo deles: quanto saiu, quanto voltou, em quantos
-sorteios houve lucro, o melhor e o pior.
-
-As faixas não são fixas em 11 a 15: elas saem dos seus cinco números. Ninguém
-acerta mais que o menor entre o jogo e o sorteio, e a faixa que o fechamento
-garante entra sempre que couber. No formato da Lotinha isso dá exatamente 11 a
-15 — a generalização contém o caso conhecido.
-
-Dois cuidados que a tela toma, e que são o motivo de ela existir:
-
-- **A garantia vale para sorteios que caiam inteiros dentro dos números
-  marcados.** Quando um resultado traz números de fora, a tela diz quais foram —
-  em vez de deixar parecer que o fechamento falhou.
-- **Simular só entre os seus números mostra lucro em todos os sorteios**, e isso
-  é verdade sobre aquele cenário e mentira sobre a loteria. Junto do resultado
-  vem a chance de o cenário acontecer: com 18 marcados de 25 e sorteio de 15,
-  **0,025% dos concursos — um em quatro mil**.
-
-Os valores informados ficam guardados no aparelho, e trocar o preço de uma faixa
-refaz o balanço de uma simulação de dez mil sorteios na hora, sem repeti-la. Os
-prêmios são os que **você** informa: o aplicativo não consulta premiação de
-lugar nenhum e não sabe quanto a sua loteria pagou.
-
-A Lotinha parte de um fechamento pronto e conferido, e o motor entra depois para
-tentar superá-lo. O Construtor faz o caminho inverso, para qualquer problema de
-cobertura. O Construtor Exato faz o mesmo caminho **sem apoio nenhum**: ele não
-consulta a tabela publicada que os outros dois usam como referência, e por isso
-todo número que ele afirma foi calculado no aparelho — inclusive quando o número
-que ele consegue provar fica abaixo do que a literatura já sabe. A folga aparece
-na tela em vez de ser escondida.
+Medido, com o caminho completo: 20 números com jogos de 17 fecha em 100% com
+**344 cartelas em 31 segundos**, contra as 240 do melhor fechamento conhecido. A
+garantia passa a ser cumprida; o preço é que aquilo deixa de ser o mínimo — e é
+exatamente isso que a tela passa a dizer, trocando *"Mínimo exato"* por
+*"Solução encontrada: 344 · Mínimo comprovado: ≥ 160"*.
 
 **→ [Abrir o aplicativo](https://jefersondias043-code.github.io/Sonho-l-cido/)**
 

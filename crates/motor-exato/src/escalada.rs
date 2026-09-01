@@ -66,6 +66,21 @@ pub const ALVOS_POR_PASSO: u128 = 400_000;
 /// Quantas rodadas sem ganho antes de a reorganização derrubar um pedaço maior.
 pub const PACIENCIA: u32 = 60;
 
+/// Quantas rodadas sem uma única melhoria antes de aceitar que o piso não basta.
+///
+/// O piso é uma **cota inferior**, não uma meta: para muitas configurações
+/// nenhuma disposição daquele tamanho cobre tudo, e a reorganização fica
+/// tentando o impossível para sempre. Medido, onde ela **consegue** fechar no
+/// piso, consegue cedo — 273 rodadas em 19 números com jogos de 17, 793 em 20
+/// com jogos de 18, e zero em 18 com jogos de 17, que fecha ainda na subida.
+/// Onde não consegue, atravessa milhões de rodadas sem melhorar uma vez.
+///
+/// Cinco mil dá ao piso uma chance seis vezes maior que a pior tentativa
+/// bem-sucedida observada, e continua sendo desistir cedo perto do infinito que
+/// a alternativa custava. Como conta rodadas **sem ganho**, e uma rodada custa
+/// mais num problema grande, a paciência cresce sozinha com a dificuldade.
+pub const RODADAS_NO_PISO: u32 = 5_000;
+
 /// Quantos pontos a curva de cobertura guarda, no máximo.
 ///
 /// A curva é a resposta a "1 cartela → quanto? 2 cartelas → quanto?" — e ela
@@ -102,8 +117,17 @@ impl std::fmt::Display for Fase {
 pub struct Passo {
     /// Quantas cartelas o conjunto atual tem. **Nunca passa de `teto`.**
     pub cartelas: usize,
-    /// O limite de cartelas — o piso provado.
+    /// O limite de cartelas em vigor. Igual ao piso, até o piso se esgotar.
     pub teto: usize,
+    /// A cota inferior provada. Não muda nunca, e é o que autoriza dizer
+    /// "mínimo" quando a cobertura fecha em cima dela.
+    pub piso: usize,
+    /// Se a construção já passou do piso.
+    ///
+    /// Enquanto for falso, fechar a cobertura é fechar no mínimo. Verdadeiro, o
+    /// que se tem é uma solução — boa, completa, e **não** comprovadamente
+    /// mínima —, e a tela é obrigada a dizer isso.
+    pub alem_do_piso: bool,
     /// Cobertura do conjunto atual, de 0 a 1.
     pub cobertura: f64,
     /// A melhor cobertura já alcançada, de 0 a 1.
@@ -137,6 +161,10 @@ pub struct EstadoSalvo {
     pub trabalho: u64,
     pub rodadas: u64,
     pub sem_ganho: u32,
+    /// A cota inferior provada. Ausente nos estados gravados antes do modo
+    /// avançado existir: ali teto e piso eram a mesma coisa.
+    #[serde(default)]
+    pub piso: usize,
     pub semente: u64,
     #[serde(default)]
     pub curva: Vec<(u32, f32)>,
@@ -152,6 +180,10 @@ fn um() -> usize {
 pub struct Escalada {
     p: Problema,
     teto: usize,
+    /// A cota inferior provada, guardada à parte porque `teto` pode subir.
+    piso: usize,
+    /// O teto do modo avançado: mais que isto não existe cartela para escolher.
+    teto_absoluto: usize,
     colex: Colex,
     do_bloco: AlvosDoBloco,
     do_alvo: BlocosDoAlvo,
@@ -195,6 +227,10 @@ impl Escalada {
         Escalada {
             p: *p,
             teto: teto.max(1),
+            piso: teto.max(1),
+            // Nenhuma coleção precisa de mais cartelas do que existem cartelas
+            // distintas: acima disso só há repetição, que não cobre nada novo.
+            teto_absoluto: p.total_de_blocos().min(usize::MAX as u128) as usize,
             colex: Colex::nova(),
             do_bloco: AlvosDoBloco::novo(p),
             do_alvo: BlocosDoAlvo::novo(p),
@@ -230,6 +266,11 @@ impl Escalada {
         self.teto
     }
 
+    /// A cota inferior provada, que não muda nem quando o teto sobe.
+    pub fn piso(&self) -> usize {
+        self.piso
+    }
+
     pub fn fase(&self) -> Fase {
         self.fase
     }
@@ -250,6 +291,8 @@ impl Escalada {
         Passo {
             cartelas: self.cartelas.len(),
             teto: self.teto,
+            piso: self.piso,
+            alem_do_piso: self.teto > self.piso,
             cobertura: self.fracao(self.entregues),
             melhor_cobertura: self.fracao(self.melhor_entregues),
             melhor_cartelas: self.melhor.len(),
@@ -410,7 +453,42 @@ impl Escalada {
         if self.entregues >= self.exigidas {
             self.registrar();
             self.fase = Fase::Fechada;
+            return;
         }
+
+        self.avancar_se_o_piso_se_esgotou();
+    }
+
+    /* ─────────── fase 3: construção avançada ─────────── */
+
+    /// Aceita que o piso não bastou, e volta a acrescentar cartelas.
+    ///
+    /// O piso é uma cota **inferior**: ele diz que nada menor existe, e não que
+    /// aquele tamanho basta. Para muitas configurações ele é inatingível — em
+    /// 20 números com jogos de 17 garantindo 15 o piso é 160 e o melhor
+    /// fechamento conhecido tem 240 —, e ali a reorganização passa a tentar o
+    /// impossível: nenhuma disposição de 160 cartelas cobre tudo, então ela
+    /// reescreve o conjunto para sempre sem nunca fechar.
+    ///
+    /// Quando a reorganização atravessa [`RODADAS_NO_PISO`] sem uma única
+    /// melhoria, o teto sobe e a subida recomeça. A partir daí a coleção deixa
+    /// de ser candidata a mínima — e é por isso que [`Passo::alem_do_piso`]
+    /// existe: quem mostra o resultado precisa parar de falar em mínimo no
+    /// momento exato em que isso deixa de ser verdade.
+    fn avancar_se_o_piso_se_esgotou(&mut self) {
+        if self.sem_ganho < RODADAS_NO_PISO || self.teto >= self.teto_absoluto {
+            return;
+        }
+        // O teto sai de vez, e não sobe de cartela em cartela.
+        //
+        // Subir de uma em uma parece mais cuidadoso e é pior: cada cartela nova
+        // custaria outra paciência inteira de reorganização, e a resposta já foi
+        // dada — o piso não basta. Medido, avançar assim levou 180 segundos para
+        // acrescentar onze cartelas em 20 números com jogos de 17, e faltavam
+        // oitenta. Sem teto, a mesma subida fecha em 100% em frações de segundo.
+        self.teto = self.teto_absoluto;
+        self.sem_ganho = 0;
+        self.fase = Fase::Subindo;
     }
 
     /* ─────────── a contabilidade da cobertura ─────────── */
@@ -532,6 +610,7 @@ impl Escalada {
             trabalho: self.trabalho,
             rodadas: self.rodadas,
             sem_ganho: self.sem_ganho,
+            piso: self.piso,
             semente: self.semente,
             curva: self.curva.clone(),
             passo_da_curva: self.passo_da_curva,
@@ -553,6 +632,8 @@ impl Escalada {
         escalada.trabalho = estado.trabalho;
         escalada.rodadas = estado.rodadas;
         escalada.sem_ganho = estado.sem_ganho;
+        // Estado gravado antes do modo avançado: ali o teto era o piso.
+        escalada.piso = if estado.piso > 0 { estado.piso } else { estado.teto };
         escalada.semente = estado.semente;
         escalada.curva.clone_from(&estado.curva);
         escalada.passo_da_curva = estado.passo_da_curva.max(1);
@@ -602,14 +683,77 @@ mod testes {
             for _ in 0..400 {
                 let passo = escalada.avancar(2_000);
                 assert!(
-                    passo.cartelas <= teto,
-                    "({v},{k},{j},{t},r={r}): {} cartelas com teto {teto}",
-                    passo.cartelas
+                    passo.cartelas <= passo.teto,
+                    "({v},{k},{j},{t},r={r}): {} cartelas com teto {}",
+                    passo.cartelas,
+                    passo.teto
                 );
-                assert!(escalada.atual().len() <= teto);
-                assert!(escalada.melhor().len() <= teto);
+                assert!(escalada.atual().len() <= escalada.teto());
+                assert!(escalada.melhor().len() <= escalada.teto());
+                assert_eq!(passo.piso, teto, "o piso não muda quando o teto sobe");
+                assert_eq!(passo.alem_do_piso, passo.teto > teto);
             }
         }
+    }
+
+    /// **A regra que substitui a anterior.** O teto só sobe depois de a
+    /// reorganização atravessar [`RODADAS_NO_PISO`] sem uma única melhoria.
+    ///
+    /// Antes disto o teto era imóvel, e a consequência era grave: para as
+    /// configurações em que o piso é inatingível — a maioria das complexas — a
+    /// reorganização tentava o impossível para sempre e a garantia nunca era
+    /// cumprida. O que não pode voltar é o teto subir **cedo**, desistindo de um
+    /// mínimo que estava ao alcance.
+    #[test]
+    fn o_teto_so_sobe_depois_de_o_piso_se_esgotar() {
+        let p = Problema::novo(13, 4, 4, 2, 1).unwrap();
+        let piso = limites::sem_busca(&p).valor as usize;
+        let mut escalada = Escalada::nova(&p, piso);
+
+        // Um lote de cada vez, para saber em que rodada o teto subiu — e não
+        // apenas que subiu em algum ponto de um lote grande.
+        let mut passo = escalada.avancar(20_000);
+        while !passo.alem_do_piso && passo.rodadas < 400_000 {
+            passo = escalada.avancar(20_000);
+        }
+        assert!(passo.alem_do_piso, "o teto precisava ter subido em algum momento");
+        assert!(
+            passo.rodadas >= RODADAS_NO_PISO as u64,
+            "o teto subiu na rodada {}, e a paciência no piso é de {RODADAS_NO_PISO}",
+            passo.rodadas
+        );
+        assert!(passo.teto > passo.piso && passo.piso == piso);
+    }
+
+    /// **O que o modo avançado existe para entregar.** Onde o piso é
+    /// inatingível, a garantia passa a ser cumprida de verdade.
+    ///
+    /// `C(12,4,3)` tem piso 15 pela cota de Schönheim e número de cobertura
+    /// conhecido 29: nenhuma disposição de 15 cartelas cobre tudo, e a versão
+    /// anterior ficava em 83,8% para sempre.
+    #[test]
+    fn onde_o_piso_nao_basta_a_cobertura_fecha_mesmo_assim() {
+        let p = Problema::novo(12, 4, 4, 3, 1).unwrap();
+        let piso = limites::sem_busca(&p).valor as usize;
+        let mut escalada = Escalada::nova(&p, piso);
+
+        let mut passo = escalada.avancar(50_000);
+        while !passo.fechou && passo.rodadas < 400_000 {
+            passo = escalada.avancar(200_000);
+        }
+
+        assert!(
+            passo.fechou,
+            "ficou em {:.1}% com {} cartelas e teto {}",
+            passo.melhor_cobertura * 100.0,
+            passo.cartelas,
+            passo.teto
+        );
+        assert!(p.cobre(escalada.melhor()), "fechou sem cobrir de verdade");
+        assert!(
+            passo.alem_do_piso && escalada.melhor().len() > piso,
+            "fechar aqui exige passar do piso de {piso}"
+        );
     }
 
     /// A cobertura que ela anuncia tem de ser a que o verificador enxerga. Um
@@ -790,16 +934,28 @@ mod testes {
 
     /// Um teto de uma cartela só é um pedido legítimo, e ela obedece.
     #[test]
-    fn um_teto_de_uma_cartela_e_respeitado() {
+    fn um_teto_de_uma_cartela_e_respeitado_enquanto_ele_vale() {
         let p = Problema::novo(9, 3, 2, 2, 1).unwrap();
         let mut escalada = Escalada::nova(&p, 1);
-        for _ in 0..50 {
-            let passo = escalada.avancar(5_000);
-            assert!(passo.cartelas <= 1);
-        }
+
+        // Enquanto o piso não se esgota, uma cartela é uma cartela — e a
+        // cobertura é exatamente a de uma: três dos trinta e seis pares.
+        let passo = escalada.avancar(5_000);
+        assert!(!passo.alem_do_piso);
+        assert_eq!(passo.cartelas, 1);
         assert_eq!(escalada.melhor().len(), 1);
-        // Uma cartela de 3 cobre 3 dos 36 pares.
-        assert!((escalada.passo().melhor_cobertura - 3.0 / 36.0).abs() < 1e-9);
+        assert!((passo.melhor_cobertura - 3.0 / 36.0).abs() < 1e-9);
+
+        // Passada a paciência, o teto sobe: uma cartela não cobre `C(9,2)`, e
+        // insistir nela seria tentar o impossível para sempre. O que continua
+        // valendo em toda rodada é o teto **em vigor**.
+        for _ in 0..400 {
+            let passo = escalada.avancar(5_000);
+            assert!(passo.cartelas <= passo.teto);
+            assert_eq!(passo.piso, 1, "o piso é o que foi provado, e não muda");
+        }
+        let fim = escalada.passo();
+        assert!(fim.alem_do_piso && fim.teto > 1);
     }
 
     /// Com um teto apertado demais para fechar, a subida enche o teto e a

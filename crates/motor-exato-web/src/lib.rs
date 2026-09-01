@@ -243,6 +243,11 @@ pub struct EscaladaExata {
 struct PassoDaEscalada {
     cartelas: usize,
     teto: usize,
+    /// A cota inferior provada. Não muda nem quando o teto sobe.
+    piso: usize,
+    /// Se a construção já passou do piso — e portanto deixou de ser candidata
+    /// a mínima. A tela é obrigada a dizer isso.
+    alem_do_piso: bool,
     cobertura: f64,
     melhor_cobertura: f64,
     melhor_cartelas: usize,
@@ -256,6 +261,8 @@ fn passo_em_json(passo: &motor_exato::escalada::Passo) -> PassoDaEscalada {
     PassoDaEscalada {
         cartelas: passo.cartelas,
         teto: passo.teto,
+        piso: passo.piso,
+        alem_do_piso: passo.alem_do_piso,
         cobertura: passo.cobertura,
         melhor_cobertura: passo.melhor_cobertura,
         melhor_cartelas: passo.melhor_cartelas,
@@ -625,11 +632,36 @@ mod testes {
         for _ in 0..500 {
             let passo: serde_json::Value =
                 serde_json::from_str(&e.avancar(5_000.0).unwrap()).unwrap();
-            assert!(passo["cartelas"].as_u64().unwrap() <= 6, "{passo}");
-            assert_eq!(passo["teto"], 6);
+            let teto = passo["teto"].as_u64().unwrap();
+            assert!(passo["cartelas"].as_u64().unwrap() <= teto, "{passo}");
+            // O piso é o que foi provado, e a ponte precisa entregá-lo à parte:
+            // é dele que a tela depende para saber quando pode falar em mínimo.
+            assert_eq!(passo["piso"], 6);
+            assert_eq!(passo["alem_do_piso"], teto > 6);
         }
-        let cartelas: Vec<Vec<u32>> = serde_json::from_str(&e.melhor().unwrap()).unwrap();
-        assert!(cartelas.len() <= 6);
+    }
+
+    /// A ponte precisa entregar os dois números, e a diferença entre eles é o
+    /// que autoriza — ou proíbe — a palavra "mínimo" na tela.
+    #[test]
+    fn a_ponte_entrega_o_piso_e_o_modo_avancado() {
+        // Uma cartela não cobre os 45 pares de dez números: o piso de 1 se
+        // esgota, o modo avançado entra, e a cobertura fecha.
+        let mut e = EscaladaExata::nova(r#"{"v":10,"k":4,"j":2,"t":2,"r":1}"#, 1).unwrap();
+        let mut passo: serde_json::Value =
+            serde_json::from_str(&e.avancar(50_000.0).unwrap()).unwrap();
+        assert_eq!(passo["piso"], 1);
+        assert_eq!(passo["alem_do_piso"], false);
+
+        for _ in 0..2_000 {
+            passo = serde_json::from_str(&e.avancar(50_000.0).unwrap()).unwrap();
+            if passo["fechou"].as_bool().unwrap() {
+                break;
+            }
+        }
+        assert_eq!(passo["fechou"], true, "{passo}");
+        assert_eq!(passo["alem_do_piso"], true, "fechar aqui exige passar do piso");
+        assert_eq!(passo["piso"], 1, "o piso continua sendo o que foi provado");
     }
 
     /// A cobertura sobe, e a melhor nunca regride — é o que a barra desenha.

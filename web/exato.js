@@ -495,14 +495,27 @@ function pintarEscalada(passo, terminou) {
   }
 
   $('ex-cartelas-agora').textContent = milhares(passo.cartelas);
-  $('ex-teto').textContent = milhares(passo.teto);
+  // O quadro mostra o **piso**, que é o número que não muda. O teto mudava de
+  // significado ao entrar na construção avançada, e um quadro que troca de
+  // sentido no meio do caminho engana mais do que informa.
+  $('ex-teto').textContent = milhares(passo.piso ?? passo.teto);
+  $('ex-teto').nextElementSibling.textContent = passo.alem_do_piso
+    ? 'piso — já ultrapassado'
+    : 'piso — o teto da escalada';
   $('ex-cobertura').textContent = porcento(passo.melhor_cobertura);
   $('ex-construcao-barra').style.width = `${(passo.melhor_cobertura * 100).toFixed(1)}%`;
 
   if (passo.fechou) {
-    $('ex-construcao').innerHTML =
-      `<b>Fechou em 100% com ${emCartelas(passo.melhor_cartelas)}.</b>` +
-      `<br><em>Exatamente o teto — e o teto é o piso provado.</em>`;
+    // Fechar no piso e fechar acima dele são resultados diferentes, e o
+    // segundo não autoriza falar em mínimo. Dizer "exatamente o teto" para uma
+    // coleção de 344 cartelas cujo piso é 160 seria afirmar o contrário do que
+    // aconteceu.
+    $('ex-construcao').innerHTML = passo.alem_do_piso
+      ? `<b>Fechou em 100% com ${emCartelas(passo.melhor_cartelas)}.</b>` +
+        `<br><em>Acima do piso de ${milhares(passo.piso)}, pela construção ` +
+        `avançada: a garantia está cumprida, e este não é o mínimo.</em>`
+      : `<b>Fechou em 100% com ${emCartelas(passo.melhor_cartelas)}.</b>` +
+        `<br><em>Exatamente no piso provado — nada menor existe.</em>`;
     return;
   }
 
@@ -527,6 +540,29 @@ function pintarEscalada(passo, terminou) {
    * em 86,4% e reorganiza para sempre, e o primeiro encontro com isso é uma
    * tela que parece travada.
    */
+  /*
+   * A construção avançada: o piso não bastou, e o teto saiu.
+   *
+   * O piso é uma cota **inferior** — diz que nada menor existe, não que aquele
+   * tamanho basta. Em 20 números com jogos de 17 ele vale 160 e o melhor
+   * fechamento conhecido tem 240: nenhuma disposição de 160 cobre tudo, e a
+   * reorganização ficava tentando o impossível para sempre. Agora, esgotada a
+   * paciência no piso, ela volta a acrescentar cartelas até fechar de verdade.
+   *
+   * A tela precisa anunciar isso no momento em que acontece, porque é o momento
+   * em que a coleção deixa de ser candidata a mínima.
+   */
+  if (passo.alem_do_piso) {
+    $('ex-construcao').innerHTML =
+      `<b>${porcento(passo.melhor_cobertura)} de cobertura</b> ` +
+      `<em>— construção avançada: ${milhares(passo.cartelas)} cartelas, acima do ` +
+      `piso de ${milhares(passo.piso)}.</em>` +
+      `<br><em>O piso não bastou — nenhuma disposição de ${milhares(passo.piso)} ` +
+      `cartelas cobre tudo. Acrescentando até a garantia ser cumprida; o ` +
+      `resultado não será o mínimo, e a tela vai dizer isso.</em>`;
+    return;
+  }
+
   if (passo.fase === 'subindo') {
     $('ex-construcao').innerHTML =
       `<b>${porcento(passo.melhor_cobertura)} de cobertura</b> ` +
@@ -537,11 +573,11 @@ function pintarEscalada(passo, terminou) {
   const parado = haQuanto(Date.now() - (estado.desdeAMelhora ?? Date.now()));
   $('ex-construcao').innerHTML =
     `<b>${porcento(passo.melhor_cobertura)} de cobertura</b> ` +
-    `<em>— no teto de ${milhares(passo.teto)} cartelas, reorganizando sem acrescentar ` +
+    `<em>— no piso de ${milhares(passo.teto)} cartelas, reorganizando sem acrescentar ` +
     `nenhuma (${milhares(passo.rodadas)} rodadas).</em>` +
-    `<br><em>Sem melhorar há <b>${parado}</b>. Ela não para sozinha: toque em ` +
-    `<b>Parar</b> quando o que está aí já servir — o resultado fica guardado, e ` +
-    `dá para continuar depois.</em>`;
+    `<br><em>Sem melhorar há <b>${parado}</b>. Se o piso não bastar, ela passa ` +
+    `sozinha à construção avançada e acrescenta cartelas até fechar. Parar ` +
+    `agora guarda o que está aí.</em>`;
 }
 
 function pintarVerificacao(dados) {
@@ -590,7 +626,8 @@ function dadosDoVeredito() {
     piso: estado.piso,
     ciclicaFechou: estado.ciclicaFechou,
     descobertos: estado.descobertos,
-    teto: estado.piso,
+    teto: estado.escalada?.teto ?? estado.piso,
+    alemDoPiso: estado.escalada?.alem_do_piso ?? false,
     cobertura: estado.escalada?.melhor_cobertura ?? 0,
   };
 }
