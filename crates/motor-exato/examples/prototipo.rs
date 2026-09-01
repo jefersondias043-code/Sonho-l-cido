@@ -40,16 +40,28 @@ use std::time::Instant;
 
 /// Quantos conjuntos são olhados antes de escolher qual descartar.
 ///
-/// Pequena de propósito: o custo de olhar um é uma varredura de bloco, e o
-/// ganho de olhar muitos satura depressa. Oito foi o que a bancada mostrou
-/// bastar.
-const AMOSTRA_PARA_DESCARTE: usize = 8;
+/// Dois, e não oito, por medida. Cada olhada custa uma varredura inteira de
+/// bloco — mais cara que o movimento que ela serve —, e a comparação entre
+/// descartar ao acaso e escolher entre oito deu **o mesmo número** nas duas
+/// vezes em que foi feita. Oito custava quatro vezes mais para não comprar
+/// nada.
+///
+/// Dois em vez de um porque a diferença é barata e evita o pior caso: descartar
+/// justamente o conjunto que segurava sozinho uma parte da cobertura.
+const AMOSTRA_PARA_DESCARTE: usize = 2;
 
 /// Quantos movimentos sem ganho antes de encarecer o que resiste.
 const MOVIMENTOS_ATE_ENCARECER: usize = 40;
 
 /// O mesmo, no espaço de órbitas, onde a vizinhança é muito menor.
 const ORBITAS_ATE_ENCARECER: usize = 200;
+
+/// Quantas entradas a tabela de cobertura pode ter.
+///
+/// Oito milhões de inteiros de quatro bytes são trinta e dois megabytes — cabe
+/// com folga aqui, e é o dobro do que os casos desta bancada pedem. Acima disso
+/// a enumeração volta a ser feita na hora, mais devagar e sem gastar memória.
+const TETO_DA_TABELA: usize = 8_000_000;
 
 /// `(pool, jogo, melhor conhecido)`, sorteio 15 e garantia cheia.
 const REFERENCIA: &[(usize, usize, usize)] = &[
@@ -144,6 +156,16 @@ struct Turan {
     /// `C(n, k)` para o cálculo da posição colex.
     tabela: Vec<Vec<usize>>,
     escolhidos: Vec<u32>,
+
+    /// Para cada conjunto de `a` elementos, as posições que ele cobre.
+    ///
+    /// Vazio quando não coube na memória, e aí a enumeração é feita na hora.
+    ///
+    /// É a diferença entre um movimento custar sete mil operações e noventa mil:
+    /// sem esta tabela, cada `por` e cada `tirar` reenumeram os subconjuntos e
+    /// recalculam a posição colex de cada um, bit a bit, milhões de vezes. Com
+    /// ela, um movimento é percorrer duas listas de inteiros.
+    cobre_de: Vec<Vec<u32>>,
 }
 
 impl Turan {
@@ -167,7 +189,44 @@ impl Turan {
             custo: total as u64,
             tabela,
             escolhidos: Vec::new(),
+            cobre_de: Vec::new(),
         }
+    }
+
+    /// Monta a tabela de cobertura, se ela couber.
+    fn preparar(&mut self) {
+        let conjuntos = binomial(self.v, self.a);
+        let por_conjunto = binomial(self.v - self.a, self.b - self.a);
+        if conjuntos.saturating_mul(por_conjunto) > TETO_DA_TABELA {
+            return;
+        }
+        let mut cobre = vec![Vec::new(); conjuntos];
+        let todos: Vec<u8> = (0..self.v as u8).collect();
+        let mut lista = Vec::new();
+        para_cada_subconjunto(&todos, self.a, &mut |c| lista.push(c));
+        for c in lista {
+            let resto = self.fora(c);
+            let i = self.posicao(c);
+            let mut posicoes = Vec::with_capacity(por_conjunto);
+            para_cada_subconjunto(&resto, self.b - self.a, &mut |extra| {
+                posicoes.push(self.posicao(c | extra) as u32);
+            });
+            cobre[i] = posicoes;
+        }
+        self.cobre_de = cobre;
+    }
+
+    /// As posições cobertas por um conjunto, da tabela ou enumeradas na hora.
+    fn posicoes_de(&self, conjunto: u32) -> Vec<u32> {
+        if !self.cobre_de.is_empty() {
+            return self.cobre_de[self.posicao(conjunto)].clone();
+        }
+        let resto = self.fora(conjunto);
+        let mut posicoes = Vec::new();
+        para_cada_subconjunto(&resto, self.b - self.a, &mut |extra| {
+            posicoes.push(self.posicao(conjunto | extra) as u32);
+        });
+        posicoes
     }
 
     fn marcar_coberta(&mut self, p: usize) {
@@ -195,7 +254,7 @@ impl Turan {
         let mut m = 0u32;
         for i in (1..=self.b).rev() {
             let mut p = i - 1;
-            while p + 1 <= self.v && self.tabela[p + 1][i] <= r {
+            while p < self.v && self.tabela[p + 1][i] <= r {
                 p += 1;
             }
             m |= 1 << p;
@@ -236,12 +295,8 @@ impl Turan {
     }
 
     fn por(&mut self, conjunto: u32) {
-        let resto = self.fora(conjunto);
-        let mut posicoes = Vec::new();
-        para_cada_subconjunto(&resto, self.b - self.a, &mut |extra| {
-            posicoes.push(self.posicao(conjunto | extra));
-        });
-        for p in posicoes {
+        let posicoes = self.posicoes_de(conjunto);
+        for p in posicoes.into_iter().map(|p| p as usize) {
             if self.coberto[p] == 0 {
                 self.marcar_coberta(p);
             }
@@ -295,14 +350,7 @@ impl Turan {
             let mut saiu = false;
             let mut i = 0;
             while i < self.escolhidos.len() {
-                let c = self.escolhidos[i];
-                let resto = self.fora(c);
-                let mut necessario = false;
-                para_cada_subconjunto(&resto, self.b - self.a, &mut |extra| {
-                    if self.coberto[self.posicao(c | extra)] <= 1 {
-                        necessario = true;
-                    }
-                });
+                let necessario = self.perda_de(i) > 0;
                 if necessario {
                     i += 1;
                     continue;
@@ -428,6 +476,9 @@ struct Orbital {
     /// o tipo de alvo que uma busca com memória encontra e uma sem memória não.
     peso: Vec<u32>,
     custo: u64,
+    /// As posições descobertas, e onde cada uma está na lista.
+    lista: Vec<u32>,
+    onde: Vec<u32>,
     semente: u64,
 }
 
@@ -479,6 +530,8 @@ impl Orbital {
             membros,
             peso: vec![1; total],
             custo: total as u64,
+            lista: (0..total as u32).collect(),
+            onde: (0..total as u32).collect(),
             semente: 20_260_901,
         }
     }
@@ -489,6 +542,13 @@ impl Orbital {
             if self.vezes[p] == 0 {
                 self.descobertos -= 1;
                 self.custo -= self.peso[p] as u64;
+                let j = self.onde[p] as usize;
+                let ultima = self.lista.pop().unwrap();
+                if j < self.lista.len() {
+                    self.lista[j] = ultima;
+                    self.onde[ultima as usize] = j as u32;
+                }
+                self.onde[p] = u32::MAX;
             }
             self.vezes[p] += 1;
         }
@@ -504,26 +564,32 @@ impl Orbital {
             if self.vezes[p] == 0 {
                 self.descobertos += 1;
                 self.custo += self.peso[p] as u64;
+                self.onde[p] = self.lista.len() as u32;
+                self.lista.push(p as u32);
             }
         }
         self.dentro[o] = false;
     }
 
     /// Encarece o que continua descoberto, e recalcula o custo.
+    ///
+    /// Varre a lista dos descobertos, e não o universo inteiro. A diferença
+    /// cresce com o problema e aparece justamente no fim da busca, quando faltam
+    /// poucos alvos e o encarecimento é chamado com mais frequência: em pool 21
+    /// são cinquenta e quatro mil posições varridas para encarecer meia dúzia.
     fn encarecer(&mut self) {
         let mut acrescimo = 0u64;
-        for p in 0..self.vezes.len() {
-            if self.vezes[p] == 0 {
-                self.peso[p] += 1;
-                acrescimo += 1;
-            }
+        for i in 0..self.lista.len() {
+            let p = self.lista[i] as usize;
+            self.peso[p] += 1;
+            acrescimo += 1;
         }
         self.custo += acrescimo;
     }
 
     fn zerar_pesos(&mut self) {
         self.peso.iter_mut().for_each(|w| *w = 1);
-        self.custo = self.descobertos as u64;
+        self.custo = self.lista.len() as u64;
     }
 
     fn limpar(&mut self) {
@@ -532,12 +598,19 @@ impl Orbital {
         }
     }
 
-    /// Um começo guloso com `m` órbitas: a de maior ganho, e a seguinte.
+    /// Um começo guloso com `m` órbitas: a de melhor ganho **por cartela**.
+    ///
+    /// Por cartela, e não bruto, porque nem toda órbita tem o mesmo tamanho. Em
+    /// pool 21 as trincas `{i, i+7, i+14}` formam órbitas de sete, e não de
+    /// vinte e uma; o melhor fechamento publicado ali tem 182 cartelas, que é
+    /// `8 × 21 + 2 × 7`. Escolhendo por ganho bruto, uma órbita de sete nunca
+    /// ganha de uma de vinte e uma, e essa estrutura fica fora do alcance —
+    /// a busca só sabia montar múltiplos de vinte e um.
     fn partida_gulosa(&mut self, m: usize) {
         self.limpar();
         while self.escolhidas.len() < m {
             let mut melhor = usize::MAX;
-            let mut maior = 0usize;
+            let mut maior = 0f64;
             for o in 0..self.cobre.len() {
                 if self.dentro[o] {
                     continue;
@@ -545,7 +618,8 @@ impl Orbital {
                 let ganho = self.cobre[o]
                     .iter()
                     .filter(|&&p| self.vezes[p as usize] == 0)
-                    .count();
+                    .count() as f64
+                    / self.tamanho[o] as f64;
                 if ganho > maior {
                     maior = ganho;
                     melhor = o;
@@ -585,18 +659,28 @@ impl Orbital {
                 continue;
             }
             let antes = self.custo;
+            let cartelas_antes = self.cartelas();
             let sai = self.escolhidas[i];
             self.tirar_em(i);
             self.por(entra);
             if self.descobertos == 0 {
                 return true;
             }
-            if self.custo > antes {
+
+            // Empate no custo decide pelo número de cartelas.
+            //
+            // É o que abre caminho para as órbitas curtas: trocar uma de vinte e
+            // uma por uma de sete, cobrindo o mesmo, é progresso — e antes disto
+            // a troca era recusada por empate, então o fechamento nunca deixava
+            // de ser múltiplo do pool.
+            let piorou = self.custo > antes
+                || (self.custo == antes && self.cartelas() > cartelas_antes);
+            if piorou {
                 let ultima = self.escolhidas.len() - 1;
                 self.tirar_em(ultima);
                 self.por(sai);
                 parado += 1;
-            } else if self.custo == antes {
+            } else if self.custo == antes && self.cartelas() == cartelas_antes {
                 parado += 1;
             } else {
                 parado = 0;
@@ -658,10 +742,14 @@ fn orbital(t: &Turan, trabalho: usize) -> Option<Vec<u32>> {
     }
 
     let mut melhor: Vec<u32> = b.conjuntos();
-    while m > 1 && b.tenta(m - 1, rodadas) {
-        m -= 1;
-        if b.cartelas() < melhor.len() {
-            melhor = b.conjuntos();
+    while m > 1 {
+        if b.tenta(m - 1, rodadas) {
+            m -= 1;
+            if b.cartelas() < melhor.len() {
+                melhor = b.conjuntos();
+            }
+        } else {
+            break;
         }
     }
     Some(melhor)
@@ -671,12 +759,8 @@ fn orbital(t: &Turan, trabalho: usize) -> Option<Vec<u32>> {
 impl Turan {
     fn tirar_em(&mut self, i: usize) {
         let c = self.escolhidos.swap_remove(i);
-        let resto = self.fora(c);
-        let mut posicoes = Vec::new();
-        para_cada_subconjunto(&resto, self.b - self.a, &mut |extra| {
-            posicoes.push(self.posicao(c | extra));
-        });
-        for p in posicoes {
+        let posicoes = self.posicoes_de(c);
+        for p in posicoes.into_iter().map(|p| p as usize) {
             self.coberto[p] -= 1;
             if self.coberto[p] == 0 {
                 self.marcar_descoberta(p);
@@ -687,6 +771,12 @@ impl Turan {
     /// Quantas posições ficariam descobertas se este conjunto saísse.
     fn perda_de(&self, i: usize) -> usize {
         let c = self.escolhidos[i];
+        if !self.cobre_de.is_empty() {
+            return self.cobre_de[self.posicao(c)]
+                .iter()
+                .filter(|&&p| self.coberto[p as usize] <= 1)
+                .count();
+        }
         let resto = self.fora(c);
         let mut perda = 0;
         para_cada_subconjunto(&resto, self.b - self.a, &mut |extra| {
@@ -1042,6 +1132,13 @@ impl Turan {
     /// Quanto peso ficaria descoberto se este conjunto saísse.
     fn perda_pesada_de(&self, i: usize) -> u64 {
         let c = self.escolhidos[i];
+        if !self.cobre_de.is_empty() {
+            return self.cobre_de[self.posicao(c)]
+                .iter()
+                .filter(|&&p| self.coberto[p as usize] <= 1)
+                .map(|&p| self.peso[p as usize] as u64)
+                .sum();
+        }
         let resto = self.fora(c);
         let mut perda = 0u64;
         para_cada_subconjunto(&resto, self.b - self.a, &mut |extra| {
@@ -1139,6 +1236,72 @@ fn descer_recozendo(t: &mut Turan, movimentos: usize, tentativas: usize) {
     }
 }
 
+/// A recursão de Turán: um caso grande sai de dois menores.
+///
+///     T(n, b, a) ≤ T(n−1, b−1, a−1) + T(n−1, b, a)
+///
+/// Fixe um elemento `x`. Resolva `T(n−1, b−1, a−1)` no resto e acrescente `x` a
+/// cada conjunto; resolva `T(n−1, b, a)` no resto e deixe como está. A união
+/// cobre tudo, e a prova cabe em duas linhas:
+///
+/// - um `b`-conjunto **sem** `x` vive inteiro em `[n−1]`, e a segunda família o
+///   cobre por construção;
+/// - um `b`-conjunto **com** `x` tem, tirando `x`, um `(b−1)`-conjunto de
+///   `[n−1]`; a primeira família cobre esse com algum `(a−1)`-conjunto, e junto
+///   com `x` ele é um `a`-conjunto da família que está dentro do original.
+///
+/// É construção, e não busca: o custo é o dos dois casos menores, e o resultado
+/// é garantido. Onde a busca direta esbarra na aritmética das órbitas — pool 21
+/// com jogos de 18 quer 182, e nenhuma união de órbitas cíclicas de Z₂₁ dá 182 —,
+/// a recursão não depende de simetria nenhuma.
+fn recursivo(v: usize, a: usize, b: usize, esforco: usize, fundo: usize) -> Vec<u32> {
+    // Fundo do poço: resolve direto.
+    if a == 1 {
+        // Todo `b`-conjunto precisa conter um dos escolhidos: bastam os
+        // `v − b + 1` primeiros, porque um `b`-conjunto que os evitasse teria de
+        // caber nos `b − 1` restantes.
+        return (0..=(v - b)).map(|i| 1u32 << i).collect();
+    }
+    if a == b {
+        // Cada `b`-conjunto contém apenas a si mesmo: não há escolha.
+        let todos: Vec<u8> = (0..v as u8).collect();
+        let mut saida = Vec::new();
+        para_cada_subconjunto(&todos, a, &mut |m| saida.push(m));
+        return saida;
+    }
+    if v <= fundo {
+        return resolver_direto(v, a, b, esforco);
+    }
+
+    let x = (v - 1) as u32;
+    let mut saida: Vec<u32> = recursivo(v - 1, a - 1, b - 1, esforco, fundo)
+        .into_iter()
+        .map(|c| c | (1 << x))
+        .collect();
+    saida.extend(recursivo(v - 1, a, b, esforco, fundo));
+    saida
+}
+
+/// O motor completo num caso: órbitas, poda e descida com pesos.
+fn resolver_direto(v: usize, a: usize, b: usize, esforco: usize) -> Vec<u32> {
+    let mut t = Turan::novo(v, a, b);
+    t.preparar();
+    let partida = if binomial(v, b) <= 200_000 {
+        let mut base = Turan::novo(v, a, b);
+        base.preparar();
+        orbital(&base, 400_000_000)
+    } else {
+        None
+    };
+    match partida {
+        Some(conjuntos) => t.refazer(conjuntos),
+        None => guloso(&mut t),
+    }
+    t.podar();
+    descer_com_pesos(&mut t, esforco, 2);
+    t.escolhidos.clone()
+}
+
 fn main() {
     // `CASO=20,17` isola uma configuração; `DUROS=1` corre só a folga de 3.
     let um_so = std::env::var("CASO").ok();
@@ -1149,6 +1312,15 @@ fn main() {
         .ok()
         .and_then(|s| s.parse().ok())
         .unwrap_or(2);
+    let orbital_trabalho: usize = std::env::var("ORBITAL")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(400_000_000);
+    // Abaixo deste pool a recursão para e o motor resolve direto.
+    let fundo_da_recursao: usize = std::env::var("FUNDO")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(18);
     let movimentos: usize = std::env::var("MOVIMENTOS")
         .ok()
         .and_then(|s| s.parse().ok())
@@ -1156,9 +1328,9 @@ fn main() {
 
     println!("\nProtótipo — construção em T(v, b, a), contra os melhores conhecidos\n");
     println!(
-        "  {:<14} {:>4} {:>8} {:>8} {:>8} {:>8} {:>10} {:>9} {:>7} {:>8}",
+        "  {:<14} {:>4} {:>8} {:>8} {:>8} {:>8} {:>10} {:>9} {:>7} {:>12} {:>8}",
         "configuração", "ref", "guloso", "cíclico", "misto", "orbital", "combinado", "recozido",
-        "pesos", "tempo"
+        "pesos", "recursivo", "tempo"
     );
 
     for &(pool, jogo, conhecido) in REFERENCIA {
@@ -1223,12 +1395,25 @@ fn main() {
             ("—".into(), "—".into())
         };
 
+        // A recursão de Turán, e depois a mesma descida sobre o que ela deu.
+        let n_recursivo = {
+            let conjuntos = recursivo(v, a, b, movimentos / 4, fundo_da_recursao);
+            let mut r = Turan::novo(v, a, b);
+            r.preparar();
+            r.refazer(conjuntos);
+            r.podar();
+            let bruto = r.escolhidos.len();
+            descer_com_pesos(&mut r, movimentos, tentativas);
+            format!("{bruto}→{}", r.escolhidos.len())
+        };
+
         // O caminho completo: órbitas para a estrutura, poda, e recozimento em
         // tamanho fixo descendo degrau a degrau.
         let n_recozido = if so_pesos {
             "—".to_string()
         } else {
             let mut r = Turan::novo(v, a, b);
+            r.preparar();
             let partida = if binomial(v, b) <= 200_000 {
                 orbital(&Turan::novo(v, a, b), 400_000_000)
             } else {
@@ -1247,8 +1432,11 @@ fn main() {
 
         let n_pesos = {
             let mut r = Turan::novo(v, a, b);
+            r.preparar();
             let partida = if binomial(v, b) <= 200_000 {
-                orbital(&Turan::novo(v, a, b), 400_000_000)
+                let mut base = Turan::novo(v, a, b);
+                base.preparar();
+                orbital(&base, orbital_trabalho)
             } else {
                 None
             };
@@ -1264,7 +1452,7 @@ fn main() {
         };
 
         println!(
-            "  pool {pool} jogo {jogo}  {conhecido:>4} {n_guloso:>8} {n_ciclico:>8} {n_misto:>8} {n_orbital:>8} {n_combinado:>10} {n_recozido:>9} {n_pesos:>7} {:>7.1}s",
+            "  pool {pool} jogo {jogo}  {conhecido:>4} {n_guloso:>8} {n_ciclico:>8} {n_misto:>8} {n_orbital:>8} {n_combinado:>10} {n_recozido:>9} {n_pesos:>7} {n_recursivo:>12} {:>7.1}s",
             comeco.elapsed().as_secs_f64()
         );
     }
