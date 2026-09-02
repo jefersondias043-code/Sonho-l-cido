@@ -319,6 +319,13 @@ main { padding: 8px 16px 0; }
   color: var(--vermelho);
 }
 
+/* O cartão que apaga tudo. A borda avisa antes de a pessoa chegar no botão —
+   num cartão comum, um botão vermelho no fim é a primeira notícia de que ali
+   se perde alguma coisa. */
+.cartao.perigoso {
+  border-color: #6b3a3a;
+}
+
 .principal[data-ocupado="sim"] {
   opacity: 0.6;
   pointer-events: none;

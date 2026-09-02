@@ -370,6 +370,95 @@ try {
     marcar(achou > 0, `${de} tem caminho para as Configurações`);
   }
 
+  // ─── 10. apagar tudo e recomeçar ───
+  //
+  // O botão existe por um sintoma concreto: o aplicativo continuar se
+  // comportando como uma versão antiga depois de o carimbo já ter mudado. Por
+  // isso o que se cobra aqui não é a mensagem, e sim o efeito — nada nosso
+  // sobra em `localStorage`, nada sobra no CacheStorage, e o service worker
+  // deixa de estar registrado. Se qualquer um dos três sobrevivesse, o botão
+  // seria um enfeite justamente no caso em que ele é a saída.
+  await pagina.goto(endereco('configuracoes.html'), { waitUntil: 'networkidle' });
+  await pagina.waitForTimeout(2500);
+
+  // Sujeira de propósito: uma chave nossa, e uma de outro dono no mesmo
+  // domínio. A segunda é a que **não** pode ser tocada.
+  await pagina.evaluate(async () => {
+    localStorage.setItem('sonho-lucido:historico', '[{"id":"x"}]');
+    localStorage.setItem('sonho-lucido:esforco-por-cartela', '900');
+    localStorage.setItem('outro-app:preferencia', 'guardar');
+    // Um depósito de uma construção anterior, que é exatamente o que faz o
+    // aplicativo continuar se comportando como a versão velha.
+    await caches.open('sonho-lucido-de-ontem');
+  });
+  await pagina.reload({ waitUntil: 'networkidle' });
+  await pagina.waitForTimeout(1500);
+
+  marcar(
+    /apagado|fechamento|ajuste/i.test((await texto('cfg-reset-resumo')) ?? ''),
+    'o resumo diz o que será apagado antes do toque',
+    await texto('cfg-reset-resumo')
+  );
+
+  const antes = await pagina.evaluate(async () => ({
+    guardados: (await caches.keys()).length,
+    trabalhadores: (await navigator.serviceWorker.getRegistrations()).length,
+  }));
+  marcar(
+    antes.guardados > 0 && antes.trabalhadores > 0,
+    'antes de apagar há conteúdo guardado e service worker registrado',
+    `${antes.guardados} depósito(s) · ${antes.trabalhadores} registro(s)`
+  );
+
+  // Apagar pede confirmação, e sem tratador o Playwright dispensa a caixa —
+  // o que faria o teste medir o cancelamento em vez do reset.
+  pagina.once('dialog', (caixa) => caixa.accept());
+  await pagina.click('#cfg-reset');
+  await pagina.waitForURL(/recomecado=/, { timeout: 30000 });
+  await pagina.waitForLoadState('networkidle');
+
+  const depois = await pagina.evaluate(async () => ({
+    depositos: await caches.keys(),
+    nossas: Object.keys(localStorage).filter((c) => c.startsWith('sonho-lucido:')),
+    alheia: localStorage.getItem('outro-app:preferencia'),
+  }));
+
+  // Contar zero depósitos aqui mediria o instante errado: a página que chega
+  // registra um service worker novo e guarda a versão atual, e é isso que
+  // "recém-instalado" quer dizer. O que não pode sobreviver é o de antes.
+  marcar(
+    !depois.depositos.includes('sonho-lucido-de-ontem'),
+    'apagar leva o conteúdo guardado da construção anterior',
+    depois.depositos.join(', ') || 'nenhum'
+  );
+  marcar(
+    (await versaoNaTela()) === versaoDaqui,
+    'e o que volta é a versão publicada, baixada de novo',
+    `${await versaoNaTela()}`
+  );
+  marcar(
+    depois.nossas.length === 0,
+    'apagar leva todas as chaves do aplicativo',
+    depois.nossas.join(', ')
+  );
+  marcar(
+    depois.alheia === 'guardar',
+    'e não toca no que é de outro dono no mesmo domínio',
+    String(depois.alheia)
+  );
+
+  // A confirmação é lida pela carga que chega, não escrita pela que sai — e o
+  // endereço volta ao normal para uma recarga seguinte não repeti-la.
+  marcar(
+    await pagina.locator('#cfg-aviso:not([hidden])').count() > 0,
+    'a página que chega confirma que recomeçou'
+  );
+  marcar(
+    !/recomecado=/.test(pagina.url()),
+    'e o endereço volta ao normal, para o aviso não se repetir',
+    pagina.url().split('/').pop()
+  );
+
   marcar(
     errosNoConsole.length === 0,
     'nenhum erro no console em todo o percurso',

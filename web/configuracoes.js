@@ -403,11 +403,155 @@ function pintarOAparelho() {
   texto('cfg-instalado', ehInstalado() ? 'instalado no aparelho' : 'no navegador');
 }
 
+// ─────────── 6 · voltar ao estado de recém-instalado ───────────
+
+/*
+ * O prefixo que marca tudo o que é deste aplicativo.
+ *
+ * Apagar `localStorage` inteiro seria mais simples e estaria errado: a origem é
+ * compartilhada com qualquer outra coisa publicada no mesmo domínio, e um botão
+ * desta tela não tem autoridade sobre o que não é dela. Todas as chaves nossas
+ * começam com este prefixo — é o que torna o corte preciso.
+ */
+const PREFIXO = 'sonho-lucido:';
+
+/** As chaves nossas que existem agora, sem tocar em nada de terceiros. */
+function chavesDaqui(deposito) {
+  const chaves = [];
+  try {
+    for (let i = 0; i < deposito.length; i += 1) {
+      const chave = deposito.key(i);
+      if (chave?.startsWith(PREFIXO)) chaves.push(chave);
+    }
+  } catch {
+    // Um navegador com armazenamento bloqueado lança ao ser lido. Não há o que
+    // apagar nesse caso, e falhar aqui impediria o resto do reset.
+  }
+  return chaves;
+}
+
+/** O que o botão vai apagar, dito antes de ele ser tocado. */
+async function pintarOResumoDoReset() {
+  const partes = [];
+
+  const daLotinha = historico.listar().length;
+  const doExato = exatoHistorico.listar().length;
+  const fechamentos = daLotinha + doExato;
+  if (fechamentos > 0) {
+    partes.push(fechamentos === 1 ? '1 fechamento' : `${fechamentos} fechamentos`);
+  }
+
+  const ajustes = chavesDaqui(localStorage).length;
+  if (ajustes > 0) partes.push(ajustes === 1 ? '1 ajuste' : `${ajustes} ajustes`);
+
+  try {
+    const guardados = (await caches.keys()).length;
+    if (guardados > 0) partes.push('o aplicativo guardado');
+  } catch {
+    // Sem CacheStorage não há o que contar, e a frase simplesmente não o cita.
+  }
+
+  texto('cfg-reset-resumo', partes.length === 0 ? 'nada — já está limpo' : partes.join(' · '));
+}
+
+/**
+ * Apaga tudo o que é nosso e recarrega.
+ *
+ * A ordem importa e é a inversa da que parece natural. O service worker sai
+ * **primeiro**: enquanto ele estiver no comando, ele pode responder à recarga
+ * com o que tem guardado, e a página voltaria exatamente igual — que é o
+ * sintoma que este botão existe para resolver. Só depois os depósitos, e a
+ * recarga por último.
+ */
+async function apagarTudo() {
+  const botao = $('cfg-reset');
+  const resposta = $('cfg-reset-resultado');
+
+  const confirmou = window.confirm(
+    'Apagar tudo e recomeçar?\n\n'
+      + 'Os fechamentos guardados nos históricos, os ajustes e o aplicativo '
+      + 'guardado para uso sem internet serão apagados deste aparelho.\n\n'
+      + 'Não dá para desfazer, e só o que você exportou para arquivo sobrevive.'
+  );
+  if (!confirmou) return;
+
+  if (botao) {
+    botao.disabled = true;
+    botao.textContent = 'Apagando…';
+  }
+  if (resposta) {
+    resposta.hidden = false;
+    resposta.textContent = 'Apagando o que está guardado neste aparelho…';
+  }
+
+  // Cada passo é tentado por conta própria: um navegador que proíbe um deles
+  // não pode impedir os outros, e um reset pela metade é pior do que um reset
+  // que diz o que não conseguiu.
+  const falhou = [];
+
+  try {
+    const registros = (await navigator.serviceWorker?.getRegistrations?.()) ?? [];
+    await Promise.all(registros.map((r) => r.unregister()));
+  } catch {
+    falhou.push('o modo sem internet');
+  }
+
+  try {
+    await Promise.all((await caches.keys()).map((c) => caches.delete(c)));
+  } catch {
+    falhou.push('o aplicativo guardado');
+  }
+
+  try {
+    for (const chave of chavesDaqui(localStorage)) localStorage.removeItem(chave);
+    for (const chave of chavesDaqui(sessionStorage)) sessionStorage.removeItem(chave);
+  } catch {
+    falhou.push('os ajustes e os históricos');
+  }
+
+  if (falhou.length > 0) {
+    if (botao) {
+      botao.disabled = false;
+      botao.textContent = 'Apagar tudo e recomeçar';
+    }
+    if (resposta) {
+      resposta.textContent =
+        `Não deu para apagar ${falhou.join(' nem ')}. O resto foi apagado. `
+        + 'Limpar os dados do site pelas configurações do navegador termina o serviço.';
+    }
+    await pintarOResumoDoReset();
+    return;
+  }
+
+  if (resposta) resposta.textContent = 'Apagado. Baixando o aplicativo de novo…';
+
+  // `location.replace` e não `reload`: a recarga simples pode ser servida do
+  // cache de navegação do próprio navegador, que é outro depósito e não
+  // obedece ao que acabou de ser apagado. Trocar o endereço força a busca.
+  window.location.replace(`./configuracoes.html?recomecado=${Date.now()}`);
+}
+
+/*
+ * A confirmação de que o reset aconteceu, lida pela carga seguinte.
+ *
+ * Pelo mesmo motivo da confirmação de atualização: quem apaga vai embora na
+ * recarga, e uma mensagem escrita antes dela não é vista por ninguém. O sinal
+ * viaja no endereço, porque é o único depósito que sobrevive a apagar todos os
+ * outros.
+ */
+function contarQueRecomecou() {
+  if (!new URLSearchParams(window.location.search).has('recomecado')) return;
+  avisar('Pronto: o aplicativo voltou ao estado de recém-instalado.', true);
+  // O endereço volta ao normal para uma recarga seguinte não repetir o aviso.
+  window.history.replaceState(null, '', './configuracoes.html');
+}
+
 // ─────────── partida ───────────
 
 $('cfg-buscar')?.addEventListener('click', buscarAtualizacoes);
 $('cfg-atualizar')?.addEventListener('click', atualizarAgora);
 $('cfg-proteger')?.addEventListener('click', pedirProtecao);
+$('cfg-reset')?.addEventListener('click', apagarTudo);
 
 atualizacao.registrar({
   aoSaberAVersao: (versao) => {
@@ -426,3 +570,5 @@ mostrarAUltimaVerificacao();
 pintarOTrabalhoGuardado();
 pintarOAparelho();
 pintarOModoSemInternet();
+pintarOResumoDoReset();
+contarQueRecomecou();
