@@ -343,24 +343,19 @@ try {
   );
   await pagina.waitForTimeout(5000);
 
-  // Esta configuração chega ao piso em 86,4% e reorganiza. A tela precisa dizer
-  // as duas coisas que decidem se vale esperar: há quanto tempo a cobertura não
-  // melhora, e o que vem a seguir se ela não melhorar. Antes da construção
-  // avançada esta fase não terminava nunca, e o primeiro encontro com um
-  // problema que não fecha era uma tela que parecia travada.
+  // Vinte dezenas com jogos de 17 é garantia cheia, então quem trabalha aqui é
+  // o motor de Turán — e ele entrega um fechamento nos primeiros segundos em vez
+  // de ficar reorganizando no piso. O que a tela precisa dizer é o que decide se
+  // vale continuar esperando: qual é o número agora, qual é o piso, e que parar
+  // devolve o que já vale.
   const durante = await texto('#ex-construcao');
   marcar(
-    /Sem melhorar há \d+/.test(durante),
-    'reorganizando, a tela diz há quanto tempo a cobertura não melhora',
-    durante.slice(durante.indexOf('Sem melhorar'), durante.indexOf('Sem melhorar') + 60)
+    /Garantia cumprida com [\d.]+ cartelas/.test(durante),
+    'com garantia cheia, o fechamento aparece em segundos e a tela diz o número',
+    durante.slice(0, 60)
   );
-  // A dica da construção avançada não aparece aqui de propósito: ela só entra
-  // quando a paciência no piso se esgota, junto com o botão que a liga. Quatro
-  // segundos depois de começar ainda há chance de fechar no mínimo, e sugerir o
-  // contrário seria convidar a desistir cedo. O oferecimento no momento certo é
-  // cobrado no estágio 7b.
   marcar(
-    /Parar agora guarda o que está aí/.test(durante),
+    /parar devolve o melhor até aqui|Pode parar/.test(durante),
     'e diz que parar não perde o trabalho, para a espera ser uma escolha',
     durante.slice(-70)
   );
@@ -537,6 +532,60 @@ try {
     !/[Mm]ínimo exato/.test(vereditoAvancado) && vereditoAvancado.includes(String(pisoDaEscalada)),
     'e o resultado nunca é chamado de mínimo: mostra os dois números',
     vereditoAvancado
+  );
+
+  // ─── 7d. o motor de Turán, no caminho de garantia cheia ───
+  //
+  // O bloco acima corre com garantia parcial, que **não** tem a representação
+  // complementar — e por isso exercita os três estágios manuais e os dois
+  // botões, que continuam valendo ali.
+  //
+  // Aqui é o outro caminho, e ele não tem estágios. Com garantia cheia a
+  // cartela precisa conter o sorteio inteiro, o problema vira um sistema de
+  // Turán, e o motor entrega um fechamento no primeiro lote e vai baixando o
+  // número. Não há o que ligar: o que se cobra é que o número apareça, que ele
+  // não suba, que a garantia se cumpra, e que parar devolva o que valia.
+  await pagina.reload({ waitUntil: 'networkidle' });
+  await pagina.waitForSelector('#ex-grade .numero');
+  await marcarNumeros(11, Array.from({ length: 11 }, (_, i) => i + 1));
+  await regras(8, 5, 5);
+  await pagina.click('#ex-resolver');
+
+  await pagina.waitForFunction(
+    () => /Garantia cumprida|Fechou em 100%/.test(
+      document.getElementById('ex-construcao')?.textContent ?? ''
+    ),
+    undefined,
+    { timeout: 120000 }
+  );
+  const pisoDeTuran = await numero('#ex-teto');
+  const primeiro = await numero('#ex-cartelas-agora');
+  marcar(
+    primeiro > 0,
+    'com garantia cheia, o fechamento aparece sem ninguém ligar nada',
+    `${primeiro} cartelas, piso ${pisoDeTuran}`
+  );
+
+  // E os botões dos três estágios não aparecem: não há estágio nenhum a ligar.
+  marcar(
+    (await pagina.locator('#ex-avancar').isHidden())
+      && (await pagina.locator('#ex-otimizar').isHidden()),
+    'e nenhum botão de estágio aparece, porque não há estágio a ligar'
+  );
+
+  await pagina.waitForTimeout(8000);
+  await pagina.click('#ex-parar');
+  await esperarResultado(180000);
+  const porTuran = await numero('#ex-encontrado');
+  marcar(
+    porTuran <= primeiro && porTuran >= pisoDeTuran,
+    'parar devolve um número que nunca subiu nem desceu abaixo do piso',
+    `${primeiro} → ${porTuran}, piso ${pisoDeTuran}`
+  );
+  marcar(
+    /Confere\./.test(await texto('#ex-verificacao')),
+    'e o que ele entrega cobre todos os sorteios, conferido um a um',
+    (await texto('#ex-verificacao')).slice(0, 60)
   );
 
   // ─── 8. conferir, e o dinheiro ───
@@ -1097,8 +1146,12 @@ try {
   // Parar no meio dizia "Com 1537 cartelas..." para quem tinha 911 — o
   // aplicativo afirmando 626 cartelas inexistentes, e apresentando trabalho
   // interrompido como conclusão matemática.
+  //
+  // O primeiro número da frase é sempre o fechamento que existe: nas duas
+  // formas que ela toma — "Com N cartelas…" quando parou no meio, e "Solução
+  // encontrada: N · Mínimo comprovado: ≥ P" quando há um fechamento completo.
   const fraseDoParcial = await texto('#ex-frase');
-  const numerosNaFrase = (fraseDoParcial.match(/[\d.]+(?= cartelas)/g) ?? []).map((n) =>
+  const numerosNaFrase = (fraseDoParcial.match(/[\d.]+/g) ?? []).map((n) =>
     Number(n.replace(/\./g, ''))
   );
   marcar(

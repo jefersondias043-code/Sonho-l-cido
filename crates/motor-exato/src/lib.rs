@@ -48,6 +48,7 @@ pub mod escalada;
 pub mod limites;
 pub mod prova;
 pub mod problema;
+pub mod turan;
 pub mod veredito;
 
 pub use limites::{Limite, LimiteInferior};

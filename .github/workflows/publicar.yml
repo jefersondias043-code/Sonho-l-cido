@@ -70,11 +70,15 @@ jobs:
         run: cargo test --workspace
 
       - name: Bancada de qualidade do motor exato
-        # Casos pequenos com resposta conhecida — os melhores fechamentos
-        # publicados —, medidos em segundos. É o que substitui rodar uma
-        # configuração grande para descobrir se uma mudança no motor melhorou ou
-        # piorou: a razão média contra a referência é a projeção para a escala
-        # que ninguém tem tempo de rodar.
+        # Nove configurações cuja resposta é conhecida — os melhores fechamentos
+        # publicados. Oito saem exatas e a razão média está em 1,00×, então o
+        # limite aqui cobra de verdade: qualquer mudança que piore o motor
+        # aparece antes de chegar ao ar.
+        #
+        # Leva vinte minutos, e leva porque a busca em espaço de órbitas precisa
+        # de quarenta e cinco bilhões de posições para achar as doze órbitas que
+        # dão as 240 cartelas de pool 20 com jogos de 17. Cortar o orçamento
+        # torna a bancada rápida e cega — foi medido.
         run: cargo test --release -p motor-exato --test qualidade -- --ignored --nocapture
 
       - name: Construir o site

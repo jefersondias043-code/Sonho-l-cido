@@ -94,6 +94,14 @@ pub const PACIENCIA: u32 = 60;
 /// mais num problema grande, a paciência cresce sozinha com a dificuldade.
 pub const RODADAS_NO_PISO: u32 = 5_000;
 
+/// Quanto trabalho um movimento do motor de Turán vale no orçamento.
+///
+/// O orçamento da escalada é contado em varreduras de alvo, e um movimento de
+/// Turán custa duas travessias da lista de cobertura de um conjunto. O número
+/// não precisa ser exato — precisa ser da ordem certa, para um lote de trabalho
+/// pedido pela tela durar o tempo que ela espera.
+const LOTE_POR_MOVIMENTO: u64 = 300;
+
 /// Quantos pontos a curva de cobertura guarda, no máximo.
 ///
 /// A curva é a resposta a "1 cartela → quanto? 2 cartelas → quanto?" — e ela
@@ -111,6 +119,8 @@ pub enum Fase {
     Subindo,
     /// No teto, reescrevendo o conjunto sem mudar o tamanho.
     Reorganizando,
+    /// A construção avançada, pelo motor de Turán: órbitas e recursão.
+    Construindo,
     /// Cobertura fechada, procurando fechar de novo com uma cartela a menos.
     Otimizando,
     /// A cobertura fechou. Não há mais o que fazer.
@@ -122,6 +132,7 @@ impl std::fmt::Display for Fase {
         match self {
             Fase::Subindo => write!(f, "subindo"),
             Fase::Reorganizando => write!(f, "reorganizando"),
+            Fase::Construindo => write!(f, "construindo"),
             Fase::Otimizando => write!(f, "otimizando"),
             Fase::Fechada => write!(f, "fechada"),
         }
@@ -249,6 +260,13 @@ pub struct Escalada {
     semente: u64,
 
 
+    /// O motor de Turán, quando o problema é representável por ele.
+    ///
+    /// Existe só a partir da construção avançada, e nunca é gravado: retomar um
+    /// trabalho guardado recomeça a busca dele, mas as cartelas que ela já
+    /// tinha achado estão em `melhor_completo` e não se perdem.
+    turan: Option<crate::turan::Construtor>,
+
     /// A curva: por quantas cartelas, que cobertura.
     curva: Vec<(u32, f32)>,
     /// De quantas em quantas cartelas a curva ainda guarda um ponto.
@@ -257,13 +275,33 @@ pub struct Escalada {
 
 impl Escalada {
     /// Uma escalada nova, com o teto que o piso determinou.
+    ///
+    /// ## Quando o motor de Turán assume tudo
+    ///
+    /// Com garantia cheia e uma cartela premiada, o problema tem uma segunda
+    /// forma — a complementar, um sistema de Turán — em que ele é muito menor e
+    /// muito mais tratável. Havendo essa forma, e cabendo na memória, é ela que
+    /// vale desde a primeira rodada: a escalada presa ao piso não é usada.
+    ///
+    /// Isso apaga os três estágios manuais **para esses casos**, e apaga porque
+    /// a razão de eles existirem deixou de valer. Eles existiam porque a
+    /// escalada empacava no piso sem saber se ele bastava, e passar do piso —
+    /// trocar um mínimo provado por uma solução que apenas funciona — não podia
+    /// ser decisão do motor. O motor novo não empaca: entrega um fechamento no
+    /// primeiro segundo e vai baixando o número. Quando ele chega ao piso, o
+    /// piso foi alcançado e o veredito diz "mínimo exato" como sempre disse —
+    /// a comparação é entre o **resultado** e o piso, e não entre o teto e o piso.
+    ///
+    /// Fora dessa forma — garantia parcial, mais de uma cartela premiada,
+    /// tamanho que não cabe —, tudo continua exatamente como estava, com os três
+    /// estágios e os dois botões.
     pub fn nova(p: &Problema, teto: usize) -> Escalada {
         let alvos_por_bloco = p.alvos_por_bloco().max(1);
         let cabe = (ALVOS_POR_PASSO / alvos_por_bloco) as usize;
         let candidatas_por_passo = cabe.clamp(MINIMO_DE_CANDIDATAS, TETO_DE_CANDIDATAS);
         let total_de_alvos = p.total_de_alvos();
 
-        Escalada {
+        let mut escalada = Escalada {
             p: *p,
             teto: teto.max(1),
             piso: teto.max(1),
@@ -287,8 +325,26 @@ impl Escalada {
             rodadas: 0,
             sem_ganho: 0,
             semente: 0x243F_6A88_85A3_08D3,
+            turan: None,
             curva: Vec::new(),
             passo_da_curva: 1,
+        };
+        escalada.tentar_o_turan();
+        escalada
+    }
+
+    /// Engata o motor de Turán, se o problema tiver a forma dele.
+    fn tentar_o_turan(&mut self) {
+        if self.turan.is_some() {
+            return;
+        }
+        self.turan = crate::turan::Construtor::novo(&self.p, self.semente);
+        if let Some(construtor) = self.turan.as_mut() {
+            // Nada de esperar por um botão: o número cai sozinho, e quem manda
+            // parar é quem está olhando.
+            construtor.liberar_a_descida();
+            self.teto = self.teto_absoluto;
+            self.fase = Fase::Construindo;
         }
     }
 
@@ -367,6 +423,10 @@ impl Escalada {
             match self.fase {
                 Fase::Subindo => self.subir_um_degrau(),
                 Fase::Reorganizando => self.reorganizar_uma_rodada(),
+                Fase::Construindo | Fase::Otimizando if self.turan.is_some() => {
+                    self.girar_o_turan(ate)
+                }
+                Fase::Construindo => self.subir_um_degrau(),
                 Fase::Otimizando => self.otimizar_uma_rodada(),
                 Fase::Fechada => break,
             }
@@ -591,6 +651,40 @@ impl Escalada {
         }
     }
 
+    /// Um lote do motor de Turán, e a adoção do que ele achar.
+    ///
+    /// O construtor devolve conjuntos de dezenas **ausentes**; a tradução para
+    /// cartelas é dele. O que chega aqui já são cartelas, e elas entram pelo
+    /// mesmo caminho de sempre — `trocar_conjunto` e `registrar` —, de modo que
+    /// `melhor_completo` continua sendo a única fonte do que cumpre a garantia.
+    fn girar_o_turan(&mut self, ate: u64) {
+        let lote = (ate.saturating_sub(self.trabalho) / LOTE_POR_MOVIMENTO).clamp(1, 200_000);
+
+        let Some(construtor) = self.turan.as_mut() else {
+            self.fase = Fase::Fechada;
+            return;
+        };
+        let antes = construtor.trabalho();
+        let melhorou = construtor.avancar(lote);
+        let gasto = construtor.trabalho().saturating_sub(antes).max(1);
+        let terminou = construtor.terminou();
+        let cartelas = if melhorou { construtor.cartelas() } else { Vec::new() };
+
+        // O que se cobra é o que foi feito, e não o que se pediu: uma rodada em
+        // órbitas toca vinte vezes mais posições que uma troca de dezena.
+        self.trabalho = self.trabalho.saturating_add(gasto);
+        self.rodadas += 1;
+
+        if melhorou && !cartelas.is_empty() {
+            self.trocar_conjunto(cartelas);
+            self.registrar();
+        }
+
+        if terminou {
+            self.fase = Fase::Fechada;
+        }
+    }
+
     /* ─────────── fase 3: construção avançada ─────────── */
 
     /// Aceita que o piso não bastou, e volta a acrescentar cartelas.
@@ -608,7 +702,28 @@ impl Escalada {
     /// existe: quem mostra o resultado precisa parar de falar em mínimo no
     /// momento exato em que isso deixa de ser verdade.
     pub fn liberar_o_teto(&mut self) {
-        if self.teto >= self.teto_absoluto || self.fase == Fase::Fechada {
+        if self.fase == Fase::Fechada {
+            return;
+        }
+
+        // O motor de Turán, quando o problema é representável por ele: garantia
+        // cheia, uma cartela premiada, e tamanho que cabe na memória. Ele entrega
+        // muito menos cartelas que a subida gulosa — 240 contra 328 em 20 dezenas
+        // com jogos de 17, que é o melhor fechamento publicado para o caso — e a
+        // razão é a troca de ponto de vista, explicada em `turan.rs`.
+        //
+        // Fora do que ele representa, a subida gulosa continua sendo o caminho.
+        if self.turan.is_none() {
+            self.turan = crate::turan::Construtor::novo(&self.p, self.semente);
+        }
+        if self.turan.is_some() {
+            self.teto = self.teto_absoluto;
+            self.sem_ganho = 0;
+            self.fase = Fase::Construindo;
+            return;
+        }
+
+        if self.teto >= self.teto_absoluto {
             return;
         }
         // O teto sai de vez, e não sobe de cartela em cartela.
@@ -639,6 +754,24 @@ impl Escalada {
     /// pode melhorar o número, nunca estragar o que já cumpria a garantia.
     pub fn otimizar(&mut self) {
         if self.melhor_completo.is_empty() || self.melhor_completo.len() <= 1 {
+            return;
+        }
+
+        // Com o motor de Turán, apertar é liberar a descida que ele já tinha
+        // pronta e parada esperando esta ordem.
+        //
+        // Se ele não existe — o aplicativo foi fechado e reaberto, e o motor não
+        // é gravado —, um novo parte direto do fechamento guardado. Sem isto, o
+        // botão de otimizar cairia no caminho antigo depois de cada retomada, e
+        // o usuário veria o mesmo botão fazer duas coisas diferentes.
+        if self.turan.is_none() {
+            self.turan =
+                crate::turan::Construtor::a_partir_de(&self.p, self.semente, &self.melhor_completo);
+        }
+        if let Some(construtor) = self.turan.as_mut() {
+            construtor.liberar_a_descida();
+            self.teto = self.teto_absoluto;
+            self.fase = Fase::Otimizando;
             return;
         }
         let completo = self.melhor_completo.clone();
@@ -944,6 +1077,19 @@ impl Escalada {
         escalada.trabalho = estado.trabalho;
         escalada.rodadas = estado.rodadas;
         escalada.sem_ganho = estado.sem_ganho;
+        // Retomar um trabalho guardado reengata o motor novo, se ele valer para
+        // este problema: ele não é gravado, mas as cartelas que ele achou estão
+        // no estado e a descida continua de onde elas param.
+        if escalada.fase == Fase::Construindo && escalada.turan.is_none() {
+            escalada.turan = crate::turan::Construtor::a_partir_de(
+                &escalada.p,
+                escalada.semente,
+                &escalada.melhor_completo,
+            );
+            if escalada.turan.is_none() {
+                escalada.tentar_o_turan();
+            }
+        }
         // Estado gravado antes do modo avançado: ali o teto era o piso.
         escalada.piso = if estado.piso > 0 { estado.piso } else { estado.teto };
         escalada.melhor_completo.clone_from(&estado.melhor_completo);
@@ -979,7 +1125,6 @@ fn proximo(estado: &mut u64) -> u64 {
 mod testes {
     use super::*;
     use crate::limites;
-
     /// **O teto nunca sobe sozinho.** Passar do piso troca um mínimo provado
     /// por uma solução que apenas funciona, e essa troca é de quem está olhando.
     ///
@@ -1140,7 +1285,14 @@ mod testes {
     /// cartelas sem nunca pedir a décima terceira.
     #[test]
     fn a_curva_registra_a_subida_e_a_reorganizacao_e_quem_fecha() {
-        let p = Problema::novo(9, 3, 2, 2, 1).unwrap();
+        // Garantia parcial de propósito: com garantia cheia quem trabalha é o
+        // motor de Turán, que não sobe degrau nenhum — e a curva, que é o
+        // registro da subida, não existe ali. O que este teste cobra é a
+        // escalada, e a escalada continua governando os problemas que não têm a
+        // forma complementar.
+        // Piso de contagem em 254 cartelas: doze não fecham de jeito nenhum, e
+        // a subida enche o teto sem nunca cobrir tudo.
+        let p = Problema::novo(18, 6, 6, 5, 1).unwrap();
         let mut escalada = Escalada::nova(&p, 12);
         while escalada.fase() == Fase::Subindo {
             escalada.avancar(50_000);
@@ -1153,25 +1305,26 @@ mod testes {
             assert!(par[1].0 > par[0].0, "as cartelas têm de crescer");
             assert!(par[1].1 >= par[0].1, "a cobertura não pode cair na subida");
         }
-        // Uma cartela de 3 cobre 3 dos 36 pares.
-        assert!((curva[0].1 - 3.0 / 36.0).abs() < 1e-6, "primeiro ponto: {}", curva[0].1);
+        assert!(curva[0].1 > 0.0, "a primeira cartela já cobre alguma coisa");
 
+        // E o que a subida sozinha **não** faz: fechar. Doze cartelas ficam
+        // muito abaixo do piso de contagem, e a reorganização passa a trabalhar
+        // com esse número sem nunca pedir a décima terceira.
         let mut passo = escalada.passo();
-        for _ in 0..2_000 {
+        for _ in 0..200 {
             passo = escalada.avancar(200_000);
-            if passo.fechou {
-                break;
-            }
         }
-        assert!(passo.fechou, "parou em {:.1}%", passo.melhor_cobertura * 100.0);
-        assert_eq!(escalada.melhor().len(), 12, "fechou com um número diferente do teto");
-        assert!(p.cobre(escalada.melhor()));
+        assert!(!passo.fechou, "doze cartelas não podiam cobrir tudo");
+        assert_eq!(passo.cartelas, 12, "e o número não pode ter mudado");
+        assert_eq!(passo.fase, Fase::Reorganizando);
     }
 
     /// Num teto grande a curva é afinada em vez de crescer sem limite.
     #[test]
     fn a_curva_nao_cresce_sem_limite() {
-        let p = Problema::novo(13, 5, 2, 2, 1).unwrap();
+        // Garantia parcial: a curva é o registro da subida, e a subida só
+        // acontece nos problemas que o motor de Turán não representa.
+        let p = Problema::novo(18, 6, 6, 5, 1).unwrap();
         let mut escalada = Escalada::nova(&p, 600);
         while escalada.fase() == Fase::Subindo {
             escalada.avancar(200_000);
@@ -1234,22 +1387,25 @@ mod testes {
     /// Um teto de uma cartela só é um pedido legítimo, e ela obedece.
     #[test]
     fn um_teto_de_uma_cartela_e_respeitado_enquanto_ele_vale() {
-        let p = Problema::novo(9, 3, 2, 2, 1).unwrap();
+        // Garantia parcial: o teto é a regra da escalada, e a escalada governa
+        // os problemas sem a forma complementar. Com garantia cheia quem entra é
+        // o motor de Turán, que trabalha sem teto nenhum — e a decisão de passar
+        // do piso deixou de existir ali porque ele não empaca no piso.
+        let p = Problema::novo(9, 3, 3, 2, 1).unwrap();
         let mut escalada = Escalada::nova(&p, 1);
 
-        // Enquanto o piso não se esgota, uma cartela é uma cartela — e a
-        // cobertura é exatamente a de uma: três dos trinta e seis pares.
+        // Enquanto o piso não se esgota, uma cartela é uma cartela.
         let passo = escalada.avancar(5_000);
         assert!(!passo.alem_do_piso);
         assert_eq!(passo.cartelas, 1);
         assert_eq!(escalada.melhor().len(), 1);
-        assert!((passo.melhor_cobertura - 3.0 / 36.0).abs() < 1e-9);
+        assert!(passo.melhor_cobertura > 0.0 && passo.melhor_cobertura < 1.0);
 
-        // Uma cartela não cobre `C(9,2)`, e o motor acaba avisando que o piso
-        // se esgotou — mas **não** passa dele sozinho. Uma cartela continua
-        // sendo uma cartela por quanto tempo for preciso.
+        // Uma cartela não cobre tudo, e o motor acaba avisando que o piso se
+        // esgotou — mas **não** passa dele sozinho. Uma cartela continua sendo
+        // uma cartela por quanto tempo for preciso.
         for _ in 0..400 {
-            let passo = escalada.avancar(5_000);
+            let passo = escalada.avancar(200_000);
             assert_eq!(passo.cartelas, 1, "passou do teto sem ninguém mandar");
             assert_eq!(passo.teto, 1);
             assert_eq!(passo.piso, 1, "o piso é o que foi provado, e não muda");

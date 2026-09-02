@@ -126,10 +126,35 @@ async function escalar(mensagem) {
     escalada.otimizar();
   }
 
+  // O retrato precisa ser tirado **depois** dos comandos de partida.
+  //
+  // Ele era tirado antes, e a condição do laço abaixo lia uma fase que já não
+  // valia: retomar em modo de otimização mostrava `fechada`, o laço decidia que
+  // não havia o que fazer, e o botão de otimizar não fazia nada.
+  if (mensagem.avancar || mensagem.otimizar) {
+    passo = JSON.parse(escalada.passo());
+  }
+
   try {
     // A otimização continua trabalhando depois de a cobertura fechar: fechar é
     // o começo dela, e não o fim. Fora dela, fechar encerra.
-    while (!parar && (!passo.fechou || otimizando)) {
+    // `fase === 'fechada'` durante a otimização quer dizer que o motor não tem
+    // mais o que apertar. Sem esta condição o laço continuava chamando um motor
+    // que já não faz nada, gastando bateria para sempre — e a tela não tinha
+    // como saber, porque as duas coisas se parecem: "trabalhando" e "girando".
+    // `fechou` quer dizer "a cobertura está completa", e não "não há mais o que
+    // fazer". Com o motor de Turán as duas coisas se separam: ele entrega um
+    // fechamento completo no primeiro lote e passa o resto do tempo baixando o
+    // número. Parar ali devolveria as 338 cartelas do primeiro palpite em vez
+    // das 240 que ele alcança — foi exatamente o que aconteceu.
+    //
+    // Quem sabe que acabou é a fase: `fechada`.
+    while (
+      !parar
+      && (!passo.fechou
+        || passo.fase === 'construindo'
+        || (otimizando && passo.fase !== 'fechada'))
+    ) {
       if (pedidoDeAvancar) {
         escalada.liberar_o_teto();
         pedidoDeAvancar = false;

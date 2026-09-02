@@ -667,16 +667,22 @@ mod testes {
 
     /// Os três estágios, ligados à mão como a tela os liga.
     ///
+    /// **Garantia parcial**, e é o que importa aqui: com garantia cheia o
+    /// problema tem a forma complementar de Turán, quem trabalha é aquele motor,
+    /// e não há estágio nenhum a ligar — ele entrega um fechamento no primeiro
+    /// lote e vai baixando o número sozinho. Os três estágios continuam
+    /// governando tudo o que não tem essa forma, e é isso que se cobra.
+    ///
     /// O que se cobra é a ordem e a propriedade que a torna segura: a
     /// construção avançada só entra quando alguém manda, a otimização só depois
     /// de a garantia estar cumprida, e apertar **nunca** devolve uma coleção
     /// que não cobre — a completa fica guardada à parte.
     #[test]
     fn os_tres_estagios_sao_ligados_a_mao() {
-        let pedido = r#"{"v":10,"k":4,"j":2,"t":2,"r":1}"#;
+        let pedido = r#"{"v":10,"k":4,"j":3,"t":2,"r":1}"#;
         let mut e = EscaladaExata::nova(pedido, 1).unwrap();
 
-        // Uma cartela não cobre os 45 pares: o piso se esgota e fica esperando.
+        // Uma cartela não cobre os 120 ternos: o piso se esgota e fica esperando.
         let mut passo: serde_json::Value = serde_json::from_str(&e.passo().unwrap()).unwrap();
         for _ in 0..4_000 {
             passo = serde_json::from_str(&e.avancar(20_000.0).unwrap()).unwrap();
@@ -720,10 +726,10 @@ mod testes {
     /// que autoriza — ou proíbe — a palavra "mínimo" na tela.
     #[test]
     fn a_ponte_entrega_o_piso_e_o_modo_avancado() {
-        // Uma cartela não cobre os 45 pares de dez números. O piso se esgota, e
-        // a escalada **fica lá**: passar dele é decisão de quem está olhando, e
-        // sem essa decisão ela não passa por conta própria.
-        let mut e = EscaladaExata::nova(r#"{"v":10,"k":4,"j":2,"t":2,"r":1}"#, 1).unwrap();
+        // Garantia parcial: é onde a escalada governa, e onde passar do piso
+        // continua sendo decisão de quem está olhando. Uma cartela não cobre os
+        // 120 ternos de dez números, o piso se esgota, e ela **fica lá**.
+        let mut e = EscaladaExata::nova(r#"{"v":10,"k":4,"j":3,"t":2,"r":1}"#, 1).unwrap();
         let mut passo: serde_json::Value =
             serde_json::from_str(&e.avancar(50_000.0).unwrap()).unwrap();
         assert_eq!(passo["piso"], 1);
@@ -770,13 +776,60 @@ mod testes {
     }
 
     /// A curva atravessa a ponte, com a forma que a tela desenha.
+    ///
+    /// A curva é o registro da **subida**, um ponto por cartela acrescentada, e
+    /// só existe onde há subida: com garantia cheia quem trabalha é o motor de
+    /// Turán, que não sobe degrau nenhum, e a tela esconde o cartão da curva em
+    /// vez de mostrar um vazio.
     #[test]
     fn a_curva_atravessa_a_ponte() {
-        let e = escalar_ate_fechar(r#"{"v":9,"k":3,"j":2,"t":2,"r":1}"#, 12);
+        let mut e = EscaladaExata::nova(r#"{"v":10,"k":4,"j":3,"t":2,"r":1}"#, 12).unwrap();
+        for _ in 0..200 {
+            e.avancar(20_000.0).unwrap();
+        }
         let curva: Vec<(u32, f32)> = serde_json::from_str(&e.curva().unwrap()).unwrap();
-        assert_eq!(curva.len(), 12, "um ponto por cartela");
-        assert_eq!(curva[0].0, 1);
-        assert!((curva[0].1 - 3.0 / 36.0).abs() < 1e-5, "primeiro ponto: {}", curva[0].1);
+        assert!(!curva.is_empty(), "a subida precisa ter deixado registro");
+        assert_eq!(curva[0].0, 1, "o primeiro ponto é uma cartela");
+        assert!(curva[0].1 > 0.0, "e ela já cobre alguma coisa");
+        for par in curva.windows(2) {
+            assert!(par[1].0 > par[0].0, "as cartelas têm de crescer");
+            assert!(par[1].1 >= par[0].1, "a cobertura não pode cair na subida");
+        }
+    }
+
+    /// **Com garantia cheia não há estágios.** O motor entrega e vai baixando.
+    ///
+    /// É a regra nova, e ela substitui os três estágios exatamente onde a razão
+    /// de eles existirem deixou de valer: a escalada empacava no piso sem saber
+    /// se ele bastava, e passar do piso não podia ser decisão do motor. Este não
+    /// empaca — no primeiro lote já há um fechamento completo, e daí em diante o
+    /// número só cai.
+    #[test]
+    fn com_garantia_cheia_o_fechamento_sai_no_primeiro_lote() {
+        let pedido = r#"{"v":10,"k":4,"j":2,"t":2,"r":1}"#;
+        let mut e = EscaladaExata::nova(pedido, 6).unwrap();
+
+        let passo: serde_json::Value =
+            serde_json::from_str(&e.avancar(200_000.0).unwrap()).unwrap();
+        assert_eq!(passo["fase"], "construindo", "{passo}");
+        assert!(passo["completo"].as_u64().unwrap() > 0, "sem fechamento nenhum: {passo}");
+        assert_eq!(passo["fechou"], true, "{passo}");
+
+        // E o número não sobe: o que já valia fica guardado.
+        let primeiro = passo["completo"].as_u64().unwrap();
+        let mut ultimo = primeiro;
+        for _ in 0..200 {
+            let passo: serde_json::Value =
+                serde_json::from_str(&e.avancar(200_000.0).unwrap()).unwrap();
+            let agora = passo["completo"].as_u64().unwrap();
+            assert!(agora <= ultimo, "o número subiu: {ultimo} → {agora}");
+            ultimo = agora;
+        }
+
+        // E o que ele entrega cobre de verdade.
+        let conferido: serde_json::Value =
+            serde_json::from_str(&verificar_com(pedido, &e.melhor().unwrap()).unwrap()).unwrap();
+        assert_eq!(conferido["cobre"], true, "entregou algo que não cobre");
     }
 
     /// Guardar e retomar: o trabalho continua de onde parou.

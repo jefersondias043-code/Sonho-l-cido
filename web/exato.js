@@ -529,10 +529,17 @@ function pintarOsComandos(passo, terminou) {
   const podeAvancar =
     Boolean(passo) && !passo.alem_do_piso && !passo.fechou && !terminou;
 
+  // Enquanto constrói, o número ainda está caindo por conta própria: oferecer
+  // o aperto ali seria oferecer o terceiro estágio antes de o segundo acabar.
+  const construindo = passo?.fase === 'construindo' && !terminou;
   const otimizando = passo?.fase === 'otimizando' && !terminou;
   const completo = passo?.completo ?? 0;
   const podeOtimizar =
-    Boolean(passo) && !otimizando && completo > 1 && completo > (passo.piso ?? 0);
+    Boolean(passo)
+    && !otimizando
+    && !construindo
+    && completo > 1
+    && completo > (passo.piso ?? 0);
 
   $('ex-avancar').hidden = !podeAvancar;
   $('ex-otimizar').hidden = !podeOtimizar;
@@ -609,9 +616,16 @@ function pintarEscalada(passo, terminou) {
   // significado ao entrar na construção avançada, e um quadro que troca de
   // sentido no meio do caminho engana mais do que informa.
   $('ex-teto').textContent = milhares(passo.piso ?? passo.teto);
-  $('ex-teto').nextElementSibling.textContent = passo.alem_do_piso
-    ? 'piso — já ultrapassado'
-    : 'piso — o teto da escalada';
+  // No caminho de garantia cheia o piso nunca foi teto de nada: ele é a cota
+  // inferior contra a qual o resultado vai ser comparado no fim. Chamá-lo de
+  // "já ultrapassado" ali soaria como derrota logo no primeiro segundo, quando
+  // o motor apenas ainda não desceu até ele.
+  $('ex-teto').nextElementSibling.textContent =
+    passo.fase === 'construindo'
+      ? 'piso — o mínimo comprovado'
+      : passo.alem_do_piso
+        ? 'piso — já ultrapassado'
+        : 'piso — o teto da escalada';
   $('ex-cobertura').textContent = porcento(passo.melhor_cobertura);
   $('ex-construcao-barra').style.width = `${(passo.melhor_cobertura * 100).toFixed(1)}%`;
 
@@ -623,6 +637,26 @@ function pintarEscalada(passo, terminou) {
       )} — uma a menos. O fechamento que você já tem fica guardado.</em>` +
       `<br><em>Cada sucesso aperta mais um. Toque em <b>Parar</b> quando o ` +
       `número já servir.</em>`;
+    return;
+  }
+
+  // A construção avançada em curso, pelo motor de Turán.
+  //
+  // A tela não pode mostrar a cobertura da escalada aqui: ela ficou parada onde
+  // o piso a deixou, e o motor novo trabalha noutro espaço. O que há para
+  // mostrar é o fechamento que ele já entregou — e ele entrega cedo, porque a
+  // recursão vem antes da busca em órbitas justamente para isso.
+  if (passo.fase === 'construindo') {
+    const noPiso = passo.completo && passo.completo <= passo.piso;
+    $('ex-construcao').innerHTML = !passo.completo
+      ? `<b>Montando o primeiro fechamento.</b> <em>Ele aparece em segundos, e ` +
+        `daí em diante o número só cai.</em>`
+      : noPiso
+        ? `<b>Garantia cumprida com ${emCartelas(passo.completo)} — no piso.</b> ` +
+          `<em>Nada menor existe. Pode parar.</em>`
+        : `<b>Garantia cumprida com ${emCartelas(passo.completo)}.</b> ` +
+          `<em>Procurando menor; o piso provado é ${milhares(passo.piso)}. O que já ` +
+          `vale fica guardado, e parar devolve o melhor até aqui.</em>`;
     return;
   }
 
@@ -1507,8 +1541,12 @@ trabalhador.onmessage = (evento) => {
     case 'escalada':
       escalandoAgora = false;
       estado.cartelas = mensagem.cartelas;
-      estado.metodo =
-        mensagem.dados.fase === 'subindo'
+      // O método vai dentro do arquivo exportado, e precisa dizer o que
+      // realmente produziu aquelas cartelas: quem fechou acima do piso passou
+      // pelo motor de Turán, e não pela escalada.
+      estado.metodo = mensagem.dados.alem_do_piso
+        ? 'construção avançada: órbitas cíclicas e recursão de Turán'
+        : mensagem.dados.fase === 'subindo'
           ? 'escalada de cobertura'
           : 'escalada de cobertura, com reorganização';
       pintarEscalada(mensagem.dados, true);
