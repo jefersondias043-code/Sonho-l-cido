@@ -988,7 +988,8 @@ impl Construtor {
         self.etapa = if self.sub_de_recursao {
             Etapa::Descendo
         } else if self.orbital.is_some() {
-            let m = self.m;
+            let m = self.primeiro_degrau();
+            self.m = m;
             if let Some(o) = self.orbital.as_mut() {
                 o.partida(m);
             }
@@ -996,6 +997,40 @@ impl Construtor {
         } else {
             Etapa::Recursando0
         };
+    }
+
+    /// Em que degrau a busca em órbitas começa.
+    ///
+    /// Começar no piso e subir era o que deixava a tela congelada. Em pool 20
+    /// com jogos de 17 o piso dá `m = 8` e o primeiro degrau viável é `m = 12`:
+    /// os quatro do meio são inviáveis, e cada um custa duas tentativas inteiras
+    /// antes de o motor desistir dele. Medido pelo caminho da tela: o
+    /// enchimento entrega 338 cartelas em 4,8 s e o 240 só aparece aos 301,7 s,
+    /// com **nada** entre um e outro — cinco minutos de CPU nativa, e bem mais
+    /// no aparelho, em que a única coisa a ver é um número parado. Quem olha não
+    /// tem como distinguir isso de um motor travado, e desliga.
+    ///
+    /// Descendo a partir do que já está na mão, a ordem se inverte a favor de
+    /// quem espera: o primeiro alvo é o mais frouxo que ainda seria melhora, cai
+    /// depressa, e cada sucesso seguinte é um degrau visível. O fim da linha não
+    /// muda — a subida por fracasso repetido e o corte por falta de esperança
+    /// continuam sendo os mesmos —, mas o caminho até ele deixa de ser mudo.
+    fn primeiro_degrau(&self) -> usize {
+        // O piso continua sendo o limite de baixo: abaixo dele não há o que
+        // procurar, porque a contagem já provou que não existe.
+        let piso = self.m.max(1);
+        if self.melhor.is_empty() {
+            return piso;
+        }
+        // Um degrau abaixo do que está na mão: o primeiro alvo que ainda vale a
+        // pena, e o mais fácil de todos os que valem.
+        let abaixo = self
+            .melhor
+            .len()
+            .div_ceil(self.maior_orbita)
+            .saturating_sub(1);
+        let quantas = self.orbital.as_ref().map(|o| o.cobre.len()).unwrap_or(0);
+        abaixo.max(piso).min(quantas.max(1))
     }
 
     fn orbitar(&mut self, movimentos: u64) {
