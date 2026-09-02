@@ -17,7 +17,15 @@
  * WebAssembly. Aqui só há pintura e sequência.
  */
 
-import { frase, folga, veredito, MINIMO, PARCIAL, FALHA } from './exato-veredito.js';
+import {
+  frase,
+  folga,
+  veredito,
+  MINIMO,
+  PARCIAL,
+  FALHA,
+  CONTRADICAO,
+} from './exato-veredito.js';
 import { definirFechamento, esquecerFechamento } from './exato-conferencia.js';
 import * as historico from './exato-historico.js';
 import * as arquivoDeSessao from './exato-sessao.js';
@@ -25,6 +33,32 @@ import * as arquivoDeSessao from './exato-sessao.js';
 const $ = (id) => document.getElementById(id);
 
 const trabalhador = new Worker('./exato-trabalhador.js', { type: 'module' });
+
+/*
+ * O motor pode morrer sem conseguir avisar, e a tela precisa saber.
+ *
+ * O trabalhador reporta falha por `postMessage({tipo:'erro'})`, e isso cobre o
+ * que ele consegue capturar — um pedido recusado, uma conta que não fecha. O
+ * que não cobre é o `panic!`: o perfil de publicação usa `panic = "abort"`, e
+ * em WebAssembly isso vira uma armadilha que envenena a instância inteira. Não
+ * sobra ninguém para chamar `postMessage`; o navegador avisa por `onerror`, e
+ * sem este ouvinte o aviso caía no chão.
+ *
+ * O efeito era a pior falha possível numa tela de espera longa: "calculando…"
+ * para sempre, sem mensagem, sem erro no console e sem caminho de volta — do
+ * lado de fora, indistinguível de um cálculo que ainda está indo. A tela do
+ * Construtor já tratava isto; esta, não.
+ */
+trabalhador.onerror = (erro) => {
+  esconderTudo();
+  $('ex-erro').hidden = false;
+  $('ex-erro').innerHTML =
+    '<b>O motor parou de responder.</b> <em>'
+    + escapar(erro?.message || 'falha inesperada')
+    + ' — o trabalho já guardado continua no histórico. Recarregue a página '
+    + 'para tentar de novo.</em>';
+  encerrar();
+};
 
 /*
  * Qual linha do histórico este trabalho está escrevendo.
@@ -806,7 +840,12 @@ function pintarResultado() {
   const numeros = dezenas();
   pintarPreviaDasCartelas(numeros);
 
-  if (qual === MINIMO || qual === FALHA) $('ex-prova-barra').style.width = '100%';
+  // A contradição também encerra: não há mais o que provar quando os próprios
+  // números se desmentem, e deixar a barra pela metade sugeriria trabalho em
+  // curso que não existe.
+  if (qual === MINIMO || qual === FALHA || qual === CONTRADICAO) {
+    $('ex-prova-barra').style.width = '100%';
+  }
 
   // As cartelas existem: a conferência passa a ter o que conferir.
   //

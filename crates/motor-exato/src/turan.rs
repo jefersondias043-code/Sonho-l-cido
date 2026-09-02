@@ -817,15 +817,6 @@ impl Construtor {
             .and_then(|o| o.tamanho.iter().copied().max())
             .unwrap_or(1);
 
-        // A recursão vem primeiro, e não por ser melhor — ela costuma ser pior.
-        //
-        // É que ela **sempre entrega**, e entrega cedo: monta a solução a partir
-        // de dois casos menores, sem procurar nada. A busca em órbitas é mais
-        // fina mas começa no menor número que a contagem permite e sobe até
-        // algum cobrir, e até lá não há fechamento nenhum para mostrar. Com a
-        // recursão na frente, quem toca no botão vê um fechamento completo em
-        // poucos segundos e vê o número cair depois; com ela atrás, veria a tela
-        // parada no que a escalada tinha deixado.
         // Encher vem antes de tudo, e é o que garante que exista um fechamento
         // para mostrar no primeiro segundo. As etapas seguintes são todas
         // tentativas de **melhorar** um número que já existe, e não a única

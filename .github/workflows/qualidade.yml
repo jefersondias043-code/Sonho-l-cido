@@ -1,0 +1,52 @@
+name: Bancada de qualidade do motor exato
+
+# Por que isto saiu do fluxo de publicação.
+#
+# A bancada responde "o motor piorou?" — pergunta legítima e cara: vinte e três
+# minutos, porque a busca em espaço de órbitas precisa de dezenas de bilhões de
+# posições para achar as doze órbitas que dão as 240 cartelas de pool 20 com
+# jogos de 17. Cortar o orçamento torna a bancada rápida e cega, e isso foi
+# medido — então o orçamento fica.
+#
+# O que ela **não** faz é validar o site. Nenhum byte do que vai ao ar depende
+# dela, e mesmo assim ela segurava a publicação de uma correção de texto por
+# vinte e três minutos. Regressão de motor é séria, mas não é urgente do jeito
+# que uma tela quebrada é: dá para saber amanhã de manhã.
+#
+# Aqui ela roda todo dia e roda **mais** do que rodava: `TUDO=1` inclui os três
+# casos pesados que o caminho de publicação escondia justamente por demorarem.
+on:
+  schedule:
+    # 06:00 UTC, todo dia.
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  bancada:
+    runs-on: ubuntu-latest
+    # A bancada completa é mais lenta que o limite padrão de seis horas? Não —
+    # mas os três casos pesados sozinhos levam dezenas de minutos cada, e um
+    # teto explícito evita que um defeito de laço queime uma hora de máquina.
+    timeout-minutes: 120
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Reaproveitar compilações anteriores
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: bancada-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}-${{ github.sha }}
+          restore-keys: |
+            bancada-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}-
+
+      - name: Rodar a bancada completa
+        env:
+          TUDO: '1'
+        run: cargo test --release -p motor-exato --test qualidade -- --ignored --nocapture

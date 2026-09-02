@@ -23,7 +23,11 @@ permissions:
 
 concurrency:
   group: pages
-  cancel-in-progress: false
+  # Um envio novo cancela o anterior que ainda está rodando. Com `false`, três
+  # envios seguidos faziam o terceiro esperar a fila inteira antes de começar —
+  # e o que ele publicaria já contém o que os dois primeiros publicariam, então
+  # a espera não comprava garantia nenhuma: comprava só atraso.
+  cancel-in-progress: true
 
 jobs:
   publicar:
@@ -68,18 +72,6 @@ jobs:
 
       - name: Rodar os testes
         run: cargo test --workspace
-
-      - name: Bancada de qualidade do motor exato
-        # Nove configurações cuja resposta é conhecida — os melhores fechamentos
-        # publicados. Oito saem exatas e a razão média está em 1,00×, então o
-        # limite aqui cobra de verdade: qualquer mudança que piore o motor
-        # aparece antes de chegar ao ar.
-        #
-        # Leva vinte minutos, e leva porque a busca em espaço de órbitas precisa
-        # de quarenta e cinco bilhões de posições para achar as doze órbitas que
-        # dão as 240 cartelas de pool 20 com jogos de 17. Cortar o orçamento
-        # torna a bancada rápida e cega — foi medido.
-        run: cargo test --release -p motor-exato --test qualidade -- --ignored --nocapture
 
       - name: Construir o site
         run: ./construir-web.sh

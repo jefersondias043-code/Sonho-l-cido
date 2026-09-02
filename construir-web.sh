@@ -85,7 +85,10 @@ arquivos=$(
         | sed 's|^\./|./|' | sort \
         | awk '{printf "%s\"%s\"", (NR>1 ? "," : ""), $0}'
 )
-sed -i "s|__ARQUIVOS_DA_CONSTRUCAO__|[$arquivos]|" "$destino/sw.js"
+# O `g` não é enfeite: sem ele o `sed` troca só a primeira ocorrência, e um
+# marcador citado duas vezes no `sw.js` sai cru da segunda em diante — service
+# worker quebrado no site publicado, e funcionando na máquina de quem editou.
+sed -i "s|__ARQUIVOS_DA_CONSTRUCAO__|[$arquivos]|g" "$destino/sw.js"
 echo "    $(echo "$arquivos" | tr ',' '\n' | wc -l) arquivos guardados para uso offline"
 
 echo "==> carimbando o service worker"

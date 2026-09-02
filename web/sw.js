@@ -49,7 +49,27 @@ const VERSAO = `sonho-lucido-${CARIMBO}`;
  * O valor literal só aparece em desenvolvimento, quando o site é servido direto
  * de `web/`; nesse caso a lista fica vazia e tudo é buscado sob demanda.
  */
-const ARQUIVOS = ['./', ...__ARQUIVOS_DA_CONSTRUCAO__];
+/*
+ * Servido direto de `web/`, o marcador não foi substituído e continua sendo um
+ * identificador **nu**: lê-lo lança `ReferenceError`, e um erro solto no corpo
+ * do service worker aborta o script inteiro — levando junto os ouvintes de
+ * `install`, `activate`, `fetch` e `message`. Não era lista vazia como o
+ * comentário prometia: era o service worker inteiro fora do ar.
+ *
+ * O `try` cita o marcador **uma vez só**, e isso é requisito e não estilo: a
+ * substituição em `construir-web.sh` é um `sed` de uma ocorrência, e a primeira
+ * tentativa de correção aqui usava o nome duas vezes — a segunda saía crua no
+ * arquivo publicado, quebrando em produção justamente o que se queria
+ * consertar em desenvolvimento.
+ */
+let daConstrucao = [];
+try {
+  daConstrucao = __ARQUIVOS_DA_CONSTRUCAO__;
+} catch {
+  daConstrucao = [];
+}
+
+const ARQUIVOS = ['./', ...daConstrucao];
 
 /** Caminhos cujo conteúdo define o que o usuário vê e como o app se comporta. */
 function ehDoAplicativo(url) {

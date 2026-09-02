@@ -149,8 +149,19 @@ function gravar(sessoes) {
   return false;
 }
 
+/*
+ * Um instante que nunca se repete.
+ *
+ * A lista ordena por `atualizadaEm`, então dois trabalhos salvos no mesmo
+ * milissegundo empatam e a ordem entre eles fica ao acaso — quem acabou de
+ * mexer num deles pode vê-lo em segundo lugar. É o mesmo defeito que já foi
+ * caçado e corrigido no histórico do Construtor Exato; a correção tinha ficado
+ * só lá, e a ordenação idêntica daqui continuava exposta.
+ */
+let ultimoInstante = 0;
 function agora() {
-  return Date.now();
+  ultimoInstante = Math.max(Date.now(), ultimoInstante + 1);
+  return ultimoInstante;
 }
 
 function novoIdentificador() {

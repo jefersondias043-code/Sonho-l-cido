@@ -26,6 +26,22 @@
  * cobre: aí é defeito, e aparece em vez de ser engolido.
  */
 
+/**
+ * Um fechamento **abaixo** do piso. Não é vitória: é prova de que o piso está
+ * errado, porque piso é cota inferior e nada pode passar por baixo dela.
+ *
+ * O Construtor já sabia gritar isso (`escada.js`, o caso `IMPOSSIVEL`, com o
+ * comentário que diz que "a tela precisa conseguir gritar"). O Exato não sabia:
+ * o `<` caía dentro do `<=` e saía como mínimo provado — ou seja, justamente
+ * aqui, onde a evidência de um defeito aparece, ele emitia a afirmação mais
+ * forte do aplicativo.
+ *
+ * E é o Exato quem mais precisa do grito: ele não consulta tabela de mínimo de
+ * ninguém, então o piso dele vem inteiro de código próprio, e é o que tem mais
+ * como errar sozinho.
+ */
+export const CONTRADICAO = 'contradicao';
+
 export const MINIMO = 'minimo';
 export const MINIMO_CICLICO = 'minimo-ciclico';
 export const INTERVALO = 'intervalo';
@@ -50,7 +66,8 @@ export function veredito({ verificado, encontrado, piso, ciclicaFechou, teto }) 
   // o número de cartelas está preso ao piso, e o piso pode simplesmente não
   // bastar. O que se tem é a melhor cobertura alcançada com aquele número.
   if (!verificado) return teto ? PARCIAL : FALHA;
-  if (encontrado <= piso) return MINIMO;
+  if (encontrado < piso) return CONTRADICAO;
+  if (encontrado === piso) return MINIMO;
   if (ciclicaFechou) return MINIMO_CICLICO;
   return INTERVALO;
 }
@@ -81,6 +98,12 @@ export function frase({
       return fraseParcial(encontrado, piso, teto, alcancado, alemDoPiso);
     case FALHA:
       return `A construção deixou ${milhar(descobertos)} alvos descobertos.`;
+    case CONTRADICAO:
+      return (
+        `Encontrei ${milhar(encontrado)} cartelas, e o piso calculado era ` +
+        `${milhar(piso)}. Um dos dois está errado, e não vou fingir que não vi: ` +
+        `o fechamento vale, mas o piso não — nenhuma afirmação de mínimo sai daqui.`
+      );
     case MINIMO:
       return `Mínimo exato: ${milhar(encontrado)} cartelas — provado, nada menor existe.`;
     case MINIMO_CICLICO:

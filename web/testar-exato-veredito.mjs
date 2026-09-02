@@ -25,6 +25,7 @@ import {
   INTERVALO,
   PARCIAL,
   FALHA,
+  CONTRADICAO,
 } from './exato-veredito.js';
 
 const passos = [];
@@ -39,7 +40,10 @@ console.log('Teste do veredito do Construtor Exato\n');
 
 const situacoes = [
   ['encostou no piso', { verificado: true, encontrado: 16, piso: 16, teto: 16 }, MINIMO],
-  ['abaixo do piso', { verificado: true, encontrado: 15, piso: 16, teto: 16 }, MINIMO],
+  // Este caso pedia `MINIMO` — o defeito estava escrito aqui como se fosse a
+  // regra, e por isso nenhum teste podia pegá-lo. Piso é cota inferior: passar
+  // por baixo dela não é recorde, é prova de que o piso está errado.
+  ['abaixo do piso', { verificado: true, encontrado: 15, piso: 16, teto: 16 }, CONTRADICAO],
   [
     'só a simetria fechou',
     { verificado: true, encontrado: 20, piso: 16, ciclicaFechou: true, teto: 16 },
@@ -189,6 +193,39 @@ marcar(
   /100,0%/.test(frase({ verificado: false, encontrado: 5, piso: 9, teto: 9, cobertura: 1 })) &&
     /8,3%/.test(frase({ verificado: false, encontrado: 1, piso: 12, teto: 12, cobertura: 1 / 12 })),
   'a cobertura sai com uma casa decimal e vírgula, nunca arredondada a inteiro'
+);
+
+/* ─── 7. abaixo do piso é contradição, nunca mínimo ─── */
+
+/*
+ * Piso é cota inferior: nada pode passar por baixo. Um fechamento menor que o
+ * piso não é recorde — é prova de que o piso está errado.
+ *
+ * O Exato dizia o contrário. O `<` caía dentro do `<=` e saía como
+ * `MINIMO`, que a tela imprime como "provado, nada menor existe" — a afirmação
+ * mais forte do aplicativo, emitida exatamente onde os números se desmentem. E
+ * é o Exato quem mais precisa do alarme: ele não consulta tabela de mínimo de
+ * ninguém, então o piso dele vem inteiro de código próprio.
+ */
+marcar(
+  veredito({ verificado: true, encontrado: 12, piso: 16 }) === CONTRADICAO,
+  'um fechamento abaixo do piso é contradição, e não mínimo provado'
+);
+marcar(
+  veredito({ verificado: true, encontrado: 16, piso: 16 }) === MINIMO,
+  'encostar no piso continua sendo mínimo provado'
+);
+
+const fraseDaContradicao = frase({ verificado: true, encontrado: 12, piso: 16 });
+marcar(
+  !/provado|nada menor existe/i.test(fraseDaContradicao),
+  'e a frase não afirma mínimo nenhum',
+  fraseDaContradicao
+);
+marcar(
+  /12/.test(fraseDaContradicao) && /16/.test(fraseDaContradicao),
+  'mostrando os dois números que não podem ser verdade ao mesmo tempo',
+  fraseDaContradicao
 );
 
 const falhas = passos.filter((p) => !p.certo);
