@@ -588,6 +588,45 @@ try {
     (await texto('#ex-verificacao')).slice(0, 60)
   );
 
+  // ─── 7e. retomar não pode devolver o motor antigo ───
+  //
+  // O defeito que este bloco existe para não deixar voltar, e que só apareceu no
+  // aparelho: a tela passa o trabalho guardado junto **mesmo quando alguém toca
+  // em Resolver**, e retomar copiava a fase gravada por cima da que o motor novo
+  // tinha escolhido. Resultado: toda configuração já trabalhada rodava o motor
+  // velho, com o carimbo da versão nova na tela.
+  await pagina.reload({ waitUntil: 'networkidle' });
+  await pagina.waitForSelector('#ex-grade .numero');
+  await marcarNumeros(11, Array.from({ length: 11 }, (_, i) => i + 1));
+  await regras(8, 5, 5);
+  marcar(
+    !(await pagina.locator('#ex-continuar').isHidden()),
+    'a tela oferece continuar o trabalho guardado desta configuração'
+  );
+
+  await pagina.click('#ex-resolver');
+  await pagina.waitForFunction(
+    () => /Garantia cumprida|Fechou em 100%/.test(
+      document.getElementById('ex-construcao')?.textContent ?? ''
+    ),
+    undefined,
+    { timeout: 120000 }
+  );
+  marcar(
+    (await pagina.locator('#ex-avancar').isHidden())
+      && (await pagina.locator('#ex-otimizar').isHidden()),
+    'e resolver de novo continua no motor novo, sem os botões dos estágios',
+    (await texto('#ex-construcao')).slice(0, 60)
+  );
+
+  await pagina.click('#ex-parar');
+  await esperarResultado(180000);
+  marcar(
+    /Confere\./.test(await texto('#ex-verificacao')),
+    'e o que ele entrega ao retomar cobre tudo',
+    (await texto('#ex-verificacao')).slice(0, 50)
+  );
+
   // ─── 8. conferir, e o dinheiro ───
   //
   // Um fechamento pequeno e comprovado, para que a conferência possa ser
@@ -1176,8 +1215,12 @@ try {
     { timeout: 120000 }
   );
   const retomadas = await numero('#ex-cartelas-agora');
+  // O que se cobra é que retomar **aproveite** o trabalho guardado, e não que
+  // devolva exatamente o mesmo número: com o motor de Turán, retomar já começa
+  // a apertar, e voltar com menos cartelas é o resultado certo. O que não pode
+  // acontecer é recomeçar do zero — e é isso que o piso desta faixa garante.
   marcar(
-    retomadas >= guardadas,
+    retomadas > guardadas / 2,
     'uma escalada interrompida retoma do ponto em que estava, e não do zero',
     `parou com ${guardadas} cartelas, retomou com ${retomadas}`
   );

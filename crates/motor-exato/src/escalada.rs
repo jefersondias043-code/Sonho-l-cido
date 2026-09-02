@@ -1073,29 +1073,46 @@ impl Escalada {
         escalada.trocar_conjunto(estado.cartelas.clone());
         escalada.melhor.clone_from(&estado.melhor);
         escalada.melhor_entregues = escalada.entregues_de(&estado.melhor);
-        escalada.fase = estado.fase;
         escalada.trabalho = estado.trabalho;
         escalada.rodadas = estado.rodadas;
         escalada.sem_ganho = estado.sem_ganho;
-        // Retomar um trabalho guardado reengata o motor novo, se ele valer para
-        // este problema: ele não é gravado, mas as cartelas que ele achou estão
-        // no estado e a descida continua de onde elas param.
-        if escalada.fase == Fase::Construindo && escalada.turan.is_none() {
-            escalada.turan = crate::turan::Construtor::a_partir_de(
-                &escalada.p,
-                escalada.semente,
-                &escalada.melhor_completo,
-            );
-            if escalada.turan.is_none() {
-                escalada.tentar_o_turan();
-            }
-        }
         // Estado gravado antes do modo avançado: ali o teto era o piso.
         escalada.piso = if estado.piso > 0 { estado.piso } else { estado.teto };
         escalada.melhor_completo.clone_from(&estado.melhor_completo);
         escalada.semente = estado.semente;
         escalada.curva.clone_from(&estado.curva);
         escalada.passo_da_curva = estado.passo_da_curva.max(1);
+
+        // ## A fase gravada é de um motor que pode já não ser o desta execução
+        //
+        // `Escalada::nova` engata o motor de Turán quando o problema tem a forma
+        // dele. Copiar a fase do estado salvo por cima disso deixava o motor
+        // montado e **nunca chamado**: `avancar` via `Reorganizando` e ia para a
+        // subida antiga, com o motor novo parado ao lado.
+        //
+        // O estrago não aparecia em teste nenhum porque todos partiam de
+        // `nova`. Aparecia no aplicativo, e do pior jeito: a tela passa o
+        // trabalho guardado junto **mesmo quando alguém toca em Resolver**,
+        // então toda configuração já trabalhada voltava ao motor velho enquanto
+        // o carimbo da versão dizia que era o novo.
+        if escalada.turan.is_some() {
+            // Havendo um fechamento guardado, o motor retoma dele: apertar o que
+            // já vale é melhor do que recomeçar do zero.
+            if !escalada.melhor_completo.is_empty() {
+                if let Some(construtor) = crate::turan::Construtor::a_partir_de(
+                    &p,
+                    escalada.semente,
+                    &escalada.melhor_completo,
+                ) {
+                    escalada.turan = Some(construtor);
+                }
+            }
+            escalada.teto = escalada.teto_absoluto;
+            escalada.fase = Fase::Construindo;
+        } else {
+            escalada.fase = estado.fase;
+        }
+
         Ok(escalada)
     }
 
@@ -1125,6 +1142,50 @@ fn proximo(estado: &mut u64) -> u64 {
 mod testes {
     use super::*;
     use crate::limites;
+    /// **Retomar não pode voltar ao motor antigo.**
+    ///
+    /// O defeito que este teste existe para não deixar voltar: a fase gravada
+    /// era copiada por cima da que `Escalada::nova` tinha acabado de escolher, e
+    /// o motor de Turán ficava montado sem nunca ser chamado. No aplicativo isso
+    /// significava que toda configuração já trabalhada rodava o motor velho —
+    /// com o carimbo da versão nova na tela.
+    #[test]
+    fn retomar_um_estado_antigo_nao_devolve_o_motor_antigo() {
+        let p = Problema::novo(11, 8, 5, 5, 1).unwrap();
+        let mut escalada = Escalada::nova(&p, 13);
+        assert_eq!(escalada.fase(), Fase::Construindo, "o motor novo devia ter assumido");
+        escalada.avancar(2_000_000);
+
+        // Um estado como os gravados antes do motor novo existir: fase da
+        // escalada, e nada que indique Turán.
+        let mut salvo = escalada.guardar();
+        salvo.fase = Fase::Reorganizando;
+
+        let retomada = Escalada::retomar(&salvo).unwrap();
+        assert_eq!(
+            retomada.fase(),
+            Fase::Construindo,
+            "retomar caiu no motor antigo"
+        );
+
+        // E ele continua de onde o outro parou, sem jogar fora o que já valia.
+        assert_eq!(retomada.melhor_completo().len(), escalada.melhor_completo().len());
+    }
+
+    /// Com garantia parcial, retomar preserva a fase gravada — ali a escalada
+    /// continua sendo quem manda.
+    #[test]
+    fn retomar_com_garantia_parcial_preserva_a_fase() {
+        let p = Problema::novo(13, 4, 4, 2, 1).unwrap();
+        let mut escalada = Escalada::nova(&p, 6);
+        assert_ne!(escalada.fase(), Fase::Construindo, "aqui o Turán não vale");
+        escalada.avancar(500_000);
+
+        let salvo = escalada.guardar();
+        let retomada = Escalada::retomar(&salvo).unwrap();
+        assert_eq!(retomada.fase(), salvo.fase, "a fase gravada tinha de valer");
+    }
+
     /// **O teto nunca sobe sozinho.** Passar do piso troca um mínimo provado
     /// por uma solução que apenas funciona, e essa troca é de quem está olhando.
     ///
