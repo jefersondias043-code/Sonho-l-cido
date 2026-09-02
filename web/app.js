@@ -331,8 +331,37 @@ function definirFase(nova, textoExtra = null) {
  */
 function noMinimoComprovado(estado) {
   const nossas = estado.melhor_cartelas;
-  if (referenciaDaBusca?.exato) return nossas > 0 && nossas <= referenciaDaBusca.jogos;
+  if (referenciaDaBusca?.exato) {
+    // Um fechamento que não cobre tudo não é mínimo de coisa nenhuma: é
+    // trabalho pela metade. Faltava esta linha, e o selo "★ ótimo provado"
+    // acendia sobre dez cartelas cobrindo 62% num caso cujo mínimo é
+    // dezesseis — a afirmação mais forte do aplicativo sobre um fechamento
+    // com furo conhecido, gravada inclusive no histórico. `pintarReferencia`
+    // já se protegia disso cem linhas abaixo, com o comentário dizendo que
+    // seria "a pior mentira que esta tela poderia contar"; aqui a guarda
+    // nunca foi escrita.
+    if (!(estado.melhor_cobertura >= 1)) return false;
+    // E abaixo do mínimo publicado não é recorde: é sinal de que um dos dois
+    // números está errado. Quem trata isso é `contradizOMinimo`.
+    return nossas > 0 && nossas === referenciaDaBusca.jogos;
+  }
   return Boolean(estado.optimalidade_provada);
+}
+
+/**
+ * O fechamento passou por baixo do mínimo publicado — e cobre tudo.
+ *
+ * Não há vitória possível aqui: ou a cobertura está errada, ou a referência
+ * está. Anunciar "ótimo provado" seria escolher a mentira mais bonita, e o
+ * Construtor já sabe gritar nessa situação (`escada.js`, o caso `IMPOSSIVEL`),
+ * assim como o Construtor Exato passou a saber (`exato-veredito.js`, o caso
+ * `CONTRADICAO`). Esta tela era a última que ainda não sabia.
+ */
+function contradizOMinimo(estado) {
+  if (!referenciaDaBusca?.exato) return false;
+  if (!(estado.melhor_cobertura >= 1)) return false;
+  const nossas = estado.melhor_cartelas;
+  return nossas > 0 && nossas < referenciaDaBusca.jogos;
 }
 
 /**
@@ -345,6 +374,13 @@ function noMinimoComprovado(estado) {
  */
 function textoDaProcura(estado) {
   const n = estado.melhor_cartelas;
+  if (contradizOMinimo(estado)) {
+    return (
+      `${n} cartelas cobrindo tudo, e o mínimo publicado é `
+      + `${referenciaDaBusca.jogos} — um dos dois está errado, e não vou fingir `
+      + 'que não vi'
+    );
+  }
   return noMinimoComprovado(estado)
     ? `${n} é o mínimo comprovado — o motor segue até você mandar parar`
     : `procurando algo menor que ${n}`;
@@ -1591,6 +1627,20 @@ function textoDaReferenciaDaBusca(estado) {
     : onde
       ? `${onde}. `
       : '';
+
+  // "Não dá com menos de N" e "você está com menos de N" na mesma frase é
+  // contradição, e a frase era montada sem nunca comparar os dois números. O
+  // piso é cota inferior: se o fechamento passou por baixo dele cobrindo tudo,
+  // é o piso que está errado, e dizer as duas coisas lado a lado como se
+  // combinassem seria a tela não notar o que ela mesma está mostrando.
+  if (nossas > 0 && nossas < piso) {
+    return (
+      `Você está com <b>${milhares(nossas)}</b> <em>— e o limite calculado diz ` +
+      `que não daria com menos de <b>${milhares(piso)}</b>. Um dos dois está ` +
+      `errado, e não vou fingir que não vi: se a cobertura fechar, o limite é ` +
+      `que precisa ser revisto.</em>`
+    );
+  }
 
   return (
     `Ninguém no mundo sabe o mínimo aqui <em>— é problema em aberto. O que se ` +

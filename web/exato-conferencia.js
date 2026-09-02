@@ -327,15 +327,37 @@ function pintarConferencia() {
 
   // A faixa garantida primeiro, e sozinha. É a que o fechamento prometeu, e a
   // única sobre a qual há uma afirmação a conferir: as outras são medida.
-  const naGarantia = r.contagem[faixas.garantia] ?? 0;
+  /*
+   * Garantia é "ao menos t", nunca "exatamente t".
+   *
+   * Esta linha lia `contagem[t]`, que por construção conta as cartelas com
+   * **exatamente** t acertos. Uma cartela que faz 15 quando a garantia era 13
+   * não entrava na conta, e a tela concluía que a garantia falhou — acusando
+   * de furado um fechamento que a cumpre com folga, e chegando a escrever "a
+   * cobertura deste fechamento não chegou a 100%" sobre um caso em que ela
+   * chegou. É a negação de um teorema por erro de índice.
+   *
+   * Pior no extremo: quando t cai fora da janela de dez faixas que a tabela
+   * mostra, `contagem[t]` podia ser zero com dezenas de cartelas premiadas.
+   *
+   * O erro só aponta contra o fechamento — `contagem[t]` nunca supera a soma
+   * de t para cima —, então nenhuma garantia foi inventada. Mas as outras duas
+   * ferramentas já somavam de t para cima (`lotinha.js` e o verificador do
+   * motor exato), e esta era a única linha do aplicativo com outra definição.
+   *
+   * A tabela por faixa continua exata: quem muda é só o veredito.
+   */
+  const naGarantia = r.contagem.slice(faixas.garantia).reduce((a, b) => a + b, 0);
   const quantasPedidas = fechamento.pedido.r ?? 1;
   const cumpriu = naGarantia >= quantasPedidas;
   const forasteiros = r.resultado.filter((d) => !fechamento.numeros.includes(d));
 
+  const ouMais = `${faixas.garantia} acerto${faixas.garantia === 1 ? '' : 's'} ou mais`;
+
   $('ex-conferencia-topo').innerHTML = cumpriu
     ? `<div class="premio ganhou">🎯 <b>${milhares(naGarantia)} cartela${
         naGarantia === 1 ? '' : 's'
-      } com ${faixas.garantia} acerto${faixas.garantia === 1 ? '' : 's'}</b>` +
+      } com ${ouMais}</b>` +
       `<em>A garantia pedia ${quantasPedidas}, e o fechamento entregou ${milhares(
         naGarantia
       )}.</em></div>`
@@ -343,7 +365,7 @@ function pintarConferencia() {
         naGarantia
           ? `${milhares(naGarantia)} cartela${naGarantia === 1 ? '' : 's'}`
           : 'Nenhuma cartela'
-      } com ${faixas.garantia} acertos</b><em>${explicarAFalta(forasteiros)}</em></div>`;
+      } com ${ouMais}</b><em>${explicarAFalta(forasteiros)}</em></div>`;
 
   const linhas = faixas.lista
     .slice()

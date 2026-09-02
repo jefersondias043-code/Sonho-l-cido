@@ -1009,7 +1009,11 @@ function guardarTrabalho(estadoJson) {
     piso: estado.piso,
     origem: estado.origem,
     fechado: estado.fechado,
-    cartelasContadas: estado.cartelas.length,
+    // `estado.cartelas` só é preenchido quando a escalada **termina**, então
+    // um trabalho em curso gravava zero — e o histórico exibia "0 cartelas,
+    // 83,6% de cobertura", que é contradição visível a olho nu. O número certo
+    // está no passo que o motor acabou de mandar.
+    cartelasContadas: estado.cartelas.length || estado.escalada?.cartelas || 0,
     escalada: estadoJson,
     curva: estado.curva ?? [],
     cobertura: estado.escalada?.melhor_cobertura ?? 0,
@@ -1577,9 +1581,42 @@ trabalhador.onmessage = (evento) => {
       if (mensagem.estado) guardarTrabalho(mensagem.estado);
       break;
 
-    case 'escalada':
+    case 'escalada': {
       escalandoAgora = false;
-      estado.cartelas = mensagem.cartelas;
+
+      /*
+       * A otimização não pode devolver menos do que já havia.
+       *
+       * Esta linha era uma atribuição direta, e havia um caminho em que ela
+       * destruía trabalho: a prova exata (`receberProva`) troca
+       * `estado.cartelas` por uma coleção **menor e já verificada** quando a
+       * varredura acha uma. Se depois disso alguém tocasse em "Ativar
+       * otimização" e mandasse parar, o resultado do otimizador entrava por
+       * cima — medido devolvendo 13 onde a pessoa tinha 12.
+       *
+       * É a pior forma do defeito: o botão promete "tentar menos", a nota
+       * abaixo dele promete que parar "devolve o melhor número alcançado", e
+       * o aplicativo entrega mais. Num aplicativo cuja tese é a honestidade
+       * sobre o que se encontrou, perder em silêncio um número melhor é a
+       * contradição mais cara que ele podia ter.
+       *
+       * O incumbente só resiste se for menor **e** já ter passado pelo
+       * verificador: uma coleção menor que ninguém conferiu não é melhor
+       * coisa nenhuma, é trabalho pela metade.
+       */
+      const incumbenteVale =
+        estado.verificado && estado.cartelas.length > 0
+        && estado.cartelas.length < mensagem.cartelas.length;
+
+      if (incumbenteVale) {
+        avisar(
+          `A otimização parou em ${milhares(mensagem.cartelas.length)}; o `
+          + `fechamento de ${milhares(estado.cartelas.length)} que você já tinha `
+          + 'continua sendo o seu.'
+        );
+      } else {
+        estado.cartelas = mensagem.cartelas;
+      }
       // O método vai dentro do arquivo exportado, e precisa dizer o que
       // realmente produziu aquelas cartelas: quem fechou acima do piso passou
       // pelo motor de Turán, e não pela escalada.
@@ -1599,6 +1636,7 @@ trabalhador.onmessage = (evento) => {
       // nada aqui vale pela palavra de quem produziu.
       enviar({ tipo: 'verificar', cartelas: estado.cartelas });
       break;
+    }
 
     case 'verificacao': {
       pintarVerificacao(mensagem.dados);
@@ -1681,6 +1719,35 @@ function mostrarPainel(qual) {
   if (qual === 'exato-historico') pintarHistorico();
   window.scrollTo({ top: 0, behavior: 'instant' });
 }
+
+/*
+ * As setas trocam de aba — sem isto, a aba inativa some do teclado.
+ *
+ * `role="tablist"` com `tabindex="-1"` na aba não selecionada é o padrão ARIA,
+ * e ele pressupõe navegação por setas: é ela que devolve o acesso que o
+ * `tabindex` tirou. Sem o par, a aba Histórico ficava inalcançável por
+ * teclado, e com ela o trabalho guardado, o retomar, o importar e o exportar.
+ *
+ * A Lotinha já fazia isto; esta tela tinha só a metade que fecha a porta.
+ */
+document.querySelector('.abas')?.addEventListener('keydown', (evento) => {
+  const abas = [...document.querySelectorAll('.aba[data-painel]')];
+  const atual = abas.indexOf(document.activeElement);
+  if (atual < 0) return;
+
+  const passo = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[evento.key];
+  let destino = null;
+  if (passo) destino = (atual + passo + abas.length) % abas.length;
+  else if (evento.key === 'Home') destino = 0;
+  else if (evento.key === 'End') destino = abas.length - 1;
+  if (destino === null) return;
+
+  evento.preventDefault();
+  mostrarPainel(abas[destino].dataset.painel);
+  // O foco acompanha a seleção: deixá-lo para trás faria a próxima seta partir
+  // da aba errada.
+  abas[destino].focus();
+});
 
 for (const aba of document.querySelectorAll('.aba[data-painel]')) {
   aba.addEventListener('click', () => mostrarPainel(aba.dataset.painel));

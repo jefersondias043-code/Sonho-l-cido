@@ -76,7 +76,9 @@ pub use avaliacao::{Avaliacao, ChaveCusto};
 pub use cartela::{Cartela, Mascara};
 pub use cobertura::{MotorCobertura, Rascunho};
 pub use conjunto::ConjuntoEsparso;
-pub use limites::{gap, limite_inferior, optimalidade_provada, LimiteInferior, MetodoLimite};
+pub use limites::{
+    contradiz_o_limite, gap, limite_inferior, optimalidade_provada, LimiteInferior, MetodoLimite,
+};
 pub use planos::semente_algebrica;
 pub use problema::{
     ErroProblema, ErroViabilidade, Objetivo, Problema, RegraCobertura, Viabilidade,

@@ -441,7 +441,12 @@ async function pintarOResumoDoReset() {
     partes.push(fechamentos === 1 ? '1 fechamento' : `${fechamentos} fechamentos`);
   }
 
-  const ajustes = chavesDaqui(localStorage).length;
+  // As duas chaves de histórico já foram contadas como fechamentos logo acima.
+  // Contá-las de novo aqui fazia um único fechamento salvo virar
+  // "1 fechamento · 1 ajuste" — o mesmo dado listado duas vezes, numa tela
+  // cuja função é dizer exatamente o que será apagado.
+  const HISTORICOS = ['sonho-lucido:historico', 'sonho-lucido:exato:historico'];
+  const ajustes = chavesDaqui(localStorage).filter((c) => !HISTORICOS.includes(c)).length;
   if (ajustes > 0) partes.push(ajustes === 1 ? '1 ajuste' : `${ajustes} ajustes`);
 
   try {

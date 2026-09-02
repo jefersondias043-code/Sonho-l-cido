@@ -521,10 +521,13 @@ main { padding: 8px 16px 0; }
   padding: 10px 0;
   border-bottom: 1px solid var(--borda);
   font-size: 14px;
+  /* Sem isto a linha do dinheiro estoura a tela num iPhone de 320 px: o saldo
+     sai do cartão e a página passa a rolar de lado. */
+  flex-wrap: wrap;
 }
 
 .linha-economia:last-of-type { border-bottom: none; }
-.linha-economia > span { color: var(--texto-fraco); }
+.linha-economia > span { color: var(--texto-fraco); min-width: 0; }
 .linha-economia b { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .linha-economia em { font-style: normal; color: var(--texto-fraco); font-size: 12.5px; }
 
@@ -716,7 +719,7 @@ details.cartao[open] > summary::after {
 
 .grade .item small {
   display: block;
-  font-size: 11.5px;
+  font-size: 13px;
   color: var(--texto-fraco);
   line-height: 1.25;
 }
@@ -1521,6 +1524,11 @@ details.cartao[open] > summary::after {
   text-decoration: none;
   font-size: 14px;
   margin-bottom: 6px;
+  /* Era um alvo de 74 × 20 px, sob a área do notch, e é o único jeito de sair
+     de qualquer uma das telas internas. O mínimo recomendado é 44 × 44; a
+     margem negativa compensa o preenchimento para o cabeçalho não crescer. */
+  padding: 12px 8px;
+  margin: -12px -8px;
 }
 
 .voltar:active { color: var(--acento); }

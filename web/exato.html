@@ -99,7 +99,7 @@
     <div class="controles">
       <button class="principal" id="ex-resolver">Resolver</button>
       <button class="secundario" id="ex-continuar" hidden>Continuar de onde parou</button>
-      <button class="secundario perigo" id="ex-parar" hidden>Parar</button>
+      <button class="secundario" id="ex-parar" hidden>Parar</button>
     </div>
   </div>
 
@@ -161,7 +161,7 @@
     </div>
 
     <div class="barra-progresso"><div id="ex-construcao-barra" style="width:0%"></div></div>
-    <div class="referencia" id="ex-construcao">começando…</div>
+    <div class="referencia" id="ex-construcao" role="status" aria-live="polite">começando…</div>
 
     <!-- A nota acompanha os comandos e muda com o que está acontecendo. Ela
          existe porque o botão deixou de ser uma porta que abre na hora certa:
@@ -210,7 +210,7 @@
   <!-- 8 · resultado ───────────────────────────────────────────────────── -->
   <div class="cartao" id="ex-resultado-cartao" hidden>
     <h2>8 · Resultado</h2>
-    <div class="referencia veredito" id="ex-frase"></div>
+    <div class="referencia veredito" id="ex-frase" role="status" aria-live="polite"></div>
     <div class="grade">
       <div class="item"><span id="ex-encontrado">—</span><small>solução encontrada</small></div>
       <div class="item"><span id="ex-provado">—</span><small>mínimo comprovado</small></div>

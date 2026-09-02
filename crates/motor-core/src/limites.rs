@@ -304,10 +304,28 @@ pub fn gap(melhor_conhecida: u64, limite: u64) -> Option<f64> {
     Some((melhor_conhecida.saturating_sub(limite)) as f64 / limite as f64)
 }
 
-/// Verdadeiro quando a melhor solução conhecida alcançou o limite inferior —
-/// e portanto é comprovadamente ótima.
+/// Verdadeiro quando a melhor solução conhecida **encontrou** o limite
+/// inferior — e portanto é comprovadamente ótima.
+///
+/// Encontro é igualdade, e era `<=`. A diferença não é preciosismo: `limite` é
+/// cota **inferior**, então uma solução menor que ela não é um ótimo melhor
+/// ainda — é prova de que a cota está errada. Com `<=`, o único sinal que o
+/// aplicativo teria de um piso mal calculado virava a afirmação mais forte que
+/// ele sabe fazer, e essa afirmação chega à tela e fica gravada no histórico.
+///
+/// O nome do teste desta função já dizia "quando os limites se encontram"; era
+/// o código que discordava dele.
 pub fn optimalidade_provada(melhor_conhecida: u64, limite: LimiteInferior) -> bool {
-    limite.valor > 0 && melhor_conhecida <= limite.valor
+    limite.valor > 0 && melhor_conhecida == limite.valor
+}
+
+/// A solução passou **por baixo** da cota inferior.
+///
+/// Não há leitura boa: ou a solução não é válida, ou a cota está errada. O que
+/// não se pode é escolher a leitura bonita e anunciar optimalidade — e era
+/// exatamente o que acontecia enquanto este caso não tinha nome.
+pub fn contradiz_o_limite(melhor_conhecida: u64, limite: LimiteInferior) -> bool {
+    limite.valor > 0 && melhor_conhecida > 0 && melhor_conhecida < limite.valor
 }
 
 #[cfg(test)]
@@ -510,6 +528,22 @@ mod testes {
         let limite = LimiteInferior { valor: 29, metodo: MetodoLimite::Schonheim };
         assert!(optimalidade_provada(29, limite));
         assert!(!optimalidade_provada(30, limite));
+
+        // Abaixo da cota não é ótimo melhor ainda: é contradição, e o caso
+        // nunca tinha sido exercido — o `<=` antigo devolvia `true` aqui.
+        assert!(
+            !optimalidade_provada(28, limite),
+            "abaixo da cota inferior nada pode ser declarado ótimo"
+        );
+        assert!(contradiz_o_limite(28, limite));
+        assert!(!contradiz_o_limite(29, limite));
+        assert!(!contradiz_o_limite(30, limite));
+
+        let sem_limite_2 = LimiteInferior { valor: 0, metodo: MetodoLimite::Contagem };
+        assert!(
+            !contradiz_o_limite(1, sem_limite_2),
+            "sem cota útil não há o que contradizer"
+        );
 
         let sem_limite = LimiteInferior { valor: 0, metodo: MetodoLimite::Contagem };
         assert!(
