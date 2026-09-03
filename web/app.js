@@ -26,6 +26,8 @@ import * as lotinha from './lotinha.js';
 import * as checagem from './checagem.js';
 import * as sessao from './sessao.js';
 import * as exato from './exato-pipeline.js';
+import * as exatoHistorico from './exato-historico.js';
+import * as arquivoDoExato from './exato-sessao.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -1894,11 +1896,38 @@ function lotTextoDaRegua(jogo, multiplicador) {
   );
 }
 
+/*
+ * Os limites do pool, tirados da tela e não da modalidade.
+ *
+ * Eram `lotinha.MENOR_POOL` e `MAIOR_POOL` — 15 e 25, os números da Lotinha. Com
+ * universo e sorteio abertos em Avançado, isso deixava um buraco grande: pedir
+ * universo 9 e sorteio 2, que é `C(9,3,2)` — o sistema de Steiner de ordem 9,
+ * um dos problemas clássicos que o motor exato resolve em segundos —, e a tela
+ * continuava só oferecendo pools de 15 a 25, todos maiores que o universo. O
+ * caso simplesmente não tinha como ser pedido.
+ *
+ * O piso é o sorteio porque um pool menor que o sorteio não contém nenhum
+ * resultado possível; o teto é o universo porque não há de onde tirar mais
+ * dezenas. Com 25 e 15 na tela isso dá exatamente os 15 a 25 de antes.
+ */
+function lotFaixaDePool() {
+  const menor = Math.max(2, Math.min(lotSorteio, lotUniverso));
+  return { menor, maior: Math.max(menor, lotUniverso) };
+}
+
 function lotMontar() {
   // Tamanho do pool.
+  const { menor: menorPool, maior: maiorPool } = lotFaixaDePool();
+  if (lotPool < menorPool || lotPool > maiorPool) {
+    lotPool = Math.min(Math.max(lotPool, menorPool), maiorPool);
+    if (lotDezenas.size > lotPool) {
+      lotDezenas = new Set([...lotDezenas].slice(0, lotPool));
+    }
+    if (lotJogo > lotPool) lotJogo = lotPool;
+  }
   const alvoPool = $('lot-pool');
   alvoPool.innerHTML = '';
-  for (let p = lotinha.MENOR_POOL; p <= lotinha.MAIOR_POOL; p++) {
+  for (let p = menorPool; p <= maiorPool; p++) {
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'opcao';
@@ -1984,7 +2013,16 @@ function lotMontar() {
 function lotMontarExigencias() {
   const alvoGarantia = $('lot-garantia');
   alvoGarantia.innerHTML = '';
-  for (let g = lotSorteio; g >= lotinha.MENOR_GARANTIA; g--) {
+  /*
+   * A garantia mínima segue o sorteio, e não a Lotofácil.
+   *
+   * `MENOR_GARANTIA` é 11 porque é a partir de 11 que a Lotofácil paga. Num
+   * sorteio de 2 números essa régua não diz nada: ela apagava a fileira
+   * inteira, e a única garantia possível — acertar os 2 — não tinha botão.
+   * Onde o sorteio é grande o piso continua sendo o da modalidade.
+   */
+  const menorGarantia = Math.min(lotinha.MENOR_GARANTIA, lotSorteio);
+  for (let g = lotSorteio; g >= menorGarantia; g--) {
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'opcao';
@@ -2127,7 +2165,10 @@ function lotPintarTudo() {
 function lotMontarOpcoesDeJogo() {
   const alvo = $('lot-jogo');
   alvo.innerHTML = '';
-  for (let k = lotinha.MENOR_POOL; k <= lotPool; k++) {
+  // Mesmo motivo do pool: o menor jogo era 15 porque a Lotinha não vende menos.
+  // Num universo de 9 com sorteios de 2, cartelas de 3 são o problema inteiro.
+  const menorJogo = Math.max(1, Math.min(lotinha.MENOR_POOL, lotFaixaDePool().menor));
+  for (let k = menorJogo; k <= lotPool; k++) {
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'opcao';
@@ -3123,12 +3164,35 @@ ligar('arquivo-sessao', 'change', async (evento) => {
     mostrarPreviaDaImportacao({ ok: false, erro: 'Não consegui ler o arquivo.' });
     return;
   }
-  const lido = sessao.interpretar(texto);
-  sessaoAguardandoConfirmacao = lido.ok ? lido.pacote : null;
-  mostrarPreviaDaImportacao(lido);
+  /*
+   * Um arquivo, dois formatos, uma porta.
+   *
+   * Os dois motores exportam pacotes diferentes — `sonho-lucido/sessao` e
+   * `sonho-lucido/exato` — e cada tela sabia ler só o seu. Quem escolhesse o
+   * arquivo errado ouvia "este arquivo é uma sessão da Lotinha" e tinha de
+   * descobrir sozinho por qual das telas entrar. Com uma ferramenta só, é o
+   * aplicativo que reconhece o que recebeu.
+   *
+   * A marca do pacote é quem decide, e é lida antes de qualquer validação: só
+   * assim o erro que aparece é o do formato certo, e não o de quem tentou ler
+   * um arquivo que nunca foi seu.
+   */
+  const doExato = ehPacoteDoExato(texto);
+  const lido = doExato ? arquivoDoExato.interpretar(texto) : sessao.interpretar(texto);
+  sessaoAguardandoConfirmacao = lido.ok ? { pacote: lido.pacote, doExato } : null;
+  mostrarPreviaDaImportacao(lido, doExato);
 });
 
-function mostrarPreviaDaImportacao(lido) {
+/** Se o arquivo se diz um fechamento do motor exato. Só olha a marca. */
+function ehPacoteDoExato(texto) {
+  try {
+    return JSON.parse(texto)?.aplicativo === arquivoDoExato.MARCA;
+  } catch {
+    return false;
+  }
+}
+
+function mostrarPreviaDaImportacao(lido, doExato = false) {
   const destino = $('previa-importacao');
   destino.hidden = false;
 
@@ -3141,6 +3205,37 @@ function mostrarPreviaDaImportacao(lido) {
 
   const r = lido.resumo;
   const quando = r.criadoEm ? new Date(r.criadoEm).toLocaleString('pt-BR') : 'data desconhecida';
+
+  // O pacote do motor exato descreve outra coisa: um fechamento com piso e
+  // cobertura, e não uma busca com iterações e recordes. Ficha própria, porque
+  // uma ficha que dissesse "0 iterações" estaria dizendo que nada foi feito.
+  if (doExato) {
+    const linhasDoExato = [
+      ['Fechamento', `${milhares(r.cartelas)} cartelas`],
+      ['Problema', exatoHistorico.descrever(r.pedido)],
+      ['Piso provado', r.teto > 0 ? `${milhares(r.teto)} cartelas` : '—'],
+      ['Cobertura', porcento(r.cobertura)],
+      ['Verificado', r.verificado ? 'sim, sorteio a sorteio' : 'não'],
+      ['Exportado em', quando],
+    ];
+    destino.innerHTML =
+      '<div class="ficha">' +
+      linhasDoExato
+        .map(([a, b]) => `<div><span>${a}</span><b>${escapar(String(b))}</b></div>`)
+        .join('') +
+      '</div>' +
+      `<p class="ajuda">${
+        r.verificado && r.teto > 0 && r.cartelas <= r.teto
+          ? 'Este fechamento alcançou o piso: é o mínimo, e nada menor existe.'
+          : 'Entra no histórico como está. Continuar retoma a escalada de onde ela parou.'
+      }</p>` +
+      '<button class="principal" id="confirmar-importacao">Guardar este fechamento</button>' +
+      '<p class="ajuda">Entra como um trabalho novo. O que já está neste aparelho continua onde está.</p>';
+    document
+      .getElementById('confirmar-importacao')
+      ?.addEventListener('click', confirmarImportacao);
+    return;
+  }
   const tempo = r.segundos > 0 ? duracao(r.segundos * 1000) : '—';
   const linhas = [
     ['Fechamento', `${milhares(r.cartelas)} cartelas de ${r.tamanho} dezenas`],
@@ -3171,10 +3266,27 @@ function mostrarPreviaDaImportacao(lido) {
 }
 
 function confirmarImportacao() {
-  const pacote = sessaoAguardandoConfirmacao;
-  if (!pacote) return avisar('Escolha um arquivo de sessão primeiro.');
+  const guardado = sessaoAguardandoConfirmacao;
+  if (!guardado) return avisar('Escolha um arquivo de sessão primeiro.');
   sessaoAguardandoConfirmacao = null;
   $('previa-importacao').hidden = true;
+
+  // Um fechamento do motor exato entra no histórico e para por aí: retomá-lo
+  // sozinho poria o aparelho a escalar sem ninguém ter pedido, e num problema
+  // que não fecha isso é escalar para sempre. Quem manda continuar é o botão
+  // Continuar da linha que acabou de aparecer.
+  if (guardado.doExato) {
+    const nova = exatoHistorico.importar(arquivoDoExato.paraSessao(guardado.pacote));
+    pintarHistorico();
+    atualizarAtalhoDoHistorico();
+    avisar(
+      `Guardado: ${milhares(exatoHistorico.contarCartelas(nova))} cartelas.`,
+      true
+    );
+    return;
+  }
+
+  const pacote = guardado.pacote;
 
   const dentro = pacote.sessao;
   const motor = dentro.motor ?? {};
@@ -3228,19 +3340,42 @@ function textoDoFechamento() {
  * ficariam indistinguíveis.
  */
 function pintarHistorico() {
-  const sessoes = historico.listar();
-  const destino = $('lista-historico');
-  $('limpar-historico').hidden = sessoes.length === 0;
-  atualizarAtalhoDoHistorico(sessoes.length);
+  /*
+   * Os dois motores guardam trabalho, e o aplicativo tem um histórico só.
+   *
+   * Eram duas listas, em duas telas, com dois armazenamentos — e quem tinha um
+   * fechamento salvo precisava lembrar **por qual porta** o tinha montado para
+   * saber onde procurá-lo. Os formatos continuam separados, porque guardam
+   * coisas diferentes: a busca guarda a melhor solução e as iterações, a
+   * escalada guarda o retrato do motor, o piso e a curva. O que passa a ser um
+   * só é a lista, ordenada por quando cada trabalho foi tocado pela última vez.
+   */
+  const daBusca = historico.listar().map((sessao) => ({
+    tipo: 'busca',
+    quando: Number(sessao.atualizadaEm) || 0,
+    sessao,
+  }));
+  const doExato = exatoHistorico.listar().map((sessao) => ({
+    tipo: 'exato',
+    quando: Number(sessao.atualizadaEm) || 0,
+    sessao,
+  }));
+  const linhas = [...daBusca, ...doExato].sort((a, b) => b.quando - a.quando);
 
-  if (!sessoes.length) {
+  const destino = $('lista-historico');
+  $('limpar-historico').hidden = linhas.length === 0;
+  atualizarAtalhoDoHistorico(linhas.length);
+
+  if (!linhas.length) {
     destino.innerHTML =
       '<p class="historico-vazio">Nenhum trabalho salvo ainda.<br>' +
-      'Toda busca que você iniciar aparece aqui automaticamente.</p>';
+      'Todo fechamento que você montar aparece aqui automaticamente.</p>';
     return;
   }
 
-  destino.innerHTML = sessoes.map(cartaoDaSessao).join('');
+  destino.innerHTML = linhas
+    .map((l) => (l.tipo === 'exato' ? cartaoDaSessaoExata(l.sessao) : cartaoDaSessao(l.sessao)))
+    .join('');
 
   destino.querySelectorAll('[data-acao]').forEach((botao) => {
     botao.addEventListener('click', () => {
@@ -3249,8 +3384,137 @@ function pintarHistorico() {
       else if (acao === 'ver') verSessao(id);
       else if (acao === 'checar') abrirChecagem(`historico:${id}`);
       else if (acao === 'excluir') excluirSessao(id);
+      else if (acao === 'ex-abrir') abrirSessaoExata(id);
+      else if (acao === 'ex-continuar') continuarSessaoExata(id);
+      else if (acao === 'ex-checar') checarSessaoExata(id);
+      else if (acao === 'ex-exportar') exportarSessaoExata(id);
+      else if (acao === 'ex-excluir') excluirSessaoExata(id);
     });
   });
+}
+
+/**
+ * A linha de um trabalho do motor exato.
+ *
+ * O selo diz o que só este motor pode dizer: alcançar o piso não é "o melhor
+ * que achei", é **o mínimo**. Por isso ele é ★ mínimo, e não ★ ótimo provado —
+ * o primeiro vem de uma cota demonstrada antes de montar cartela nenhuma.
+ */
+function cartaoDaSessaoExata(sessao) {
+  const quantas = exatoHistorico.contarCartelas(sessao);
+  const id = escapar(sessao.id);
+
+  const marca = sessao.emCurso
+    ? '<span class="sessao-marca viva">trabalhando</span>'
+    : sessao.verificado && sessao.piso > 0 && quantas <= sessao.piso
+      ? '<span class="sessao-marca otima">★ mínimo</span>'
+      : sessao.piso > 0
+        ? `<span class="sessao-marca">mínimo ${milhares(sessao.piso)}</span>`
+        : '';
+
+  return `
+    <div class="sessao${sessao.emCurso ? ' em-andamento' : ''}">
+      <div class="sessao-topo">
+        <span class="sessao-quantia">${milhares(quantas)}</span>
+        <span class="sessao-unidade">cartela${quantas === 1 ? '' : 's'}</span>
+        ${marca}
+      </div>
+      <div class="sessao-config">
+        ${escapar(exatoHistorico.descrever(sessao.pedido))} · motor exato<br>
+        ${porcento(sessao.cobertura)} de cobertura ·
+        ${escapar(exatoHistorico.quando(sessao.atualizadaEm))}
+      </div>
+      <div class="sessao-acoes">
+        <button class="continuar" data-acao="ex-continuar" data-id="${id}">Continuar</button>
+        <button data-acao="ex-abrir" data-id="${id}">Ver cartelas</button>
+        <button data-acao="ex-checar" data-id="${id}">Checar</button>
+        <button data-acao="ex-exportar" data-id="${id}">Exportar</button>
+        <button class="excluir" data-acao="ex-excluir" data-id="${id}"
+                aria-label="Excluir este trabalho">✕</button>
+      </div>
+    </div>`;
+}
+
+/** Abre um trabalho do motor exato para consulta, sem ligar o motor. */
+function abrirSessaoExata(id) {
+  const sessao = exatoHistorico.obter(id);
+  if (!sessao) {
+    avisar('Este fechamento já não está guardado.');
+    pintarHistorico();
+    return;
+  }
+  mostrarPainel('buscar');
+  $('grupo-exato').hidden = false;
+  $('grupo-busca').hidden = true;
+  exato.abrirGuardado(sessao);
+}
+
+/** Retoma a escalada de um trabalho do motor exato, de onde ela parou. */
+function continuarSessaoExata(id) {
+  const sessao = exatoHistorico.obter(id);
+  if (!sessao) {
+    avisar('Este fechamento já não está guardado.');
+    pintarHistorico();
+    return;
+  }
+  mostrarPainel('buscar');
+  $('grupo-exato').hidden = false;
+  $('grupo-busca').hidden = true;
+  exato.retomarGuardado(sessao);
+}
+
+/*
+ * Checar um trabalho do exato na mesma aba que checa todo o resto.
+ *
+ * As cartelas vêm decodificadas das máscaras que a sessão guarda; a
+ * configuração é remontada do pedido, que é o que o conferidor precisa saber
+ * para julgar o que vê.
+ */
+function checarSessaoExata(id) {
+  const sessao = exatoHistorico.obter(id);
+  if (!sessao) return;
+  const cartelas = exatoHistorico.cartelasDaSessao(sessao);
+  if (!cartelas.length) {
+    avisar('Este trabalho ainda não tem cartelas para conferir.');
+    return;
+  }
+  lotFechamento = cartelas;
+  chkPintarSeletor('lotinha');
+  abrirChecagem('lotinha');
+}
+
+/** Guarda um trabalho do exato num arquivo, que é o que sobrevive a tudo. */
+function exportarSessaoExata(id) {
+  const sessao = exatoHistorico.obter(id);
+  if (!sessao) return;
+
+  const pacote = arquivoDoExato.empacotar(sessao, {
+    versao: ($('versao')?.textContent ?? '').replace(/^versão\s*/i, '').trim(),
+    cartelas: exatoHistorico.cartelasDaSessao(sessao),
+  });
+  const texto = JSON.stringify(pacote, null, 1);
+  const nome = arquivoDoExato.nomeDoArquivo(pacote);
+  const endereco = URL.createObjectURL(new Blob([texto], { type: 'application/json' }));
+
+  const link = document.createElement('a');
+  link.href = endereco;
+  link.download = nome;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  // Um quadro depois: revogar na mesma volta do laço cancela o download em
+  // alguns navegadores antes de ele começar.
+  setTimeout(() => URL.revokeObjectURL(endereco), 4000);
+  avisar(`Exportado: ${nome}`);
+}
+
+function excluirSessaoExata(id) {
+  const sessao = exatoHistorico.obter(id);
+  if (!sessao) return;
+  const quantas = exatoHistorico.contarCartelas(sessao);
+  if (!confirm(`Excluir este trabalho de ${milhares(quantas)} cartelas?`)) return;
+  exatoHistorico.remover(id);
+  pintarHistorico();
 }
 
 function cartaoDaSessao(sessao) {
@@ -3353,11 +3617,15 @@ function excluirSessao(id) {
 }
 
 ligar('limpar-historico', 'click', () => {
-  const total = historico.quantidade();
+  // A lista é uma só, e o botão que a apaga tem de apagá-la inteira. Limpando
+  // só um dos dois armazenamentos, a tela continuaria mostrando trabalhos
+  // depois de dizer que apagou tudo.
+  const total = historico.quantidade() + exatoHistorico.listar().length;
   if (!total) return;
   if (!confirm(`Apagar todos os ${total} trabalhos do histórico? Não dá para desfazer.`)) return;
 
   historico.limpar();
+  exatoHistorico.limpar();
   sessaoAtual = null;
   pintarHistorico();
   avisar('Histórico apagado.', true);
@@ -4542,10 +4810,25 @@ function mostrarTrabalhoInterrompido() {
   const cartao = document.getElementById('cartao-interrompido');
   if (!cartao) return;
   const sessao = historico.interrompida();
+  /*
+   * O motor exato também deixa trabalho pela metade, e ele também precisa ser
+   * oferecido de volta.
+   *
+   * A escalada grava o retrato do motor a cada quatro segundos justamente para
+   * que fechar o aplicativo no meio não custe o que já foi feito. Sem esta
+   * metade, esse retrato existia no armazenamento e nada na tela dizia que ele
+   * estava lá — o trabalho ficava guardado para ninguém.
+   */
+  const doExato = exatoHistorico.interrompida();
+  if (!sessao && doExato && fase === 'ocioso' && !exato.estaRodando()) {
+    mostrarEscaladaInterrompida(cartao, doExato);
+    return;
+  }
   if (!sessao || fase !== 'ocioso') {
     cartao.hidden = true;
     return;
   }
+  cartao.dataset.motor = 'busca';
 
   const m = sessao.motor ?? {};
   const quando = sessao.atualizadaEm
@@ -4567,17 +4850,44 @@ function mostrarTrabalhoInterrompido() {
   cartao.hidden = false;
 }
 
+/** O mesmo cartão, para a escalada que ficou pelo meio. */
+function mostrarEscaladaInterrompida(cartao, sessao) {
+  const quantas = exatoHistorico.contarCartelas(sessao);
+  const quando = sessao.atualizadaEm
+    ? new Date(sessao.atualizadaEm).toLocaleString('pt-BR')
+    : 'momento desconhecido';
+  const linhas = [
+    ['Fechamento', `${milhares(quantas)} cartelas`],
+    ['Cobertura', porcento(sessao.cobertura)],
+    ['Piso provado', sessao.piso > 0 ? `${milhares(sessao.piso)} cartelas` : '—'],
+    ['Última gravação', quando],
+  ];
+  document.getElementById('resumo-interrompido').innerHTML =
+    `<p class="ajuda">${escapar(exatoHistorico.descrever(sessao.pedido))} — o motor exato ` +
+    'estava escalando quando o aplicativo fechou.</p><div class="ficha">' +
+    linhas.map(([a, b]) => `<div><span>${a}</span><b>${escapar(String(b))}</b></div>`).join('') +
+    '</div>';
+  cartao.dataset.sessao = sessao.id;
+  cartao.dataset.motor = 'exato';
+  cartao.hidden = false;
+}
+
 ligar('retomar-interrompido', 'click', () => {
-  const id = document.getElementById('cartao-interrompido')?.dataset?.sessao;
+  const cartao = document.getElementById('cartao-interrompido');
+  const id = cartao?.dataset?.sessao;
   if (!id) return;
-  document.getElementById('cartao-interrompido').hidden = true;
-  continuarSessao(id);
+  cartao.hidden = true;
+  if (cartao.dataset.motor === 'exato') continuarSessaoExata(id);
+  else continuarSessao(id);
 });
 
 ligar('dispensar-interrompido', 'click', () => {
   const cartao = document.getElementById('cartao-interrompido');
   const id = cartao?.dataset?.sessao;
-  if (id) historico.encerrar(id);
+  if (id) {
+    if (cartao.dataset.motor === 'exato') exatoHistorico.encerrar(id);
+    else historico.encerrar(id);
+  }
   if (cartao) cartao.hidden = true;
   pintarHistorico();
 });

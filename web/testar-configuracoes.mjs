@@ -360,12 +360,14 @@ try {
   marcar(true, 'o atalho abre a ferramenta', '#lot-grade');
   await pagina.goBack({ waitUntil: 'networkidle' });
 
-  // ─── 9. e as outras telas levam até aqui ───
-  for (const de of ['index.html', 'exato.html']) {
-    await pagina.goto(endereco(de === 'index.html' ? '' : de), { waitUntil: 'domcontentloaded' });
-    const achou = await pagina.locator('a[href="./configuracoes.html"]').count();
-    marcar(achou > 0, `${de} tem caminho para as Configurações`);
-  }
+  // ─── 9. e a ferramenta leva até aqui ───
+  //
+  // Era um laço sobre duas telas. Agora há uma, e é dela que o caminho de volta
+  // tem de sair: uma tela de Configurações sem porta de entrada é uma tela que
+  // só se alcança digitando o endereço.
+  await pagina.goto(endereco(''), { waitUntil: 'domcontentloaded' });
+  const achou = await pagina.locator('a[href="./configuracoes.html"]').count();
+  marcar(achou > 0, 'a ferramenta tem caminho para as Configurações');
 
   // ─── 10. apagar tudo e recomeçar ───
   //

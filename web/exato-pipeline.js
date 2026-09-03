@@ -72,14 +72,6 @@ trabalhador.onerror = (erro) => {
  */
 let sessaoEmCurso = null;
 
-/*
- * O carimbo da construção que está rodando neste aparelho.
- *
- * Vai dentro do arquivo exportado. Não muda nada no que ele carrega, e serve
- * para uma pergunta que aparece quando algo dá errado meses depois: qual versão
- * produziu este fechamento. Quem responde é o service worker, que é quem sabe.
- */
-let CARIMBO = '';
 
 /** Quantos nós a prova ganha, por unidade de esforço escolhida. */
 const NOS_POR_ESFORCO = 10_000_000;
@@ -259,11 +251,6 @@ let aoTerminar = () => {};
 export function ligar(avisos = {}) {
   aoMudarOHistorico = avisos.aoMudarOHistorico ?? aoMudarOHistorico;
   aoTerminar = avisos.aoTerminar ?? aoTerminar;
-}
-
-/** O carimbo da construção, que vai dentro do arquivo exportado. */
-export function definirCarimbo(carimbo) {
-  CARIMBO = String(carimbo ?? '');
 }
 
 /** Se o motor exato está trabalhando neste instante. */
@@ -856,6 +843,107 @@ function pintarResultado() {
   aoTerminar(estado.cartelas, estado.verificado, { numeros, pedido });
 
   encerrar();
+}
+
+/**
+ * Abre um fechamento guardado **sem pôr o motor para trabalhar**.
+ *
+ * Sem este caminho, "Continuar" seria o único jeito de abrir um fechamento — e
+ * ele sempre retoma a escalada. Quem quisesse apenas rever as cartelas punha o
+ * aparelho a calcular, e num fechamento que não fecha, a calcular **para
+ * sempre**, já que a escalada só para quando mandam.
+ *
+ * Aqui não há motor nenhum: as cartelas saem das máscaras que a sessão guarda e
+ * o veredito é remontado dos números que ela também guarda.
+ */
+export function abrirGuardado(sessao) {
+  if (!sessao) return;
+  if (rodando) {
+    avisar('Pare o trabalho em curso antes de abrir outro.');
+    return;
+  }
+
+  numerosEscolhidos = [...sessao.numeros].sort((a, b) => a - b);
+  universo = Math.max(sessao.universo || 0, ...sessao.numeros);
+  sessaoEmCurso = sessao.id;
+
+  etapa += 1;
+  pedido = { ...sessao.pedido };
+  esforco = sessao.esforco ?? 4;
+  estado = {
+    piso: sessao.piso,
+    origem: sessao.origem,
+    fechado: sessao.fechado,
+    cartelas: historico.cartelasDaSessao(sessao),
+    metodo: 'fechamento guardado',
+    verificado: sessao.verificado,
+    descobertos: sessao.descobertos,
+    ciclicaFechou: false,
+    linhasDaProva: [],
+    familiaPendente: null,
+    dadosPendentes: null,
+    parado: true,
+    // O passo que o veredito e a barra leem. Não veio do motor agora: veio de
+    // quando este fechamento foi trabalhado, e é exatamente o que foi salvo.
+    escalada: {
+      cartelas: historico.contarCartelas(sessao),
+      teto: sessao.piso,
+      melhor_cobertura: sessao.cobertura,
+      melhor_cartelas: historico.contarCartelas(sessao),
+      fase: sessao.fase,
+      rodadas: 0,
+      fechou: sessao.verificado,
+    },
+    guardado: sessao.escalada,
+    curva: sessao.curva ?? [],
+    melhorCobertura: sessao.cobertura,
+    desdeAMelhora: Date.now(),
+  };
+
+  esconderTudo();
+  $('ex-piso-cartao').hidden = false;
+  pintarPiso({ valor: sessao.piso, origem: sessao.origem, fechado: sessao.fechado });
+  pintarEscalada(estado.escalada, true);
+  pintarCurva(estado.curva);
+  pintarVerificacao({
+    cobre: sessao.verificado,
+    descobertos: sessao.descobertos,
+    alvos: combinacoes(pedido.v, pedido.j),
+    premiadas: pedido.r,
+  });
+  pintarProva(
+    [
+      '<b>Fechamento guardado, aberto para consulta.</b>',
+      '<em>O motor não foi acionado: o que está na tela é o que ficou salvo. ' +
+        'Para retomar a escalada, use Continuar no histórico.</em>',
+    ],
+    false
+  );
+  pintarResultado();
+  avisar('Fechamento aberto. O motor não está trabalhando.');
+}
+
+/**
+ * Abre um fechamento guardado e **retoma a escalada** de onde ela parou.
+ *
+ * O piso vem junto: no esforço fundo determiná-lo leva minutos, e continuar um
+ * trabalho não pode começar repetindo a parte mais cara do que já foi feito.
+ */
+export function retomarGuardado(sessao) {
+  if (!sessao) return;
+  if (rodando) {
+    avisar('Pare o trabalho em curso antes de abrir outro.');
+    return;
+  }
+  sessaoEmCurso = sessao.id;
+  resolver({
+    pedido: sessao.pedido,
+    numeros: sessao.numeros,
+    universo: Math.max(sessao.universo || 0, ...sessao.numeros),
+    esforco: sessao.esforco ?? 4,
+    estadoGuardado: sessao.escalada,
+    sessao,
+  });
 }
 
 /* ─────────── as cartelas: uma amostra, e o resto sob demanda ─────────── */
