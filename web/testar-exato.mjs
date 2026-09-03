@@ -1262,6 +1262,65 @@ try {
     (await texto('#ex-erro')).slice(0, 110)
   );
 
+  /* ─── a barra de situação responde de qualquer altura da página ─── */
+
+  /*
+   * A página passa de cinco mil pixels depois de um resultado, e os controles
+   * ficam longe dos números: quem rola para ver o progresso perde o Parar de
+   * vista, e vice-versa. A barra é o que responde "está funcionando?" sem
+   * obrigar ninguém a rolar de volta. A Lotinha já tinha uma; a tela que mais
+   * precisava dela era a única sem.
+   */
+  await marcarNumeros(25, Array.from({ length: 11 }, (_, i) => i + 1));
+  await regras(8, 5, 5);
+  await pagina.click('#ex-resolver');
+  await pagina.waitForFunction(
+    () => !document.getElementById('ex-situacao').hidden,
+    undefined,
+    { timeout: 20000 }
+  );
+  const situacaoViva = await pagina.evaluate(() => {
+    const b = document.getElementById('ex-situacao');
+    return {
+      texto: document.getElementById('ex-texto-situacao').textContent.trim(),
+      trabalhando: b.classList.contains('trabalhando'),
+      grudada: getComputedStyle(b).position,
+    };
+  });
+  marcar(
+    situacaoViva.trabalhando && situacaoViva.texto.length > 0,
+    'a barra de situação aparece e diz o que está acontecendo',
+    situacaoViva.texto
+  );
+  marcar(
+    situacaoViva.grudada === 'sticky',
+    'e acompanha a rolagem, para responder de qualquer altura da página',
+    situacaoViva.grudada
+  );
+
+  const relogioAndou = await pagina.evaluate(async () => {
+    const ler = () => document.getElementById('ex-relogio').textContent;
+    const antes = ler();
+    await new Promise((r) => setTimeout(r, 700));
+    return { antes, depois: ler() };
+  });
+  marcar(
+    relogioAndou.antes !== relogioAndou.depois,
+    'e o relógio corre enquanto o motor trabalha',
+    `${relogioAndou.antes} → ${relogioAndou.depois}`
+  );
+
+  await esperarResultado();
+  const situacaoParada = await pagina.evaluate(() => ({
+    texto: document.getElementById('ex-texto-situacao').textContent.trim(),
+    trabalhando: document.getElementById('ex-situacao').classList.contains('trabalhando'),
+  }));
+  marcar(
+    !situacaoParada.trabalhando && /parado/i.test(situacaoParada.texto),
+    'e no fim ela diz que parou, em vez de continuar pulsando',
+    situacaoParada.texto
+  );
+
   /* ─── tocar em Resolver muda o que a pessoa vê ─── */
 
   /*

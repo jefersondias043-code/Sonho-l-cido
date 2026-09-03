@@ -36,6 +36,24 @@
 
 <section class="painel ativo" id="exato" role="tabpanel" aria-labelledby="ex-aba-construtor">
 
+  <!--
+    A barra de situação, fixa no topo enquanto se rola.
+
+    Esta página tem mais de cinco mil pixels de altura depois de um resultado, e
+    o progresso nasce mil pixels abaixo do botão que o inicia: quem toca em
+    Resolver e rola para ver os números perde de vista o "Parar", e quem olha o
+    "Parar" não vê os números. A barra responde, de qualquer altura da página, a
+    pergunta que se faz o tempo todo — isso está funcionando ou travou?
+
+    O padrão é o mesmo da Lotinha, e estava justamente na tela que menos precisa
+    dele: aquela cabe quase inteira numa tela.
+  -->
+  <div class="situacao" id="ex-situacao" role="status" aria-live="polite" hidden>
+    <span class="pulso" id="ex-pulso"></span>
+    <span id="ex-texto-situacao">preparando…</span>
+    <span class="relogio" id="ex-relogio">0,0 s</span>
+  </div>
+
   <!-- 1 · os números ──────────────────────────────────────────────────── -->
   <div class="cartao">
     <h2>1 · Os seus números</h2>

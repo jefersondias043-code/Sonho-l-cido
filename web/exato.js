@@ -395,6 +395,48 @@ function maiuscula(texto) {
   return texto.charAt(0).toUpperCase() + texto.slice(1);
 }
 
+/* ─────────── a barra de situação ─────────── */
+
+/*
+ * A resposta, de qualquer altura da página, para "isso está funcionando?".
+ *
+ * A página passa de cinco mil pixels depois de um resultado, e os controles
+ * ficam longe dos números: quem rola para ver o progresso perde o Parar de
+ * vista, e vice-versa. A barra é fixa no topo e carrega as três coisas que
+ * respondem à pergunta — se está trabalhando, em que estágio, e há quanto tempo.
+ */
+let relogioDaSituacao = 0;
+let comecoDaCorrida = 0;
+
+function pintarSituacao(texto, trabalhando = true) {
+  const barra = $('ex-situacao');
+  if (!barra) return;
+  barra.hidden = false;
+  barra.classList.toggle('trabalhando', trabalhando);
+  $('ex-texto-situacao').textContent = texto;
+}
+
+function ligarORelogioDaSituacao() {
+  comecoDaCorrida = Date.now();
+  clearInterval(relogioDaSituacao);
+  const tique = () => {
+    const passou = (Date.now() - comecoDaCorrida) / 1000;
+    $('ex-relogio').textContent =
+      passou < 60
+        ? `${passou.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} s`
+        : haQuanto(Date.now() - comecoDaCorrida);
+  };
+  tique();
+  // Cinco vezes por segundo: é uma atribuição de texto, e é o bastante para o
+  // relógio parecer vivo sem custar nada.
+  relogioDaSituacao = setInterval(tique, 200);
+}
+
+function pararORelogioDaSituacao() {
+  clearInterval(relogioDaSituacao);
+  relogioDaSituacao = 0;
+}
+
 function esconderTudo() {
   for (const id of [
     'ex-analise-cartao',
@@ -481,6 +523,8 @@ function comecar(estadoGuardado = null, sessao = null) {
    * enquanto resolve não informa nada.
    */
   $('ex-resolver').textContent = 'Procurando…';
+  pintarSituacao('medindo o pedido…');
+  ligarORelogioDaSituacao();
   $('ex-analise-cartao').scrollIntoView({ block: 'start', behavior: 'smooth' });
 
   trabalhador.postMessage({ tipo: 'retomar' });
@@ -502,6 +546,8 @@ let avancoFoiPedido = false;
 function encerrar() {
   rodando = false;
   escalandoAgora = false;
+  pararORelogioDaSituacao();
+  pintarSituacao('parado — o que está na tela continua valendo', false);
   $('ex-parar').hidden = true;
   $('ex-avancar').hidden = true;
   encerrarASessao();
@@ -511,6 +557,7 @@ function encerrar() {
 /* ─────────── a pintura, estágio a estágio ─────────── */
 
 function pintarAnalise(dados) {
+  pintarSituacao('medindo o pedido…');
   $('ex-alvos').textContent = grande(dados.alvos);
   $('ex-blocos').textContent = grande(dados.blocos);
   $('ex-por-bloco').textContent = grande(dados.alvos_por_bloco);
@@ -518,6 +565,7 @@ function pintarAnalise(dados) {
 }
 
 function pintarPiso(dados) {
+  pintarSituacao('mínimo determinado — montando o fechamento…');
   estado.piso = dados.valor;
   estado.origem = dados.origem;
   estado.fechado = dados.fechado;
@@ -697,6 +745,15 @@ function pintarANotaDosComandos(passo, podeAvancar, podeOtimizar) {
 
 function pintarEscalada(passo, terminou) {
   $('ex-construcao-cartao').hidden = false;
+  // O estágio longo. A barra carrega o que a pessoa precisa saber sem rolar:
+  // quantas cartelas já existem, e quanto da garantia está coberto.
+  if (!terminou) {
+    pintarSituacao(
+      passo.completo
+        ? `${milhares(passo.completo)} cartelas — procurando menos`
+        : `montando — ${porcento(passo.melhor_cobertura)} de cobertura`
+    );
+  }
   estado.escalada = passo;
   pintarOsComandos(passo, terminou);
 
@@ -848,6 +905,7 @@ function pintarEscalada(passo, terminou) {
 }
 
 function pintarVerificacao(dados) {
+  pintarSituacao('conferindo sorteio a sorteio…');
   estado.verificado = dados.cobre;
   estado.descobertos = dados.descobertos;
   $('ex-verificacao-cartao').hidden = false;
