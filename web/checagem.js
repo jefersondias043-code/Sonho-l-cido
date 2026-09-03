@@ -1,21 +1,20 @@
 /*
- * Checar um fechamento contra um resultado.
+ * Checar um fechamento da Lotinha contra um resultado.
  *
- * Este módulo não desenha nada e não guarda estado: recebe cartelas e um
- * resultado, devolve contas. É o que permite testá-lo sem navegador e reusá-lo
- * dentro de um worker, que é onde as simulações longas rodam.
+ * ## Este módulo deixou de ter matemática própria
  *
- * ## A representação: uma cartela é um número
+ * Ele era cópia de `exato-checagem.js`, com as mesmas contas escritas duas
+ * vezes — e as duas cópias divergiram, como cópias divergem. `mascaraDe` aceita
+ * até 25 aqui e até 31 lá; `bitsEm` usa um algoritmo em cada lado; e o veredito
+ * da conferência do Exato passou meses lendo "exatamente `t` acertos" onde a
+ * garantia é "ao menos `t`", num defeito que o gêmeo daqui não tinha. Cada
+ * correção chegava a um lado e o outro seguia como estava.
  *
- * Dezenas vão de 1 a 25, então uma cartela inteira cabe num inteiro de 32 bits
- * — a dezena `d` é o bit `d − 1`. Contar acertos vira `popcount(cartela &
- * sorteio)`: duas instruções, em vez de percorrer quinze números procurando
- * cada um numa lista.
- *
- * A diferença não é cosmética. Um fechamento de 24 dezenas com jogos de 17 tem
- * 26.837 cartelas; dez mil sorteios simulados sobre ele são 268 milhões de
- * comparações. Com máscaras isso leva segundos; com `Array.includes` levaria
- * minutos e travaria a tela.
+ * Agora só sobra a tradução. A Lotinha é o caso particular em que o universo
+ * tem 25 dezenas, saem 15, e a tabela mostra as faixas de 11 a 15 — e
+ * `faixasDe({ k, j: 15, t: 11 })` reproduz exatamente essas cinco faixas para
+ * qualquer tamanho de jogo. O que este arquivo faz é dizer isso uma vez, para
+ * que a tela e o worker continuem chamando o que sempre chamaram.
  *
  * ## O que este módulo não decide
  *
@@ -23,154 +22,103 @@
  * regra mora na tela, junto com a explicação. Aqui só se conta.
  */
 
+import {
+  bitsEm as bitsGeral,
+  conferir as conferirGeral,
+  faixasDe,
+  interpretarResultado as interpretarGeral,
+  mascaraDe as mascaraGeral,
+  mascarasDe,
+  simularVarios as simularGeral,
+  sortearDe,
+  urnaDoUniverso,
+} from './exato-checagem.js';
+
 /** O universo da modalidade: dezenas de 1 a 25. */
 export const UNIVERSO = 25;
 
-/** Quantas dezenas um sorteio tem. */
+/** Quantas dezenas saem num sorteio. */
 export const SORTEIO = 15;
 
 /**
- * Converte uma cartela em máscara de bits.
+ * As cinco faixas que a tela da Lotinha mostra: 11 a 15.
  *
- * Dezenas fora de `1..25` são ignoradas em vez de deslocarem bits fora do
- * inteiro — uma cartela inválida vinda do armazenamento não pode corromper a
- * conta das outras.
+ * `faixasDe` deriva a janela do pedido, e com `t = 11` ela devolve exatamente
+ * 11..15 para qualquer tamanho de jogo — porque o teto é `min(j, k)`, que é 15
+ * quando saem 15, e o piso é `max(0, maximo − 9, min(t, maximo − 4))`, que dá
+ * 11. Escrever a janela à mão aqui seria repor a duplicata que este arquivo
+ * acabou de perder.
  */
-export function mascaraDe(cartela) {
-  let m = 0;
-  for (const d of cartela) {
-    if (Number.isInteger(d) && d >= 1 && d <= UNIVERSO) m |= 1 << (d - 1);
-  }
-  return m;
-}
-
-/** Quantos bits ligados — o algoritmo de Wegner, sem laço sobre 32 posições. */
-export function bitsEm(n) {
-  let conta = 0;
-  while (n) {
-    n &= n - 1;
-    conta++;
-  }
-  return conta;
-}
+const FAIXAS = faixasDe({ k: SORTEIO, j: SORTEIO, t: 11 });
 
 /**
- * As máscaras de um fechamento inteiro, calculadas uma vez.
+ * A tradução de posição para dezena, que aqui não traduz nada.
  *
- * Guardar num `Int32Array` e não num array comum importa: são dezenas de
- * milhares de entradas percorridas dez mil vezes numa simulação longa.
+ * O módulo geral recebe cartelas como **posições** dentro de uma lista de
+ * números escolhidos, porque no Construtor Exato as dezenas são escolhidas uma
+ * a uma. Na Lotinha as cartelas já vêm com as dezenas de verdade, então a
+ * tradução é a identidade — e passá-la explicitamente é mais honesto do que ter
+ * duas funções que fazem quase a mesma coisa.
  */
+const IDENTIDADE = Array.from({ length: 31 }, (_, i) => i + 1);
+
+export function mascaraDe(cartela) {
+  return mascaraGeral(cartela);
+}
+
+export function bitsEm(n) {
+  return bitsGeral(n);
+}
+
 export function mascarasDo(jogos) {
-  const saida = new Int32Array(jogos.length);
-  for (let i = 0; i < jogos.length; i++) saida[i] = mascaraDe(jogos[i]);
-  return saida;
+  return mascarasDe(jogos, IDENTIDADE);
 }
 
 /**
  * Lê as dezenas que a pessoa digitou.
  *
- * Aceita qualquer separador — espaço, vírgula, ponto e vírgula, quebra de linha
- * — porque copiar um resultado de outro lugar traz o separador de lá, e recusar
- * por causa disso seria implicância.
- *
- * Devolve `{ dezenas }` ou `{ erro }`. O erro é uma frase pronta: quem chama
- * mostra, não interpreta.
+ * Devolve `{ dezenas }` ou `{ erro }`. O módulo geral chama o campo de
+ * `numeros`, porque lá o universo não é necessariamente de loteria; aqui o
+ * nome antigo fica, para os pontos de chamada não mudarem por causa de uma
+ * palavra.
  */
 export function interpretarResultado(texto) {
-  const numeros = (String(texto ?? '').match(/\d+/g) ?? []).map(Number);
-
-  if (numeros.length === 0) {
-    return { erro: 'Digite as 15 dezenas do resultado.' };
-  }
-  if (numeros.length !== SORTEIO) {
-    return {
-      erro: `Um sorteio tem ${SORTEIO} dezenas, e você digitou ${numeros.length}.`,
-    };
-  }
-
-  const fora = numeros.filter((n) => n < 1 || n > UNIVERSO);
-  if (fora.length) {
-    return {
-      erro:
-        `As dezenas vão de 1 a ${UNIVERSO}, e ` +
-        `${[...new Set(fora)].join(', ')} está fora.`,
-    };
-  }
-
-  const repetidas = [...new Set(numeros.filter((n, i) => numeros.indexOf(n) !== i))];
-  if (repetidas.length) {
-    return {
-      erro: `Um sorteio não repete dezena, e ${repetidas.join(', ')} apareceu duas vezes.`,
-    };
-  }
-
-  return { dezenas: [...numeros].sort((a, b) => a - b) };
+  const lido = interpretarGeral(texto, {
+    universo: UNIVERSO,
+    sorteio: SORTEIO,
+    nome: 'dezena',
+    plural: 'dezenas',
+  });
+  return lido.erro ? lido : { dezenas: lido.numeros };
 }
 
-/**
- * Um sorteio ao acaso: 15 dezenas distintas entre 1 e 25.
- *
- * Embaralhamento de Fisher-Yates sobre as 25 e corte nas primeiras 15. É o
- * único jeito que dá a mesma probabilidade a toda combinação — sortear quinze
- * vezes e descartar repetidas dá o mesmo conjunto, mas com um laço que pode não
- * terminar; sortear "sem repor" pela ordem enviesa as primeiras posições.
- */
 export function sortearResultado(aleatorio = Math.random) {
-  const urna = Array.from({ length: UNIVERSO }, (_, i) => i + 1);
-  for (let i = urna.length - 1; i > 0; i--) {
-    const j = Math.floor(aleatorio() * (i + 1));
-    [urna[i], urna[j]] = [urna[j], urna[i]];
-  }
-  return urna.slice(0, SORTEIO).sort((a, b) => a - b);
+  return sortearDe(urnaDoUniverso(UNIVERSO), SORTEIO, aleatorio);
 }
 
 /**
  * Confere um fechamento contra um resultado.
  *
- * Devolve:
- *
- * - `porFaixa[a]` — quantas cartelas fizeram exatamente `a` acertos, para
- *   `a` de 0 a 15;
- * - `indices[a]` — quais cartelas, para as faixas de 11 a 15. Abaixo disso a
- *   lista teria dezenas de milhares de entradas e ninguém a olharia;
- * - `melhor` — a maior quantidade de acertos alcançada, ou `-1` sem cartelas;
- * - `premiadas` — quantas fizeram os 15, que é a única faixa que paga.
+ * Mantém o formato antigo — `porFaixa` indexado por acertos, e `premiadas`
+ * pronto — porque é o que a tela lê. O módulo geral devolve `contagem` com o
+ * mesmo conteúdo e um `porFaixa` de outra forma; converter aqui é uma linha, e
+ * evita mexer em dez pontos de pintura por causa de um nome.
  */
 export function conferir(jogos, resultado, mascaras = null) {
-  const alvo = mascaraDe(resultado);
   const ms = mascaras ?? mascarasDo(jogos);
-
-  const porFaixa = new Array(SORTEIO + 1).fill(0);
-  const indices = new Map();
-  for (let a = 11; a <= SORTEIO; a++) indices.set(a, []);
-
-  let melhor = -1;
-  for (let i = 0; i < ms.length; i++) {
-    const acertos = bitsEm(ms[i] & alvo);
-    porFaixa[acertos]++;
-    if (acertos > melhor) melhor = acertos;
-    if (acertos >= 11) indices.get(acertos).push(i);
-  }
-
+  const r = conferirGeral(ms, resultado, FAIXAS);
   return {
-    porFaixa,
-    indices,
-    melhor,
-    total: ms.length,
-    premiadas: porFaixa[SORTEIO],
-    resultado: [...resultado].sort((a, b) => a - b),
+    porFaixa: r.contagem,
+    indices: r.indices,
+    melhor: r.melhor,
+    total: r.total,
+    premiadas: r.contagem[SORTEIO],
+    resultado: r.resultado,
   };
 }
 
 /**
  * Muitos sorteios independentes, e o que se aprende com eles.
- *
- * Para cada faixa de 11 a 15 devolve: em quantos sorteios apareceu ao menos uma
- * cartela, a soma para tirar a média, e o maior e o menor número de cartelas
- * num mesmo sorteio.
- *
- * `aoProgresso` é chamado a cada `lote` sorteios com quantos já foram — é o que
- * permite mostrar andamento sem que quem chama precise saber do laço.
  *
  * **Isto é simulação, não previsão.** Cada sorteio é sorteado do zero, com a
  * mesma chance para toda combinação; o que sai daqui descreve o comportamento
@@ -182,44 +130,12 @@ export function simularVarios(
   { aleatorio = Math.random, aoProgresso = null, lote = 200, mascaras = null } = {}
 ) {
   const ms = mascaras ?? mascarasDo(jogos);
-  const faixas = [11, 12, 13, 14, 15];
-
-  const estatistica = new Map(
-    faixas.map((a) => [
-      a,
-      { acertos: a, sorteiosComAlguma: 0, soma: 0, maximo: 0, minimo: Infinity },
-    ])
-  );
-
-  for (let s = 0; s < quantos; s++) {
-    const alvo = mascaraDe(sortearResultado(aleatorio));
-
-    // Conta só as faixas que interessam, num vetor de seis posições — montar
-    // um objeto por sorteio custaria mais que a conferência inteira.
-    const conta = [0, 0, 0, 0, 0];
-    for (let i = 0; i < ms.length; i++) {
-      const acertos = bitsEm(ms[i] & alvo);
-      if (acertos >= 11) conta[acertos - 11]++;
-    }
-
-    for (let f = 0; f < faixas.length; f++) {
-      const e = estatistica.get(faixas[f]);
-      const n = conta[f];
-      e.soma += n;
-      if (n > 0) e.sorteiosComAlguma++;
-      if (n > e.maximo) e.maximo = n;
-      if (n < e.minimo) e.minimo = n;
-    }
-
-    if (aoProgresso && (s + 1) % lote === 0) aoProgresso(s + 1, quantos);
-  }
-
-  for (const e of estatistica.values()) {
-    if (e.minimo === Infinity) e.minimo = 0;
-    e.media = quantos > 0 ? e.soma / quantos : 0;
-    e.proporcao = quantos > 0 ? e.sorteiosComAlguma / quantos : 0;
-  }
-
-  if (aoProgresso) aoProgresso(quantos, quantos);
-  return { sorteios: quantos, cartelas: ms.length, faixas: [...estatistica.values()] };
+  return simularGeral(ms, quantos, {
+    urna: urnaDoUniverso(UNIVERSO),
+    sorteio: SORTEIO,
+    faixas: FAIXAS,
+    aleatorio,
+    aoProgresso,
+    lote,
+  });
 }

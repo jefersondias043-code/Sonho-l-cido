@@ -131,18 +131,27 @@ export function mascarasDe(cartelas, numeros) {
  * um resultado oficial por conter um número que a pessoa não marcou seria
  * recusar o caso mais comum de todos.
  *
+ * `nome` e `plural` existem porque a palavra muda com a tela: na Lotinha o que
+ * se digita são **dezenas**, e no Construtor Exato são **números**, porque ali
+ * o universo não é necessariamente de loteria. Sem isto, a única saída seria
+ * cada tela ter o seu analisador — que foi exatamente como as duas cópias
+ * divergiram da primeira vez.
+ *
  * Devolve `{ numeros }` ou `{ erro }`. O erro é uma frase pronta: quem chama
  * mostra, não interpreta.
  */
-export function interpretarResultado(texto, { universo, sorteio }) {
+export function interpretarResultado(
+  texto,
+  { universo, sorteio, nome = 'número', plural = 'números' } = {}
+) {
   const lidos = (String(texto ?? '').match(/\d+/g) ?? []).map(Number);
 
   if (lidos.length === 0) {
-    return { erro: `Digite os ${sorteio} números do resultado.` };
+    return { erro: `Digite ${sorteio === 1 ? 'o' : 'os'} ${sorteio} ${plural} do resultado.` };
   }
   if (lidos.length !== sorteio) {
     return {
-      erro: `Este sorteio tem ${sorteio} números, e você digitou ${lidos.length}.`,
+      erro: `Este sorteio tem ${sorteio} ${plural}, e você digitou ${lidos.length}.`,
     };
   }
 
@@ -150,7 +159,7 @@ export function interpretarResultado(texto, { universo, sorteio }) {
   if (fora.length) {
     return {
       erro:
-        `Os números vão de 1 a ${universo}, e ` +
+        `${plural[0].toUpperCase()}${plural.slice(1)} vão de 1 a ${universo}, e ` +
         `${[...new Set(fora)].join(', ')} está fora.`,
     };
   }
@@ -158,7 +167,7 @@ export function interpretarResultado(texto, { universo, sorteio }) {
   const repetidos = [...new Set(lidos.filter((n, i) => lidos.indexOf(n) !== i))];
   if (repetidos.length) {
     return {
-      erro: `Um sorteio não repete número, e ${repetidos.join(', ')} apareceu duas vezes.`,
+      erro: `Um sorteio não repete ${nome}, e ${repetidos.join(', ')} apareceu duas vezes.`,
     };
   }
 
