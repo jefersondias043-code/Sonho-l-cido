@@ -18,6 +18,13 @@
  */
 
 import {
+  combinacoes,
+  escapar,
+  maximoPremiadas,
+  milhares,
+  porcento,
+} from './comum.js';
+import {
   frase,
   folga,
   veredito,
@@ -149,15 +156,6 @@ let sorteio = 15;
 let garantia = 15;
 let premiadas = 1;
 
-function escapar(texto) {
-  return String(texto).replace(
-    /[&<>"']/g,
-    (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]
-  );
-}
-
-const milhares = (n) => Number(n).toLocaleString('pt-BR');
-
 /**
  * "1 cartela", "16 cartelas".
  *
@@ -183,29 +181,6 @@ function avisar(texto) {
 }
 
 /* ─────────── binomiais, para a tela contar sozinha ─────────── */
-
-function combinacoes(n, k) {
-  if (k < 0 || k > n) return 0;
-  let total = 1;
-  for (let i = 0; i < Math.min(k, n - k); i += 1) {
-    total = (total * (n - i)) / (i + 1);
-  }
-  return Math.round(total);
-}
-
-/**
- * Quantas cartelas distintas conseguem atender um mesmo sorteio.
- *
- * É o teto de cartelas premiadas: acima dele não há o que comprar, só repetir
- * cartela — que soma custo e prêmio na mesma proporção e não muda nada.
- */
-function maximoPremiadas(v, k, j, t) {
-  let total = 0;
-  for (let i = t; i <= Math.min(k, j); i += 1) {
-    if (k - i <= v - j) total += combinacoes(j, i) * combinacoes(v - j, k - i);
-  }
-  return Math.max(1, Math.min(total, 1000));
-}
 
 /* ─────────── a grade e os parâmetros ─────────── */
 
@@ -489,14 +464,6 @@ function pintarPiso(dados) {
         'cobertura simples, e esticá-la até aqui inventaria um piso. O que vale é a ' +
         'contagem e a cota de Turán no avesso, que troca cartela e sorteio pelos ' +
         'complementos deles e volta a ser um problema com teorema.</em>');
-}
-
-/** A cobertura como a pessoa lê: uma porcentagem com uma casa. */
-function porcento(fracao) {
-  return `${(fracao * 100).toLocaleString('pt-BR', {
-    minimumFractionDigits: 1,
-    maximumFractionDigits: 1,
-  })}%`;
 }
 
 /*

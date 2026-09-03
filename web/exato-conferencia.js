@@ -21,6 +21,7 @@
  * ligação de botão e o que fica guardado entre uma visita e outra.
  */
 
+import { doisDigitos, escapar, milhares } from './comum.js';
 import {
   faixasDe,
   mascarasDe,
@@ -60,23 +61,12 @@ let origemDoSorteio = 'universo';
 
 /* ─────────── utilidades de texto ─────────── */
 
-function escapar(texto) {
-  return String(texto).replace(
-    /[&<>"']/g,
-    (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]
-  );
-}
-
-const milhares = (n) => Number(n).toLocaleString('pt-BR');
-
 const reais = (n) =>
   Number(n).toLocaleString('pt-BR', {
     style: 'currency',
     currency: 'BRL',
     maximumFractionDigits: 2,
   });
-
-const doisDigitos = (n) => String(n).padStart(2, '0');
 
 /** Um decimal com vírgula, como o resto da tela. `toFixed` escreveria com ponto. */
 const decimal = (n, casas) =>
@@ -226,7 +216,18 @@ function pintarOrigem() {
 }
 
 /** Binomial em ponto flutuante: só serve para uma razão, e não para contar. */
-function combinacoes(n, k) {
+/*
+ * `C(n, k)` **sem arredondar**, e o nome é diferente de propósito.
+ *
+ * O `combinacoes` de `comum.js` devolve inteiro, que é o certo para contar
+ * cartelas. Aqui o valor só aparece dividido por outro, numa razão que vira
+ * probabilidade — arredondar os dois lados antes de dividir jogaria fora a
+ * precisão justamente onde ela importa.
+ *
+ * Chamar-se `combinacoes` como os outros era convite a alguém "unificar a
+ * duplicata" e trocar silenciosamente a conta.
+ */
+function razaoBinomial(n, k) {
   if (k < 0 || k > n) return 0;
   let total = 1;
   for (let i = 0; i < Math.min(k, n - k); i += 1) total = (total * (n - i)) / (i + 1);
@@ -249,8 +250,8 @@ function chanceDeCairDentro() {
   const v = fechamento.numeros.length;
   const j = fechamento.pedido.j;
   if (v >= universo || j > v) return null;
-  const total = combinacoes(universo, j);
-  return total > 0 ? combinacoes(v, j) / total : null;
+  const total = razaoBinomial(universo, j);
+  return total > 0 ? razaoBinomial(v, j) / total : null;
 }
 
 /** Quanto voltou por real gasto: porcentagem até dez vezes, múltiplo acima. */

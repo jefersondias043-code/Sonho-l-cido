@@ -11,6 +11,7 @@
  * ainda vale deixar isto trabalhando?
  */
 
+import { combinacoes, escapar, maximoPremiadas, milhares } from './comum.js';
 import { Escada, PROVADO, IMPOSSIVEL } from './escada.js';
 
 const $ = (id) => document.getElementById(id);
@@ -59,33 +60,6 @@ function montarGrade() {
 /** Os números marcados, em ordem. É o pool que vai ao motor. */
 function pool() {
   return [...escolhidos].sort((a, b) => a - b);
-}
-
-function combinacoes(n, k) {
-  if (k < 0 || k > n) return 0;
-  let total = 1;
-  for (let i = 0; i < Math.min(k, n - k); i += 1) {
-    total = (total * (n - i)) / (i + 1);
-  }
-  return Math.round(total);
-}
-
-/**
- * Quantas cartelas distintas conseguem atender um mesmo sorteio.
- *
- * É o teto de cartelas premiadas: acima dele não há o que comprar, só repetir
- * cartela — que soma custo e prêmio na mesma proporção e não muda nada.
- *
- * A conta existe também na Lotinha, presa a um sorteio de 15. Aqui o sorteio é
- * parâmetro, então ela precisa ser a versão geral; e mora neste arquivo, e não
- * num módulo comum, porque cada aplicativo da plataforma se sustenta sozinho.
- */
-function maximoPremiadas(v, k, j, t) {
-  let total = 0;
-  for (let i = t; i <= Math.min(k, j); i += 1) {
-    if (k - i <= v - j) total += combinacoes(j, i) * combinacoes(v - j, k - i);
-  }
-  return Math.max(1, Math.min(total, 1000));
 }
 
 /** A escala de cartelas premiadas: de 1 a 8, e sempre incluindo o teto. */
@@ -415,16 +389,6 @@ function pararEscada() {
 }
 
 /* ─────────── utilidades ─────────── */
-
-function milhares(n) {
-  return Number(n).toLocaleString('pt-BR');
-}
-
-function escapar(texto) {
-  return String(texto).replace(/[&<>"']/g, (c) =>
-    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]
-  );
-}
 
 function avisar(mensagem) {
   const destino = $('cs-aviso');

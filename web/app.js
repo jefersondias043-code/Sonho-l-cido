@@ -20,6 +20,7 @@
  * em `encerrar`; até lá o motor continua procurando.
  */
 
+import { escapar, milhares, porcento } from './comum.js';
 import * as historico from './historico.js';
 import * as lotinha from './lotinha.js';
 import * as checagem from './checagem.js';
@@ -239,8 +240,7 @@ let cronometro = null;
 
 /* ─────────── formatação ─────────── */
 
-const milhares = (n) => Math.round(n).toLocaleString('pt-BR');
-const porcento = (f) => `${(f * 100).toFixed(1).replace('.', ',')}%`;
+
 
 /**
  * Tempo decorrido, na precisão que faz sentido para a escala.
@@ -3172,13 +3172,6 @@ function cartaoDaSessao(sessao) {
                 aria-label="Excluir este trabalho">✕</button>
       </div>
     </div>`;
-}
-
-/** Impede que um valor gravado acabe interpretado como marcação. */
-function escapar(texto) {
-  return String(texto).replace(/[&<>"']/g, (c) =>
-    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]
-  );
 }
 
 function verSessao(id) {
