@@ -546,6 +546,16 @@ let avancoFoiPedido = false;
 function encerrar() {
   rodando = false;
   escalandoAgora = false;
+  /*
+   * O estágio 5 é repintado no fim, e não deixado como estava.
+   *
+   * Sem isto ele congelava no último quadro do motor: "Otimizando: procurando
+   * cobrir tudo com 12…" continuava na tela com o motor parado, o Parar já
+   * escondido e o resultado final logo abaixo dizendo outro número. Texto em
+   * gerúndio depois de tudo ter acabado é a tela afirmando algo que não está
+   * mais acontecendo.
+   */
+  if (estado?.escalada) pintarEscalada(estado.escalada, true);
   pararORelogioDaSituacao();
   pintarSituacao('parado — o que está na tela continua valendo', false);
   $('ex-parar').hidden = true;
@@ -766,7 +776,17 @@ function pintarEscalada(passo, terminou) {
     estado.desdeAMelhora = Date.now();
   }
 
-  $('ex-cartelas-agora').textContent = milhares(passo.cartelas);
+  /*
+   * Acabado, o quadro mostra o que a pessoa **tem**, e não o que o motor
+   * estava tentando.
+   *
+   * A tela chegava a exibir três números diferentes ao mesmo tempo: o quadro
+   * com o que o otimizador estava perseguindo, o texto abaixo com outro, e o
+   * cartão de resultado com um terceiro. A pergunta "quantas cartelas eu tenho,
+   * afinal?" não tinha resposta na página.
+   */
+  const naMao = terminou && estado.cartelas.length ? estado.cartelas.length : passo.cartelas;
+  $('ex-cartelas-agora').textContent = milhares(naMao);
   // O quadro mostra o **piso**, que é o número que não muda. O teto mudava de
   // significado ao entrar na construção avançada, e um quadro que troca de
   // sentido no meio do caminho engana mais do que informa.

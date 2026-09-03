@@ -1262,6 +1262,42 @@ try {
     (await texto('#ex-erro')).slice(0, 110)
   );
 
+  /* ─── acabado, a página conta uma história só ─── */
+
+  /*
+   * A tela chegava a exibir três números diferentes de cartelas ao mesmo tempo
+   * — o quadro do estágio 5 com o que o otimizador perseguia, o texto abaixo
+   * dele com outro, e o cartão de resultado com um terceiro — e o texto ficava
+   * no gerúndio ("Otimizando: procurando…") com o motor já parado.
+   */
+  // Garantia cheia num tamanho que fecha depressa: o que se mede aqui é a
+  // coerência da página no fim, não quanto o motor consegue.
+  await marcarNumeros(25, Array.from({ length: 11 }, (_, i) => i + 1));
+  await regras(8, 5, 5);
+  await pagina.click('#ex-resolver');
+  await esperarResultado();
+
+  const contagem = await pagina.evaluate(() => ({
+    noQuadro: Number(
+      (document.getElementById('ex-cartelas-agora').textContent || '').replace(/\D/g, '')
+    ),
+    noResultado: Number(
+      (document.getElementById('ex-encontrado').textContent || '').replace(/\D/g, '')
+    ),
+    texto: (document.getElementById('ex-construcao').textContent || '').trim(),
+  }));
+
+  marcar(
+    contagem.noQuadro === contagem.noResultado,
+    'acabado, o quadro e o resultado dizem o mesmo número de cartelas',
+    `quadro ${contagem.noQuadro}, resultado ${contagem.noResultado}`
+  );
+  marcar(
+    !/Otimizando|Procurando menor|Montando/i.test(contagem.texto),
+    'e o texto não fica no gerúndio depois de o motor parar',
+    contagem.texto.slice(0, 80)
+  );
+
   /* ─── a barra de situação responde de qualquer altura da página ─── */
 
   /*
