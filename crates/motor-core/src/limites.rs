@@ -17,6 +17,9 @@ use crate::referencia;
 pub enum MetodoLimite {
     /// Cota de Schönheim, válida para covering designs (`j == t`).
     Schonheim,
+    /// A cota de Turán no avesso — a única deste módulo que fala de garantia
+    /// parcial (`t < j`). Ver [`turan_dual`].
+    TuranDual,
     /// Contagem simples: total de alvos dividido pelo que cabe em uma cartela.
     Contagem,
     /// Valor exato de um sistema de Turán pequeno, elevado até a configuração
@@ -35,6 +38,7 @@ impl std::fmt::Display for MetodoLimite {
             MetodoLimite::Schonheim => write!(f, "cota de Schönheim"),
             MetodoLimite::TuranElevado => write!(f, "Turán exato, elevado"),
             MetodoLimite::Contagem => write!(f, "cota de contagem"),
+            MetodoLimite::TuranDual => write!(f, "cota de Turán no avesso"),
             MetodoLimite::Publicado => write!(f, "limite provado na literatura"),
         }
     }
@@ -242,15 +246,115 @@ pub fn turan_elevado(v: usize, k: usize, t: usize) -> u64 {
 ///
 /// Com mais de uma cartela premiada por alvo, a contagem entra multiplicada e
 /// as fontes do catálogo entram inteiras, sem multiplicar — ver o corpo.
+/// A cota de Turán no avesso — e a única deste módulo que fala de `t < j`.
+///
+/// ## A troca de ponto de vista
+///
+/// Com `B` uma cartela (`|B| = k`), `S` um alvo (`|S| = j`), e as linhas
+/// marcando complemento no pool de `v` elementos:
+///
+/// ```text
+/// |B ∩ S| = j − |S ∩ B'|   e   |S ∩ B'| = a − |B' ∩ S'|
+/// logo  |B ∩ S| ≥ t  ⟺  |B' ∩ S'| ≥ t + v − k − j
+/// ```
+///
+/// **É igualdade, não aproximação.** O problema `(v, k, j, t)` é o mesmo objeto
+/// que `(v, a, b, t')`, com `a = v−k`, `b = v−j`, `t' = t+v−k−j`. Com `t = j`
+/// sai `t' = a`, isto é `B' ⊆ S'`, que é a condição de Turán — a generalização
+/// contém o caso conhecido em vez de competir com ele.
+///
+/// ## De onde vem o número
+///
+/// A sombra de nível `t'` da família — a união dos `t'`-subconjuntos dos
+/// complementos escolhidos — precisa ser um sistema de Turán `T(v, b, t')`, e
+/// cada complemento contribui com no máximo `C(a, t')` membros:
+///
+/// ```text
+/// |F| · C(a, t') ≥ T(v, b, t') = C(v, v−t', j)
+/// ```
+///
+/// Schönheim vale integralmente do lado direito, porque está sendo aplicada
+/// **ao sistema de Turán dual**, onde alvo e interseção coincidem — e não
+/// esticada para fora do teorema dela, que é o que o comentário abaixo proíbe
+/// com razão.
+///
+/// ## Onde há folga
+///
+/// Complementos podem compartilhar membros da sombra; a sombra pode ser maior
+/// que um sistema de Turán mínimo; e nem todo sistema mínimo é sombra de poucos
+/// `a`-conjuntos. É cota inferior, e nada além disso.
+/// `C(n, k)` pela forma multiplicativa, saturando em vez de estourar.
+///
+/// Itera pelo menor dos dois lados e divide a cada passo, o que mantém o valor
+/// intermediário pequeno. O `u128` no meio é o que permite `C(31, 15)` sem
+/// perder exatidão.
+fn binomial(n: usize, k: usize) -> u64 {
+    if k > n {
+        return 0;
+    }
+    let k = k.min(n - k);
+    let mut total: u128 = 1;
+    for i in 0..k {
+        total = total * (n - i) as u128 / (i as u128 + 1);
+        if total > u64::MAX as u128 {
+            return u64::MAX;
+        }
+    }
+    total as u64
+}
+
+pub fn turan_dual(v: usize, k: usize, j: usize, t: usize, premiadas: u64) -> u64 {
+    if t > j || k > v || j > v {
+        return 0;
+    }
+    let a = v - k;
+    if a == 0 {
+        // Cartela igual ao pool: ela contém todo alvo, e uma basta por prêmio.
+        return premiadas.max(1);
+    }
+    let t_linha = (t + v).saturating_sub(k + j);
+    if t_linha == 0 {
+        // `t ≤ k + j − v`: duas partes desses tamanhos sempre se cruzam nisso,
+        // então a garantia é automática e o piso é uma cartela por prêmio.
+        return premiadas.max(1);
+    }
+    if t_linha > a {
+        // Nem o complemento inteiro alcança a garantia: pedido impossível.
+        return 0;
+    }
+    let dentro = schonheim(v, v - t_linha, j);
+    let por_bloco = binomial(a, t_linha).max(1);
+    let exigido = (dentro as u128) * (premiadas.max(1) as u128);
+    exigido.div_ceil(por_bloco as u128).min(u64::MAX as u128) as u64
+}
+
 pub fn limite_inferior(motor: &MotorCobertura) -> LimiteInferior {
     let viabilidade = motor.viabilidade();
     let premiadas = u64::from(motor.premiadas());
     let por_contagem =
         limite_por_contagem(viabilidade.total_alvos, viabilidade.alvos_por_cartela, premiadas);
 
+    // A cota do avesso entra sempre, e é a única que fala quando `t < j`.
+    //
+    // Sem ela, garantia parcial saía só com a contagem — verdadeira e frouxa. E
+    // como a escalada usa o piso de **teto**, um piso frouxo não é apenas um
+    // número feio: é o motor perseguindo um alvo que a matemática proíbe.
+    let dual = turan_dual(
+        motor.tamanho_pool(),
+        motor.tamanho_cartela(),
+        motor.alvo(),
+        motor.intersecao(),
+        premiadas,
+    );
+    let melhor_ate_aqui = if dual > por_contagem {
+        LimiteInferior { valor: dual, metodo: MetodoLimite::TuranDual }
+    } else {
+        LimiteInferior { valor: por_contagem, metodo: MetodoLimite::Contagem }
+    };
+
     let e_covering_design = motor.alvo() == motor.intersecao();
     if !e_covering_design {
-        return LimiteInferior { valor: por_contagem, metodo: MetodoLimite::Contagem };
+        return melhor_ate_aqui;
     }
 
     // Schönheim e a tabela publicada falam de cobertura **simples**: cada alvo
@@ -492,6 +596,88 @@ mod testes {
         )
         .unwrap();
         MotorCobertura::novo(&problema).unwrap()
+    }
+
+    /// **A invariante que importa.** Uma cota inferior que passe do tamanho de
+    /// uma solução que existe está errada, e não há discussão: a solução é a
+    /// testemunha.
+    ///
+    /// O teste constrói de verdade, com um guloso simples, e confere alvo por
+    /// alvo antes de comparar. É a única forma de a cota nova ser adotada sem
+    /// fé — e ela vira **teto** na escalada, então uma cota alta demais não é
+    /// um número feio: é o motor perseguindo o impossível para sempre.
+    #[test]
+    fn a_cota_do_avesso_nunca_passa_por_cima_de_uma_solucao_que_existe() {
+        let mut conferidos = 0;
+        for v in 5..=11 {
+            for k in 1..v {
+                for j in 1..=v {
+                    for t in 1..=k.min(j) {
+                        let dual = turan_dual(v, k, j, t, 1);
+                        if dual == 0 {
+                            continue;
+                        }
+
+                        // Guloso: enquanto houver alvo descoberto, acrescenta a
+                        // cartela que cobre mais. Sem finura nenhuma — o que
+                        // importa é que o resultado é uma solução de verdade.
+                        let alvos: Vec<u32> = mascaras_de_tamanho(v, j);
+                        let cartelas: Vec<u32> = mascaras_de_tamanho(v, k);
+                        let atende = |c: u32, a: u32| (c & a).count_ones() as usize >= t;
+
+                        let mut falta: Vec<u32> = alvos.clone();
+                        let mut usadas = 0usize;
+                        while !falta.is_empty() {
+                            let melhor = cartelas
+                                .iter()
+                                .copied()
+                                .max_by_key(|&c| falta.iter().filter(|&&a| atende(c, a)).count());
+                            let Some(c) = melhor else { break };
+                            let antes = falta.len();
+                            falta.retain(|&a| !atende(c, a));
+                            if falta.len() == antes {
+                                break;
+                            }
+                            usadas += 1;
+                        }
+                        if !falta.is_empty() {
+                            continue;
+                        }
+
+                        assert!(
+                            dual <= usadas as u64,
+                            "({v},{k},{j},{t}): a cota diz {dual} e existe solução de {usadas}"
+                        );
+                        conferidos += 1;
+                    }
+                }
+            }
+        }
+        assert!(conferidos > 200, "o teste precisa exercitar de verdade: {conferidos} casos");
+    }
+
+    /// Com garantia cheia a cota do avesso **é** Schönheim — não é cota nova
+    /// competindo com a antiga, é a antiga vista do lugar certo.
+    #[test]
+    fn com_garantia_cheia_o_avesso_reproduz_schonheim() {
+        for v in 3..=22 {
+            for k in 1..v {
+                for t in 1..=k {
+                    assert_eq!(
+                        turan_dual(v, k, t, t, 1),
+                        schonheim(v, k, t),
+                        "({v},{k},{t}): o avesso deveria reproduzir Schönheim"
+                    );
+                }
+            }
+        }
+    }
+
+    /// Todas as máscaras de `v` bits com exatamente `tamanho` bits acesos.
+    fn mascaras_de_tamanho(v: usize, tamanho: usize) -> Vec<u32> {
+        (0u32..(1u32 << v))
+            .filter(|m| m.count_ones() as usize == tamanho)
+            .collect()
     }
 
     #[test]
