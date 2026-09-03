@@ -803,6 +803,16 @@ function pintarEscalada(passo, terminou) {
         : 'piso — o teto da escalada';
   $('ex-cobertura').textContent = porcento(passo.melhor_cobertura);
   $('ex-construcao-barra').style.width = `${(passo.melhor_cobertura * 100).toFixed(1)}%`;
+  /*
+   * A barra deixa de parecer progresso quando ela deixou de ser progresso.
+   *
+   * Preenchida a 87% e azul, ela diz "faltam 13%" — e no piso esgotado não
+   * falta nada: nenhuma disposição daquele tamanho cobre tudo, e o motor já
+   * demonstrou isso em cinco mil rodadas. Quem lê espera, e espera, porque a
+   * barra prometeu. As listras dizem que ali é um limite alcançado, e a nota
+   * ao lado diz o que fazer a respeito.
+   */
+  $('ex-construcao-barra').classList.toggle('parada', Boolean(passo.piso_esgotado));
 
   if (passo.fase === 'otimizando') {
     $('ex-construcao').innerHTML =

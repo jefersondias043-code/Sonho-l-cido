@@ -491,6 +491,17 @@ try {
     undefined,
     { timeout: 60000 }
   );
+  // E a barra para de parecer progresso quando deixou de ser progresso: cheia
+  // e azul a 87% ela lê-se como "faltam 13%", e ali não falta nada — nenhuma
+  // disposição daquele tamanho cobre tudo, e o motor acabou de demonstrar isso.
+  marcar(
+    await pagina.evaluate(() =>
+      document.getElementById('ex-construcao-barra').classList.contains('parada')
+    ),
+    'e a barra deixa de parecer progresso, porque deixou de ser',
+    await pagina.evaluate(() => document.getElementById('ex-construcao-barra').style.width)
+  );
+
   marcar(
     /piso se esgotou/.test(await texto('#ex-comandos-nota')),
     'e quando o piso se esgota, a tela recomenda em vez de destrancar',

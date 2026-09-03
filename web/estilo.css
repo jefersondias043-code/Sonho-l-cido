@@ -1215,6 +1215,20 @@ details.cartao[open] > summary::after {
   transition: width 0.2s linear;
 }
 
+/* A barra que parou de andar, e que não vai andar mais.
+   Uma barra azul cheia a 87% lê-se como "faltam 13%" — e nesses casos não
+   falta nada: nenhuma disposição daquele tamanho cobre tudo, e o motor já
+   demonstrou isso. As listras dizem que aquilo é um limite alcançado, e não um
+   progresso em curso. */
+.barra-progresso > div.parada {
+  background: repeating-linear-gradient(
+    45deg,
+    var(--texto-fraco) 0 6px,
+    transparent 6px 12px
+  );
+  animation: none;
+}
+
 #chk-faixa-botoes { margin-bottom: 4px; }
 #chk-mais { margin-top: 10px; }
 
