@@ -209,6 +209,24 @@ pub fn elevar_do_interno(v: usize, k: usize, interno: u64) -> u64 {
 /// - `t' = 0` (isto é, `t ≤ k + j − v`): a garantia é automática, porque duas
 ///   partes de tamanho `k` e `j` num universo de `v` sempre se cruzam em pelo
 ///   menos `k + j − v`. Uma cartela qualquer basta.
+/// ## Por que `r` **não** multiplica esta cota
+///
+/// A tentação é escrever `|F| · C(a,t') ≥ r · T(v,b,t')`, e ela é falsa. Com
+/// `r` cartelas premiadas a exigência é que **`r` cartelas distintas** tenham
+/// interseção suficiente com cada alvo — não que existam `r` membros distintos
+/// da sombra dentro dele. Duas cartelas diferentes podem contribuir com o
+/// mesmo `t'`-subconjunto, e aí a sombra tem um membro só onde a exigência
+/// pedia duas cartelas.
+///
+/// O que continua valendo é a versão simples: quem atende cada alvo `r` vezes
+/// atende ao menos uma, logo a sombra continua sendo um sistema de Turán. A
+/// escala com `r` fica por conta da cota de contagem, onde ela é legítima, e o
+/// máximo das duas é o que a tela usa.
+///
+/// Cheguei a multiplicar, e o que pegou foi um teste que cobrava outro número.
+/// Uma cota inferior alta demais não é um número feio: ela vira **teto** na
+/// escalada, e o motor passa a perseguir o impossível.
+///
 /// - `t' = 1`: a exigência vira "nenhum `b`-conjunto escapa da união dos
 ///   complementos", ou seja `|U| ≥ j + 1`, e o mínimo é `⌈(j+1)/a⌉`. É o caso
 ///   mais comum do aplicativo, e a cota o acerta na mosca.
@@ -224,8 +242,10 @@ pub fn turan_dual(p: &Problema) -> u64 {
     }
     let t_linha = (p.t + p.v).saturating_sub(p.k + p.j);
     if t_linha == 0 {
-        // Garantia automática — o piso é uma cartela por prêmio exigido.
-        return p.r.max(1) as u64;
+        // Garantia automática: duas partes de tamanho `k` e `j` num universo de
+        // `v` sempre se cruzam em pelo menos `k + j − v`. Uma cartela basta, e
+        // quem escala com `r` é a contagem.
+        return 1;
     }
     if t_linha > a {
         // Pedido impossível: nem o complemento inteiro alcança a garantia.
@@ -233,10 +253,7 @@ pub fn turan_dual(p: &Problema) -> u64 {
     }
     let dentro = schonheim(p.v, p.v - t_linha, p.j);
     let por_bloco = binomial(a, t_linha).max(1);
-    // `r` cartelas premiadas exigem `r` sombras sobrepostas, e a contagem
-    // escala junto: cada alvo precisa ser alcançado `r` vezes.
-    let exigido = (dentro as u128) * (p.r.max(1) as u128);
-    exigido.div_ceil(por_bloco).min(u64::MAX as u128) as u64
+    (dentro as u128).div_ceil(por_bloco).min(u64::MAX as u128) as u64
 }
 
 /// O melhor limite que este aplicativo consegue afirmar **sem procurar nada**.

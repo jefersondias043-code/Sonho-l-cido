@@ -590,10 +590,15 @@ mod testes {
         assert!(erro.contains("não há"), "{erro}");
     }
 
-    /// "Saem 15 e garanto 15" ainda é um covering design — as cotas fortes
-    /// valem. "Saem 15 e garanto 13" não é, e ali só a contagem vale. A tela
-    /// precisa saber diferenciar os dois, porque a conclusão que ela pode tirar
-    /// muda junto.
+    /// "Saem 15 e garanto 15" ainda é um covering design — Schönheim vale.
+    /// "Saem 15 e garanto 13" não é, e ali Schönheim está proibida — mas a cota
+    /// de Turán no avesso vale, e é ela que dá o piso. A tela precisa saber
+    /// diferenciar os dois, porque a conclusão que ela pode tirar muda junto.
+    ///
+    /// Este teste pedia `"cota de contagem"` na garantia parcial, e passava —
+    /// era o comportamento antigo escrito como se fosse a regra. Quando a cota
+    /// do avesso entrou, ele reprovou o CI cinco vezes seguidas enquanto eu
+    /// rodava só os crates que achava ter tocado.
     #[test]
     fn a_ponte_distingue_o_covering_design_do_que_nao_e() {
         let total = limitar_com(r#"{"v":20,"k":17,"j":15,"t":15,"r":1}"#).unwrap();
@@ -601,15 +606,22 @@ mod testes {
         assert_eq!(total["fechado"], true, "j = t e r = 1 é covering design");
         assert!(total["valor"].as_u64().unwrap() >= 114, "{total}");
 
+        // Garantia parcial: fora do covering design, e com piso de verdade.
+        // `t' = 13 + 20 − 17 − 15 = 1`, e nesse degrau a cota é exata — a
+        // exigência vira "nenhum 5-conjunto escapa da união dos complementos",
+        // ou seja ⌈16/3⌉ = 6, que é o mínimo verdadeiro. A contagem dava 2.
         let parcial = limitar_com(r#"{"v":20,"k":17,"j":15,"t":13,"r":1}"#).unwrap();
         let parcial: serde_json::Value = serde_json::from_str(&parcial).unwrap();
         assert_eq!(parcial["fechado"], false, "garantia parcial não é covering design");
-        assert_eq!(parcial["origem"], "cota de contagem");
+        assert!(
+            parcial["origem"].as_str().unwrap().contains("avesso"),
+            "a cota do avesso é a que fala aqui: {parcial}"
+        );
+        assert_eq!(parcial["valor"], 6, "o piso verdadeiro deste caso");
 
         let premiadas = limitar_com(r#"{"v":20,"k":17,"j":15,"t":15,"r":2}"#).unwrap();
         let premiadas: serde_json::Value = serde_json::from_str(&premiadas).unwrap();
         assert_eq!(premiadas["fechado"], false, "duas premiadas saem do catálogo");
-        assert_eq!(premiadas["origem"], "cota de contagem");
         assert_eq!(premiadas["valor"], 228, "a contagem dobra com o pedido");
     }
 

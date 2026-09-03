@@ -278,6 +278,24 @@ pub fn turan_elevado(v: usize, k: usize, t: usize) -> u64 {
 /// esticada para fora do teorema dela, que é o que o comentário abaixo proíbe
 /// com razão.
 ///
+/// ## Por que `r` **não** multiplica esta cota
+///
+/// A tentação é escrever `|F| · C(a,t') ≥ r · T(v,b,t')`, e ela é falsa. Com
+/// `r` cartelas premiadas a exigência é que **`r` cartelas distintas** tenham
+/// interseção suficiente com cada alvo — não que existam `r` membros distintos
+/// da sombra dentro dele. Duas cartelas diferentes podem contribuir com o
+/// mesmo `t'`-subconjunto, e aí a sombra tem um membro só onde a exigência
+/// pedia duas cartelas.
+///
+/// O que continua valendo é a versão simples: quem atende cada alvo `r` vezes
+/// atende ao menos uma, logo a sombra continua sendo um sistema de Turán. A
+/// escala com `r` fica por conta da cota de contagem, onde ela é legítima, e o
+/// máximo das duas é o que a tela usa.
+///
+/// Cheguei a multiplicar, e o que pegou foi um teste que cobrava outro número.
+/// Uma cota inferior alta demais não é um número feio: ela vira **teto** na
+/// escalada, e o motor passa a perseguir o impossível.
+///
 /// ## Onde há folga
 ///
 /// Complementos podem compartilhar membros da sombra; a sombra pode ser maior
@@ -303,20 +321,20 @@ fn binomial(n: usize, k: usize) -> u64 {
     total as u64
 }
 
-pub fn turan_dual(v: usize, k: usize, j: usize, t: usize, premiadas: u64) -> u64 {
+pub fn turan_dual(v: usize, k: usize, j: usize, t: usize, _premiadas: u64) -> u64 {
     if t > j || k > v || j > v {
         return 0;
     }
     let a = v - k;
     if a == 0 {
-        // Cartela igual ao pool: ela contém todo alvo, e uma basta por prêmio.
-        return premiadas.max(1);
+        // Cartela igual ao pool: ela contém todo alvo, e uma basta.
+        return 1;
     }
     let t_linha = (t + v).saturating_sub(k + j);
     if t_linha == 0 {
         // `t ≤ k + j − v`: duas partes desses tamanhos sempre se cruzam nisso,
-        // então a garantia é automática e o piso é uma cartela por prêmio.
-        return premiadas.max(1);
+        // então a garantia é automática e uma cartela basta.
+        return 1;
     }
     if t_linha > a {
         // Nem o complemento inteiro alcança a garantia: pedido impossível.
@@ -324,8 +342,7 @@ pub fn turan_dual(v: usize, k: usize, j: usize, t: usize, premiadas: u64) -> u64
     }
     let dentro = schonheim(v, v - t_linha, j);
     let por_bloco = binomial(a, t_linha).max(1);
-    let exigido = (dentro as u128) * (premiadas.max(1) as u128);
-    exigido.div_ceil(por_bloco as u128).min(u64::MAX as u128) as u64
+    (dentro as u128).div_ceil(por_bloco as u128).min(u64::MAX as u128) as u64
 }
 
 pub fn limite_inferior(motor: &MotorCobertura) -> LimiteInferior {
@@ -654,6 +671,83 @@ mod testes {
             }
         }
         assert!(conferidos > 200, "o teste precisa exercitar de verdade: {conferidos} casos");
+    }
+
+    /// A mesma invariante, agora **com cartelas premiadas** — que era o buraco.
+    ///
+    /// A primeira versão desta cota multiplicava o resultado por `r`, e o passo
+    /// é falso: a exigência é que `r` cartelas **distintas** atendam cada alvo,
+    /// não que existam `r` membros distintos da sombra dentro dele. Duas
+    /// cartelas podem contribuir com o mesmo `t'`-subconjunto.
+    ///
+    /// O teste anterior nunca teria pego, porque só exercitava `r = 1`. Quem
+    /// pegou foi um teste de outro crate que cobrava um número — e só depois de
+    /// cinco reprovações seguidas no fluxo de publicação.
+    #[test]
+    fn a_cota_do_avesso_vale_tambem_com_cartelas_premiadas() {
+        let mut conferidos = 0;
+        for v in 5..=9 {
+            for k in 1..v {
+                for j in 1..=v {
+                    for t in 1..=k.min(j) {
+                        for r in 2..=3u64 {
+                            let dual = turan_dual(v, k, j, t, r);
+                            if dual == 0 {
+                                continue;
+                            }
+
+                            let alvos = mascaras_de_tamanho(v, j);
+                            let cartelas = mascaras_de_tamanho(v, k);
+                            let atende = |c: u32, a: u32| (c & a).count_ones() as usize >= t;
+
+                            // Guloso com multiplicidade: um alvo só sai da lista
+                            // quando `r` cartelas distintas já o atendem.
+                            let mut vezes: Vec<u64> = vec![0; alvos.len()];
+                            let mut usadas = 0usize;
+                            let mut escolhidas: Vec<u32> = Vec::new();
+                            loop {
+                                let falta: Vec<usize> = (0..alvos.len())
+                                    .filter(|&i| vezes[i] < r)
+                                    .collect();
+                                if falta.is_empty() {
+                                    break;
+                                }
+                                let melhor = cartelas
+                                    .iter()
+                                    .copied()
+                                    .filter(|c| !escolhidas.contains(c))
+                                    .max_by_key(|&c| {
+                                        falta.iter().filter(|&&i| atende(c, alvos[i])).count()
+                                    });
+                                let Some(c) = melhor else { break };
+                                let ganho =
+                                    falta.iter().filter(|&&i| atende(c, alvos[i])).count();
+                                if ganho == 0 {
+                                    break;
+                                }
+                                for i in 0..alvos.len() {
+                                    if atende(c, alvos[i]) {
+                                        vezes[i] += 1;
+                                    }
+                                }
+                                escolhidas.push(c);
+                                usadas += 1;
+                            }
+                            if vezes.iter().any(|&x| x < r) {
+                                continue;
+                            }
+
+                            assert!(
+                                dual <= usadas as u64,
+                                "({v},{k},{j},{t},r={r}): a cota diz {dual} e existe solução de {usadas}"
+                            );
+                            conferidos += 1;
+                        }
+                    }
+                }
+            }
+        }
+        assert!(conferidos > 100, "o teste precisa exercitar de verdade: {conferidos} casos");
     }
 
     /// Com garantia cheia a cota do avesso **é** Schönheim — não é cota nova
