@@ -1744,12 +1744,60 @@ function pintarCartelas() {
  * mínimo é problema aberto na matemática, é aí que ele tem trabalho de verdade.
  */
 
+/*
+ * O pedido, em cinco números — e são os mesmos cinco do Construtor Exato.
+ *
+ * `lotUniverso` e `lotSorteio` eram constantes da modalidade espalhadas pelo
+ * arquivo: a tela **era** a Lotinha, e por isso precisava de outras duas telas
+ * para tudo o que não fosse ela. Virando variáveis, o mesmo formulário descreve
+ * qualquer fechamento — e o que muda entre "a Lotinha" e "um problema qualquer"
+ * deixa de ser a ferramenta e passa a ser o valor de dois campos.
+ *
+ * Os padrões continuam sendo a Lotinha como ela é jogada, e é isso que mantém a
+ * porta da frente em três toques: quem não abre a dobra Avançado nunca vê estes
+ * dois números.
+ */
+let lotUniverso = lotinha.UNIVERSO;
+let lotSorteio = lotinha.SORTEIO;
 let lotPool = 18;
 let lotJogo = 17;
 /* Quantos acertos garantir, e quantas cartelas precisam ganhar. Os padrões são
    a Lotinha como ela é jogada: as 15, numa cartela. */
 let lotGarantia = lotinha.SORTEIO;
 let lotPremiadas = 1;
+
+/**
+ * O pedido que está na tela, no formato que todos os motores entendem.
+ *
+ * `v` é o pool — as dezenas marcadas —, e não o universo: o universo diz de
+ * onde os números saem, o pool diz quais você joga.
+ */
+function pedidoDaTela() {
+  return {
+    v: lotDezenas.size,
+    k: lotJogo,
+    j: lotSorteio,
+    t: lotGarantia,
+    r: lotPremiadas,
+    universo: lotUniverso,
+  };
+}
+
+/**
+ * Se o pedido é a Lotinha canônica — a única forma que o banco guarda.
+ *
+ * O banco tem 44 combinações de pool e tamanho de jogo, todas com universo de
+ * 25, sorteio de 15, garantia cheia e uma cartela premiada. Fora disso ele não
+ * responde, e quem responde é o motor.
+ */
+function ehLotinhaCanonica() {
+  return (
+    lotUniverso === lotinha.UNIVERSO &&
+    lotSorteio === lotinha.SORTEIO &&
+    lotGarantia === lotinha.SORTEIO &&
+    lotPremiadas === 1
+  );
+}
 let lotDezenas = new Set();
 let lotFechamento = null;
 /*
@@ -1868,7 +1916,7 @@ function lotMontar() {
   // Grade das 25 dezenas.
   const grade = $('lot-grade');
   grade.innerHTML = '';
-  for (let n = 1; n <= lotinha.UNIVERSO; n++) {
+  for (let n = 1; n <= lotUniverso; n++) {
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'numero';
@@ -1934,7 +1982,7 @@ function lotMontar() {
 function lotMontarExigencias() {
   const alvoGarantia = $('lot-garantia');
   alvoGarantia.innerHTML = '';
-  for (let g = lotinha.SORTEIO; g >= lotinha.MENOR_GARANTIA; g--) {
+  for (let g = lotSorteio; g >= lotinha.MENOR_GARANTIA; g--) {
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'opcao';
@@ -2392,7 +2440,7 @@ ligar('lot-limpar', 'click', () => {
 });
 
 ligar('lot-sortear', 'click', () => {
-  const todas = Array.from({ length: lotinha.UNIVERSO }, (_, i) => i + 1);
+  const todas = Array.from({ length: lotUniverso }, (_, i) => i + 1);
   for (let i = todas.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [todas[i], todas[j]] = [todas[j], todas[i]];
@@ -2403,6 +2451,38 @@ ligar('lot-sortear', 'click', () => {
 });
 
 ligar('lot-valor', 'input', lotPintarEconomia);
+
+/*
+ * Universo e sorteio: os dois que abrem a tela para além da Lotinha.
+ *
+ * Mexer neles invalida tudo o que estava calculado — o banco deixa de servir, o
+ * mínimo muda, a economia muda — então o caminho é o mesmo de trocar de pool:
+ * esquecer o fechamento e repintar do zero.
+ */
+for (const [campo, aplicar] of [
+  ['lot-universo', (n) => {
+    lotUniverso = n;
+    for (const d of [...lotDezenas]) if (d > lotUniverso) lotDezenas.delete(d);
+    if (lotSorteio > lotUniverso) lotSorteio = lotUniverso;
+  }],
+  ['lot-sorteio', (n) => {
+    lotSorteio = Math.min(n, lotUniverso);
+    if (lotGarantia > lotSorteio) lotGarantia = lotSorteio;
+  }],
+]) {
+  ligar(campo, 'input', () => {
+    const n = Number($(campo).value);
+    if (!Number.isInteger(n) || n < 1 || n > 31) return;
+    aplicar(n);
+    $('lot-sorteio').value = String(lotSorteio);
+    lotEsquecerFechamento();
+    // `lotMontar` refaz as opções de pool e a grade: as duas dependem do
+    // universo, e trocar o universo sem refazê-las deixaria botões de dezenas
+    // que já não existem.
+    lotMontar();
+    lotPintarTudo();
+  });
+}
 
 ligar('lot-iniciar', 'click', async () => {
   if (lotDezenas.size !== lotPool) return;
@@ -2418,10 +2498,9 @@ ligar('lot-iniciar', 'click', async () => {
     //
     // Só o caso padrão está lá: garantir as 15 numa cartela. As outras
     // exigências multiplicam o espaço muito além do que caberia num arquivo.
-    const doBanco =
-      lotGarantia === lotinha.SORTEIO && lotPremiadas === 1
-        ? await lotinha.fechamentoPara(lotPool, lotJogo, dezenas)
-        : null;
+    const doBanco = ehLotinhaCanonica()
+      ? await lotinha.fechamentoPara(lotPool, lotJogo, dezenas)
+      : null;
 
     // ── 2. a fórmula, quando o banco não tem ──
     //
@@ -2443,7 +2522,7 @@ ligar('lot-iniciar', 'click', async () => {
 
     if (pronto) {
       destino.textContent = `conferindo ${milhares(
-        lotinha.combinacoes(lotPool, lotinha.SORTEIO)
+        lotinha.combinacoes(lotPool, lotSorteio)
       )} sorteios, um a um…`;
 
       // Cede um quadro à tela antes da conferência, que pode levar segundos
@@ -2463,10 +2542,10 @@ ligar('lot-iniciar', 'click', async () => {
     lotPintarEconomia();
 
     lotConfiguracao = {
-      universo: lotinha.UNIVERSO,
+      universo: lotUniverso,
       pool: dezenas,
       cartela: lotJogo,
-      alvo: lotinha.SORTEIO,
+      alvo: lotSorteio,
       intersecao: lotGarantia,
       premiadas: lotPremiadas,
       orcamento: null,
@@ -2480,7 +2559,7 @@ ligar('lot-iniciar', 'click', async () => {
     // alvos — quase dois segundos por iteração. Ligar isso sem ser pedido, para
     // melhorar um fechamento que já está correto na tela, é gastar a bateria de
     // quem só queria os jogos.
-    if (pronto && lotinha.combinacoes(lotPool, lotinha.SORTEIO) > ALVOS_PESADOS) {
+    if (pronto && lotinha.combinacoes(lotPool, lotSorteio) > ALVOS_PESADOS) {
       $('lot-otimizar').hidden = false;
       $('lot-otimizar').textContent =
         `Procurar um fechamento menor que ${milhares(pronto.length)}`;

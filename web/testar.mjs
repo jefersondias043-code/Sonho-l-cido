@@ -1296,6 +1296,72 @@ try {
   );
 
 
+  /* ─── a tela deixou de ser a modalidade ─── */
+
+  /*
+   * Universo e sorteio eram constantes no código, e era isso que obrigava a
+   * existir uma segunda ferramenta para "não é loteria" e uma terceira para
+   * "saem outros tantos". Aqui se prova que o mesmo formulário descreve outro
+   * problema — e que, nos valores da Lotinha, nada mudou para quem só joga.
+   */
+  await pagina.click('.aba[data-painel="lotinha"]');
+  await pagina.waitForSelector('#lotinha.ativo');
+  await pagina.evaluate(() => {
+    document.getElementById('lot-avancado').open = true;
+  });
+
+  const padroes = await pagina.evaluate(() => ({
+    universo: document.getElementById('lot-universo')?.value,
+    sorteio: document.getElementById('lot-sorteio')?.value,
+  }));
+  marcar(
+    padroes.universo === '25' && padroes.sorteio === '15',
+    'os dois parâmetros novos nascem na Lotinha, para a porta da frente não mudar',
+    `universo ${padroes.universo}, saem ${padroes.sorteio}`
+  );
+
+  // Um universo menor: a grade tem de encolher junto, ou sobram botões de
+  // dezenas que já não existem.
+  await pagina.evaluate(() => {
+    const c = document.getElementById('lot-universo');
+    c.value = '12';
+    c.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await pagina.waitForTimeout(300);
+  const dozeNaGrade = await pagina.locator('#lot-grade .numero').count();
+  marcar(
+    dozeNaGrade === 12,
+    'trocar o universo refaz a grade, sem deixar dezenas fantasmas',
+    `${dozeNaGrade} botões`
+  );
+
+  // E o sorteio não pode passar do universo.
+  await pagina.evaluate(() => {
+    const c = document.getElementById('lot-sorteio');
+    c.value = '20';
+    c.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await pagina.waitForTimeout(300);
+  const sorteioLimitado = await pagina.evaluate(
+    () => document.getElementById('lot-sorteio').value
+  );
+  marcar(
+    Number(sorteioLimitado) <= 12,
+    'e o sorteio não passa do universo, porque não caberia',
+    `saem ${sorteioLimitado} de 12`
+  );
+
+  // De volta à modalidade, para não deixar a tela num estado estranho.
+  await pagina.evaluate(() => {
+    const u = document.getElementById('lot-universo');
+    u.value = '25';
+    u.dispatchEvent(new Event('input', { bubbles: true }));
+    const s = document.getElementById('lot-sorteio');
+    s.value = '15';
+    s.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await pagina.waitForTimeout(300);
+
   marcar(errosDeConsole.length === 0, 'nenhum erro no console', errosDeConsole.join(' | ').slice(0, 120));
 } finally {
   await navegador.close();

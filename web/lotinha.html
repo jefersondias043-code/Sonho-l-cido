@@ -145,6 +145,33 @@
 
   <details class="cartao" id="lot-avancado">
     <summary>Avançado</summary>
+
+    <!--
+      Os dois números que faziam falta para esta tela descrever qualquer
+      fechamento, e não só a Lotinha.
+
+      Eles estavam fixos no código — universo de 25, saem 15 — e era isso que
+      obrigava a existir uma segunda tela para "não é loteria" e uma terceira
+      para "saem outros tantos". Aqui embaixo, já preenchidos com a modalidade,
+      eles não atrapalham quem só quer jogar: a porta da frente continua sendo
+      marcar as dezenas e escolher o tamanho do jogo.
+    -->
+    <label class="campo linha">
+      <span>Universo <em>— de quantos números o sorteio sai</em></span>
+      <input type="number" id="lot-universo" min="2" max="31" step="1" value="25"
+        inputmode="numeric">
+    </label>
+    <label class="campo linha">
+      <span>Quantos saem <em>— o tamanho de cada sorteio</em></span>
+      <input type="number" id="lot-sorteio" min="1" max="31" step="1" value="15"
+        inputmode="numeric">
+    </label>
+    <p class="ajuda">
+      Com estes dois nos valores da Lotinha — 25 e 15 — o aplicativo usa os
+      fechamentos prontos que já vêm com ele, que são os melhores conhecidos.
+      Mudando qualquer um deles, o motor assume e monta do zero.
+    </p>
+
     <label class="campo linha">
       <span>Estágio 0 — construtor <em>— segundos procurando a menor construção</em></span>
       <!-- Vinte segundos foi o que separou, na medição, uma partida de 4.142
