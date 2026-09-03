@@ -87,7 +87,7 @@ console.log('Teste da atualização automática\n');
 const caminhoSw = join(RAIZ, 'sw.js');
 const caminhoEstilo = join(RAIZ, 'estilo.css');
 const caminhoLotinha = join(RAIZ, 'lotinha.js');
-const caminhoIndex = join(RAIZ, 'lotinha.html');
+const caminhoIndex = join(RAIZ, 'index.html');
 const swOriginal = await readFile(caminhoSw, 'utf8');
 const estiloOriginal = await readFile(caminhoEstilo, 'utf8');
 const lotinhaOriginal = await readFile(caminhoLotinha, 'utf8');
@@ -95,7 +95,7 @@ const indexOriginal = await readFile(caminhoIndex, 'utf8');
 
 try {
   // ─── 1. a versão que o usuário já tem ───
-  await pagina.goto(`http://localhost:${PORTA}${BASE}lotinha.html`, { waitUntil: 'networkidle' });
+  await pagina.goto(`http://localhost:${PORTA}${BASE}`, { waitUntil: 'networkidle' });
   await esperarControle(pagina);
   await pagina.waitForFunction(
     () => document.getElementById('versao').textContent.trim() !== '',
@@ -242,7 +242,7 @@ try {
   const pagina2 = await contexto.newPage();
   let cargas = 0;
   pagina2.on('load', () => (cargas += 1));
-  await pagina2.goto(`http://localhost:${PORTA}${BASE}lotinha.html`);
+  await pagina2.goto(`http://localhost:${PORTA}${BASE}`);
   await pagina2.waitForTimeout(3500);
 
   marcar(
@@ -270,11 +270,11 @@ try {
   //
   // O outro caminho para o mesmo estrago: `$('x').addEventListener(...)` com o
   // elemento ausente lança, e os registros seguintes somem junto. `#lot-simular`
-  // fica de fora do `lotinha.html` — ele não está na lista de peças exigidas, então
+  // fica de fora do `index.html` — ele não está na lista de peças exigidas, então
   // a auto-cura não entra e o que se mede é o isolamento.
   await writeFile(caminhoIndex, indexOriginal.replace('id="lot-simular"', 'id="lot-simular-ausente"'));
   const pagina3 = await contexto.newPage();
-  await pagina3.goto(`http://localhost:${PORTA}${BASE}lotinha.html`);
+  await pagina3.goto(`http://localhost:${PORTA}${BASE}`);
   await pagina3.waitForTimeout(2500);
 
   const vivos = await pagina3.evaluate(async () => {

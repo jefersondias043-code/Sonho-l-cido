@@ -30,7 +30,7 @@
  * Um fechamento **abaixo** do piso. Não é vitória: é prova de que o piso está
  * errado, porque piso é cota inferior e nada pode passar por baixo dela.
  *
- * O Construtor já sabia gritar isso (`escada.js`, o caso `IMPOSSIVEL`, com o
+ * O Construtor sabia gritar isso — o caso `IMPOSSIVEL` do antigo `escada.js`, com o
  * comentário que diz que "a tela precisa conseguir gritar"). O Exato não sabia:
  * o `<` caía dentro do `<=` e saía como mínimo provado — ou seja, justamente
  * aqui, onde a evidência de um defeito aparece, ele emitia a afirmação mais

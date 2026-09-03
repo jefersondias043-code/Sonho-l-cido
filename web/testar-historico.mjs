@@ -125,7 +125,7 @@ async function encerrar() {
 console.log('Teste do histórico de trabalhos\n');
 
 try {
-  await pagina.goto(`http://localhost:${PORTA}${BASE}lotinha.html`, { waitUntil: 'networkidle' });
+  await pagina.goto(`http://localhost:${PORTA}${BASE}`, { waitUntil: 'networkidle' });
   await pagina.evaluate(() => localStorage.clear());
   await pagina.reload({ waitUntil: 'networkidle' });
 

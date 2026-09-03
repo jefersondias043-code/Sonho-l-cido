@@ -72,7 +72,7 @@ pagina.on('pageerror', (e) => errosDeConsole.push(String(e)));
 console.log('Teste da ferramenta Checar fechamento\n');
 
 try {
-  await pagina.goto(`http://localhost:${PORTA}/lotinha.html`, { waitUntil: 'networkidle' });
+  await pagina.goto(`http://localhost:${PORTA}/`, { waitUntil: 'networkidle' });
 
   // ─── 1. a aritmética dos acertos, caso a caso ───
   //

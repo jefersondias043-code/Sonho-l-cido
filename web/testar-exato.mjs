@@ -125,23 +125,16 @@ async function esperarResultado(limite = 180000) {
 console.log('Teste do Construtor Exato\n');
 
 try {
-  // ─── 1. a plataforma ───
-  await pagina.goto(`http://localhost:${PORTA}/`, { waitUntil: 'networkidle' });
-  const aplicativos = await pagina.$$eval('.aplicativo h2', (h) =>
-    h.map((x) => x.textContent.trim())
-  );
-  marcar(
-    aplicativos.join(' · ') === 'Lotinha · Construtor · Construtor Exato',
-    'a página inicial oferece os três aplicativos',
-    aplicativos.join(' · ')
-  );
-
-  await pagina.click('.aplicativo[href="./exato.html"]');
-  // Esperar pelo botão não basta: ele vem no HTML, e a grade e as fileiras são
-  // montadas pelo módulo depois. Esperar por um número na grade é esperar pelo
-  // aplicativo de fato pronto.
+  // ─── 1. a tela abre ───
+  //
+  // Havia aqui um teste do lançador com os três aplicativos. O lançador saiu
+  // junto com eles: a raiz **é** a ferramenta agora, e não um menu para
+  // escolher entre três que faziam a mesma coisa.
+  await pagina.goto(`http://localhost:${PORTA}/exato.html`, { waitUntil: 'networkidle' });
+  // Esperar pelo HTML não basta: a grade e as fileiras são montadas pelo módulo
+  // depois. Esperar por um número na grade é esperar pelo aplicativo pronto.
   await pagina.waitForSelector('#ex-grade .numero', { timeout: 20000 });
-  marcar(true, 'e o Construtor Exato abre a partir dela');
+  marcar(true, 'o Construtor Exato abre');
 
   // ─── 2. os cinco parâmetros existem ───
   const fileiras = ['ex-jogo', 'ex-sorteio', 'ex-garantia', 'ex-premiadas'];

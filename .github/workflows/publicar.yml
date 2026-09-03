@@ -139,7 +139,6 @@ jobs:
           # mínimo publicado, onde a escada tem de parar exatamente no número
           # provado — e num caso em aberto, onde ela não pode declarar prova
           # nenhuma.
-          node web/testar-construtor.mjs
 
           # E o Construtor Exato, que faz a mesma afirmação sem apoio nenhum:
           # ele não consulta tabela de mínimos de ninguém. O que se cobra aqui é

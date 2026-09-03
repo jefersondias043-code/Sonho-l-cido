@@ -346,25 +346,22 @@ try {
     { timeout: 60000 }
   );
 
-  // ─── 8. o menu leva a algum lugar ───
+  // ─── 8. o atalho leva à ferramenta ───
   //
-  // Conferido pela peça, e não pelo `<h1>`: a Lotinha tem "Sonho Lúcido" no
-  // cabeçalho, igual à página inicial, e um teste que olhasse só para o título
-  // passaria com o atalho levando ao lugar errado.
-  for (const [alvo, nome, peca] of [
-    ['lotinha.html', 'Lotinha', '#lot-grade'],
-    ['construtor.html', 'Construtor', '#cs-aviso'],
-    ['exato.html', 'Construtor Exato', '#ex-aba-construtor'],
-  ]) {
-    await pagina.click(`.atalho[href="./${alvo}"]`);
-    await pagina.waitForURL(new RegExp(`${alvo.replace('.', '\\.')}$`), { timeout: 15000 });
-    const chegou = (await pagina.locator(peca).count()) > 0;
-    marcar(chegou, `o atalho para ${nome} abre o aplicativo certo`, `${alvo} · ${peca}`);
-    await pagina.goBack({ waitUntil: 'networkidle' });
-  }
+  // Conferido pela peça, e não pelo `<h1>`: o título é o mesmo em todas as
+  // páginas, e um teste que olhasse só para ele passaria com o atalho levando
+  // ao lugar errado.
+  await pagina.click('.atalho[href="./"]');
+  await pagina.waitForFunction(
+    () => !!document.getElementById('lot-grade'),
+    undefined,
+    { timeout: 15000 }
+  );
+  marcar(true, 'o atalho abre a ferramenta', '#lot-grade');
+  await pagina.goBack({ waitUntil: 'networkidle' });
 
   // ─── 9. e as outras telas levam até aqui ───
-  for (const de of ['index.html', 'lotinha.html', 'construtor.html', 'exato.html']) {
+  for (const de of ['index.html', 'exato.html']) {
     await pagina.goto(endereco(de === 'index.html' ? '' : de), { waitUntil: 'domcontentloaded' });
     const achou = await pagina.locator('a[href="./configuracoes.html"]').count();
     marcar(achou > 0, `${de} tem caminho para as Configurações`);
