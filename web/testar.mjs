@@ -1254,6 +1254,48 @@ try {
   );
 
 
+  // ─── dividir um fechamento cujas dezenas não são 1, 2, 3… ───
+  //
+  // O defeito que este teste existe para não deixar voltar: a configuração do
+  // fechamento carregado na porta da frente descrevia o pool como as
+  // **posições** `[1, 2, …, P]` em vez das dezenas marcadas. O motor de divisão
+  // traduz rótulo→índice e recusa com "o número N não está no pool", então
+  // dividir falhava sempre que a seleção não fosse exatamente {1…P}.
+  //
+  // Nenhum teste pegava porque todos carregavam as vinte primeiras dezenas —
+  // o único caso em que posição e dezena coincidem. Aqui elas não coincidem de
+  // propósito.
+  const ESPALHADAS = [2, 3, 5, 7, 11, 13, 17, 19, 22, 23, 24, 25, 1, 4, 6, 8, 9, 10, 12, 14];
+  await carregarFechamento(20, 17, ESPALHADAS);
+  await pagina.click('#aba-dividir');
+  await pagina.waitForSelector('#dividir.ativo', { timeout: 10000 });
+  await pagina.evaluate(() => {
+    const s = document.getElementById('div-partes');
+    s.value = '2';
+    s.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await pagina.click('#div-dividir');
+
+  const divisaoEspalhada = await pagina
+    .waitForSelector('#div-resumo-cartao:not([hidden])', { timeout: 30000 })
+    .then(() => true)
+    .catch(() => false);
+  marcar(
+    divisaoEspalhada,
+    'dividir funciona com dezenas que não são as vinte primeiras',
+    divisaoEspalhada ? '' : await pagina.locator('#div-aviso').innerText().catch(() => 'sem aviso')
+  );
+  const avisoDaDivisao = await pagina
+    .locator('#div-aviso')
+    .innerText()
+    .catch(() => '');
+  marcar(
+    !/não está no pool/.test(avisoDaDivisao),
+    'e o motor não recusa as dezenas, que era o defeito exato',
+    avisoDaDivisao ? avisoDaDivisao.slice(0, 70) : 'sem aviso'
+  );
+
+
   marcar(errosDeConsole.length === 0, 'nenhum erro no console', errosDeConsole.join(' | ').slice(0, 120));
 } finally {
   await navegador.close();

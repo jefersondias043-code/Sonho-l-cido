@@ -2407,7 +2407,7 @@ ligar('lot-valor', 'input', lotPintarEconomia);
 ligar('lot-iniciar', 'click', async () => {
   if (lotDezenas.size !== lotPool) return;
 
-  const dezenas = [...lotDezenas].sort((a, b) => a - b);
+  const dezenas = dezenasEscolhidas();
   const cartao = $('lot-resultado-cartao');
   const destino = $('lot-conferencia');
   cartao.hidden = false;
@@ -2648,7 +2648,7 @@ async function lotPintarConferencia(dezenas, jogos, origem = null, exaustivo = n
 
 ligar('lot-conferir', 'click', async () => {
   if (lotDezenas.size !== lotPool) return;
-  const dezenas = [...lotDezenas].sort((a, b) => a - b);
+  const dezenas = dezenasEscolhidas();
   const jogos = melhorCartelas;
 
   if (!jogos.length) {
@@ -3279,15 +3279,38 @@ let chkSimulando = false;
  * ela monta um motor de cobertura para medir o que cada bloco cobre, e para
  * isso tem de saber qual é o problema.
  */
-function configuracaoDaLotinha(pool, jogo) {
-  if (!pool || !jogo) return null;
+/*
+ * A configuração do fechamento carregado na porta da frente.
+ *
+ * Ela descrevia o pedido errado de três formas, e a Dividir pagava por todas:
+ *
+ * - **O pool eram posições, não dezenas.** `[1, 2, …, P]` em vez das dezenas
+ *   marcadas. O motor de divisão resolve rótulo→índice e recusa com "o número N
+ *   não está no pool", então dividir o fechamento da porta da frente falhava
+ *   sempre que a seleção não fosse exatamente {1…P} — que é o caso comum, já
+ *   que quem escolhe dezenas escolhe as suas.
+ * - **A garantia estava presa em 15.** Um fechamento montado para garantir 13
+ *   era medido contra a exigência de garantir 15: a divisão avaliava a
+ *   qualidade dos blocos contra um problema que não era o do usuário.
+ * - **As premiadas estavam presas em 1**, com o mesmo efeito.
+ *
+ * Agora ela lê o pedido que está na tela, como `lotConfiguracao` já fazia para
+ * o caminho do motor.
+ */
+/** As dezenas marcadas, em ordem. É o que o motor chama de "pool". */
+function dezenasEscolhidas() {
+  return [...lotDezenas].sort((a, b) => a - b);
+}
+
+function configuracaoDaLotinha() {
+  if (!lotDezenas.size || !lotJogo) return null;
   return {
-    universo: 25,
-    pool: Array.from({ length: pool }, (_, i) => i + 1),
-    cartela: jogo,
-    alvo: 15,
-    intersecao: 15,
-    premiadas: 1,
+    universo: lotinha.UNIVERSO,
+    pool: dezenasEscolhidas(),
+    cartela: lotJogo,
+    alvo: lotinha.SORTEIO,
+    intersecao: lotGarantia,
+    premiadas: lotPremiadas,
     semente: 1,
   };
 }
@@ -3316,7 +3339,7 @@ function chkFontes() {
       cartelas: lotFechamento,
       criadaEm: null,
       descricao: `${lotPool} dezenas · jogos de ${lotJogo}`,
-      configuracao: configuracaoDaLotinha(lotPool, lotJogo),
+      configuracao: configuracaoDaLotinha(),
     });
   }
 
