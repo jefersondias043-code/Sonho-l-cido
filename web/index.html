@@ -190,6 +190,22 @@
       veio no arquivo é o ponto de partida da otimização, e nenhuma construção
       nova entra por cima dele.
     </p>
+    <label class="campo">
+      <span>Esforço na determinação do mínimo <em>— quanto o motor varre antes
+        de admitir que não sabe mais</em></span>
+      <select id="ex-esforco">
+        <option value="1">rápido — segundos</option>
+        <option value="4" selected>normal</option>
+        <option value="20">fundo — pode levar minutos</option>
+      </select>
+    </label>
+    <p class="ajuda">
+      Só vale quando o motor exato entra — isto é, quando não há fechamento
+      pronto nem fórmula para o que você pediu. O piso é o que ele prova antes
+      de montar qualquer cartela, e varrer mais fundo às vezes o levanta, o que
+      encurta a escalada inteira.
+    </p>
+
     <label class="campo linha">
       <span>Semente <em>— a mesma semente repete a mesma busca</em></span>
       <input type="number" id="semente" value="1361508949" min="0" inputmode="numeric">
@@ -230,6 +246,157 @@
 
 <!-- ══════════════════ BUSCAR ══════════════════ -->
 <section id="buscar" class="painel" role="tabpanel" aria-labelledby="aba-buscar">
+
+  <!--
+    O motor exato, e o que ele demonstra pelo caminho.
+
+    Estes cartões eram uma tela separada — a terceira ferramenta. Eles estão
+    aqui porque respondem a uma pergunta que a busca estocástica não responde:
+    **qual é o mínimo**. O motor de Turán prova um piso, escala até ele e
+    verifica o que saiu; quando o piso é alcançado, não há o que procurar, e a
+    tela diz isso em vez de continuar girando.
+
+    Um problema usa um motor ou o outro, nunca os dois ao mesmo tempo, e é por
+    isso que os dois grupos se alternam em vez de conviverem.
+  -->
+  <div id="grupo-exato" hidden>
+    <div class="situacao" id="ex-situacao" role="status" aria-live="polite" hidden>
+      <span class="pulso" id="ex-pulso"></span>
+      <span id="ex-texto-situacao">preparando…</span>
+      <span class="relogio" id="ex-relogio">0,0 s</span>
+    </div>
+
+    <div class="referencia" id="ex-erro" hidden></div>
+
+    <!-- 3 · análise ─────────────────────────────────────────────────────── -->
+    <div class="cartao" id="ex-analise-cartao" hidden>
+      <h2>Análise matemática</h2>
+      <p class="ajuda">
+        O tamanho do problema, antes de qualquer busca. Estes números são
+        contagem pura e saem em microssegundos.
+      </p>
+      <div class="grade" id="ex-analise">
+        <div class="item"><span id="ex-alvos">—</span><small>sorteios a cobrir</small></div>
+        <div class="item"><span id="ex-blocos">—</span><small>cartelas possíveis</small></div>
+        <div class="item"><span id="ex-por-bloco">—</span><small>sorteios por cartela</small></div>
+        <div class="item"><span id="ex-por-alvo">—</span><small>cartelas por sorteio</small></div>
+      </div>
+    </div>
+
+    <!-- 4 · determinação do mínimo ──────────────────────────────────────── -->
+    <div class="cartao" id="ex-piso-cartao" hidden>
+      <h2>Determinação do mínimo</h2>
+      <p class="ajuda">
+        O piso é a afirmação forte: <b>nada menor que isto existe</b>. Ele não
+        depende de procurar nada. Tudo o que aparece aqui foi calculado neste
+        aparelho.
+      </p>
+      <div class="referencia" id="ex-piso">calculando…</div>
+    </div>
+
+    <!-- 5 · a escalada de cobertura ─────────────────────────────────────── -->
+    <div class="cartao" id="ex-construcao-cartao" hidden>
+      <h2>Escalada de cobertura</h2>
+      <p class="ajuda">
+        <b>Quando a garantia é cheia</b> — a cartela precisa conter o sorteio
+        inteiro —, o problema tem uma segunda forma: as dezenas que <em>faltam</em>
+        à cartela precisam caber entre as que faltam ao sorteio. Nessa forma ele é
+        muito menor, e é nela que o motor trabalha. Você recebe um fechamento
+        completo nos primeiros segundos e vê o número cair enquanto ele procura
+        melhor. Não há etapas a ligar: quem manda parar é você, quando o número já
+        servir.
+        <br><br>
+        Chegando ao piso, o mínimo está provado e a tela diz isso. Parando acima
+        dele, a tela mostra os dois números separados — o que você tem e o que
+        está provado — e nunca chama um de outro.
+        <br><br>
+        <b>Com garantia parcial</b>, ou mais de uma cartela premiada, aquela
+        segunda forma não existe e o caminho é outro: a escalada sobe até o piso e
+        reorganiza; se nem assim fechar, é porque o piso não basta, e aí aparecem
+        dois botões — a <b>construção avançada</b>, que volta a acrescentar
+        cartelas até a garantia ser cumprida, e a <b>otimização</b>, que tenta
+        apertar o número depois. Os dois são ligados por você, e passar do piso
+        troca um mínimo provado por uma solução que apenas funciona.
+      </p>
+
+      <div class="grade">
+        <div class="item"><span id="ex-cartelas-agora">—</span><small>cartelas agora</small></div>
+        <div class="item"><span id="ex-teto">—</span><small>piso — o teto da escalada</small></div>
+        <div class="item"><span id="ex-cobertura">—</span><small>cobertura</small></div>
+      </div>
+
+      <div class="barra-progresso"><div id="ex-construcao-barra" style="width:0%"></div></div>
+      <div class="referencia" id="ex-construcao" role="status" aria-live="polite">começando…</div>
+
+      <!-- A nota acompanha os comandos e muda com o que está acontecendo. Ela
+           existe porque o botão deixou de ser uma porta que abre na hora certa:
+           estando sempre disponível, é o texto que passa a dizer se agora é uma
+           boa hora — e quem decide continua sendo quem está olhando. -->
+      <p class="ajuda" id="ex-comandos-nota" hidden></p>
+
+      <button class="principal" id="ex-avancar" hidden>
+        Ativar construção avançada
+      </button>
+      <button class="principal" id="ex-otimizar" hidden>
+        Ativar otimização — reduzir o número de cartelas
+      </button>
+
+      <details class="dobra" id="ex-curva-cartao" hidden>
+        <summary>A curva: cartela por cartela, quanto foi coberto</summary>
+        <div class="referencia" id="ex-curva"></div>
+      </details>
+    </div>
+
+    <!-- 6 · verificação ─────────────────────────────────────────────────── -->
+    <div class="cartao" id="ex-verificacao-cartao" hidden>
+      <h2>Verificação</h2>
+      <p class="ajuda">
+        As cartelas voltam ao motor e são conferidas sorteio por sorteio. Não é a
+        palavra de quem construiu: é a varredura sobre o que está na tela.
+      </p>
+      <div class="referencia" id="ex-verificacao">verificando…</div>
+    </div>
+
+    <!-- 7 · o encontro ──────────────────────────────────────────────────── -->
+    <div class="cartao" id="ex-prova-cartao" hidden>
+      <h2>O encontro dos dois números</h2>
+      <p class="ajuda">
+        A pergunta que sobra: <b>existe alguma coisa menor?</b> Aqui ela costuma
+        já estar respondida, e é a escalada que a responde: o número de cartelas
+        nunca passa do piso, então fechar a cobertura é fechar exatamente no
+        mínimo — não sobra espaço onde procurar. Quando a cobertura não fecha, não
+        há mínimo a demonstrar, e é isso que aparece escrito, em vez de uma busca
+        que não teria o que achar.
+      </p>
+      <div class="barra-progresso"><div id="ex-prova-barra" style="width:0%"></div></div>
+      <div class="referencia" id="ex-prova">…</div>
+    </div>
+
+    <!-- 8 · resultado ───────────────────────────────────────────────────── -->
+    <div class="cartao" id="ex-resultado-cartao" hidden>
+      <h2>Resultado</h2>
+      <div class="referencia veredito" id="ex-frase" role="status" aria-live="polite"></div>
+      <div class="grade">
+        <div class="item"><span id="ex-encontrado">—</span><small>solução encontrada</small></div>
+        <div class="item"><span id="ex-provado">—</span><small>mínimo comprovado</small></div>
+        <div class="item"><span id="ex-folga">—</span><small>folga que resta</small></div>
+      </div>
+      <div class="controles">
+        <button class="secundario" id="ex-copiar">Copiar</button>
+        <button class="secundario" id="ex-compartilhar" hidden>Compartilhar</button>
+      </div>
+      <div class="referencia" id="ex-aviso-cartelas"></div>
+      <div id="ex-previa"></div>
+      <button class="secundario" id="ex-ver-cartelas" hidden>Ver todas as cartelas</button>
+      <div id="ex-cartelas" hidden></div>
+    </div>
+
+    <div class="controles">
+      <button class="secundario" id="ex-parar" hidden>Parar</button>
+    </div>
+  </div>
+
+  <div id="grupo-busca">
 
   <!-- Fica no topo e sempre visível: é aqui que o usuário confere, de relance,
        se o motor está trabalhando ou parado. -->
@@ -478,6 +645,7 @@
   <div class="cartao">
     <div class="rotulo">Recordes</div>
     <ol class="recordes" id="lista-recordes"></ol>
+  </div>
   </div>
 </section>
 

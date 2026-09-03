@@ -25,6 +25,7 @@ import * as historico from './historico.js';
 import * as lotinha from './lotinha.js';
 import * as checagem from './checagem.js';
 import * as sessao from './sessao.js';
+import * as exato from './exato-pipeline.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -2531,11 +2532,26 @@ ligar('lot-iniciar', 'click', async () => {
       await new Promise((r) => setTimeout(r, 0));
       lotPintarConferencia(dezenas, pronto, daFormula ? 'fórmula' : 'banco');
     } else {
+      /*
+       * O quarto caminho, e o único que **prova** alguma coisa.
+       *
+       * Banco e fórmula respondem instantaneamente onde têm resposta, e é por
+       * isso que vêm antes. Onde não têm, quem entra é o motor exato: ele mede
+       * o pedido, prova um piso pela cota de Turán no avesso, escala até esse
+       * piso sem nunca ultrapassá-lo e verifica sorteio a sorteio o que saiu.
+       * Fechando no piso, o mínimo está demonstrado e não há o que procurar —
+       * a resposta é a melhor que existe, não a melhor que se achou.
+       *
+       * Era a terceira ferramenta do aplicativo, e a pessoa tinha de saber
+       * de antemão que o caso dela precisava dela. Agora é o aplicativo que
+       * sabe.
+       */
       destino.innerHTML =
         `<b>Sem fechamento pronto para esta combinação.</b> <em>Nem o banco a ` +
-        `traz, nem há fórmula fechada que caiba aqui — o motor vai construir um ` +
-        `do zero, e isso leva alguns segundos. Quando houver solução na tela, o ` +
-        `botão abaixo confere sorteio a sorteio o que ele encontrou.</em>`;
+        `traz, nem há fórmula fechada que caiba aqui. O motor exato assume: ` +
+        `ele começa provando o mínimo e só então monta as cartelas.</em>`;
+      lotChamarOExato(dezenas);
+      return;
     }
     $('lot-conferir').hidden = false;
     $('lot-checar').hidden = !pronto;
@@ -2586,6 +2602,54 @@ ligar('lot-iniciar', 'click', async () => {
  * os de 24 e 25, onde ela custa 16 e 39 MB e segundos por iteração.
  */
 const ALVOS_PESADOS = 1_000_000;
+
+/**
+ * Manda o motor exato resolver o que está na tela.
+ *
+ * A ponte é curta de propósito: o módulo guarda o próprio estado e pinta os
+ * próprios cartões. O que ele não sabe é quando rodar, com que números, e o que
+ * fazer quando terminar — e é só isso que atravessa daqui.
+ */
+function lotChamarOExato(numeros) {
+  const pedido = pedidoDaTela();
+  if (!pedido) return;
+
+  mostrarPainel('buscar');
+  $('grupo-exato').hidden = false;
+  $('grupo-busca').hidden = true;
+
+  exato.resolver({
+    pedido: { v: pedido.v, k: pedido.k, j: pedido.j, t: pedido.t, r: pedido.r },
+    numeros,
+    universo: lotUniverso,
+    esforco: Number($('ex-esforco')?.value) || 4,
+  });
+}
+
+exato.ligar({
+  aoMudarOHistorico: () => pintarHistorico(),
+  /*
+   * O que o motor exato achou passa a ser o fechamento da ferramenta.
+   *
+   * Sem isto o resultado morreria dentro do painel dele: a conferência
+   * independente, o botão de checar e a conta do dinheiro leem
+   * `lotFechamento`, e continuariam falando do que havia antes. Quem produziu
+   * as cartelas não muda o que elas são.
+   */
+  aoTerminar: (cartelas) => {
+    if (!cartelas?.length) return;
+    lotFechamento = cartelas;
+    $('lot-checar').hidden = false;
+    $('lot-conferir').hidden = false;
+    lotPintarEconomia();
+    // A aba Checar já está pintada quando o motor exato termina; sem repintar,
+    // o fechamento que ele acabou de provar não apareceria no seletor até
+    // alguma outra coisa mexer nele.
+    chkPintarSeletor();
+  },
+});
+
+ligar('ex-parar', 'click', () => exato.pararTudo());
 
 ligar('lot-otimizar', 'click', () => {
   if (!lotConfiguracao || !lotFechamento) return;
@@ -2841,6 +2905,10 @@ function comecar(
 
   zerarCronometro();
   mostrarPainel('buscar');
+  // Um problema é de um motor ou do outro. Quem entra aqui é a busca
+  // estocástica, e os cartões do motor exato saem da frente.
+  $('grupo-exato').hidden = true;
+  $('grupo-busca').hidden = false;
   definirFase('carregando');
 
   garantirTrabalhador().postMessage({
@@ -3377,11 +3445,17 @@ function dezenasEscolhidas() {
 
 function configuracaoDaLotinha() {
   if (!lotDezenas.size || !lotJogo) return null;
+  // Universo e sorteio vêm da tela, e não da modalidade.
+  //
+  // Eram `lotinha.UNIVERSO` e `lotinha.SORTEIO` fixos — sobra de quando esta
+  // tela **era** a Lotinha. Com os dois abertos em Avançado, um fechamento
+  // montado para outro universo era conferido e dividido contra o de 25/15: a
+  // ferramenta media o fechamento certo com a régua errada.
   return {
-    universo: lotinha.UNIVERSO,
+    universo: lotUniverso,
     pool: dezenasEscolhidas(),
     cartela: lotJogo,
-    alvo: lotinha.SORTEIO,
+    alvo: lotSorteio,
     intersecao: lotGarantia,
     premiadas: lotPremiadas,
     semente: 1,
