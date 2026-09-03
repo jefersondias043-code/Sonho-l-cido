@@ -160,7 +160,14 @@ struct Instancia {
     cobre_de: Vec<Vec<u32>>,
 
     /// Quantos conjuntos escolhidos cobrem cada posição.
-    coberto: Vec<u8>,
+    /// Quantos conjuntos escolhidos cada alvo contém.
+    ///
+    /// `u16` e não `u8`: o teto estrutural é `C(b, a)`, que passa de 255 já em
+    /// `b = 13, a = 3`. Em release o estouro não entra em pânico — ele dá a
+    /// volta em silêncio e marca como coberto um alvo que não está, produzindo
+    /// uma solução inválida sem nenhum sinal. Num aplicativo cuja premissa é
+    /// nunca afirmar o que não provou, resposta errada calada é pior que morrer.
+    coberto: Vec<u16>,
     /// As posições descobertas, e onde cada uma está nesta lista.
     ///
     /// É o que permite sortear um alvo descoberto em tempo constante. Sem isto,
@@ -493,27 +500,58 @@ impl Orbital {
         let cheio = mascara_cheia(t.v);
         let girar = |c: u32| ((c << 1) | (c >> (t.v - 1))) & cheio;
 
-        let mut visto = vec![false; 1usize << t.v.min(25)];
+        // A guarda vem antes da alocação, e não depois.
+        //
+        // Estava invertido: para um pool acima de 25 dezenas o código alocava
+        // 2²⁵ bytes — 33 MB — e devolvia `None` na linha seguinte, sem usar um
+        // único deles. E mesmo no pool de 25, que é legítimo, são 33 MB de pico
+        // num celular; o teto de memória que este módulo se impõe inteiro é de
+        // 16 MB.
         if t.v > 25 {
             return None;
         }
+
+        // Um conjunto esparso no lugar da tabela densa de 2^v posições.
+        //
+        // A densa custava até 33 MB para guardar um bit por máscara possível,
+        // quando o que se visita são só os `C(v,a)` conjuntos de `a` dezenas —
+        // 1.140 num pool de 20. Trocar por um conjunto esparso guarda o que
+        // existe em vez do que caberia.
+        //
+        // A **ordem** de descoberta é preservada de propósito: o representante
+        // de cada órbita continua sendo o primeiro candidato encontrado na
+        // enumeração, e não a menor rotação. Parece detalhe e não é — a ordem
+        // das órbitas nos vetores é a ordem em que a busca as visita, e trocá-la
+        // muda a trajetória. Medido: com a rotação mínima como representante,
+        // pool 20 com jogos de 17 parava em 260 onde antes chegava a 240.
+        let mut visto: std::collections::HashSet<u32> =
+            std::collections::HashSet::with_capacity(candidatos.len());
 
         let mut cobre = Vec::new();
         let mut membros = Vec::new();
         let mut tamanho = Vec::new();
 
         for &c in &candidatos {
-            if visto[c as usize] {
+            if visto.contains(&c) {
                 continue;
             }
+            // Andar até voltar ao começo dá a órbita exata, com cada membro
+            // uma vez só — inclusive nas órbitas curtas, que existem: em Z₂₁ o
+            // conjunto {i, i+7, i+14} tem período 7 e não 21. Girar `v` vezes
+            // revisitaria os membros dessas, e era isso que a tabela de
+            // visitados estava resolvendo.
+            // Andar até voltar ao começo dá a órbita exata, com cada membro uma
+            // vez só — inclusive nas curtas, que existem: em Z₂₁ o conjunto
+            // {i, i+7, i+14} tem período 7 e não 21.
             let mut orbita = Vec::new();
             let mut atual = c;
-            for _ in 0..t.v {
-                if !visto[atual as usize] {
-                    visto[atual as usize] = true;
-                    orbita.push(atual);
-                }
+            loop {
+                orbita.push(atual);
+                visto.insert(atual);
                 atual = girar(atual);
+                if atual == c {
+                    break;
+                }
             }
 
             let mut posicoes = Vec::new();
@@ -775,7 +813,7 @@ impl Construtor {
             return None;
         }
         let (v, a, b) = (p.v, p.v - p.k, p.v - p.j);
-        Construtor::da_instancia(v, a, b, semente, true)
+        Construtor::da_instancia(v, a, b, semente, true, true)
     }
 
     /// Um construtor que só aperta, partindo de um fechamento já pronto.
@@ -788,10 +826,15 @@ impl Construtor {
         if cartelas.len() <= 1 {
             return None;
         }
-        let mut c = Construtor::novo(p, semente)?;
+        if p.t != p.j || p.r != 1 || p.k >= p.v || p.j > p.v {
+            return None;
+        }
+        let (v, a, b) = (p.v, p.v - p.k, p.v - p.j);
+        // Sem órbitas: este construtor só desce a partir do que já existe, e
+        // montá-las aqui era trabalho inteiro para o lixo.
+        let mut c = Construtor::da_instancia(v, a, b, semente, true, false)?;
         let cheio = mascara_cheia(p.v);
         c.melhor = cartelas.iter().map(|&b| cheio & !b).collect();
-        c.orbital = None;
         c.sub = None;
         c.etapa = Etapa::Descendo;
         c.descer_liberado = true;
@@ -804,9 +847,14 @@ impl Construtor {
         b: usize,
         semente: u64,
         pode_recursar: bool,
+        com_orbital: bool,
     ) -> Option<Construtor> {
         let t = Instancia::nova(v, a, b, semente)?;
-        let orbital = Orbital::novo(&t);
+        // `com_orbital` existe porque um dos dois caminhos que chegam aqui não
+        // quer órbita nenhuma: quem retoma para apertar um fechamento pronto
+        // pagava a construção de todas elas para descartá-las três linhas
+        // depois — e a construção percorre `C(v,a)` conjuntos.
+        let orbital = if com_orbital { Orbital::novo(&t) } else { None };
 
         // O menor número de conjuntos que a contagem permite, dividido pela
         // maior órbita: começar abaixo disso é gastar tentativa em degrau
@@ -1113,7 +1161,10 @@ impl Construtor {
                 self.etapa = Etapa::Recursando1;
                 return;
             }
-            match Construtor::da_instancia(v - 1, sa, sb, self.t.semente ^ 0xabcd, false) {
+            // As metades da recursão existem para entregar depressa, e a busca em
+            // órbitas delas custaria mais do que o pai inteiro — o código já
+            // pulava a etapa, mas montava a estrutura assim mesmo.
+            match Construtor::da_instancia(v - 1, sa, sb, self.t.semente ^ 0xabcd, false, false) {
                 Some(c) => self.sub = Some(Box::new(c)),
                 None => {
                     self.etapa = Etapa::Descendo;

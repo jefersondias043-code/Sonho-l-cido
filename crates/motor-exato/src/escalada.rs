@@ -509,7 +509,19 @@ impl Escalada {
         self.trabalho += candidatas.len().max(1) as u64;
         // Uma cartela que já está no conjunto não acrescenta cópia nenhuma, por
         // mais que a conta de ganho diga o contrário.
-        candidatas.retain(|b| !self.cartelas.contains(b));
+        //
+        // O `contains` de um `Vec` é varredura, e eram até 685 candidatas contra
+        // uma coleção que nos casos reais chega a dez mil cartelas: sete milhões
+        // de comparações por cartela acrescentada, e há dez mil a acrescentar.
+        //
+        // O conjunto é montado a cada chamada em vez de mantido ao lado da
+        // coleção, e é escolha e não preguiça: sete pontos diferentes mexem em
+        // `self.cartelas`, e um índice paralelo teria de ser mantido nos sete —
+        // dessincronizar seria um defeito silencioso pior do que a lentidão que
+        // ele conserta. Montar custa uma passada, e substitui o produto por uma
+        // soma.
+        let presentes: std::collections::HashSet<Bloco> = self.cartelas.iter().copied().collect();
+        candidatas.retain(|b| !presentes.contains(b));
         if candidatas.is_empty() {
             return None;
         }
@@ -716,7 +728,18 @@ impl Escalada {
         if self.turan.is_none() {
             self.turan = crate::turan::Construtor::novo(&self.p, self.semente);
         }
-        if self.turan.is_some() {
+        if let Some(construtor) = self.turan.as_mut() {
+            // A descida precisa ser liberada aqui como é em `tentar_o_turan`.
+            //
+            // Hoje este ramo é inalcançável — `Escalada::nova` sempre tenta o
+            // Turán, e o construtor é determinístico, então chegar aqui com
+            // `None` implica que lá também deu `None`. Mas é armadilha armada:
+            // no dia em que o construtor passar a recusar por memória ou por
+            // orçamento, este caminho monta um motor que entra em `Descendo`
+            // com a trava fechada, e `descer` volta sem fazer nada. O resultado
+            // seria fase "construindo", zero progresso e trabalho sendo cobrado
+            // para sempre — indistinguível de travamento.
+            construtor.liberar_a_descida();
             self.teto = self.teto_absoluto;
             self.sem_ganho = 0;
             self.fase = Fase::Construindo;
@@ -1069,16 +1092,45 @@ impl Escalada {
     /// estado que tenha envelhecido mal.
     pub fn retomar(estado: &EstadoSalvo) -> Result<Escalada, ErroDoProblema> {
         let p = Problema::novo(estado.v, estado.k, estado.j, estado.t, estado.r)?;
+
+        /*
+         * O que vem de fora é conferido antes de virar cartela.
+         *
+         * `EstadoSalvo` chega por serde a partir do armazenamento do navegador,
+         * e `Problema::novo` valida os cinco parâmetros — mas nada conferia que
+         * cada máscara tivesse exatamente `k` dezenas acesas, todas dentro do
+         * pool. Uma máscara curta faz `espalhar` indexar fora da lista de
+         * posições, e em WebAssembly o perfil de publicação usa
+         * `panic = "abort"`: o pânico vira armadilha, envenena a instância
+         * inteira, e o worker morre sem conseguir avisar.
+         *
+         * Chegar aqui exige um blob truncado ou adulterado, e não um uso
+         * normal. Mas isto é fronteira de desserialização, e fronteira dessas
+         * não deveria confiar: o custo de conferir é uma passada, e o custo de
+         * não conferir é a tela morta sem explicação.
+         *
+         * Máscaras inválidas são descartadas, não recusadas: o resto do
+         * trabalho guardado continua valendo, e a escalada reconstrói o que
+         * faltar. Recusar tudo por causa de uma cartela torta perderia trabalho
+         * bom por excesso de zelo.
+         */
+        let cheia = crate::problema::mascara_cheia(p.v);
+        let valida = |b: &Bloco| b & !cheia == 0 && b.count_ones() as usize == p.k;
+        let cartelas: Vec<Bloco> = estado.cartelas.iter().copied().filter(valida).collect();
+        let melhor: Vec<Bloco> = estado.melhor.iter().copied().filter(valida).collect();
+        let melhor_completo: Vec<Bloco> =
+            estado.melhor_completo.iter().copied().filter(valida).collect();
+
         let mut escalada = Escalada::nova(&p, estado.teto);
-        escalada.trocar_conjunto(estado.cartelas.clone());
-        escalada.melhor.clone_from(&estado.melhor);
-        escalada.melhor_entregues = escalada.entregues_de(&estado.melhor);
+        escalada.trocar_conjunto(cartelas);
+        escalada.melhor.clone_from(&melhor);
+        escalada.melhor_entregues = escalada.entregues_de(&melhor);
         escalada.trabalho = estado.trabalho;
         escalada.rodadas = estado.rodadas;
         escalada.sem_ganho = estado.sem_ganho;
         // Estado gravado antes do modo avançado: ali o teto era o piso.
         escalada.piso = if estado.piso > 0 { estado.piso } else { estado.teto };
-        escalada.melhor_completo.clone_from(&estado.melhor_completo);
+        escalada.melhor_completo.clone_from(&melhor_completo);
         escalada.semente = estado.semente;
         escalada.curva.clone_from(&estado.curva);
         escalada.passo_da_curva = estado.passo_da_curva.max(1);
@@ -1170,6 +1222,43 @@ mod testes {
 
         // E ele continua de onde o outro parou, sem jogar fora o que já valia.
         assert_eq!(retomada.melhor_completo().len(), escalada.melhor_completo().len());
+    }
+
+    /// **Retomar não confia no que vem do armazenamento.**
+    ///
+    /// `EstadoSalvo` chega por serde a partir do navegador. `Problema::novo`
+    /// confere os cinco parâmetros, mas nada conferia as máscaras: uma com
+    /// menos dezenas do que `k` faz `espalhar` indexar fora da lista de
+    /// posições, e com `panic = "abort"` em WebAssembly isso mata o worker sem
+    /// deixar mensagem — a tela fica "calculando" para sempre.
+    ///
+    /// O que se cobra aqui é o comportamento inteiro: não entrar em pânico,
+    /// descartar só o que está torto, e preservar o que estava bom.
+    #[test]
+    fn retomar_descarta_cartela_torta_sem_derrubar_o_motor() {
+        let p = Problema::novo(11, 8, 5, 5, 1).unwrap();
+        let mut escalada = Escalada::nova(&p, 13);
+        escalada.avancar(2_000_000);
+
+        let mut salvo = escalada.guardar();
+        let boas = salvo.cartelas.len();
+        assert!(boas > 0, "o teste precisa de cartelas boas para preservar");
+
+        // Três formas de torto, todas alcançáveis por um blob adulterado:
+        // poucas dezenas, dezenas demais, e dezena fora do pool.
+        salvo.cartelas.push(0b0000_0011);
+        salvo.cartelas.push(crate::problema::mascara_cheia(11));
+        salvo.cartelas.push(1 << 20);
+
+        let retomada = Escalada::retomar(&salvo).expect("retomar não pode entrar em pânico");
+        assert_eq!(
+            retomada.atual().len(),
+            boas,
+            "as tortas deviam ter sido descartadas, e só elas"
+        );
+        for b in retomada.atual() {
+            assert_eq!(b.count_ones() as usize, p.k);
+        }
     }
 
     /// Com garantia parcial, retomar preserva a fase gravada — ali a escalada
