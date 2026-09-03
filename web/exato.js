@@ -485,9 +485,10 @@ function pintarPiso(dados) {
     `<br><em>De onde vem: ${escapar(dados.origem)}.</em>` +
     (dados.fechado
       ? ''
-      : '<br><em>Com sorteio diferente da garantia, ou mais de uma cartela premiada, ' +
-        'só a cota de contagem vale — as outras falam de cobertura simples, e esticá-las ' +
-        'até aqui inventaria um piso.</em>');
+      : '<br><em>Com sorteio diferente da garantia, Schönheim não vale — ela fala de ' +
+        'cobertura simples, e esticá-la até aqui inventaria um piso. O que vale é a ' +
+        'contagem e a cota de Turán no avesso, que troca cartela e sorteio pelos ' +
+        'complementos deles e volta a ser um problema com teorema.</em>');
 }
 
 /** A cobertura como a pessoa lê: uma porcentagem com uma casa. */

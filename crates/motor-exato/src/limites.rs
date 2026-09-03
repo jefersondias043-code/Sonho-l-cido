@@ -39,6 +39,12 @@ pub enum Limite {
     /// naquele tamanho — e às vezes é ele próprio uma elevação de mais fundo. A
     /// frase diz `≥` nos dois casos, porque é `≥` o que se provou.
     Interno { v: usize, k: usize, t: usize, piso: u64 },
+    /// A cota de Turán no avesso — a única que fala de garantia parcial.
+    ///
+    /// `t' = t + v − k − j`. Vale para todo `t ≤ j`, e com `t = j` devolve
+    /// exatamente Schönheim: não é cota nova competindo com a antiga, é a
+    /// antiga vista do lugar certo.
+    TuranDual { t_linha: usize },
     /// O próprio problema resolvido ao certo, sem restrição.
     Exaustao,
 }
@@ -50,6 +56,9 @@ impl std::fmt::Display for Limite {
             Limite::Schonheim => write!(f, "cota de Schönheim"),
             Limite::Interno { v, k, t, piso } => {
                 write!(f, "C({v},{k},{t}) ≥ {piso}, provado aqui e elevado")
+            }
+            Limite::TuranDual { t_linha } => {
+                write!(f, "cota de Turán no avesso (t' = {t_linha})")
             }
             Limite::Exaustao => write!(f, "exaustão: nenhuma solução menor existe"),
         }
@@ -143,22 +152,125 @@ pub fn elevar_do_interno(v: usize, k: usize, interno: u64) -> u64 {
     ((v as u128 * interno as u128).div_ceil(k as u128)).min(u64::MAX as u128) as u64
 }
 
+/// A cota de Turán no avesso — e a única deste módulo que fala de `t < j`.
+///
+/// ## A troca de ponto de vista
+///
+/// Com `B` uma cartela (`|B| = k`), `S` um sorteio (`|S| = j`), e as linhas
+/// marcando complemento no pool de `v` dezenas:
+///
+/// ```text
+/// |B ∩ S| = |S| − |S ∩ B'| = j − |S ∩ B'|
+/// |S ∩ B'| = |B'| − |B' ∩ S'| = a − |B' ∩ S'|
+/// ```
+///
+/// Somando as duas, `|B ∩ S| = j − a + |B' ∩ S'|`, e portanto
+///
+/// ```text
+/// |B ∩ S| ≥ t   ⟺   |B' ∩ S'| ≥ t + v − k − j
+/// ```
+///
+/// **Isto é igualdade, não aproximação.** O problema `(v, k, j, t)` é o mesmo
+/// objeto que `(v, a, b, t')`, com `a = v−k`, `b = v−j`, `t' = t+v−k−j`. Com
+/// `t = j` sai `t' = a`, isto é `B' ⊆ S'`, que é a condição de Turán que o
+/// motor já usa: a generalização **contém** o caso de hoje.
+///
+/// ## De onde vem o número
+///
+/// Chame de sombra de nível `t'` a união dos `t'`-subconjuntos dos complementos
+/// escolhidos. A família resolve o problema **se e somente se** essa sombra é um
+/// sistema de Turán `T(v, b, t')` — todo `b`-conjunto contém algum membro dela.
+///
+/// (⇒) dado `S'`, algum `B'` tem `|B' ∩ S'| ≥ t'`, e qualquer `t'`-subconjunto
+/// dessa interseção está na sombra e dentro de `S'`.
+/// (⇐) dado `S'`, algum membro `T` da sombra cabe em `S'`; `T` veio de algum
+/// `B'`, logo `|B' ∩ S'| ≥ |T| = t'`.
+///
+/// Cada complemento contribui com no máximo `C(a, t')` membros, então
+///
+/// ```text
+/// |F| · C(a, t') ≥ T(v, b, t')
+/// ```
+///
+/// e pela dualidade Turán↔cobertura, `T(v, b, t') = C(v, v−t', j)`. Qualquer
+/// piso válido de cobertura serve do lado direito, e aqui Schönheim vale
+/// integralmente — porque ela está sendo aplicada **ao sistema de Turán dual**,
+/// onde sorteio e garantia coincidem, e não esticada para fora do teorema dela.
+///
+/// ## Onde há folga, dito com todas as letras
+///
+/// A desigualdade perde em três lugares: complementos podem compartilhar
+/// membros da sombra; a sombra pode ser estritamente maior que um sistema de
+/// Turán mínimo; e nem todo sistema de Turán mínimo é sombra de poucos
+/// `a`-conjuntos. É cota inferior, e nada além disso.
+///
+/// ## Dois casos em que ela é exata
+///
+/// - `t' = 0` (isto é, `t ≤ k + j − v`): a garantia é automática, porque duas
+///   partes de tamanho `k` e `j` num universo de `v` sempre se cruzam em pelo
+///   menos `k + j − v`. Uma cartela qualquer basta.
+/// - `t' = 1`: a exigência vira "nenhum `b`-conjunto escapa da união dos
+///   complementos", ou seja `|U| ≥ j + 1`, e o mínimo é `⌈(j+1)/a⌉`. É o caso
+///   mais comum do aplicativo, e a cota o acerta na mosca.
+pub fn turan_dual(p: &Problema) -> u64 {
+    // Fora de `t ≤ j` a troca de ponto de vista não descreve o problema.
+    if p.t > p.j || p.k > p.v || p.j > p.v {
+        return 0;
+    }
+    let a = p.v - p.k;
+    if a == 0 {
+        // Cartela igual ao pool: ela contém todo sorteio, e uma basta.
+        return 1;
+    }
+    let t_linha = (p.t + p.v).saturating_sub(p.k + p.j);
+    if t_linha == 0 {
+        // Garantia automática — o piso é uma cartela por prêmio exigido.
+        return p.r.max(1) as u64;
+    }
+    if t_linha > a {
+        // Pedido impossível: nem o complemento inteiro alcança a garantia.
+        return 0;
+    }
+    let dentro = schonheim(p.v, p.v - t_linha, p.j);
+    let por_bloco = binomial(a, t_linha).max(1);
+    // `r` cartelas premiadas exigem `r` sombras sobrepostas, e a contagem
+    // escala junto: cada alvo precisa ser alcançado `r` vezes.
+    let exigido = (dentro as u128) * (p.r.max(1) as u128);
+    exigido.div_ceil(por_bloco).min(u64::MAX as u128) as u64
+}
+
 /// O melhor limite que este aplicativo consegue afirmar **sem procurar nada**.
 ///
 /// Toma o máximo das cotas fechadas: cada uma diz "não existe solução menor que
 /// isto", e a afirmação mais forte continua verdadeira.
 pub fn sem_busca(p: &Problema) -> LimiteInferior {
     let conta = LimiteInferior { valor: contagem(p).max(1), origem: Limite::Contagem };
+
+    // A cota do avesso entra sempre, e é a única que fala quando `t < j`.
+    //
+    // Sem ela, garantia parcial saía só com a contagem — que é verdadeira e
+    // frouxa. Medido em pool 20, jogos de 17, saem 15, garante 13: a contagem
+    // dá 2 e o mínimo é 6. E como a escalada usa o piso de teto, o motor ficava
+    // perseguindo um alvo que a matemática proíbe, girando para sempre nos
+    // 87,1% que é exatamente o máximo que duas cartelas alcançam.
+    let dual = LimiteInferior {
+        valor: turan_dual(p),
+        origem: Limite::TuranDual {
+            t_linha: (p.t + p.v).saturating_sub(p.k + p.j),
+        },
+    };
+    let melhor = conta.melhor(dual);
+
     if !p.e_covering_design() {
         // Schönheim fala de cobertura **simples** com sorteio igual à garantia.
         // Fora disso ela não vale, e não há teorema que autorize multiplicá-la
         // por `r` nem esticá-la para `j ≠ t`. Usá-la assim inventaria um piso —
         // e um piso inventado faz o aplicativo dizer "mínimo provado" sobre o
         // que não é mínimo.
-        return conta;
+        return melhor;
     }
     let scho = LimiteInferior { valor: schonheim(p.v, p.k, p.t), origem: Limite::Schonheim };
-    conta.melhor(scho)
+    melhor.melhor(scho)
 }
 
 #[cfg(test)]
@@ -220,20 +332,83 @@ mod testes {
         }
     }
 
-    /// Fora do covering design puro, só a contagem vale — e a tela precisa
-    /// poder dizer isso com todas as letras.
+    /// Fora do covering design puro, Schönheim continua proibida — mas a cota
+    /// do avesso vale, e é ela que salva a garantia parcial.
+    ///
+    /// O nome antigo deste teste era "só a contagem vale", e ele passava por
+    /// acaso: nos dois casos que ele olhava, a contagem vencia mesmo. A
+    /// afirmação, porém, deixou de ser verdadeira no momento em que a cota de
+    /// Turán no avesso entrou — e um teste que afirma o que não vale mais é
+    /// armadilha para quem for mexer.
     #[test]
-    fn fora_do_covering_design_so_a_contagem_vale() {
+    fn fora_do_covering_design_schonheim_nao_vale_mas_a_do_avesso_sim() {
         let parcial = Problema::novo(10, 5, 4, 3, 1).unwrap();
         assert!(!parcial.e_covering_design());
-        assert_eq!(sem_busca(&parcial).origem, Limite::Contagem);
+        assert_ne!(sem_busca(&parcial).origem, Limite::Schonheim);
 
         let dobrado = Problema::novo(9, 3, 2, 2, 2).unwrap();
         assert!(!dobrado.e_covering_design());
-        assert_eq!(sem_busca(&dobrado).origem, Limite::Contagem);
+        assert_ne!(sem_busca(&dobrado).origem, Limite::Schonheim);
         // E a contagem dobra junto com o pedido.
         let simples = Problema::novo(9, 3, 2, 2, 1).unwrap();
         assert_eq!(contagem(&dobrado), 2 * contagem(&simples));
+    }
+
+    /// O caso que motivou tudo: pool 20, jogos de 17, saem 15, garante 13.
+    ///
+    /// A contagem dá 2, e 2 é verdade — nada com uma cartela cobre tudo. Mas o
+    /// mínimo é 6, e a escalada usa o piso de **teto**: com 2 no lugar de 6, o
+    /// motor perseguia um alvo que a matemática proíbe e girava para sempre nos
+    /// 87,1% que é exatamente o máximo alcançável com duas cartelas.
+    ///
+    /// Aqui `t' = 13 + 20 − 17 − 15 = 1`, e nesse degrau a cota é **exata**: a
+    /// exigência vira "nenhum 5-conjunto escapa da união dos complementos", ou
+    /// seja `|U| ≥ 16`, e com complementos de 3 dezenas isso são `⌈16/3⌉ = 6`.
+    #[test]
+    fn a_garantia_parcial_ganha_um_piso_que_nao_e_o_da_contagem() {
+        let p = Problema::novo(20, 17, 15, 13, 1).unwrap();
+        assert!(!p.e_covering_design());
+        assert_eq!(contagem(&p), 2, "a contagem é verdadeira, e frouxa");
+        assert_eq!(turan_dual(&p), 6, "o avesso acerta o mínimo verdadeiro");
+        assert_eq!(sem_busca(&p).valor, 6);
+    }
+
+    /// Com garantia cheia a cota do avesso **é** Schönheim — não é cota nova
+    /// competindo com a antiga, é a antiga vista do lugar certo.
+    ///
+    /// Com `t = j` sai `t' = v − k = a` e `C(a,a) = 1`, então
+    /// `schonheim(v, v−a, j) = schonheim(v, k, t)`. Se algum dia as duas
+    /// discordarem, uma delas quebrou.
+    #[test]
+    fn com_garantia_cheia_o_avesso_reproduz_schonheim() {
+        for v in 3..=22 {
+            for k in 1..v {
+                for t in 1..=k.min(v - 1) {
+                    let Ok(p) = Problema::novo(v, k, t, t, 1) else {
+                        continue;
+                    };
+                    assert_eq!(
+                        turan_dual(&p),
+                        schonheim(v, k, t),
+                        "({v},{k},{t}): o avesso deveria reproduzir Schönheim"
+                    );
+                }
+            }
+        }
+    }
+
+    /// A garantia que sai de graça não pode pedir mais de uma cartela.
+    ///
+    /// Duas partes de tamanho `k` e `j` num universo de `v` sempre se cruzam em
+    /// pelo menos `k + j − v`. Pedir exatamente isso é pedir o que já se tem, e
+    /// o piso tem de dizer uma cartela — não zero, que seria afirmar que nada é
+    /// preciso, e não mais, que seria inventar dificuldade.
+    #[test]
+    fn a_garantia_automatica_custa_uma_cartela() {
+        // 20 e 17 se cruzam em ao menos 12 dentro de um sorteio de 15.
+        let p = Problema::novo(20, 17, 15, 12, 1).unwrap();
+        assert_eq!(turan_dual(&p), 1);
+        assert_eq!(sem_busca(&p).valor, 1);
     }
 
     /// Dois mínimos que não dependem de tabela: o plano de Fano tem 7 blocos e

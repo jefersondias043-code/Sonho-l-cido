@@ -231,10 +231,14 @@ try {
     { timeout: 30000 }
   );
   const piso = await texto('#ex-piso');
+  // A frase mudou junto com a matemática: fora do covering design a cota de
+  // Turán no avesso passou a valer, e é ela que dá o piso deste caso. Cobrar a
+  // frase antiga seria cobrar que o aplicativo continue dizendo o que deixou de
+  // ser verdade.
   marcar(
-    /cota de contagem/.test(piso) && /só a cota de contagem vale/.test(piso),
-    'e avisa que fora do covering design só a contagem vale',
-    piso.slice(-90)
+    /Schönheim não vale/.test(piso) && /avesso/.test(piso),
+    'e explica qual cota vale fora do covering design, e por quê',
+    piso.slice(-110)
   );
 
   // ─── 5. o teto nunca é ultrapassado, e a cobertura é o que anda ───
@@ -248,12 +252,17 @@ try {
   );
   const leituras = new Set();
   let passouDoTeto = false;
+  // O botão de parar é conferido **dentro** do laço. Com o piso certo este caso
+  // fecha em décimos de segundo, e perguntar depois da corrida mediria o
+  // instante errado: mede-se que ele esteve à mão enquanto havia o que parar.
+  let pararEsteveAMao = false;
   for (let i = 0; i < 40; i += 1) {
     const agora = await texto('#ex-construcao');
     if (agora) leituras.add(agora);
     const cartelas = await numero('#ex-cartelas-agora');
     const teto = await numero('#ex-teto');
     if (teto > 0 && cartelas > teto) passouDoTeto = true;
+    if (!(await pagina.locator('#ex-parar').isHidden())) pararEsteveAMao = true;
     if (leituras.size >= 2) break;
     await pagina.waitForTimeout(120);
   }
@@ -267,13 +276,19 @@ try {
     'a escalada mostra progresso que muda enquanto ela trabalha',
     `${leituras.size} leituras distintas`
   );
-  marcar(
-    !(await pagina.locator('#ex-parar').isHidden()),
-    'e o botão de parar está à mão enquanto ela roda'
-  );
+  marcar(pararEsteveAMao, 'e o botão de parar esteve à mão enquanto ela rodava');
 
-  // Ela roda até mandarem parar: quem decide a hora é quem está olhando.
-  await pagina.click('#ex-parar');
+  // Ela roda até mandarem parar — quando ainda há o que parar.
+  //
+  // Este bloco foi escrito quando esta configuração não terminava nunca: o piso
+  // de garantia parcial vinha da cota de contagem, dava 2 onde o mínimo é 6, e
+  // como a escalada usa o piso de teto o motor perseguia um alvo que a
+  // matemática proíbe. Com a cota de Turán no avesso o piso ficou certo e o
+  // caso fecha em décimos de segundo, no mínimo provado. Insistir no clique
+  // seria cobrar que o aplicativo continue não terminando.
+  if (!(await pagina.locator('#ex-parar').isHidden())) {
+    await pagina.click('#ex-parar');
+  }
   await esperarResultado();
   const parcial = await texto('#ex-frase');
   const achou = await numero('#ex-encontrado');
