@@ -883,6 +883,69 @@ try {
     recusa.slice(0, 80)
   );
 
+  /* ─── a cota é da origem, não da chave ─── */
+
+  /*
+   * O defeito que este teste existe para não deixar voltar: os dois históricos
+   * disputam os mesmos megabytes do navegador, e cada um só sabia aparar as
+   * próprias sessões. Encher o do Construtor Exato fazia a Lotinha falhar ao
+   * salvar — e a Lotinha então descartava trabalho **dela**, o que não libera
+   * um único byte do que o outro ocupou.
+   *
+   * A primeira verificação é uma guarda contra teste vazio: se o enchimento
+   * não encheu nada, as seguintes passariam sem provar coisa alguma. Já
+   * escrevi esse teste errado uma vez nesta mesma sessão.
+   */
+  const atravessado = await pagina.evaluate(async () => {
+    const h = await import('./historico.js');
+    const e = await import('./exato-historico.js');
+    h.limpar();
+    e.limpar();
+
+    // `escalada` é o estado do motor, guardado como texto — é o campo que pesa,
+    // e é por ele que se enche a origem depressa.
+    const pesado = 'x'.repeat(400_000);
+    const pedido = { v: 23, k: 17, j: 15, t: 15, r: 1 };
+    const numeros = Array.from({ length: 23 }, (_, n) => n + 1);
+    for (let i = 0; i < 14; i += 1) {
+      e.criar({ pedido, numeros, escalada: pesado, cartelasContadas: 100 });
+    }
+    const noExato = e.quantidade();
+
+    const cedeu = [];
+    const pararDeOuvir = e.quandoFaltarEspaco((r) => cedeu.push(r));
+
+    // Agora a Lotinha tenta guardar o trabalho dela.
+    const config = { pool: numeros, cartela: 17 };
+    const gordas = Array.from({ length: 4000 }, () =>
+      Array.from({ length: 17 }, (_, i) => i + 1)
+    );
+    h.criar(config, { melhor: gordas });
+    const naLotinha = h.quantidade();
+    const sobrouNoExato = e.quantidade();
+
+    pararDeOuvir();
+    h.limpar();
+    e.limpar();
+    return { noExato, naLotinha, sobrouNoExato, cedeu: cedeu.length };
+  });
+
+  marcar(
+    atravessado.noExato >= 2,
+    'o cenário de fato enche o histórico do Exato antes de medir',
+    `${atravessado.noExato} sessões no Exato`
+  );
+  marcar(
+    atravessado.naLotinha >= 1,
+    'com o Exato ocupando a origem, a Lotinha ainda consegue guardar',
+    `${atravessado.naLotinha} na Lotinha`
+  );
+  marcar(
+    atravessado.sobrouNoExato === atravessado.noExato || atravessado.cedeu > 0,
+    'e se o Exato cedeu espaço, ele avisou — nada some em silêncio',
+    `${atravessado.noExato} → ${atravessado.sobrouNoExato}, ${atravessado.cedeu} aviso(s)`
+  );
+
   marcar(errosDeConsole.length === 0, 'nenhum erro no console', errosDeConsole.join(' | ').slice(0, 140));
 } finally {
   await navegador.close();

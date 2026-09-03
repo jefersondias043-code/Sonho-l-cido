@@ -35,6 +35,7 @@
  * isso a tela oferece exportar: o arquivo é o que sobrevive a qualquer coisa.
  */
 
+import * as armazem from './armazem.js';
 import { quando } from './historico.js';
 
 // Reexportado para a tela não precisar saber de dois módulos só por causa de
@@ -211,25 +212,30 @@ function avisarQueFaltouEspaco(descartadas, guardou) {
  * teto anunciado, e sair dele é o combinado.
  */
 function gravar(sessoes) {
-  const pedidas = Math.min(sessoes.length, LIMITE_DE_SESSOES);
-  let paraGravar = sessoes.slice(0, LIMITE_DE_SESSOES);
-
-  for (let tentativa = 0; tentativa < 5; tentativa += 1) {
-    try {
-      localStorage.setItem(CHAVE, JSON.stringify(paraGravar));
-      avisarQueFaltouEspaco(pedidas - paraGravar.length, true);
-      return true;
-    } catch {
-      if (paraGravar.length <= 1) {
-        avisarQueFaltouEspaco(pedidas, false);
-        return false;
-      }
-      paraGravar = paraGravar.slice(0, Math.max(1, Math.floor(paraGravar.length * 0.75)));
-    }
-  }
-  avisarQueFaltouEspaco(pedidas, false);
-  return false;
+  // A administração do espaço mora em `armazem.js`, e não aqui, porque a cota
+  // do navegador é **por origem**: os dois históricos disputam os mesmos
+  // megabytes. Aparar só as próprias sessões, como esta função fazia, não
+  // libera um único byte do que o outro ocupou.
+  const { gravou, descartadas } = armazem.gravar(CHAVE, sessoes);
+  avisarQueFaltouEspaco(descartadas, gravou);
+  return gravou;
 }
+
+/*
+ * Este depósito se apresenta ao armazém.
+ *
+ * `aoAparar` é o que faz a perda ser dita: quando o vizinho precisa de espaço e
+ * este histórico cede sessões, quem está olhando **esta** tela precisa saber
+ * que perdeu trabalho — mesmo que a gravação que causou a perda tenha sido da
+ * outra. Perder em silêncio para caber o trabalho alheio seria trocar um
+ * defeito por outro pior.
+ */
+armazem.registrar({
+  chave: CHAVE,
+  limite: LIMITE_DE_SESSOES,
+  ler,
+  aoAparar: (quantas) => avisarQueFaltouEspaco(quantas, true),
+});
 
 /**
  * O instante de agora, garantidamente depois do anterior.
