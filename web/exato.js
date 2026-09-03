@@ -213,6 +213,16 @@ function montarOpcoes(id, valores, atual, aoEscolher) {
     b.textContent = String(valor);
     b.dataset.valor = String(valor);
     b.setAttribute('aria-pressed', String(valor === atual));
+    // A fileira de premiadas salta de 8 para o teto matemático — 1 2 3 … 8 120
+    // — e o 120 aparecia sem rótulo nenhum. Quem tocasse nele montava um
+    // problema de outra ordem de grandeza sem saber que estava no extremo.
+    const ehOTeto = valores.length > 2 && valor === valores[valores.length - 1]
+      && valor > valores[valores.length - 2] + 1;
+    if (ehOTeto) {
+      b.classList.add('opcao-teto');
+      b.title = 'o máximo que este pedido permite';
+      b.setAttribute('aria-label', `${valor} — o máximo que este pedido permite`);
+    }
     b.addEventListener('click', () => {
       aoEscolher(valor);
       pintarParametros();
@@ -353,13 +363,37 @@ function pintarEscala(dados, doPedido) {
         ? 'leva algum tempo, e cabe folgado no aparelho'
         : 'é um fechamento grande — vai levar minutos e ocupar bastante espaço';
 
+  /*
+   * O que este número é depende do regime, e a frase dizia sempre a mesma coisa.
+   *
+   * "É o mínimo matemático, e também o teto: a escalada monta até aí e não
+   * passa" só vale com garantia cheia e uma cartela premiada, e nem sempre: em
+   * 10 dezenas com jogos de 5 o prometido eram 50 e saíram 60 no primeiro
+   * segundo. Com garantia parcial é pior — o número prometido era 7, o
+   * resultado foi 15, e "termina em segundos" precedia uma corrida que não
+   * terminava sozinha.
+   *
+   * Agora ela diz o que o número é: piso provado nos dois casos, teto só onde
+   * ele de fato é teto.
+   */
+  const garantiaCheia = pedidoDaTela().t === pedidoDaTela().j && pedidoDaTela().r === 1;
+
   $('ex-escala').innerHTML =
-    `<b>Este pedido custa ${emCartelas(quantas)}.</b> ` +
-    `<em>É o mínimo matemático, e também o teto: a escalada monta até aí e não ` +
-    `passa. ${porte}.</em>`;
+    `<b>${garantiaCheia ? 'Este pedido custa' : 'O piso deste pedido é'} ` +
+    `${emCartelas(quantas)}.</b> ` +
+    (garantiaCheia
+      ? `<em>Nada menor existe. ${maiuscula(porte)}.</em>`
+      : `<em>Nada menor existe, mas com garantia menor que o sorteio o resultado ` +
+        `costuma ficar acima disso, e a busca pode não ter fim automático — quem ` +
+        `manda parar é você. ${maiuscula(porte)}.</em>`);
 }
 
 /* ─────────── a sequência ─────────── */
+
+/** Primeira letra maiúscula. A frase anterior terminava em ponto. */
+function maiuscula(texto) {
+  return texto.charAt(0).toUpperCase() + texto.slice(1);
+}
 
 function esconderTudo() {
   for (const id of [

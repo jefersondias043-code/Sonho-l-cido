@@ -287,6 +287,13 @@ main { padding: 8px 16px 0; }
   background: #24325c;
 }
 
+/* O último degrau de uma fileira que salta — em "cartelas premiadas" a escala
+   vai 1 2 3 … 8 e depois pula direto para o teto matemático. Sem marca, o
+   número do extremo parecia mais um da sequência. */
+.opcao-teto {
+  border-style: dashed;
+}
+
 /* ─────────── botões ─────────── */
 
 .principal, .secundario {

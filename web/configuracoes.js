@@ -472,10 +472,25 @@ async function apagarTudo() {
   const botao = $('cfg-reset');
   const resposta = $('cfg-reset-resultado');
 
+  /*
+   * A confirmação diz o número, e não só a categoria.
+   *
+   * "Os fechamentos guardados serão apagados" é abstrato o bastante para não
+   * pesar. "Vai apagar 7 fechamentos" é o mesmo fato com a consequência à
+   * vista — e a tela já tinha calculado esse número, logo acima, para o resumo
+   * "Será apagado".
+   */
+  const quantos = historico.listar().length + exatoHistorico.listar().length;
+  const oQueSePerde =
+    quantos === 0
+      ? 'Não há fechamento guardado. '
+      : `Vai apagar ${quantos === 1 ? '1 fechamento' : `${quantos} fechamentos`} `
+        + 'e os ajustes deste aparelho. ';
+
   const confirmou = window.confirm(
     'Apagar tudo e recomeçar?\n\n'
-      + 'Os fechamentos guardados nos históricos, os ajustes e o aplicativo '
-      + 'guardado para uso sem internet serão apagados deste aparelho.\n\n'
+      + oQueSePerde
+      + 'O aplicativo guardado para uso sem internet sai junto.\n\n'
       + 'Não dá para desfazer, e só o que você exportou para arquivo sobrevive.'
   );
   if (!confirmou) return;
