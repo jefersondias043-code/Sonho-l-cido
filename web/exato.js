@@ -284,7 +284,13 @@ function pintarParametrosSem() {
   const botao = $('ex-resolver');
   const falta = jogo > v || v === 0;
   botao.disabled = falta || rodando;
-  botao.textContent = falta ? 'Marque ao menos o tamanho do jogo' : 'Resolver';
+  // Com o motor rodando o rótulo é dele, não desta função: repor "Resolver"
+  // aqui desfaria o "Procurando…" no primeiro repintar.
+  botao.textContent = rodando
+    ? 'Procurando…'
+    : falta
+      ? 'Marque ao menos o tamanho do jogo'
+      : 'Resolver';
 }
 
 function trocarUniverso() {
@@ -387,6 +393,9 @@ function comecar(estadoGuardado = null, sessao = null) {
 
   etapa += 1;
   rodando = true;
+  // Corrida nova, crédito zerado: a bandeira da construção avançada não pode
+  // atravessar de um pedido para o outro.
+  avancoFoiPedido = false;
   pedido = { v: lista.length, k: jogo, j: sorteio, t: garantia, r: premiadas };
   esforco = Number($('ex-esforco').value) || 1;
   estado = {
@@ -424,6 +433,22 @@ function comecar(estadoGuardado = null, sessao = null) {
   estado.guardado = estadoGuardado;
   $('ex-continuar').hidden = true;
   $('ex-retomar-aviso').hidden = true;
+
+  /*
+   * Levar a pessoa até onde o trabalho aparece.
+   *
+   * Medido: numa tela de iPhone, depois de tocar em Resolver o `scrollY` não
+   * mudava um pixel, o botão continuava escrito "Resolver" — só um pouco mais
+   * apagado — e o progresso nascia mil pixels abaixo da dobra. A ação mais
+   * importante do aplicativo não mudava nada que a pessoa conseguisse ver, e o
+   * primeiro instinto de quem não vê resposta é tocar de novo.
+   *
+   * O rótulo muda junto, porque um botão que continua dizendo "Resolver"
+   * enquanto resolve não informa nada.
+   */
+  $('ex-resolver').textContent = 'Procurando…';
+  $('ex-analise-cartao').scrollIntoView({ block: 'start', behavior: 'smooth' });
+
   trabalhador.postMessage({ tipo: 'retomar' });
   enviar({ tipo: 'analisar' });
 }
@@ -431,6 +456,14 @@ function comecar(estadoGuardado = null, sessao = null) {
 function enviar(mensagem) {
   trabalhador.postMessage({ ...mensagem, pedido: JSON.stringify(pedido), etapa });
 }
+
+/*
+ * Se a construção avançada foi ligada à mão nesta corrida.
+ *
+ * Existe só para a tela não creditar a um botão o que o motor fez sozinho: com
+ * garantia cheia o botão nem aparece, e mesmo assim o resultado passa do piso.
+ */
+let avancoFoiPedido = false;
 
 function encerrar() {
   rodando = false;
@@ -567,6 +600,21 @@ function pintarOsComandos(passo, terminou) {
  * mais útil do que esconder o botão — quem lê decide, e quem não lê pelo menos
  * não fica preso.
  */
+/**
+ * Se a cobertura parou de subir tempo suficiente para mudar o conselho.
+ *
+ * Oito segundos: curto o bastante para não deixar alguém esperando por engano,
+ * longo o bastante para não chamar de "parada" uma escalada que só está entre
+ * duas melhoras. O motor entrega estado várias vezes por segundo.
+ */
+const PARADA_PARA_AVISAR = 8000;
+
+function paradoHaMuito(passo) {
+  if (passo?.piso_esgotado) return true;
+  if (!estado.desdeAMelhora) return false;
+  return Date.now() - estado.desdeAMelhora > PARADA_PARA_AVISAR;
+}
+
 function pintarANotaDosComandos(passo, podeAvancar, podeOtimizar) {
   const nota = $('ex-comandos-nota');
   if (!nota) return;
@@ -581,8 +629,22 @@ function pintarANotaDosComandos(passo, podeAvancar, podeOtimizar) {
           'avançada é o caminho para os 100%.'
         : `A escalada ainda está tentando fechar com ${emCartelas(passo.piso)}, que é ` +
           'o piso provado. A construção avançada passa desse número e vai até a ' +
-          'garantia ser cumprida — o resultado deixa de ser o mínimo. Enquanto a ' +
-          'cobertura sobe, vale esperar.'
+          'garantia ser cumprida — o resultado deixa de ser o mínimo. ' +
+          /*
+           * O conselho tem de olhar o que está acontecendo, e não a fase.
+           *
+           * A frase dizia sempre "enquanto a cobertura sobe, vale esperar" —
+           * inclusive com a cobertura parada há minutos, que é justamente
+           * quando ela aparece. Medido no caminho de garantia parcial: os três
+           * números grandes ficavam idênticos do primeiro frame ao
+           * quadragésimo quinto segundo, com esta frase embaixo mandando
+           * esperar. O conselho estava invertido em relação ao que a própria
+           * tela mostrava.
+           */
+          (paradoHaMuito(passo)
+            ? '<b>A cobertura não sobe há um tempo</b> — este número não vai ' +
+              'fechar sozinho.'
+            : 'Enquanto a cobertura sobe, vale esperar.')
     );
   }
 
@@ -669,8 +731,21 @@ function pintarEscalada(passo, terminou) {
     // aconteceu.
     $('ex-construcao').innerHTML = passo.alem_do_piso
       ? `<b>Fechou em 100% com ${emCartelas(passo.melhor_cartelas)}.</b>` +
-        `<br><em>Acima do piso de ${milhares(passo.piso)}, pela construção ` +
-        `avançada: a garantia está cumprida, e este não é o mínimo.</em>`
+        `<br><em>Acima do piso de ${milhares(passo.piso)}` +
+        /*
+         * Só se credita ao botão quem tocou nele.
+         *
+         * A frase dizia "pela construção avançada" sempre que o resultado
+         * ficasse acima do piso — inclusive com garantia cheia, onde esse
+         * botão nem aparece, porque ali o motor passa do piso sozinho. Quem
+         * apenas tocou em Resolver lia que um botão que nunca viu produziu o
+         * resultado dela.
+         */
+        (avancoFoiPedido
+          ? ', pela construção avançada: a garantia está cumprida, e este não é o mínimo.'
+          : ` — ${milhares(passo.piso)} não bastou. A garantia está cumprida, e ` +
+            'este não é o mínimo.') +
+        '</em>'
       : `<b>Fechou em 100% com ${emCartelas(passo.melhor_cartelas)}.</b>` +
         `<br><em>Exatamente no piso provado — nada menor existe.</em>`;
     return;
@@ -1821,6 +1896,7 @@ $('ex-parar').addEventListener('click', () => {
  * prova — e tocar em otimizar naquela janela não fazia nada.
  */
 $('ex-avancar').addEventListener('click', () => {
+  avancoFoiPedido = true;
   $('ex-avancar').hidden = true;
   if (escalandoAgora) {
     trabalhador.postMessage({ tipo: 'avancar-alem-do-piso' });

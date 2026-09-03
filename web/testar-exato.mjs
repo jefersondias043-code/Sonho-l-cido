@@ -1262,6 +1262,46 @@ try {
     (await texto('#ex-erro')).slice(0, 110)
   );
 
+  /* ─── tocar em Resolver muda o que a pessoa vê ─── */
+
+  /*
+   * Medido antes da correção: depois do toque o `scrollY` não mudava um pixel,
+   * o botão continuava escrito "Resolver" — só mais apagado — e o progresso
+   * nascia mil pixels abaixo da dobra. A ação mais importante do aplicativo
+   * não mudava nada visível, e quem não vê resposta toca de novo.
+   */
+  await marcarNumeros(25, Array.from({ length: 11 }, (_, i) => i + 1));
+  await regras(8, 5, 5);
+  const antesDoToque = await pagina.evaluate(() => window.scrollY);
+  await pagina.click('#ex-resolver');
+  await pagina.waitForFunction(
+    () => !document.getElementById('ex-analise-cartao').hidden,
+    undefined,
+    { timeout: 20000 }
+  );
+  const rotuloEmCurso = await texto('#ex-resolver');
+  await pagina.waitForTimeout(700);
+  const depoisDoToque = await pagina.evaluate(() => window.scrollY);
+
+  marcar(
+    /Procurando/i.test(rotuloEmCurso),
+    'o botão diz que está procurando, em vez de continuar dizendo Resolver',
+    rotuloEmCurso
+  );
+  marcar(
+    depoisDoToque !== antesDoToque
+      || (await pagina.locator('#ex-analise-cartao').isVisible()),
+    'e a tela leva até onde o trabalho aparece',
+    `scrollY ${antesDoToque} → ${depoisDoToque}`
+  );
+
+  await esperarResultado();
+  marcar(
+    !/Procurando/i.test(await texto('#ex-resolver')),
+    'e o rótulo volta ao normal quando acaba',
+    await texto('#ex-resolver')
+  );
+
   marcar(
     errosDeConsole.length === 0,
     'nenhum erro no console',
