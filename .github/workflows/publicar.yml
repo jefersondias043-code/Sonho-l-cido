@@ -148,18 +148,29 @@ jobs:
           # a conferência, que o dinheiro na tela seja o que a aritmética diz.
           node web/testar-exato.mjs
 
-      - name: Varrer o catálogo de fechamentos, sorteio a sorteio
+      - name: Conferir o aplicativo de fechamentos antes de levá-lo junto
         # O segundo aplicativo deste repositório promete "está garantido", e o
-        # que sustenta a promessa é esta varredura: todos os sorteios possíveis
-        # de cada um dos 312 fechamentos publicados, conferidos por um binário
-        # que não compartilha uma linha com o gerador. Uma falha aqui bloqueia a
-        # publicação do site inteiro, de propósito — publicar metade seria pôr no
-        # ar um endereço que promete o que não confere.
+        # que sustenta a promessa é a varredura: todos os sorteios possíveis de
+        # cada um dos 312 fechamentos publicados, conferidos por um binário que
+        # não compartilha uma linha com o gerador.
+        #
+        # Uma falha aqui bloqueia a publicação **do site inteiro**, de propósito.
+        # `catalogo.yml` roda o mesmo a cada envio, mas roda em paralelo com este
+        # fluxo: se a decisão de publicar dependesse dele, publicar-se-ia sem
+        # saber. Pôr no ar um endereço que promete o que não confere é pior do
+        # que não publicar a correção de texto que vinha junto.
         run: |
           cargo build --release --bin conferir-tudo
           ./target/release/conferir-tudo catalogo
+          node app/testar-estrategia.mjs
+          node app/testar-catalogo.mjs
+          node app/testar-conferir.mjs
+          node servidor/testar-intencao.mjs
+          node servidor/testar-explicar.mjs
+          ./construir-app.sh
+          node app/testar-tela.mjs
 
-      - name: Construir o aplicativo de fechamentos
+      - name: Construir o aplicativo de fechamentos no lugar dele
         # Numa subpasta, ao lado do motor, e não no lugar dele: são dois
         # aplicativos com dois públicos, e o endereço de cada um continua sendo o
         # que sempre foi. O service worker de `fechamentos/` tem escopo mais
