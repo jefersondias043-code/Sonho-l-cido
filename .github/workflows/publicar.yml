@@ -169,6 +169,7 @@ jobs:
           node servidor/testar-explicar.mjs
           ./construir-app.sh
           node app/testar-tela.mjs
+          ./target/release/conferir-tudo publicar/catalogo
 
       - name: Construir o aplicativo de fechamentos no lugar dele
         # Numa subpasta, ao lado do motor, e não no lugar dele: são dois
@@ -180,7 +181,9 @@ jobs:
         # cobra que todo arquivo dali esteja na lista de uso sem internet do
         # motor — lista que não fala, nem deve falar, dos arquivos do outro
         # aplicativo.
-        run: ./construir-app.sh site/fechamentos
+        run: |
+          ./construir-app.sh site/fechamentos
+          ./target/release/conferir-tudo site/fechamentos/catalogo
 
       - name: Publicar na branch gh-pages
         run: |

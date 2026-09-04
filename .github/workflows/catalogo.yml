@@ -75,6 +75,14 @@ jobs:
       - name: Montar o site
         run: ./construir-app.sh
 
+      - name: E de novo, nos bytes que sairiam publicados
+        # A varredura acima olhou `catalogo/`; esta olha `publicar/catalogo/`,
+        # que é o que o navegador de alguém vai baixar. São a mesma coisa por
+        # construção — e é justamente por serem "a mesma coisa por construção"
+        # que vale conferir: uma cópia que esquece um arquivo, um `rsync` que
+        # exclui um padrão, um build que roda com a árvore suja.
+        run: ./target/release/conferir-tudo publicar/catalogo
+
       - name: O carimbo é do conteúdo, e não do caminho
         # O mesmo site montado em dois lugares tem de sair com o mesmo carimbo.
         # `sha256sum` imprime o caminho ao lado do resumo, então esta é fácil de

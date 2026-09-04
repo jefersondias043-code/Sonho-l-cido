@@ -326,6 +326,29 @@ await contexto.setOffline(false);
 
 conferir('nenhum erro de JavaScript no caminho todo', erros.length === 0, erros.join(' | '));
 
+// ── com a memória do aparelho trancada ──────────────────────────────────────
+
+// Navegação privada e "bloquear dados de sites" fazem `localStorage` **lançar**,
+// não devolver vazio. Um aplicativo que guarda o que a pessoa marcou tem de
+// continuar respondendo aí — perder o que foi guardado é aceitável; não abrir,
+// não é.
+const trancado = await navegador.newContext({ viewport: { width: 360, height: 740 } });
+await trancado.addInitScript(() => {
+  const recusa = { get: () => { throw new Error('acesso negado'); } };
+  Object.defineProperty(window, 'localStorage', recusa);
+  Object.defineProperty(window, 'sessionStorage', recusa);
+});
+const semMemoria = await trancado.newPage();
+const errosSemMemoria = [];
+semMemoria.on('pageerror', (e) => errosSemMemoria.push(String(e)));
+await semMemoria.goto(endereco, { waitUntil: 'networkidle' });
+await semMemoria.click('#escolher');
+await semMemoria.waitForSelector('.bilhetes li', { timeout: 20000 });
+conferir('sem poder guardar nada, o aplicativo ainda responde',
+  (await semMemoria.locator('.bilhetes li').count()) > 0);
+conferir('e sem erro de JavaScript', errosSemMemoria.length === 0, errosSemMemoria.join(' | '));
+await trancado.close();
+
 await navegador.close();
 servidor.close();
 
