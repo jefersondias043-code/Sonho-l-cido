@@ -264,11 +264,12 @@ try {
   const bancoInteiro = await pagina.evaluate(async () => {
     const lot = await import('./lotinha.js');
     const banco = await fetch('./lotinha.json').then((r) => r.json());
-    const saida = { conferidas: 0, sorteios: 0, falhas: [] };
+    const saida = { conferidas: 0, sorteios: 0, falhas: [], naoTriviais: 0 };
     for (const chave of Object.keys(banco.fechamentos)) {
       const blocos = banco.fechamentos[chave];
       // A entrada trivial — jogo do tamanho do pool — é um bloco vazio.
       if (blocos.length === 0 || blocos[0].length === 0) continue;
+      saida.naoTriviais += 1;
       const pool = Number(chave.split(',')[0]);
       const dezenas = Array.from({ length: pool }, (_, i) => i + 1);
       // O banco guarda a forma complementar: as dezenas que **faltam** ao jogo.
@@ -285,10 +286,24 @@ try {
     }
     return saida;
   });
+  /*
+   * A contagem esperada sai do próprio banco, e não de um número escrito aqui.
+   *
+   * Estava `conferidas === 35`, e 35 era quantas entradas não triviais o banco
+   * tinha no dia em que a asserção foi escrita. Um número assim envelhece de
+   * duas formas, e a segunda é perigosa: crescendo o banco, ele reprova uma
+   * mudança boa — foi o que aconteceu ao acrescentar os jogos de 16 — e,
+   * encolhendo o laço por um defeito que pulasse entradas, ele continuaria
+   * passando enquanto exatamente 35 fossem conferidas.
+   *
+   * Cobrar "conferi todas as que existem" fecha os dois buracos de uma vez.
+   */
   marcar(
-    bancoInteiro.falhas.length === 0 && bancoInteiro.conferidas === 35,
+    bancoInteiro.falhas.length === 0
+      && bancoInteiro.conferidas === bancoInteiro.naoTriviais
+      && bancoInteiro.conferidas > 0,
     'cada fechamento do banco cobre todo sorteio possível do seu pool',
-    `${bancoInteiro.conferidas} fechamentos · ` +
+    `${bancoInteiro.conferidas} de ${bancoInteiro.naoTriviais} fechamentos · ` +
       `${bancoInteiro.sorteios.toLocaleString('pt-BR')} sorteios` +
       (bancoInteiro.falhas.length ? ` · FALHAS: ${bancoInteiro.falhas.join(', ')}` : '')
   );
@@ -314,7 +329,7 @@ try {
   const doNosso = contraOBanco.filter((l) => l.banco > 0);
   const furados = doNosso.filter((l) => l.piso > l.banco);
   marcar(
-    furados.length === 0 && doNosso.length === 44,
+    furados.length === 0 && doNosso.length === 50,
     'nenhum piso passa por cima do fechamento que o aplicativo já entrega',
     `${doNosso.length} combinações do banco conferidas`
   );
@@ -369,8 +384,12 @@ try {
     semPronto.economia.slice(0, 70).trim()
   );
 
-  // E o placar geral: quantas das 45 combinações já saem prontas do aplicativo,
+  // E o placar geral: quantas das 66 combinações já saem prontas do aplicativo,
   // sem o motor precisar ser acionado. É o que o pré-processamento comprou.
+  //
+  // Subiu de 61 para 62 com os jogos de 16 no banco: 22 dezenas com jogos de 16
+  // não tinha número nenhum antes do toque — a fórmula estourava o teto — e
+  // agora sai pronto, com 19.112 jogos contra um piso de 10.730.
   const prontidao = await pagina.evaluate(async () => {
     const lot = await import('./lotinha.js');
     await lot.carregarBanco();
@@ -381,8 +400,8 @@ try {
     return prontas;
   });
   marcar(
-    prontidao === 61,
-    '61 das 66 combinações têm o tamanho conhecido antes do toque',
+    prontidao === 62,
+    '62 das 66 combinações têm o tamanho conhecido antes do toque',
     `${prontidao} de 66`
   );
 

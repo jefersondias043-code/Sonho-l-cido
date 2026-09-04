@@ -1,15 +1,21 @@
 //! Gera o banco de fechamentos da Lotinha.
 //!
-//! A modalidade: escolhem-se de 17 a 25 dezenas entre 25, o resultado da
-//! Lotofácil é a referência, e ganha-se quando as 15 sorteadas caem **todas**
-//! dentro do conjunto escolhido. São 45 combinações de `(pool, tamanho do jogo)`
-//! com `17 ≤ jogo ≤ pool ≤ 25`.
+//! A modalidade: escolhem-se dezenas entre 25, o resultado da Lotofácil é a
+//! referência, e ganha-se quando as 15 sorteadas caem **todas** dentro do
+//! conjunto escolhido. São 54 combinações de `(pool, tamanho do jogo)` com
+//! `16 ≤ jogo ≤ pool ≤ 25`.
 //!
-//! Uma delas não entra no banco, e é decisão consciente: `(25,17)` termina com
-//! 81.556 jogos, que ficariam em quase 2 MiB e descreveriam uma compra de
-//! oitenta e um mil reais. Não é fechamento que alguém vá levar. Ali o
-//! aplicativo mostra o piso conhecido e deixa o motor construir sob demanda,
-//! em vez de carregar megabytes que ninguém usaria.
+//! Quem decide o que entra é `TETO_DO_BANCO`, aplicado ao resultado final:
+//! `(25,17)` termina com 81.556 jogos e `(23,16)` para cima passa de quarenta
+//! mil. Ficariam em megabytes e descrevem compras de dezenas de milhares de
+//! reais — não são fechamentos que alguém vá levar. Ali o aplicativo mostra o
+//! piso conhecido e deixa o motor construir sob demanda.
+//!
+//! Jogo 15 fica de fora por outra razão, e é matemática: ali `a = pool − 15`
+//! iguala `b`, todo `b`-conjunto precisa conter um `a`-conjunto do mesmo
+//! tamanho, e o fechamento é **todo** o `C(pool,15)`. É mínimo provado, sai de
+//! fórmula em microssegundos, e guardá-lo seria guardar uma tabela de
+//! combinações.
 //!
 //! ## A transformação que resolve quase tudo
 //!
@@ -130,8 +136,26 @@ fn main() {
 
     let mut banco: BTreeMap<String, Vec<Vec<usize>>> = BTreeMap::new();
 
+    // O jogo começa em 16, e não em 17.
+    //
+    // A tela oferece jogos de 15 a 25 desde que os cinco números do pedido
+    // passaram a ser livres, mas o gerador tinha ficado em `17..=pool` — o
+    // escopo de quando a modalidade era o aplicativo inteiro. O buraco custava
+    // dinheiro de verdade: em 20 dezenas com jogos de 16, a fórmula entrega
+    // 2.160 jogos e o motor chega a 1.418. São R$ 742 que quem não soubesse
+    // apertar "procurar menor" pagava a mais, sem nada na tela dizendo que
+    // dava.
+    //
+    // Jogo 15 continua fora, e por um bom motivo: ali `a = pool − 15` iguala
+    // `b`, todo `b`-conjunto precisa conter um `a`-conjunto do mesmo tamanho, e
+    // o fechamento é **todo** o `C(pool,15)`. É mínimo provado, sai de fórmula
+    // em microssegundos, e guardá-lo seria guardar uma tabela de combinações.
+    //
+    // Quem decide o que entra continua sendo `TETO_DO_BANCO`, aplicado ao
+    // resultado final: das sete combinações novas com jogo 16, as de pool 23
+    // para cima passam de quarenta mil jogos e ficam de fora sozinhas.
     for pool in 17..=25usize {
-        for jogo in 17..=pool {
+        for jogo in 16..=pool {
             let a = pool - jogo;
             let b = pool - SORTEIO;
             let piso = melhor_piso(pool, jogo);
@@ -380,14 +404,16 @@ fn ler_banco(arquivo: &str) -> BTreeMap<String, Vec<Cartela>> {
 
 /// Acima disto o fechamento não entra no banco embutido.
 ///
-/// Guardando complementos, o banco inteiro dá 1,6 MiB de JSON que viajam em
-/// 316 KiB comprimidos — menos que o WebAssembly do motor, e o navegador só
-/// baixa uma vez. Com este teto, 44 das 45 combinações da modalidade ficam
-/// prontas de fábrica.
+/// Guardando complementos, o banco inteiro dá 1,7 MiB de JSON que viajam
+/// comprimidos — menos que o WebAssembly do motor, e o navegador só baixa uma
+/// vez. Com este teto, 50 das 54 combinações da modalidade ficam prontas de
+/// fábrica.
 ///
-/// A que sobra é `(25,17)`, com 81.556 jogos. Ela ficaria em quase 2 MiB, e
-/// descreve uma compra de oitenta e um mil reais — não é fechamento que alguém
-/// vá levar. Ali a fórmula e o motor continuam disponíveis sob demanda.
+/// As quatro que sobram são `(25,17)`, com 81.556 jogos, e os jogos de 16 nos
+/// pools 23, 24 e 25, com pisos de 35.022, 85.304 e 223.813. Todas descrevem
+/// compras de dezenas ou centenas de milhares de reais — não são fechamentos
+/// que alguém vá levar. Ali a fórmula e o motor continuam disponíveis sob
+/// demanda.
 ///
 /// O teto é aplicado ao resultado **final**, depois de o motor ter feito o que
 /// podia: `(24,18)` nasce com 134.596 jogos da construção e termina com 7.400.
