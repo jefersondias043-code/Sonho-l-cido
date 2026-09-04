@@ -18,17 +18,10 @@ const lembrar = (c, padrao) => {
 };
 
 const estado = {
-  orcamento: lembrar('orcamento', 5000),
-  dezenas: new Set(lembrar('dezenas', [])),
-  garantiaMinima: 0,
-  indice: null,
-  precos: null,
-  precosPublicados: null,
-  acaso: null,
-  plano: null,
-  bilhetes: [],
-  mascaras: [],
-  carteira: lembrar('carteira', []),
+  orcamento: lembrar('orcamento', 5000), dezenas: new Set(lembrar('dezenas', [])),
+  carteira: lembrar('carteira', []), garantiaMinima: 0,
+  indice: null, precos: null, precosPublicados: null, acaso: null,
+  plano: null, bilhetes: [], mascaras: [],
 };
 
 // ── dinheiro ────────────────────────────────────────────────────────────────
@@ -53,7 +46,9 @@ const paraARegua = (c) =>
 // ── arranque ────────────────────────────────────────────────────────────────
 
 async function arrancar() {
-  montarGrade();
+  $('grade').innerHTML = Array.from({ length: UNIVERSO }, (_, i) => i + 1)
+    .map((d) => `<button type="button" data-dezena="${d}" aria-pressed="false">${d}</button>`)
+    .join('');
   ligarControles();
   registrarServico();
 
@@ -83,22 +78,15 @@ async function arrancar() {
   responder();
 }
 
-function montarGrade() {
-  $('grade').innerHTML = Array.from({ length: UNIVERSO }, (_, i) => i + 1)
-    .map((d) => `<button type="button" data-dezena="${d}" aria-pressed="false">${d}</button>`)
-    .join('');
-}
-
 function registrarServico() {
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js').catch(() => {});
   }
   const rede = () => ($('rede').textContent = navigator.onLine ? '' : 'sem internet');
   addEventListener('online', rede); addEventListener('offline', rede); rede();
-  fetch('sw.js', { cache: 'no-store' })
-    .then((r) => r.text())
-    .then((t) => ($('carimbo').textContent = `versão ${t.match(/CARIMBO = '([^']+)'/)?.[1] ?? '—'}`))
-    .catch(() => {});
+  fetch('sw.js', { cache: 'no-store' }).then((r) => r.text()).then((t) => {
+    $('carimbo').textContent = `versão ${t.match(/CARIMBO = '([^']+)'/)?.[1] ?? '—'}`;
+  }).catch(() => {});
 }
 
 // ── desenho ─────────────────────────────────────────────────────────────────
@@ -182,7 +170,7 @@ function desenharResposta(plano) {
     <p class="frase">Se as 15 dezenas sorteadas saírem todas entre as suas ${e.v},
       ao menos um destes bilhetes terá <b>${e.t} acertos ou mais</b>. Não é probabilidade:
       é certeza, conferida sorteio por sorteio.</p>
-    <p class="ressalva">${chanceDeCairDentro(e.v)}</p>`;
+    <p class="ressalva">${chanceDeCairDentro(e.v)} ${quantoPagaAGarantia(e.t)}</p>`;
 }
 
 /// Pede ao servidor uma frase sobre os números que já estão na tela — a troca
@@ -209,6 +197,15 @@ async function pedirAFrase(onde, dados) {
       alvo.textContent = frase;
     }
   } catch { /* a frase determinística fica */ }
+}
+
+/// Quanto a garantia vale em dinheiro. Sem este número, "garantido" se lê como
+/// lucro garantido — e não é: nas faixas fixas o prêmio de uma cartela costuma
+/// ficar abaixo do que o fechamento inteiro custou.
+function quantoPagaAGarantia(t) {
+  if (t > 13) return `O prêmio de ${t} acertos é rateado e muda a cada concurso.`;
+  return `Esses ${t} acertos pagam ${dinheiro(estado.precos.premio[t])} por cartela premiada —
+    o fechamento compra certeza, não lucro.`;
 }
 
 /// A ressalva que faz a garantia ser verdade inteira: ela só vale se as 15
