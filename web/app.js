@@ -2725,6 +2725,29 @@ function lotChamarOExato(numeros) {
   // pedido.
   lotGeracaoDoExato = lotGeracao;
 
+  /*
+   * A configuração fica pronta para a busca que vem **depois** do motor exato.
+   *
+   * Sem ela, o caminho da garantia parcial terminava no motor exato e parava
+   * ali: `#lot-iniciar` entregava a ele e retornava, então a busca estocástica
+   * — que é outra técnica, não um ajuste da mesma — nunca era oferecida.
+   *
+   * Medido em 23 dezenas com jogos de 17 garantindo 13: o motor exato fecha
+   * com 72 cartelas e não tira mais nenhuma; a busca, partindo daí, chega a 58
+   * em meia hora. Vinte por cento do fechamento estavam do outro lado de um
+   * botão que não existia.
+   */
+  lotConfiguracao = {
+    universo: lotUniverso,
+    pool: numeros,
+    cartela: lotJogo,
+    alvo: lotSorteio,
+    intersecao: lotGarantia,
+    premiadas: lotPremiadas,
+    orcamento: null,
+    semente: Number($('semente')?.value) || 1,
+  };
+
   exato.resolver({
     pedido: { v: pedido.v, k: pedido.k, j: pedido.j, t: pedido.t, r: pedido.r },
     numeros,
@@ -2769,6 +2792,21 @@ exato.ligar({
     lotFechamento = cartelas;
     $('lot-checar').hidden = false;
     $('lot-conferir').hidden = false;
+
+    /*
+     * E a porta para a busca, que é outra técnica e não um ajuste desta.
+     *
+     * O motor exato prova um piso e escala até onde consegue; a busca
+     * estocástica desmonta e remonta o fechamento inteiro milhares de vezes. Em
+     * 23 dezenas com jogos de 17 garantindo 13 a diferença é de 72 para 58, e
+     * ela só aparece para quem continua depois de o exato parar.
+     */
+    if (lotConfiguracao) {
+      $('lot-otimizar').hidden = false;
+      $('lot-otimizar').textContent =
+        `Procurar um fechamento menor que ${milhares(cartelas.length)}`;
+    }
+
     lotPintarEconomia();
     // A aba Checar já está pintada quando o motor exato termina; sem repintar,
     // o fechamento que ele acabou de provar não apareceria no seletor até

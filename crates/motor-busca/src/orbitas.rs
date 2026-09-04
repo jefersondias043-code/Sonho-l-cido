@@ -173,6 +173,33 @@ impl InstanciaCiclica {
         Self::montar_ate(v, a, b, TETO_DE_LIGACOES, parar)
     }
 
+    /// A mesma instância, com a exigência de interseção afrouxada.
+    ///
+    /// Cobrir deixa de ser **conter**: um `a`-conjunto cobre um `b`-conjunto
+    /// quando encontra ao menos `t'` elementos dele. Com `t' = a` isto é a
+    /// continência de sempre, e é o que `montar` continua pedindo.
+    ///
+    /// A álgebra está em `motor-exato::limites`: `|B ∩ S| = j − a + |B' ∩ S'|`,
+    /// então `|B ∩ S| ≥ t ⟺ |B' ∩ S'| ≥ t'` com `t' = t + v − k − j`. Garantia
+    /// cheia dá `t' = a`; garantia parcial dá `t' < a`.
+    ///
+    /// **Por que aqui e não na tabela densa.** A mesma generalização em
+    /// `motor-exato::turan` guarda a cobertura por *conjunto*: em 23 dezenas com
+    /// jogos de 17 garantindo 13 isso pede `C(23,6) × 39.916` = quatro bilhões
+    /// de ligações. Aqui ela é guardada por *órbita*, dos dois lados, e o
+    /// quociente divide por 23 em cada um — 4.389 órbitas de seis contra 21.318
+    /// de oito. O que não cabia em quatro bilhões cabe em sete milhões.
+    pub fn montar_com_intersecao(
+        v: usize,
+        a: usize,
+        b: usize,
+        t_linha: usize,
+        teto: usize,
+        parar: Option<&Controle>,
+    ) -> Option<Self> {
+        Self::montar_geral(v, a, b, t_linha, teto, parar)
+    }
+
     /// Como [`InstanciaCiclica::montar`], com o teto de ligações escolhido por
     /// quem chama. Só faz sentido afrouxá-lo fora do navegador.
     pub fn montar_ate(
@@ -182,17 +209,49 @@ impl InstanciaCiclica {
         teto: usize,
         parar: Option<&Controle>,
     ) -> Option<Self> {
-        if v > MAIOR_POOL || a == 0 || a > b || b > v {
+        Self::montar_geral(v, a, b, a, teto, parar)
+    }
+
+    fn montar_geral(
+        v: usize,
+        a: usize,
+        b: usize,
+        t_linha: usize,
+        teto: usize,
+        parar: Option<&Controle>,
+    ) -> Option<Self> {
+        // `a > b` só é recusa quando cobrir significa conter: um conjunto maior
+        // que o alvo não cabe dentro dele. Com interseção parcial cabe — o que
+        // não pode é exigir mais interseção do que os dois lados têm a dar.
+        if v > MAIOR_POOL || a == 0 || b > v || t_linha == 0 || t_linha > a.min(b) {
             return None;
         }
-        let (v, a, b) = (v as u32, a as u32, b as u32);
+        if t_linha == a && a > b {
+            return None;
+        }
+        let (v, a, b, t_linha) = (v as u32, a as u32, b as u32, t_linha as u32);
 
         let orb_a = orbitas(v, a);
         let orb_b = orbitas(v, b);
         if orb_a.is_empty() || orb_b.is_empty() {
             return None;
         }
-        if orb_a.len().saturating_mul(combinacoes_pequenas(v - a, b - a, teto)) > teto {
+        // Quantos alvos cada conjunto alcança, para recusar antes de alocar.
+        // Com `t' = a` a soma tem um termo só e é o `C(v−a, b−a)` de antes.
+        let por_conjunto: usize = (t_linha..=a.min(b))
+            .map(|i| {
+                combinacoes_pequenas(a, i, teto).saturating_mul(combinacoes_pequenas(
+                    v - a,
+                    b - i,
+                    teto,
+                ))
+            })
+            .fold(0usize, |acc, x| acc.saturating_add(x));
+        // O teto é sobre as ligações **guardadas**, que são órbitas de alvo: a
+        // enumeração passa por `por_conjunto` posições e as reduz a no máximo
+        // `orb_b.len()` distintas, então cobrar o mínimo dos dois é cobrar o que
+        // de fato ocupa memória.
+        if orb_a.len().saturating_mul(por_conjunto.min(orb_b.len())) > teto {
             return None;
         }
 
@@ -209,16 +268,26 @@ impl InstanciaCiclica {
                 return None;
             }
             let livres: Vec<u32> = (0..v).filter(|i| rep & (1 << i) == 0).collect();
+            let dentro: Vec<u32> = (0..v).filter(|i| rep & (1 << i) != 0).collect();
             let mut alvos = Vec::new();
-            combinar(&livres, (b - a) as usize, &mut |extra: &[u32]| {
-                let mut m = rep;
-                for &e in extra {
-                    m |= 1 << e;
-                }
-                if let Some(&i) = indice_b.get(&canonico(m, v)) {
-                    alvos.push(i as u32);
-                }
-            });
+            // Para cada quantidade `i ≥ t'` de elementos em comum: escolhe-se
+            // `i` dentro do representante e completa-se o alvo fora dele. Com
+            // `t' = a` o laço externo tem uma volta só, `parte` é o próprio
+            // representante, e isto vira exatamente o que era antes.
+            for quantos in t_linha..=a.min(b) {
+                combinar(&dentro, quantos as usize, &mut |parte: &[u32]| {
+                    let base = parte.iter().fold(0u32, |m, &e| m | 1 << e);
+                    combinar(&livres, (b - quantos) as usize, &mut |extra: &[u32]| {
+                        let mut m = base;
+                        for &e in extra {
+                            m |= 1 << e;
+                        }
+                        if let Some(&i) = indice_b.get(&canonico(m, v)) {
+                            alvos.push(i as u32);
+                        }
+                    });
+                });
+            }
             alvos.sort_unstable();
             alvos.dedup();
             cobre.push(alvos);

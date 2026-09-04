@@ -674,6 +674,50 @@ try {
   );
   await pagina.click('#aba-lotinha');
 
+  // ─── 7a4. depois do motor exato, a busca ───
+  //
+  // Com garantia parcial `#lot-iniciar` entregava ao motor exato e **retornava**.
+  // A busca estocástica — que é outra técnica, e não um ajuste da mesma — nunca
+  // era oferecida, e não havia caminho da tela para ela.
+  //
+  // Medido em 23 dezenas com jogos de 17 garantindo 13: o motor exato fecha com
+  // 72 cartelas e não tira mais nenhuma; a busca, partindo daí, chega a 56.
+  // Vinte e dois por cento do fechamento estavam atrás de um botão que não
+  // existia.
+  await pagina.click('#aba-lotinha');
+  await marcarNumeros(25, Array.from({ length: 18 }, (_, i) => i + 1));
+  await regras(16, 15, 14);
+  await pagina.click('#lot-iniciar');
+  await pagina.waitForSelector('#grupo-exato:not([hidden])', { timeout: 60000 });
+  await pagina.waitForFunction(
+    () => !document.getElementById('ex-resultado-cartao').hidden,
+    undefined,
+    { timeout: 240000 }
+  );
+  await pagina.waitForTimeout(1500);
+  const doExato = await numero('#ex-encontrado');
+
+  await pagina.click('#aba-lotinha');
+  await pagina.waitForTimeout(500);
+  const portaDaBusca = await pagina.evaluate(() => {
+    const b = document.getElementById('lot-otimizar');
+    return { visivel: !b.hidden, texto: b.textContent.trim() };
+  });
+  marcar(
+    portaDaBusca.visivel && new RegExp(`menor que ${doExato}`).test(portaDaBusca.texto),
+    'depois do motor exato, a tela oferece a busca — e diz de que número ela parte',
+    portaDaBusca.texto
+  );
+
+  await pagina.click('#lot-otimizar');
+  await pagina.waitForSelector('#grupo-busca:not([hidden])', { timeout: 60000 });
+  marcar(
+    await pagina.locator('#grupo-exato').isHidden(),
+    'e um motor de cada vez: os cartões do exato saem da frente'
+  );
+  await pagina.click('#encerrar');
+  await pagina.waitForSelector('#lotinha.ativo', { timeout: 60000 });
+
   // ─── 7b. os três estágios, cada um ligado à mão ───
   //
   // Numa configuração **pequena** em que o piso é comprovadamente inatingível:
