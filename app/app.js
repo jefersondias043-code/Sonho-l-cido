@@ -220,11 +220,12 @@ function chanceDeCairDentro(v) {
     o que acontece em cerca de 1 concurso a cada ${uma}.`;
 }
 
+/// O degrau sempre falta dinheiro: se coubesse no orçamento, ele já teria sido
+/// escolhido — a resposta é a maior garantia que cabe.
 function frasedoDegrau(plano) {
   if (plano.motivo !== 'ok') return '';
   const d = plano.degrau;
   if (!d) return `Não há garantia maior para comprar com ${plano.escolha.v} dezenas.`;
-  if (d.falta === 0) return `Arraste mais um pouco: ${d.t} acertos garantidos já cabem.`;
   return `Por mais ${dinheiro(d.falta)} você sobe de ${d.de} para ${d.t} acertos garantidos.`;
 }
 

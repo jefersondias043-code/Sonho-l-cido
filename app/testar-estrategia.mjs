@@ -97,6 +97,17 @@ const comDegrau = melhorEstrategia(indice, precos, { orcamento: 5000, dezenas: 2
 conferir('há degrau seguinte quando não se está no topo', comDegrau.degrau != null);
 conferir('o degrau garante mais', comDegrau.degrau.t > comDegrau.escolha.t);
 conferir('e custa mais do que se tem', comDegrau.degrau.falta > 0);
+
+// O degrau **nunca** cabe no orçamento, e não por acaso: se coubesse, ele seria
+// a resposta. A tela conta com isso — só sabe dizer "por mais X você sobe".
+for (const dezenas of [16, 18, 20, 22, 25]) {
+  for (const orcamento of [700, 3000, 15000, 90000, 900000]) {
+    const plano = melhorEstrategia(indice, precos, { orcamento, dezenas });
+    if (plano.motivo !== 'ok' || !plano.degrau) continue;
+    conferir(`o degrau sempre falta dinheiro (${dezenas} dezenas, ${orcamento})`,
+      plano.degrau.falta > 0, `falta ${plano.degrau.falta}`);
+  }
+}
 conferir('e o degrau é o mais barato que garante mais',
   !indice.entradas.some(
     (e) => e.v === 20 && e.soma !== 0 && precos.aposta[e.k] && e.t > comDegrau.escolha.t &&
