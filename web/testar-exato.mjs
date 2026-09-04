@@ -655,6 +655,23 @@ try {
     'e a ficha inteira fala do mesmo fechamento, sem se contradizer',
     `dezenas usadas ${usadas}, com a tela num pool de 20`
   );
+
+  // E a aba Dividir enxerga o mesmo trabalho, pela mesma lista de fontes.
+  //
+  // A unificação juntou as duas listas do histórico numa só, e a pessoa passou
+  // a ver linhas da busca e do motor exato lado a lado — mas só as da busca
+  // chegavam ao seletor. Duas linhas idênticas na tela, uma divisível e outra
+  // não, sem nada explicando a diferença.
+  await pagina.click('#aba-dividir');
+  await pagina.waitForTimeout(600);
+  const naDivisao = await pagina.$$eval('#div-fechamento option', (o) =>
+    o.map((x) => x.textContent.trim())
+  );
+  marcar(
+    naDivisao.some((r) => /22 números/.test(r) && /garante 13/.test(r)),
+    'e a aba Dividir enxerga o trabalho do motor exato, com os números dele',
+    naDivisao.join(' | ').slice(0, 110)
+  );
   await pagina.click('#aba-lotinha');
 
   // ─── 7b. os três estágios, cada um ligado à mão ───

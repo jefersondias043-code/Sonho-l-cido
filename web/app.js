@@ -3595,24 +3595,35 @@ function checarSessaoExata(id) {
    * problema dele era universo 11 e sorteios de 5. Régua errada, não etiqueta
    * errada.
    */
-  const p = sessao.pedido ?? {};
-  const numeros = [...(sessao.numeros ?? [])].sort((a, b) => a - b);
   chkDoExato = {
     id: sessao.id,
     cartelas,
-    descricao: exatoHistorico.descrever(p),
-    configuracao: {
-      universo: Math.max(sessao.universo || 0, ...numeros, p.v ?? 0),
-      pool: numeros,
-      cartela: p.k,
-      alvo: p.j,
-      intersecao: p.t,
-      premiadas: p.r ?? 1,
-      semente: 1,
-    },
+    descricao: exatoHistorico.descrever(sessao.pedido ?? {}),
+    configuracao: configuracaoDaSessaoExata(sessao),
   };
   chkPintarSeletor(`exato:${sessao.id}`);
   abrirChecagem(`exato:${sessao.id}`);
+}
+
+/**
+ * O problema que um trabalho do motor exato resolve, na forma que a
+ * conferência e a divisão entendem.
+ *
+ * Sai do pedido guardado, e não da tela. É a diferença entre medir o
+ * fechamento com a régua dele e medi-lo com a de outro.
+ */
+function configuracaoDaSessaoExata(sessao) {
+  const p = sessao.pedido ?? {};
+  const numeros = [...(sessao.numeros ?? [])].sort((a, b) => a - b);
+  return {
+    universo: Math.max(sessao.universo || 0, ...numeros, p.v ?? 0),
+    pool: numeros,
+    cartela: p.k,
+    alvo: p.j,
+    intersecao: p.t,
+    premiadas: p.r ?? 1,
+    semente: 1,
+  };
 }
 
 /** Guarda um trabalho do exato num arquivo, que é o que sobrevive a tudo. */
@@ -3917,6 +3928,33 @@ function chkFontes() {
         ? historico.descrever(configuracaoDaBusca)
         : 'resultado em tela',
       configuracao: configuracaoDaBusca ?? null,
+    });
+  }
+
+  /*
+   * Os trabalhos do motor exato, ao lado dos da busca.
+   *
+   * A unificação juntou as duas listas do histórico numa só, e a pessoa passou
+   * a ver os dois tipos de linha lado a lado — mas só um deles chegava aqui.
+   * Efeito: uma linha da busca podia ser dividida e conferida pelo seletor, e
+   * uma do motor exato, idêntica na tela, não aparecia em nenhum dos dois.
+   *
+   * Cada uma vem com a configuração **dela**, montada do pedido guardado.
+   */
+  for (const sessao of exatoHistorico.listar()) {
+    if (sessao.id === chkDoExato?.id) continue;
+    const cartelas = exatoHistorico.cartelasDaSessao(sessao);
+    if (!cartelas.length) continue;
+    const descricao = exatoHistorico.descrever(sessao.pedido ?? {});
+    fontes.push({
+      chave: `exato:${sessao.id}`,
+      rotulo: `${descricao} · ${milhares(cartelas.length)} cartelas · ${exatoHistorico.quando(
+        sessao.atualizadaEm
+      )}`,
+      cartelas,
+      criadaEm: sessao.criadaEm ?? null,
+      descricao,
+      configuracao: configuracaoDaSessaoExata(sessao),
     });
   }
 
