@@ -37,6 +37,20 @@ def costurar() -> str:
     partes = []
     for nome in MODULOS:
         fonte = (APP / nome).read_text()
+        if nome == "volante.js":
+            # O visualizador de artefatos não deixa uma página baixar arquivo
+            # por conta própria: link com `download` e blob são inertes lá. Onde
+            # existir a capacidade de download do visualizador, o arquivo passa
+            # por ela; onde não existir — a prévia aberta num navegador comum —
+            # o caminho de sempre continua valendo.
+            fonte = fonte.replace(
+                "export function baixar(nome, conteudo, tipo = 'text/plain') {",
+                "export async function baixar(nome, conteudo, tipo = 'text/plain') {\n"
+                "  const salvador = await window.claude?.use?.('downloads');\n"
+                "  if (salvador) {\n"
+                "    return salvador.save({ filename: nome, data: conteudo }).catch(() => {});\n"
+                "  }",
+            )
         if nome == "catalogo.js":
             # `baixar` existe nos dois módulos, com sentidos diferentes: aqui é
             # trazer do catálogo, em volante.js é oferecer um arquivo para
@@ -61,6 +75,32 @@ def embutir_catalogo() -> dict:
     return arquivos
 
 
+def tema_explicito(estilo: str) -> str:
+    """Faz o tema escuro obedecer também a uma escolha explícita do leitor.
+
+    O aplicativo publicado segue o tema do sistema, e é só disso que ele
+    precisa: quem abre no navegador já escolheu ali. Alguns lugares onde uma
+    prévia é aberta oferecem um botão próprio de claro/escuro, e marcam a
+    escolha em `data-theme` na raiz do documento. Aqui os mesmos tokens do
+    tema escuro passam a valer também para essa marca, e a consulta de mídia
+    passa a ceder quando a escolha explícita foi "claro".
+
+    É transformação de construção, não código de cliente: o `estilo.css` do
+    repositório continua com uma regra só.
+    """
+    achado = re.search(
+        r"@media \(prefers-color-scheme: dark\) \{\s*:root \{(.*?)\}\s*\}", estilo, re.S
+    )
+    if not achado:
+        return estilo
+    tokens = achado.group(1)
+    return (
+        estilo.replace("@media (prefers-color-scheme: dark) {\n  :root {",
+                       "@media (prefers-color-scheme: dark) {\n  :root:not([data-theme=\"light\"]) {")
+        + f'\n:root[data-theme="dark"] {{{tokens}}}\n'
+    )
+
+
 def main() -> None:
     saida = pathlib.Path(sys.argv[1] if len(sys.argv) > 1 else RAIZ / "previa.html")
 
@@ -68,7 +108,7 @@ def main() -> None:
     corpo = html[html.index("<body>") + len("<body>") : html.index("</body>")]
     corpo = corpo.replace('<script type="module" src="app.js"></script>', "")
 
-    estilo = (APP / "estilo.css").read_text()
+    estilo = tema_explicito((APP / "estilo.css").read_text())
     icone = (APP / "icone.svg").read_text()
     catalogo = json.dumps(embutir_catalogo(), separators=(",", ":"), ensure_ascii=False)
 
@@ -81,7 +121,7 @@ def main() -> None:
         carimbo = achado.group(1) if achado else carimbo
 
     saida.write_text(
-        f"""<title>Sonho Lúcido — fechamentos da Lotofácil</title>
+        f"""<title>Fechamentos da Lotofácil</title>
 <style>
 {estilo}
 /* A prévia não tem service worker; o rodapé diz de onde ela saiu. */
