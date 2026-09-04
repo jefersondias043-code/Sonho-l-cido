@@ -421,10 +421,9 @@ async function acaoDosBilhetes(acao) {
   } else if (acao === 'csv') {
     volante.baixar(`${nome}.csv`, volante.comoCsv(estado.bilhetes), 'text/csv');
   } else if (acao === 'imprimir') {
-    abrirPainel(
-      'Volantes',
-      estado.bilhetes.map((b) => volante.comoVolante(b, UNIVERSO)).join(''),
-    );
+    $('painel-titulo').textContent = 'Volantes';
+    $('painel-corpo').innerHTML = estado.bilhetes.map((b) => volante.comoVolante(b, UNIVERSO)).join('');
+    $('painel').hidden = false;
     print();
   } else if (acao === 'guardar') {
     estado.carteira.unshift({
@@ -435,12 +434,6 @@ async function acaoDosBilhetes(acao) {
     desenharCarteira();
     $('det-carteira').open = true;
   }
-}
-
-function abrirPainel(titulo, corpo) {
-  $('painel-titulo').textContent = titulo;
-  $('painel-corpo').innerHTML = corpo;
-  $('painel').hidden = false;
 }
 
 async function varrerTudo() {
@@ -561,22 +554,28 @@ async function enviarIntencao() {
   $('aviso-intencao').textContent = '';
 }
 
-/// O caminho alternativo, sem modelo nenhum: números, "dezenas" e "garantir".
+/// O caminho alternativo, sem modelo nenhum. Não entende tudo, e não precisa —
+/// precisa nunca inventar. Um número solto não é dinheiro: em "vinte dezenas,
+/// garantir 14" não há valor, e ler o 14 como catorze reais seria pior do que
+/// não entender.
+const EM_REAIS = { cem: 100, duzentos: 200, trezentos: 300, quinhentos: 500, mil: 1000 };
+const QUANTAS = ['quinze', 'dezesseis', 'dezessete', 'dezoito', 'dezenove', 'vinte e cinco',
+  'vinte e quatro', 'vinte e três', 'vinte e dois', 'vinte e um', 'vinte'];
 function ler(texto) {
   const t = texto.toLowerCase();
-  const escrito = { cem: 100, duzentos: 200, trezentos: 300, quinhentos: 500, mil: 1000 };
-  const dinheiro = t.match(/(?:r\$\s*)?(\d[\d.]*(?:,\d{1,2})?)\s*(?:reais|conto|pila)/);
-  const solto = t.match(/(?:r\$\s*)(\d[\d.]*(?:,\d{1,2})?)/);
-  const achado = dinheiro ?? solto;
+  const achado = t.match(/(?:r\$\s*)?(\d[\d.]*(?:,\d{1,2})?)\s*(?:reais|conto|pila)/)
+    ?? t.match(/r\$\s*(\d[\d.]*(?:,\d{1,2})?)/);
   const orcamento = achado
     ? Number(achado[1].replace(/\./g, '').replace(',', '.'))
-    : (Object.entries(escrito).find(([palavra]) => t.includes(palavra))?.[1] ?? 0);
+    : (Object.entries(EM_REAIS).find(([palavra]) => t.includes(palavra))?.[1] ?? 0);
   if (!orcamento) return null;
+  const nomeada = QUANTAS.findIndex((palavra) => t.includes(palavra));
   return {
     orcamento,
     dezenas: [],
-    quantasDezenas: Number(t.match(/(\d{2})\s*dezenas/)?.[1] ?? 0),
-    garantiaMinima: Number(t.match(/garantir?\s*(?:de\s*)?(\d{2})/)?.[1] ?? 0),
+    quantasDezenas: Number(t.match(/(\d{2})\s*dezenas/)?.[1] ?? 0)
+      || (nomeada < 0 ? 0 : [15, 16, 17, 18, 19, 25, 24, 23, 22, 21, 20][nomeada]),
+    garantiaMinima: Number(t.match(/garant\w*\s*(?:de\s*)?(\d{2})/)?.[1] ?? 0),
   };
 }
 

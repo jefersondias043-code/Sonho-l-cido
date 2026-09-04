@@ -61,6 +61,9 @@ jobs:
       - name: O catálogo — soma de verificação, posições e bolão
         run: node app/testar-catalogo.mjs
 
+      - name: O leitor de intenção, que responde quando o modelo não responde
+        run: node servidor/testar-intencao.mjs
+
       - name: A varredura do cliente, contra o catálogo publicado
         # A terceira implementação da mesma pergunta, agora na linguagem que roda
         # no aparelho de quem apostou.

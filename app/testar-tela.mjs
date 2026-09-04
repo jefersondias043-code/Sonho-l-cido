@@ -269,6 +269,31 @@ await pagina.click('#det-dinheiro summary');
 const precos = await pagina.locator('#det-dinheiro').innerText();
 conferir('a tela diz que não audita os valores', precos.includes('não são auditados'));
 
+// ── pedir com as próprias palavras, sem servidor nenhum ─────────────────────
+
+// Não há servidor neste teste: `api/intencao` responde 404. O leitor
+// determinístico do cliente é quem lê — e é essa a prova de que desligar a IA
+// inteira mantém o aplicativo funcional.
+await pagina.click('#det-intencao summary');
+await pagina.fill('#intencao', 'trezentos reais, vinte dezenas, quero garantir 14');
+await pagina.click('#enviar-intencao');
+await pagina.waitForFunction(
+  () => document.querySelectorAll('.grade [aria-pressed=true]').length === 20, null,
+  { timeout: 15000 });
+conferir('o pedido em texto livre marca as vinte dezenas', true);
+conferir('e ajusta o dinheiro', (await pagina.inputValue('#valor')).includes('300,00'),
+  await pagina.inputValue('#valor'));
+conferir('e nenhum aviso de erro sobra', (await pagina.locator('#aviso-intencao').innerText()) === '');
+
+// E um pedido que ninguém entende diz isso, em vez de mexer no estado.
+await pagina.fill('#intencao', 'bom dia');
+await pagina.click('#enviar-intencao');
+await pagina.waitForFunction(
+  () => document.getElementById('aviso-intencao').innerText.includes('Não consegui'), null,
+  { timeout: 15000 });
+conferir('um pedido ilegível não vira estado',
+  (await pagina.inputValue('#valor')).includes('300,00'));
+
 // ── segunda visita, sem rede ────────────────────────────────────────────────
 
 // A promessa é a do avião: o que já foi aberto continua abrindo. O catálogo

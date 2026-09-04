@@ -22,12 +22,18 @@ export function comoVolante(bilhete, universo = 25) {
   return `<div class="volante">${celulas.join('')}</div>`;
 }
 
-/// Divide o fechamento em `partes` de tamanho equilibrado.
+/// Divide o fechamento em `partes` de cobertura equilibrada.
 ///
-/// Distribuição alternada sobre a lista ordenada: cada pessoa leva bilhetes
-/// espalhados por todo o fechamento, e não um bloco contíguo. Ninguém fica com
-/// a parte "boa" nem com a parte "ruim" — e as partes diferem em no máximo um
-/// bilhete.
+/// Equilibrar a cobertura é equilibrar a contagem, e isso não é aproximação: no
+/// mesmo fechamento todos os bilhetes têm o mesmo tamanho, e um bilhete de `k`
+/// dezenas atende sempre a mesma quantidade de sorteios, quaisquer que sejam as
+/// dezenas nele. Então partes com o mesmo número de bilhetes carregam o mesmo
+/// peso de cobertura.
+///
+/// A distribuição é alternada sobre a lista ordenada: cada pessoa leva bilhetes
+/// espalhados por todo o fechamento, e não um bloco contíguo — bilhetes vizinhos
+/// na ordem se parecem, e um bloco contíguo concentraria a semelhança numa
+/// pessoa só. As partes diferem em no máximo um bilhete.
 export function dividir(bilhetes, partes) {
   const grupos = Array.from({ length: partes }, () => []);
   bilhetes.forEach((b, i) => grupos[i % partes].push(b));

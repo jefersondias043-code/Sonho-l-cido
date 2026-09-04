@@ -5,14 +5,9 @@
 // soma e traduzir posições em dezenas. Nada aqui calcula fechamento nenhum.
 
 const guardados = new Map();
-let raiz = 'catalogo/';
-
-export function usarRaiz(nova) {
-  raiz = nova;
-}
 
 async function baixar(caminho) {
-  const resposta = await fetch(raiz + caminho, { cache: 'default' });
+  const resposta = await fetch(`catalogo/${caminho}`, { cache: 'default' });
   if (!resposta.ok) throw new Error(`${caminho}: ${resposta.status}`);
   return resposta.json();
 }

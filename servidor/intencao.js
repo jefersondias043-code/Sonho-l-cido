@@ -104,23 +104,34 @@ const inteiroEntre = (n, min, max) => Number.isInteger(n) && n >= min && n <= ma
 ///
 /// Não entende tudo, e não precisa — precisa nunca inventar. O que ele não
 /// achar fica de fora, e a tela continua com os controles normais.
-export function ler(texto) {
-  const minusculo = texto.toLowerCase();
-  const dinheiro = minusculo.match(/(?:r\$\s*)?(\d[\d.]*(?:,\d{1,2})?)\s*(?:reais|conto|pila)?/);
-  const escrito = { cem: 100, duzentos: 200, trezentos: 300, quinhentos: 500, mil: 1000 };
-  const porExtenso = Object.entries(escrito).find(([palavra]) => minusculo.includes(palavra));
+const EM_REAIS = { cem: 100, duzentos: 200, trezentos: 300, quinhentos: 500, mil: 1000 };
 
-  const orcamento = dinheiro
-    ? Number(dinheiro[1].replace(/\./g, '').replace(',', '.'))
-    : (porExtenso?.[1] ?? 0);
+// Os compostos vêm antes dos simples: "vinte e cinco" contém "vinte", e procurar
+// o simples primeiro leria vinte e cinco dezenas como vinte.
+const QUANTAS = [
+  ['quinze', 15], ['dezesseis', 16], ['dezessete', 17], ['dezoito', 18], ['dezenove', 19],
+  ['vinte e cinco', 25], ['vinte e quatro', 24], ['vinte e três', 23], ['vinte e dois', 22],
+  ['vinte e um', 21], ['vinte', 20],
+];
+
+export function ler(texto) {
+  const t = texto.toLowerCase();
+  // Um número solto não é dinheiro: em "vinte dezenas, quero garantir 14" não há
+  // valor nenhum, e ler o 14 como catorze reais seria pior do que não entender.
+  // Só conta o que vem com unidade — "R$ 300", "300 reais" — ou por extenso.
+  const achado = t.match(/(?:r\$\s*)?(\d[\d.]*(?:,\d{1,2})?)\s*(?:reais|conto|pila)/)
+    ?? t.match(/r\$\s*(\d[\d.]*(?:,\d{1,2})?)/);
+
+  const orcamento = achado
+    ? Number(achado[1].replace(/\./g, '').replace(',', '.'))
+    : (Object.entries(EM_REAIS).find(([palavra]) => t.includes(palavra))?.[1] ?? 0);
   if (!orcamento) return null;
 
-  const quantas = minusculo.match(/(\d{2})\s*dezenas/);
-  const garantia = minusculo.match(/garantir?\s*(?:de\s*)?(\d{2})/);
+  const nomeada = QUANTAS.find(([palavra]) => t.includes(palavra));
   return {
     orcamento,
     dezenas: [],
-    quantasDezenas: quantas ? Math.min(25, Number(quantas[1])) : 0,
-    garantiaMinima: garantia ? Math.min(15, Number(garantia[1])) : 0,
+    quantasDezenas: Math.min(25, Number(t.match(/(\d{2})\s*dezenas/)?.[1] ?? 0) || nomeada?.[1] || 0),
+    garantiaMinima: Math.min(15, Number(t.match(/garant\w*\s*(?:de\s*)?(\d{2})/)?.[1] ?? 0)),
   };
 }
