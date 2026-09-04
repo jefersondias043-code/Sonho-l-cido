@@ -80,36 +80,112 @@ const texto = (sel) => pagina.textContent(sel).then((t) => (t ?? '').replace(/\s
 const numero = async (sel) => Number((await texto(sel)).replace(/\D/g, ''));
 
 /** Define o universo e marca exatamente estes números na grade. */
+/*
+ * O pedido inteiro, guardado aqui.
+ *
+ * O Construtor Exato tinha uma tela só sua, com uma grade própria e quatro
+ * fileiras de opção próprias. Ela saiu: os cinco números moram agora nos
+ * mesmos controles que a ferramenta já usava para tudo. Como um deles depende
+ * do outro — o sorteio decide que pools existem, o pool decide que jogos
+ * existem, o jogo decide que garantias existem —, o pedido é guardado inteiro e
+ * aplicado sempre na mesma ordem. Aplicar peça por peça, na ordem em que os
+ * testes pedem, deixaria a tela num estado que ela nunca teria sozinha.
+ */
+const pedidoDaTela = {
+  universo: 25,
+  numeros: Array.from({ length: 18 }, (_, i) => i + 1),
+  jogo: 17,
+  sorteio: 15,
+  garantia: 15,
+  premiadas: 1,
+};
+
+async function aplicarOPedido() {
+  const p = pedidoDaTela;
+  // Montar o pedido é coisa da primeira aba, e uma corrida anterior deixou a
+  // tela na aba da busca. Sem voltar, os campos existem e estão invisíveis.
+  await pagina.click('#aba-lotinha');
+  await pagina.evaluate(() => {
+    const d = document.getElementById('lot-avancado');
+    if (d) d.open = true;
+  });
+  await pagina.fill('#lot-universo', String(p.universo));
+  await pagina.waitForTimeout(120);
+  await pagina.fill('#lot-sorteio', String(p.sorteio));
+  await pagina.waitForTimeout(120);
+
+  await pagina.click(`#lot-pool .opcao[data-pool="${p.numeros.length}"]`);
+  await pagina.waitForTimeout(80);
+
+  // A grade guarda a seleção anterior; limpar antes é o que faz o pedido ser o
+  // que está escrito, e não a soma dele com o do teste passado.
+  await pagina.click('#lot-limpar');
+  for (const n of p.numeros) {
+    await pagina.click(`#lot-grade .numero[data-n="${n}"]`);
+  }
+
+  await pagina.click(`#lot-jogo .opcao[data-jogo="${p.jogo}"]`);
+  await pagina.waitForTimeout(80);
+  await pagina.click(`#lot-garantia .opcao[data-garantia="${p.garantia}"]`);
+  await pagina.waitForTimeout(80);
+  if (p.premiadas > 1) {
+    await pagina.click(`#lot-premiadas .opcao[data-premiadas="${p.premiadas}"]`);
+    await pagina.waitForTimeout(80);
+  }
+}
+
+/*
+ * As dezenas e o universo, anotados — e só.
+ *
+ * Aplicar aqui não daria certo: o sorteio ainda é o do teste anterior, e é ele
+ * que decide quais pools a tela oferece. Marcar nove dezenas com o sorteio em
+ * 15 pediria um pool de 9 numa fileira que começa em 15. O pedido só faz
+ * sentido inteiro, e é `regras` — sempre a próxima chamada — que o aplica.
+ */
 async function marcarNumeros(universo, numeros) {
-  await pagina.fill('#ex-universo', String(universo));
-  await pagina.click('#ex-limpar');
-  for (const n of numeros) await pagina.click(`#ex-grade .numero[data-n="${n}"]`);
+  pedidoDaTela.universo = universo;
+  pedidoDaTela.numeros = numeros;
+  // Um pedido novo zera as premiadas: elas não atravessam de um teste ao outro,
+  // e o botão delas nem sempre existe no pedido seguinte.
+  pedidoDaTela.premiadas = 1;
 }
 
-/** Escolhe um valor numa das fileiras de opção. */
-async function escolher(fileira, valor) {
-  await pagina.click(`#${fileira} .opcao[data-valor="${valor}"]`);
-}
-
-/** Preenche as quatro regras, na ordem em que uma restringe a outra. */
 async function regras(jogo, sorteio, garantia, premiadas = 1) {
-  await escolher('ex-jogo', jogo);
-  await escolher('ex-sorteio', sorteio);
-  await escolher('ex-garantia', garantia);
-  if (premiadas > 1) await escolher('ex-premiadas', premiadas);
+  Object.assign(pedidoDaTela, { jogo, sorteio, garantia, premiadas });
+  await aplicarOPedido();
 }
 
-/** A altura do cartão de resultado, que é o que empurra as ferramentas para baixo. */
+/*
+ * Manda resolver, sempre pelo motor exato.
+ *
+ * `#lot-iniciar` roteia: banco, fórmula, motor exato. Onde o banco responde —
+ * a Lotinha canônica, que vários casos daqui usam — o motor exato nunca
+ * entraria, e é ele que esta suíte existe para cobrar. `#lot-provar` é a porta
+ * que o chama de propósito, e ela nasce escondida até haver pedido montado.
+ */
+async function resolver() {
+  await pagina.click('#lot-iniciar');
+  // Onde nada pronto responde, o motor exato já assumiu sozinho e os cartões
+  // dele estão na tela: pedir de novo começaria uma segunda corrida por cima da
+  // primeira. Onde o banco ou a fórmula responderam, é este botão que o chama.
+  try {
+    await pagina.waitForSelector('#grupo-exato:not([hidden])', { timeout: 2500 });
+    return;
+  } catch {
+    /* o banco respondeu: a prova é pedida à mão */
+  }
+  // Nos casos leves a busca estocástica já partiu e levou a tela junto; o botão
+  // da prova ficou na primeira aba, que é onde o pedido se monta.
+  await pagina.click('#aba-lotinha');
+  await pagina.waitForSelector('#lot-provar:not([hidden])', { timeout: 30000 });
+  await pagina.click('#lot-provar');
+  await pagina.waitForSelector('#grupo-exato:not([hidden])', { timeout: 30000 });
+}
+
+/** A altura do cartão de resultado, que é o que empurra o resto para baixo. */
 async function alturaDoResultado() {
   const caixa = await pagina.locator('#ex-resultado-cartao').boundingBox();
   return Math.round(caixa.height);
-}
-
-/** Quanto se rola do topo do resultado até a conferência. É a queixa, medida. */
-async function vaoAteAConferencia() {
-  const a = await pagina.locator('#ex-resultado-cartao').boundingBox();
-  const b = await pagina.locator('#ex-conferir-cartao').boundingBox();
-  return Math.round(b.y - a.y);
 }
 
 async function esperarResultado(limite = 180000) {
@@ -130,36 +206,11 @@ try {
   // Havia aqui um teste do lançador com os três aplicativos. O lançador saiu
   // junto com eles: a raiz **é** a ferramenta agora, e não um menu para
   // escolher entre três que faziam a mesma coisa.
-  await pagina.goto(`http://localhost:${PORTA}/exato.html`, { waitUntil: 'networkidle' });
+  await pagina.goto(`http://localhost:${PORTA}/`, { waitUntil: 'networkidle' });
   // Esperar pelo HTML não basta: a grade e as fileiras são montadas pelo módulo
   // depois. Esperar por um número na grade é esperar pelo aplicativo pronto.
-  await pagina.waitForSelector('#ex-grade .numero', { timeout: 20000 });
-  marcar(true, 'o Construtor Exato abre');
-
-  // ─── 2. os cinco parâmetros existem ───
-  const fileiras = ['ex-jogo', 'ex-sorteio', 'ex-garantia', 'ex-premiadas'];
-  const presentes = [];
-  for (const f of fileiras) {
-    presentes.push((await pagina.locator(`#${f} .opcao`).count()) > 0);
-  }
-  marcar(
-    presentes.every(Boolean) && (await pagina.locator('#ex-grade .numero').count()) === 25,
-    'a tela tem a grade e as quatro fileiras de regra',
-    `grade com ${await pagina.locator('#ex-grade .numero').count()} números`
-  );
-
-  // A garantia nunca pode passar do sorteio nem do jogo: a tela precisa impedir
-  // em vez de deixar o motor recusar depois.
-  await marcarNumeros(25, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
-  await regras(4, 3, 3);
-  const maiorGarantia = await pagina.$$eval('#ex-garantia .opcao', (b) =>
-    Math.max(...b.map((x) => Number(x.dataset.valor)))
-  );
-  marcar(
-    maiorGarantia === 3,
-    'a garantia não oferece mais do que o sorteio permite',
-    `vai até ${maiorGarantia}`
-  );
+  await pagina.waitForSelector('#lot-grade .numero', { timeout: 20000 });
+  marcar(true, 'a ferramenta abre');
 
   // ─── 3. o caso pequeno, onde a prova fecha ───
   //
@@ -168,7 +219,7 @@ try {
   await marcarNumeros(25, [3, 5, 7, 9, 11, 13, 15, 17, 19]);
   await regras(3, 2, 2);
   await pagina.selectOption('#ex-esforco', '1');
-  await pagina.click('#ex-resolver');
+  await resolver();
 
   await pagina.waitForFunction(
     () => document.getElementById('ex-alvos').textContent.trim() === '36',
@@ -209,7 +260,7 @@ try {
   await marcarNumeros(25, Array.from({ length: 20 }, (_, i) => i + 1));
   await regras(17, 15, 13);
   await pagina.selectOption('#ex-esforco', '1');
-  await pagina.click('#ex-resolver');
+  await resolver();
 
   await pagina.waitForFunction(
     () => document.getElementById('ex-por-bloco').textContent.trim() === '9.316',
@@ -279,9 +330,12 @@ try {
   // matemática proíbe. Com a cota de Turán no avesso o piso ficou certo e o
   // caso fecha em décimos de segundo, no mínimo provado. Insistir no clique
   // seria cobrar que o aplicativo continue não terminando.
-  if (!(await pagina.locator('#ex-parar').isHidden())) {
-    await pagina.click('#ex-parar');
-  }
+  // O clique é uma corrida contra a escalada: entre perguntar se o botão está à
+  // mão e tocá-lo, ela pode ter fechado e o botão sumido. Sumir é o resultado
+  // certo, então não tocar também é.
+  await pagina
+    .click('#ex-parar', { timeout: 1500 })
+    .catch(() => {});
   await esperarResultado();
   const parcial = await texto('#ex-frase');
   const achou = await numero('#ex-encontrado');
@@ -317,7 +371,7 @@ try {
   await marcarNumeros(25, Array.from({ length: 9 }, (_, i) => i + 1));
   await regras(3, 2, 2, 2);
   await pagina.selectOption('#ex-esforco', '1');
-  await pagina.click('#ex-resolver');
+  await resolver();
   // Esperar pelo resultado, e não por um número aparecer: o teto da rodada
   // anterior ainda está na tela, e ler cedo demais leria o problema errado.
   await esperarResultado();
@@ -343,7 +397,7 @@ try {
   await marcarNumeros(25, Array.from({ length: 20 }, (_, i) => i + 1));
   await regras(17, 15, 15);
   await pagina.selectOption('#ex-esforco', '1');
-  await pagina.click('#ex-resolver');
+  await resolver();
   await pagina.waitForFunction(
     () => Number(document.getElementById('ex-cartelas-agora').textContent.replace(/\D/g, '')) > 0,
     undefined,
@@ -389,37 +443,96 @@ try {
   const cartelasGrandes = await numero('#ex-encontrado');
   const alturaComMuitas = await alturaDoResultado();
 
+  /*
+   * A oferta de retomar deixou de ser um aviso embaixo do pedido.
+   *
+   * O Construtor Exato tinha o seu: `#ex-continuar` aparecia sob os parâmetros
+   * quando os cinco números batiam com algum fechamento guardado. A ferramenta
+   * já tinha o dela, e melhor — o cartão de trabalho interrompido, que aparece
+   * na partida sem depender de a pessoa remontar o pedido —, e agora ele
+   * conhece os dois motores. Manter os dois seria manter duas ofertas para a
+   * mesma coisa, discordando uma da outra sempre que uma delas fosse esquecida.
+   *
+   * O que se cobra aqui é a promessa inteira: fechar o aplicativo no meio de
+   * uma escalada e reabri-lo devolve o trabalho, com o número de cartelas que
+   * estava lá.
+   */
+  // O trabalho parado com o botão é trabalho **encerrado**, e o histórico o
+  // registra assim: ele aparece na lista, com Continuar à mão. Trabalho
+  // *interrompido* é outra coisa — a página que some com o motor rodando — e é
+  // do cartão da partida, verificado logo abaixo.
   await pagina.reload({ waitUntil: 'networkidle' });
-  await pagina.waitForSelector('#ex-grade .numero');
-  await marcarNumeros(25, Array.from({ length: 20 }, (_, i) => i + 1));
-  await regras(17, 15, 15);
-  await pagina.waitForTimeout(200);
+  await pagina.waitForSelector('#lot-grade .numero');
+  await pagina.waitForTimeout(600);
+
+  // O histórico guarda a linha, e ela é do motor exato: as duas origens
+  // convivem numa lista só, ordenadas pelo último toque.
+  await pagina.click('#aba-historico');
+  await pagina.waitForTimeout(300);
+  const linhasDoExato = await pagina
+    .locator('#lista-historico [data-acao="ex-continuar"]')
+    .count();
   marcar(
-    !(await pagina.locator('#ex-continuar').isHidden()),
-    'e ao voltar com os mesmos números a tela oferece continuar de onde parou',
-    (await texto('#ex-retomar-aviso')).slice(0, 90)
+    linhasDoExato >= 1,
+    'o trabalho parado fica no histórico único, ao lado dos da busca',
+    `${linhasDoExato} linha(s) do motor exato`
+  );
+  marcar(
+    (await pagina.locator('#lista-historico [data-acao="ex-abrir"]').count()) > 0
+      && (await pagina.locator('#lista-historico [data-acao="ex-exportar"]').count()) > 0,
+    'e a linha dele oferece abrir, continuar, checar e exportar'
   );
 
-  // Numa configuração nunca trabalhada a oferta some: retomar sobre outra
-  // configuração seria continuar o problema errado. A garantia 14 é escolhida
-  // de propósito — nenhuma outra parte desta suíte a resolve, e com o histórico
-  // guardando todos os trabalhos, mudar para algo já feito passou a oferecer
-  // continuar, que é justamente o que ele existe para fazer.
-  await regras(17, 15, 14);
-  await pagina.waitForTimeout(200);
-  marcar(
-    await pagina.locator('#ex-continuar').isHidden(),
-    'e some numa configuração que nunca foi trabalhada'
-  );
 
-  // E volta a aparecer numa que foi: é o histórico funcionando, e não um
-  // resquício da versão de um trabalho só.
+  // ─── 7a. a página some com o motor rodando ───
+  //
+  // A escalada grava o retrato do motor a cada quatro segundos justamente para
+  // isto: fechar o aplicativo no meio não pode custar o trabalho já feito. O
+  // cartão da partida é onde ele volta, e ele conhece os dois motores — cada um
+  // guarda numa chave própria, e um cartão que só olhasse uma delas deixaria
+  // metade do trabalho guardado para ninguém.
+  //
+  // Um pool grande de propósito: precisa continuar rodando na hora da recarga.
+  await pagina.click('#aba-lotinha');
+  await marcarNumeros(25, Array.from({ length: 22 }, (_, i) => i + 1));
   await regras(17, 15, 13);
+  await resolver();
+  await pagina.waitForFunction(
+    () => !document.getElementById('ex-construcao-cartao').hidden,
+    undefined,
+    { timeout: 60000 }
+  );
+  // Sem parar: a página some enquanto ele trabalha, que é o caso real.
+  await pagina.waitForTimeout(5000);
+  await pagina.reload({ waitUntil: 'networkidle' });
+  await pagina.waitForSelector('#lot-grade .numero');
+  await pagina.waitForTimeout(1500);
+  const cartaoDeVolta = await pagina.evaluate(() => {
+    const c = document.getElementById('cartao-interrompido');
+    return {
+      aberto: c ? !c.hidden : false,
+      motor: c?.dataset?.motor ?? '',
+      texto: document.getElementById('resumo-interrompido')?.textContent ?? '',
+    };
+  });
+  marcar(
+    cartaoDeVolta.aberto && cartaoDeVolta.motor === 'exato',
+    'reabrir o aplicativo devolve a escalada que ficou pela metade',
+    `motor "${cartaoDeVolta.motor}", cartão ${cartaoDeVolta.aberto ? 'aberto' : 'fechado'}`
+  );
+  marcar(
+    /motor exato/.test(cartaoDeVolta.texto) && /cartelas/.test(cartaoDeVolta.texto),
+    'e diz de qual motor ela é, e quantas cartelas tinha',
+    cartaoDeVolta.texto.replace(/\s+/g, ' ').slice(0, 90)
+  );
+  // O cartão mora na aba Histórico, que é onde os trabalhos salvos vivem.
+  await pagina.click('#aba-historico');
+  await pagina.click('#dispensar-interrompido');
   await pagina.waitForTimeout(200);
   marcar(
-    !(await pagina.locator('#ex-continuar').isHidden()),
-    'e reaparece numa configuração trabalhada antes, mesmo depois de outras no meio',
-    (await texto('#ex-retomar-aviso')).slice(0, 80)
+    (await pagina.locator('#cartao-interrompido').isHidden())
+      && (await pagina.locator('#lista-historico [data-acao="ex-continuar"]').count()) > 0,
+    'e "agora não" fecha a oferta sem apagar o trabalho'
   );
 
   // ─── 7b. os três estágios, cada um ligado à mão ───
@@ -439,10 +552,10 @@ try {
   // os números — não passa do piso sozinha, passa quando mandam, nunca desce
   // abaixo dele — em vez de decorar um valor que muda se a fórmula melhorar.
   await pagina.reload({ waitUntil: 'networkidle' });
-  await pagina.waitForSelector('#ex-grade .numero');
+  await pagina.waitForSelector('#lot-grade .numero');
   await marcarNumeros(13, Array.from({ length: 13 }, (_, i) => i + 1));
   await regras(4, 4, 2);
-  await pagina.click('#ex-resolver');
+  await resolver();
 
   // O comando já está à mão, e o motor mal começou.
   //
@@ -565,10 +678,10 @@ try {
   // número. Não há o que ligar: o que se cobra é que o número apareça, que ele
   // não suba, que a garantia se cumpra, e que parar devolva o que valia.
   await pagina.reload({ waitUntil: 'networkidle' });
-  await pagina.waitForSelector('#ex-grade .numero');
+  await pagina.waitForSelector('#lot-grade .numero');
   await marcarNumeros(11, Array.from({ length: 11 }, (_, i) => i + 1));
   await regras(8, 5, 5);
-  await pagina.click('#ex-resolver');
+  await resolver();
 
   await pagina.waitForFunction(
     () => /Garantia cumprida|Fechou em 100%/.test(
@@ -615,15 +728,18 @@ try {
   // tinha escolhido. Resultado: toda configuração já trabalhada rodava o motor
   // velho, com o carimbo da versão nova na tela.
   await pagina.reload({ waitUntil: 'networkidle' });
-  await pagina.waitForSelector('#ex-grade .numero');
+  await pagina.waitForSelector('#lot-grade .numero');
   await marcarNumeros(11, Array.from({ length: 11 }, (_, i) => i + 1));
   await regras(8, 5, 5);
-  marcar(
-    !(await pagina.locator('#ex-continuar').isHidden()),
-    'a tela oferece continuar o trabalho guardado desta configuração'
+  // O trabalho desta configuração está guardado — foi 7d que o guardou — e o
+  // que se cobra aqui é o oposto de retomá-lo: mandar resolver de novo tem de
+  // dar o motor novo, e não a fase gravada por cima dele.
+  const guardadoAntes = await pagina.evaluate(() =>
+    Object.keys(localStorage).some((c) => c.includes('exato'))
   );
+  marcar(guardadoAntes, 'há trabalho guardado desta configuração no aparelho');
 
-  await pagina.click('#ex-resolver');
+  await resolver();
   await pagina.waitForFunction(
     () => /Garantia cumprida|Fechou em 100%/.test(
       document.getElementById('ex-construcao')?.textContent ?? ''
@@ -646,348 +762,23 @@ try {
     (await texto('#ex-verificacao')).slice(0, 50)
   );
 
-  // ─── 8. conferir, e o dinheiro ───
-  //
-  // Um fechamento pequeno e comprovado, para que a conferência possa ser
-  // cobrada contra números que se conhecem de cor: 18 dezenas, jogos de 17,
-  // garante 15, mínimo 16 cartelas.
-  await pagina.reload({ waitUntil: 'networkidle' });
-  await pagina.waitForSelector('#ex-grade .numero');
-  await marcarNumeros(25, Array.from({ length: 18 }, (_, i) => i + 1));
-  await regras(17, 15, 15);
-
-  // Quanto custa este pedido, **antes** de mandar resolver. Sem isto, a única
-  // forma de saber se uma configuração dá 16 cartelas ou 27.000 era resolvê-la.
-  await pagina.waitForFunction(
-    () => document.getElementById('ex-escala').textContent.trim() !== '',
-    undefined,
-    { timeout: 20000 }
-  );
-  marcar(
-    /16 cartelas/.test(await texto('#ex-escala')),
-    'a tela diz quantas cartelas o pedido custa antes de resolver',
-    await texto('#ex-escala')
-  );
-  await regras(17, 15, 13);
-  // Esperar por "sem 16 cartelas" pegaria também o instante em que a linha está
-  // vazia, entre a mudança do parâmetro e a resposta do motor.
-  await pagina.waitForFunction(
-    () => {
-      const t = document.getElementById('ex-escala').textContent;
-      return /cartela/.test(t) && !/ 16 cartelas/.test(t);
-    },
-    undefined,
-    { timeout: 20000 }
-  );
-  const outraEscala = await texto('#ex-escala');
-  await regras(17, 15, 15);
-  await pagina.waitForFunction(
-    () => /16 cartelas/.test(document.getElementById('ex-escala').textContent),
-    undefined,
-    { timeout: 20000 }
-  );
-  marcar(
-    !/ 16 cartelas/.test(outraEscala) && /cartela/.test(outraEscala),
-    'e o número acompanha a configuração, sem precisar rodar nada',
-    outraEscala
-  );
-
-  // Uma configuração que o motor vai recusar é dita na hora de escolher, e não
-  // depois de tocar em Resolver — que é justamente para isso que a prévia
-  // existe.
-  await marcarNumeros(25, Array.from({ length: 25 }, (_, i) => i + 1));
-  await regras(12, 15, 11);
-  await pagina.waitForFunction(
-    () => /não cabe/.test(document.getElementById('ex-escala').textContent),
-    undefined,
-    { timeout: 20000 }
-  );
-  marcar(
-    /teto é 4\.000\.000/.test(await texto('#ex-escala')) &&
-      /5\.200\.300/.test(await texto('#ex-escala')),
-    'e um pedido grande demais é recusado já na escolha, com o número legível',
-    (await texto('#ex-escala')).slice(0, 100)
-  );
-
-  await marcarNumeros(25, Array.from({ length: 18 }, (_, i) => i + 1));
-  await regras(17, 15, 15);
-  await pagina.waitForFunction(
-    () => / 16 cartelas/.test(document.getElementById('ex-escala').textContent),
-    undefined,
-    { timeout: 20000 }
-  );
-
-  await pagina.selectOption('#ex-esforco', '1');
-  await pagina.click('#ex-resolver');
-  await esperarResultado(180000);
-
-  marcar(
-    (await pagina.locator('#ex-dinheiro-cartao').isVisible()) &&
-      (await pagina.locator('#ex-conferir-cartao').isVisible()),
-    'com as cartelas prontas, a conferência e o controle financeiro aparecem'
-  );
-
-  // ─── a lista de cartelas não pode ficar entre o resultado e as ferramentas ───
-  //
-  // Era o defeito: as cartelas saíam todas na tela, e chegar à conferência num
-  // fechamento de mil custava mil cartelas de rolagem.
-  marcar(
-    (await pagina.locator('#ex-previa .cartela').count()) === 3 &&
-      (await pagina.locator('#ex-cartelas').isHidden()) &&
-      (await pagina.locator('#ex-cartelas .cartela').count()) === 0,
-    'o resultado mostra uma amostra de três cartelas, e não a lista inteira',
-    await texto('#ex-aviso-cartelas')
-  );
-
-  marcar(
-    /Ver todas as 16 cartelas/.test(await texto('#ex-ver-cartelas')),
-    'e um botão diz quantas existem e o que ele faz',
-    await texto('#ex-ver-cartelas')
-  );
-
-  const vaoFechado = await vaoAteAConferencia();
-  const alturaComPoucas = await alturaDoResultado();
-  marcar(
-    vaoFechado < 2500,
-    'com a lista fechada, a conferência fica a poucas telas de distância',
-    `${vaoFechado} px até o estágio 10`
-  );
-
-  // A promessa que o pedido faz por escrito: 20, 100, 500 ou 1.000 cartelas dão
-  // a mesma página. Se a altura do resultado não muda entre um fechamento de
-  // 16 e um de 160, ela não vai mudar num de 1.000.
-  marcar(
-    Math.abs(alturaComMuitas - alturaComPoucas) < 80,
-    'e o tamanho da página não cresce com o tamanho do fechamento',
-    `${cartelasGrandes} cartelas: ${alturaComMuitas} px · 16 cartelas: ${alturaComPoucas} px`
-  );
-
-  await pagina.click('#ex-ver-cartelas');
-  await pagina.waitForTimeout(400);
-  marcar(
-    (await pagina.locator('#ex-cartelas .cartela').count()) === 16 &&
-      /Ocultar as cartelas/.test(await texto('#ex-ver-cartelas')),
-    'tocar no botão abre a listagem completa, e ele passa a oferecer fechá-la',
-    `${await pagina.locator('#ex-cartelas .cartela').count()} cartelas desenhadas`
-  );
-
-  marcar(
-    (await vaoAteAConferencia()) > vaoFechado,
-    'e a página cresce só enquanto ela está aberta',
-    `${await vaoAteAConferencia()} px abertas contra ${vaoFechado} px fechadas`
-  );
-
-  // Aberta num fechamento grande a lista passa de 800.000 px, e o botão que a
-  // fecha nasce no topo dela. Sem acompanhar, abrir vira um caminho sem volta.
-  await pagina.evaluate(() => window.scrollTo(0, document.body.scrollHeight * 0.6));
-  await pagina.waitForTimeout(200);
-  const alcance = await pagina.evaluate(() => {
-    const r = document.getElementById('ex-ver-cartelas').getBoundingClientRect();
-    return { dentro: r.top >= 0 && r.bottom <= window.innerHeight, topo: Math.round(r.top) };
-  });
-  marcar(
-    alcance.dentro,
-    'e o botão de fechar continua ao alcance de dentro da lista',
-    `a ${alcance.topo} px do topo da janela`
-  );
-  await pagina.evaluate(() => window.scrollTo(0, 0));
-
-  await pagina.click('#ex-ver-cartelas');
-  await pagina.waitForTimeout(200);
-  marcar(
-    await pagina.locator('#ex-cartelas').isHidden(),
-    'tocar de novo fecha a listagem'
-  );
-
-  const faixasNaTela = await pagina.$$eval('#ex-premios input[data-faixa]', (campos) =>
-    campos.map((c) => Number(c.dataset.faixa))
-  );
-  marcar(
-    faixasNaTela.join(',') === '15,14,13,12,11',
-    'há um campo de prêmio para cada faixa de acertos, do topo para baixo',
-    faixasNaTela.join(', ')
-  );
-
-  // O custo total é aritmética que a pessoa confere de cabeça: 16 × 2,50 = 40.
-  await pagina.fill('#ex-custo-unitario', '2,50');
-  const custo = await texto('#ex-custo-total');
-  marcar(
-    /R\$\s*40,00/.test(custo) && /16 cartelas/.test(custo),
-    'o custo total é o número de cartelas vezes o valor de cada uma',
-    custo
-  );
-
-  for (const [faixa, valor] of [
-    [11, '6'],
-    [12, '12'],
-    [13, '30'],
-    [14, '1500'],
-    [15, '60000'],
-  ]) {
-    await pagina.fill(`#ex-premio-${faixa}`, valor);
-  }
-
-  // Um sorteio tirado só dos números marcados: a garantia é uma afirmação
-  // sobre exatamente estes, e tem de aparecer cumprida.
-  await pagina.click('#ex-origem .opcao[data-origem="meus"]');
-  await pagina.click('#ex-sortear');
-  await pagina.waitForSelector('#ex-conferencia-cartao:not([hidden])');
-
-  const sorteados = await pagina.$$eval('#ex-sorteio-saiu span', (e) =>
-    e.map((x) => Number(x.textContent))
-  );
-  marcar(
-    sorteados.length === 15 &&
-      new Set(sorteados).size === 15 &&
-      sorteados.every((n) => n >= 1 && n <= 18),
-    'um sorteio simulado dentro dos meus números não traz nenhum de fora',
-    sorteados.join(' ')
-  );
-
-  marcar(
-    /🎯/.test(await texto('#ex-conferencia-topo')),
-    'e a garantia aparece cumprida, porque é sobre estes números que ela vale',
-    (await texto('#ex-conferencia-topo')).slice(0, 90)
-  );
-
-  // A soma da tabela tem de fechar com o total: nenhuma cartela pode sumir
-  // entre as faixas mostradas e a linha de baixo.
-  const somaDaTabela = await pagina.$$eval('#ex-conferencia-faixas tbody tr', (linhas) =>
-    linhas.reduce(
-      (s, l) => s + Number((l.children[1].textContent || '0').replace(/\D/g, '')),
-      0
-    )
-  );
-  marcar(somaDaTabela === 16, 'a tabela de faixas fecha com o total de cartelas', `${somaDaTabela} de 16`);
-
-  // O balanço: as três linhas que respondem "valeu a pena?".
-  const balanco = await texto('#ex-balanco');
-  marcar(
-    /Custo do fechamento/.test(balanco) &&
-      /Total das premiações/.test(balanco) &&
-      /Resultado líquido/.test(balanco) &&
-      /R\$\s*40,00/.test(balanco),
-    'o balanço mostra custo, premiação e líquido, com o custo do fechamento inteiro',
-    balanco.slice(0, 110)
-  );
-
-  // Cada faixa mostra quantidade, valor e o produto — separada das outras, que
-  // é como o pedido descreve.
-  const linhaDoTopo = await pagina.$eval('#ex-conferencia-faixas tbody tr', (l) =>
-    [...l.children].map((c) => c.textContent.trim())
-  );
-  const quantasNoTopo = Number(linhaDoTopo[1].replace(/\D/g, ''));
-  marcar(
-    linhaDoTopo.length === 4 &&
-      /15 acertos/.test(linhaDoTopo[0]) &&
-      new RegExp(`${(quantasNoTopo * 60000).toLocaleString('pt-BR')}`).test(linhaDoTopo[3]),
-    'cada faixa mostra quantidade × prêmio = total, na própria linha',
-    linhaDoTopo.join(' | ')
-  );
-
-  // As cartelas premiadas podem ser vistas, e não só contadas.
-  marcar(
-    (await pagina.locator('#ex-premiadas-cartao').isVisible()) &&
-      (await pagina.locator('#ex-faixa-cartelas .cartela').count()) > 0,
-    'e dá para ver quais cartelas foram premiadas, e não só quantas',
-    `${await pagina.locator('#ex-faixa-cartelas .cartela').count()} desenhadas`
-  );
-
-  // Um resultado digitado com números de fora: a garantia não se aplica, e a
-  // tela precisa dizer o motivo certo em vez do motivo genérico.
-  await pagina.fill('#ex-resultado', '01 02 03 04 05 06 07 08 09 10 11 12 13 22 23');
-  await pagina.click('#ex-conferir');
-  const comForasteiros = await texto('#ex-conferencia-topo');
-  marcar(
-    /2 de fora/.test(comForasteiros) && /22, 23/.test(comForasteiros),
-    'um resultado com números que não foram marcados é conferido, e a tela diz quais ficaram de fora',
-    comForasteiros.slice(0, 120)
-  );
-
-  await pagina.fill('#ex-resultado', '1 2 3');
-  await pagina.click('#ex-conferir');
-  marcar(
-    /15 números, e você digitou 3/.test(await texto('#ex-conferir-erro')),
-    'e uma entrada errada é recusada com uma frase que explica o quê',
-    await texto('#ex-conferir-erro')
-  );
-
-  // ─── 9. muitos sorteios, e o desempenho financeiro ao longo deles ───
-  await pagina.click('#ex-origem .opcao[data-origem="universo"]');
-  await pagina.evaluate(() => {
-    document.getElementById('ex-simulacao-cartao').open = true;
-  });
-  await pagina.click('#ex-quantos .opcao[data-quantos="1000"]');
-  await pagina.click('#ex-simular');
-  await pagina.waitForSelector('#ex-simulacao-rolagem:not([hidden])', { timeout: 120000 });
-
-  const tabelaDaSimulacao = await texto('#ex-simulacao-faixas');
-  marcar(
-    /1.000 sorteios do universo inteiro/.test(tabelaDaSimulacao) &&
-      (await pagina.locator('#ex-simulacao-faixas tbody tr').count()) === 5,
-    'a simulação relata cada faixa ao longo de mil sorteios',
-    tabelaDaSimulacao.slice(0, 80)
-  );
-
-  const financeiro = await texto('#ex-simulacao-dinheiro');
-  marcar(
-    /Investido em 1.000 sorteios/.test(financeiro) &&
-      /Recebido no total/.test(financeiro) &&
-      /Sorteios com lucro/.test(financeiro) &&
-      /R\$\s*40.000,00/.test(financeiro),
-    'e o balanço da simulação diz quanto saiu, quanto voltou e em quantos sorteios houve lucro',
-    financeiro.slice(0, 120)
-  );
-
-  // A promessa que faz a tela valer: experimentar outro cenário de premiação
-  // não custa outra simulação.
-  const antes = financeiro;
-  await pagina.fill('#ex-premio-11', '12');
-  await pagina.waitForTimeout(150);
-  const depois = await texto('#ex-simulacao-dinheiro');
-  marcar(
-    antes !== depois && /Recebido no total/.test(depois),
-    'mudar um prêmio refaz o balanço na hora, sem repetir a simulação'
-  );
-
-  // O aviso que impede a leitura errada do cenário mais bonito.
-  await pagina.click('#ex-origem .opcao[data-origem="meus"]');
-  await pagina.click('#ex-quantos .opcao[data-quantos="100"]');
-  await pagina.click('#ex-simular');
-  await pagina.waitForFunction(
-    () => /Leia com esta ressalva/.test(document.getElementById('ex-simulacao-dinheiro').textContent),
-    undefined,
-    { timeout: 60000 }
-  );
-  const ressalva = await texto('#ex-simulacao-dinheiro');
-  marcar(
-    /0,025%/.test(ressalva) && /1 em 4.006/.test(ressalva),
-    'simular só entre os meus números vem com a chance de isso acontecer de verdade',
-    ressalva.slice(ressalva.indexOf('Leia com'), ressalva.indexOf('Leia com') + 130)
-  );
-
-  // Os preços sobrevivem a fechar o aplicativo: ninguém redigita cinco faixas.
-  await pagina.reload({ waitUntil: 'networkidle' });
-  await pagina.waitForSelector('#ex-grade .numero');
-  await marcarNumeros(25, Array.from({ length: 18 }, (_, i) => i + 1));
-  await regras(17, 15, 15);
-  await pagina.selectOption('#ex-esforco', '1');
-  await pagina.click('#ex-resolver');
-  await esperarResultado(180000);
-  marcar(
-    (await pagina.inputValue('#ex-custo-unitario')).replace('.', ',') === '2,5' &&
-      (await pagina.inputValue('#ex-premio-15')) === '60000',
-    'os valores informados sobrevivem a fechar e reabrir o aplicativo',
-    `cartela ${await pagina.inputValue('#ex-custo-unitario')} · 15 acertos ${await pagina.inputValue('#ex-premio-15')}`
-  );
-
   // ─── 10. o histórico: guardar, abrir, exportar, importar ───
   //
   // A promessa do pedido, e a única que importa aqui: **abrir um fechamento
   // salvo devolve exatamente a quantidade de cartelas que estava registrada, e
   // retoma daquele estado.**
-  await pagina.click('#ex-aba-historico');
-  const linhas = await pagina.locator('#ex-hist-lista .sessao').count();
+  /*
+   * Quantas cartelas o motor acabou de entregar, lidas da tela.
+   *
+   * Estava escrito 16 à mão, do caso que a suíte resolvia antes desta seção. O
+   * caso mudou junto com a unificação, e um número decorado teria mandado a
+   * seção inteira falhar por estar certa. O que se cobra é a relação — a linha
+   * do histórico diz o mesmo que o resultado disse — e não um valor.
+   */
+  const cartelasDoResultado = await numero('#ex-encontrado');
+
+  await pagina.click('#aba-historico');
+  const linhas = await pagina.locator('#lista-historico .sessao').count();
   marcar(
     linhas >= 1,
     'o fechamento resolvido aparece no histórico, sem ninguém pedir',
@@ -995,31 +786,31 @@ try {
   );
 
   const cartelasNaLinha = await pagina
-    .locator('#ex-hist-lista .sessao .sessao-quantia')
+    .locator('#lista-historico .sessao .sessao-quantia')
     .first()
     .textContent();
   marcar(
-    Number(cartelasNaLinha.replace(/\D/g, '')) === 16,
-    'e a linha diz quantas cartelas ele tem',
-    `${cartelasNaLinha} cartelas`
+    Number(cartelasNaLinha.replace(/\D/g, '')) === cartelasDoResultado,
+    'e a linha diz quantas cartelas ele tem — o mesmo número do resultado',
+    `${cartelasNaLinha} na linha, ${cartelasDoResultado} no resultado`
   );
   marcar(
-    /18 números · jogos de 17 · garante 15/.test(await texto('#ex-hist-lista .sessao-config')),
+    /11 números · jogos de 8 · garante 5/.test(await texto('#lista-historico .sessao-config')),
     'com as regras que o produziram, em português',
-    (await texto('#ex-hist-lista .sessao-config')).slice(0, 70)
+    (await texto('#lista-historico .sessao-config')).slice(0, 70)
   );
 
   // Exportar: o arquivo tem de sair, e tem de trazer o fechamento inteiro.
   const [entregue] = await Promise.all([
     pagina.waitForEvent('download', { timeout: 20000 }),
-    pagina.click('#ex-hist-lista [data-exportar]'),
+    pagina.click('#lista-historico [data-acao="ex-exportar"]'),
   ]);
   const caminhoDoArquivo = join(tmpdir(), entregue.suggestedFilename());
   await entregue.saveAs(caminhoDoArquivo);
   const exportado = JSON.parse(await readFile(caminhoDoArquivo, 'utf8'));
   marcar(
     exportado.aplicativo === 'sonho-lucido/exato' &&
-      exportado.fechamento.cartelas.length === 16 &&
+      exportado.fechamento.cartelas.length === cartelasDoResultado &&
       typeof exportado.fechamento.escalada === 'string' &&
       exportado.fechamento.escalada.length > 0,
     'exportar entrega um arquivo com as cartelas e o estado do motor dentro',
@@ -1028,25 +819,25 @@ try {
 
   // Fechar e reabrir o aplicativo: o histórico é o que não pode se perder.
   await pagina.reload({ waitUntil: 'networkidle' });
-  await pagina.waitForSelector('#ex-grade .numero');
-  await pagina.click('#ex-aba-historico');
+  await pagina.waitForSelector('#lot-grade .numero');
+  await pagina.click('#aba-historico');
   marcar(
-    (await pagina.locator('#ex-hist-lista .sessao').count()) === linhas,
+    (await pagina.locator('#lista-historico .sessao').count()) === linhas,
     'fechar e reabrir o aplicativo não perde nada do histórico'
   );
 
   // Importar o mesmo arquivo de volta: a prévia diz o que tem dentro antes de
   // guardar, e o que entra é o que estava lá.
-  await pagina.setInputFiles('#ex-hist-arquivo', caminhoDoArquivo);
-  await pagina.waitForSelector('#ex-hist-confirmar-cartao:not([hidden])', { timeout: 15000 });
+  await pagina.setInputFiles('#arquivo-sessao', caminhoDoArquivo);
+  await pagina.waitForSelector('#previa-importacao:not([hidden])', { timeout: 15000 });
   marcar(
-    /16 cartelas/.test(await texto('#ex-hist-previa')),
+    new RegExp(`${cartelasDoResultado} cartelas`).test(await texto('#previa-importacao')),
     'importar mostra o que o arquivo traz antes de guardá-lo',
-    (await texto('#ex-hist-previa')).slice(0, 80)
+    (await texto('#previa-importacao')).slice(0, 80)
   );
-  await pagina.click('#ex-hist-confirmar');
+  await pagina.click('#confirmar-importacao');
   marcar(
-    (await pagina.locator('#ex-hist-lista .sessao').count()) === linhas + 1,
+    (await pagina.locator('#lista-historico .sessao').count()) === linhas + 1,
     'e guardar acrescenta o fechamento importado ao histórico'
   );
 
@@ -1056,18 +847,21 @@ try {
   const remendado = JSON.parse(await readFile(caminhoDoArquivo, 'utf8'));
   remendado.fechamento.cartelas = remendado.fechamento.cartelas.slice(0, 9);
   await writeFile(arquivoRuim, JSON.stringify(remendado));
-  await pagina.setInputFiles('#ex-hist-arquivo', arquivoRuim);
+  await pagina.setInputFiles('#arquivo-sessao', arquivoRuim);
   await pagina.waitForFunction(
-    () => /não serve/.test(document.getElementById('ex-hist-previa').textContent),
+    () => /não serve/.test(document.getElementById('previa-importacao').textContent),
     undefined,
     { timeout: 15000 }
   );
+  // A caixa de importação é uma só agora: ela mostra a recusa, e o que não pode
+  // existir é o botão que confirmaria — antes eram dois cartões, e o teste
+  // cobrava que o segundo estivesse escondido.
   marcar(
-    /16 cartelas/.test(await texto('#ex-hist-previa')) &&
-      /9/.test(await texto('#ex-hist-previa')) &&
-      (await pagina.locator('#ex-hist-confirmar-cartao').isHidden()),
+    new RegExp(`${cartelasDoResultado} cartelas`).test(await texto('#previa-importacao')) &&
+      /9/.test(await texto('#previa-importacao')) &&
+      (await pagina.locator('#confirmar-importacao').count()) === 0,
     'um arquivo cujo estado discorda da ficha é recusado, com os dois números',
-    (await texto('#ex-hist-previa')).slice(0, 120)
+    (await texto('#previa-importacao')).slice(0, 120)
   );
 
   // ─── 11. abrir só para olhar, sem pôr o motor para trabalhar ───
@@ -1077,20 +871,20 @@ try {
   // punha o aparelho a calcular — e num fechamento que não fecha, a calcular
   // para sempre, já que a escalada só para quando mandam.
   marcar(
-    (await pagina.locator('#ex-hist-lista [data-ver]').count()) > 0 &&
-      (await pagina.locator('#ex-hist-lista [data-abrir]').count()) > 0,
+    (await pagina.locator('#lista-historico [data-acao="ex-abrir"]').count()) > 0 &&
+      (await pagina.locator('#lista-historico [data-acao="ex-continuar"]').count()) > 0,
     'a linha do histórico separa abrir de continuar',
-    await pagina.$$eval('#ex-hist-lista .sessao-acoes button', (b) =>
+    await pagina.$$eval('#lista-historico .sessao-acoes button', (b) =>
       b.map((x) => x.textContent.trim()).join(' | ')
     )
   );
 
   const relogioDoAbrir = Date.now();
-  await pagina.click('#ex-hist-lista [data-ver]');
+  await pagina.click('#lista-historico [data-acao="ex-abrir"]');
   await esperarResultado(60000);
   const abriuEm = Date.now() - relogioDoAbrir;
   marcar(
-    (await numero('#ex-encontrado')) === 16 && abriuEm < 20000,
+    (await numero('#ex-encontrado')) === cartelasDoResultado && abriuEm < 20000,
     'abrir devolve o fechamento guardado na hora, sem refazer nada',
     `${await numero('#ex-encontrado')} cartelas em ${abriuEm} ms`
   );
@@ -1106,9 +900,8 @@ try {
     (await texto('#ex-prova')).slice(0, 70)
   );
   marcar(
-    (await pagina.locator('#ex-conferir-cartao').isVisible()) &&
-      (await pagina.locator('#ex-previa .cartela').count()) === 3,
-    'e as cartelas e a conferência ficam à mão, que é para isso que se abre'
+    (await pagina.locator('#ex-previa .cartela').count()) === 3,
+    'e a amostra de cartelas fica à mão, que é para isso que se abre'
   );
 
   // ─── 11b. as três vistas das cartelas contam a mesma coisa ───
@@ -1135,7 +928,7 @@ try {
       .sort()
       .join(' | ');
   marcar(
-    daTela.length === 16 && emOrdem(daTela) === emOrdem(doArquivo),
+    daTela.length === cartelasDoResultado && emOrdem(daTela) === emOrdem(doArquivo),
     'as cartelas na tela e as do arquivo exportado são a mesma coleção',
     `${daTela.length} de cada lado`
   );
@@ -1151,17 +944,18 @@ try {
 
 
   // ─── 12. continuar de onde parou, com a mesma quantidade de cartelas ───
-  await pagina.click('#ex-aba-historico');
+  await pagina.click('#aba-historico');
   const relogio = Date.now();
-  await pagina.click('#ex-hist-lista [data-abrir]');
+  await pagina.click('#lista-historico [data-acao="ex-continuar"]');
   await esperarResultado(180000);
   marcar(
-    (await numero('#ex-encontrado')) === 16 && (await numero('#ex-teto')) === 16,
+    (await numero('#ex-encontrado')) === cartelasDoResultado
+      && (await numero('#ex-teto')) === cartelasDoResultado,
     'abrir um fechamento guardado devolve exatamente a mesma quantidade de cartelas',
     `${await numero('#ex-encontrado')} cartelas, teto ${await numero('#ex-teto')}`
   );
   marcar(
-    /Mínimo exato: 16 cartelas/.test(await texto('#ex-frase')),
+    new RegExp(`Mínimo exato: ${cartelasDoResultado} cartelas`).test(await texto('#ex-frase')),
     'e o veredito continua sendo o mesmo',
     (await texto('#ex-frase')).slice(0, 60)
   );
@@ -1172,25 +966,25 @@ try {
   );
 
   // Excluir uma linha tira uma, e não todas.
-  await pagina.click('#ex-aba-historico');
-  const antesDeExcluir = await pagina.locator('#ex-hist-lista .sessao').count();
-  await pagina.click('#ex-hist-lista [data-excluir]');
+  await pagina.click('#aba-historico');
+  const antesDeExcluir = await pagina.locator('#lista-historico .sessao').count();
+  await pagina.click('#lista-historico [data-acao="ex-excluir"]');
   await pagina.waitForTimeout(300);
   marcar(
-    (await pagina.locator('#ex-hist-lista .sessao').count()) === antesDeExcluir - 1,
+    (await pagina.locator('#lista-historico .sessao').count()) === antesDeExcluir - 1,
     'excluir tira exatamente o fechamento pedido',
-    `${antesDeExcluir} → ${await pagina.locator('#ex-hist-lista .sessao').count()}`
+    `${antesDeExcluir} → ${await pagina.locator('#lista-historico .sessao').count()}`
   );
 
   // ─── 13. retomar uma escalada que ficou no meio ───
   //
   // O caso do pedido: um fechamento grande, interrompido, reaberto depois — e
   // retomado do ponto em que estava, sem recomeçar a montagem.
-  await pagina.click('#ex-aba-construtor');
+  await pagina.click('#aba-lotinha');
   await marcarNumeros(25, Array.from({ length: 20 }, (_, i) => i + 1));
   await regras(17, 15, 15);
   await pagina.selectOption('#ex-esforco', '1');
-  await pagina.click('#ex-resolver');
+  await resolver();
   await pagina.waitForFunction(
     () => Number(document.getElementById('ex-cartelas-agora').textContent.replace(/\D/g, '')) > 30,
     undefined,
@@ -1223,9 +1017,9 @@ try {
   );
 
   await pagina.reload({ waitUntil: 'networkidle' });
-  await pagina.waitForSelector('#ex-grade .numero');
-  await pagina.click('#ex-aba-historico');
-  await pagina.click('#ex-hist-lista [data-abrir]');
+  await pagina.waitForSelector('#lot-grade .numero');
+  await pagina.click('#aba-historico');
+  await pagina.click('#lista-historico [data-acao="ex-continuar"]');
   await pagina.waitForFunction(
     () =>
       !document.getElementById('ex-construcao-cartao').hidden &&
@@ -1254,7 +1048,7 @@ try {
   // ─── 14. o que não é problema é recusado com o motivo ───
   await marcarNumeros(25, Array.from({ length: 25 }, (_, i) => i + 1));
   await regras(12, 15, 11);
-  await pagina.click('#ex-resolver');
+  await resolver();
   await pagina.waitForFunction(
     () => !document.getElementById('ex-erro').hidden,
     undefined,
@@ -1278,7 +1072,7 @@ try {
   // coerência da página no fim, não quanto o motor consegue.
   await marcarNumeros(25, Array.from({ length: 11 }, (_, i) => i + 1));
   await regras(8, 5, 5);
-  await pagina.click('#ex-resolver');
+  await resolver();
   await esperarResultado();
 
   const contagem = await pagina.evaluate(() => ({
@@ -1313,7 +1107,7 @@ try {
    */
   await marcarNumeros(25, Array.from({ length: 11 }, (_, i) => i + 1));
   await regras(8, 5, 5);
-  await pagina.click('#ex-resolver');
+  await resolver();
   await pagina.waitForFunction(
     () => !document.getElementById('ex-situacao').hidden,
     undefined,
@@ -1372,13 +1166,13 @@ try {
   await marcarNumeros(25, Array.from({ length: 11 }, (_, i) => i + 1));
   await regras(8, 5, 5);
   const antesDoToque = await pagina.evaluate(() => window.scrollY);
-  await pagina.click('#ex-resolver');
+  await resolver();
   await pagina.waitForFunction(
     () => !document.getElementById('ex-analise-cartao').hidden,
     undefined,
     { timeout: 20000 }
   );
-  const rotuloEmCurso = await texto('#ex-resolver');
+  const rotuloEmCurso = await texto('#lot-iniciar');
   await pagina.waitForTimeout(700);
   const depoisDoToque = await pagina.evaluate(() => window.scrollY);
 
@@ -1396,9 +1190,9 @@ try {
 
   await esperarResultado();
   marcar(
-    !/Procurando/i.test(await texto('#ex-resolver')),
+    !/Procurando/i.test(await texto('#lot-iniciar')),
     'e o rótulo volta ao normal quando acaba',
-    await texto('#ex-resolver')
+    await texto('#lot-iniciar')
   );
 
   marcar(

@@ -29,31 +29,46 @@ apenas uma escolha diferente de números.
 
 ## No celular, sem instalar nada
 
-São **três aplicativos**, e a página inicial é a escolha entre eles. Tudo roda
-**dentro do seu aparelho**, compilado para WebAssembly. Não há servidor, não há
-conta, não há nada saindo do telefone.
+É **um aplicativo**, e abrir a página já é estar nele. Tudo roda **dentro do
+seu aparelho**, compilado para WebAssembly. Não há servidor, não há conta, não
+há nada saindo do telefone.
 
-| aplicativo | a pergunta que ele responde |
+Eram três — Lotinha, Construtor e Construtor Exato —, cada um com a sua tela, o
+seu histórico e a sua conferência. Eram três porque a tela **era** a modalidade:
+o universo de 25 e o sorteio de 15 estavam fixos no código da Lotinha, então
+"não é loteria" precisava de uma segunda tela e "saem outros tantos" de uma
+terceira. Abertos os dois números, as três viraram casos de uma só, e a
+diferença entre elas passou a ser o que sempre foi: qual motor responde melhor
+àquele pedido.
+
+| a pergunta | quem responde |
 |---|---|
-| **Lotinha** | quais jogos preciso fazer para não perder? |
-| **Construtor** | qual é a menor estrutura que satisfaz estas regras? |
-| **Construtor Exato** | qual é o mínimo, e como sei que é o mínimo? |
+| quais jogos preciso fazer para não perder? | o banco embutido, na hora |
+| e se o pedido não estiver no banco? | a construção algébrica, em milissegundos |
+| qual é o mínimo, e como sei que é o mínimo? | o motor exato: piso provado, escalada e verificação |
+| dá para fazer menor do que isso? | a busca estocástica, enquanto você deixar |
 
-Os **dois construtores** recebem os mesmos cinco números que descrevem um
-fechamento — pool, tamanho do jogo, quantos números são sorteados, quantos deles
-a cartela precisa conter, e quantas cartelas premiadas — e a mesma grade onde
-você marca quais dezenas vai jogar, para as cartelas saírem com os seus números.
-Separar o sorteio da garantia é o que permite pedir "saem 15, quero garantir
-13", que os três números de um covering design não conseguem descrever.
+O aplicativo escolhe sozinho entre os três primeiros, nessa ordem, e nunca
+esconde qual respondeu. Os dois últimos também podem ser pedidos à mão sobre um
+fechamento que já está na tela: ter um fechamento e ter a prova de que ele é o
+menor são coisas diferentes.
 
-Com mais de uma cartela premiada a tabela publicada some da tela dos dois, e
-isso é de propósito: ela descreve cobertura **simples**, e um covering design
-não entrega duas cartelas premiadas por sorteio. Mostrá-la ali convidaria a
-comparar o seu resultado com um número que resolve outro problema.
+Os cinco números que descrevem um fechamento — pool, tamanho do jogo, quantos
+números são sorteados, quantos deles a cartela precisa conter, e quantas
+cartelas premiadas — estão todos na tela, com a grade onde você marca as dezenas
+que vai jogar. Universo e sorteio ficam em **Avançado**, já preenchidos com a
+modalidade: quem só quer jogar não esbarra neles. Separar o sorteio da garantia
+é o que permite pedir "saem 15, quero garantir 13", que os três números de um
+covering design não conseguem descrever.
+
+Com mais de uma cartela premiada a tabela publicada some da tela, e isso é de
+propósito: ela descreve cobertura **simples**, e um covering design não entrega
+duas cartelas premiadas por sorteio. Mostrá-la ali convidaria a comparar o seu
+resultado com um número que resolve outro problema.
 
 ### A escalada de cobertura
 
-O Construtor Exato não monta uma solução grande para depois encolher. A lógica é
+O motor exato não monta uma solução grande para depois encolher. A lógica é
 a inversa:
 
 > **O número de cartelas é limitado pelo mínimo matemático. A variável que
@@ -540,7 +555,7 @@ um recorde que ainda pode cair.
 
 ### O aplicativo que recusa essa referência
 
-O **Construtor Exato** não usa nada disso, e a recusa é o ponto dele. A tabela
+O **motor exato** não usa nada disso, e a recusa é o ponto dele. A tabela
 da La Jolla é trabalho de outras pessoas; um aplicativo que a exibe como
 resposta está mostrando o que sabem, não o que ele sabe. Ali, todo número é
 calculado no aparelho — e onde o cálculo não alcança, os dois números aparecem
@@ -737,7 +752,7 @@ crates/
 ├── motor-cli/           a linha de comando
 ├── motor-web/           a ponte para o navegador, via WebAssembly
 │
-├── motor-exato/         o motor do Construtor Exato — sem dependência dos outros
+├── motor-exato/         o motor exato — sem dependência dos outros
 │   ├── problema         o modelo formal, e o verificador
 │   ├── limites          só cotas com demonstração escrita: contagem, Schönheim
 │   ├── escalada         a cobertura sobe; o número de cartelas para no piso
@@ -745,20 +760,21 @@ crates/
 │   ├── prova            ramifica-e-poda: existe alguma coisa menor?
 │   └── veredito         onde construção e prova se encontram — ou não
 │
-└── motor-exato-web/     a ponte do Construtor Exato, num módulo separado
+└── motor-exato-web/     a ponte do motor exato, num módulo separado
 
 web/                     a interface da plataforma
-├── index.html           a escolha entre os três aplicativos
-├── lotinha.html         a Lotinha, e app.js / trabalhador.js / historico.js
-├── construtor.html      o Construtor, e construtor.js / escada.js
-├── exato.html           o Construtor Exato, e exato.js
+├── index.html           a ferramenta, e app.js / trabalhador.js / historico.js
+├── exato-pipeline.js    o motor exato dentro dela, e exato-trabalhador.js
 ├── exato-checagem.js    a aritmética da conferência e do dinheiro, sem DOM
-├── exato-conferencia.js a tela da conferência: faixas, balanço e simulações
-├── exato-checador.js    o trabalhador das simulações longas do Exato
+├── exato-checador.js    o trabalhador das simulações longas
 ├── exato-historico.js   os fechamentos guardados, com o estado do motor junto
 ├── exato-sessao.js      o arquivo de fechamento: exportar e importar
-├── exato-veredito.js    o que os dois números autorizam a afirmar
 ├── exato-veredito.js    a regra do que pode ser afirmado, sem DOM e sem wasm
+├── lotinha.js           a modalidade: banco, construção algébrica e mínimos
+├── checagem.js          a conferência de um resultado, e checador.js
+├── comum.js             a aritmética que todos usam, num lugar só
+├── armazem.js           o armazenamento partilhado, com aparo educado
+├── configuracoes.html   atualização, espaço e volta aos padrões de fábrica
 └── sw.js                funcionamento sem internet e atualização automática
 ```
 
@@ -904,10 +920,10 @@ node web/testar.mjs                             # testa a interface na raiz
 node web/testar.mjs /Sonho-l-cido/              # testa sob a subpasta do Pages
 node web/testar-atualizacao.mjs                 # testa a atualização automática
 node web/testar-historico.mjs                   # testa o histórico de trabalhos
-node web/testar-lotinha.mjs                     # testa a ferramenta Lotinha
+node web/testar-lotinha.mjs                     # testa a ferramenta
 node web/testar-checagem.mjs                    # testa a conferência de acertos
 node web/testar-construtor.mjs                  # testa o Construtor
-node web/testar-exato.mjs                       # testa o Construtor Exato
+node web/testar-exato.mjs                       # testa o motor exato na ferramenta
 node web/testar-exato-checagem.mjs              # a aritmética do dinheiro, sem navegador
 node web/testar-exato-historico.mjs             # o histórico e o arquivo, sem navegador
 node web/testar-exato-veredito.mjs              # o que ele tem direito de afirmar

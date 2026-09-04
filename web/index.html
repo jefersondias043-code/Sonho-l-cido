@@ -138,6 +138,14 @@
     <button class="principal" id="lot-otimizar" hidden>
       Procurar um fechamento menor
     </button>
+    <!-- O motor exato é a única coisa no aplicativo que responde "qual é o
+         mínimo" em vez de "o melhor que achei". Ele entra sozinho quando nada
+         mais responde; aqui ele é oferecido mesmo quando já há resposta, porque
+         ter um fechamento e ter a prova de que ele é o menor são duas coisas
+         diferentes. -->
+    <button class="secundario" id="lot-provar" hidden>
+      Provar o mínimo com o motor exato
+    </button>
     <button class="secundario" id="lot-checar" hidden>
       Checar este fechamento
     </button>

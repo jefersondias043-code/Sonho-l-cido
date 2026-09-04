@@ -1837,9 +1837,24 @@ function lotEsquecerFechamento() {
   $('lot-conferir').hidden = true;
   $('lot-otimizar').hidden = true;
   $('lot-checar').hidden = true;
+  $('lot-provar').hidden = true;
   $('lot-conferencia').innerHTML =
     '<em>Ao carregar, cada sorteio possível dentro do seu pool é conferido um a ' +
     'um — sem consultar o motor que produziu o fechamento.</em>';
+
+  /*
+   * O que o motor exato mostrou também deixou de valer.
+   *
+   * Mexer num dos cinco números troca o problema, e os cartões dele continuam
+   * afirmando coisas sobre o anterior: um piso provado, uma cobertura, um
+   * "mínimo exato" que agora é de outra pergunta. Se ele ainda estiver
+   * escalando, está escalando o problema que acabou de sair da tela — parar é
+   * o que respeita quem mudou de ideia, e o trabalho até aqui fica guardado
+   * no histórico como qualquer outro.
+   */
+  if (exato.estaRodando()) exato.pararTudo();
+  const painelDoExato = $('grupo-exato');
+  if (painelDoExato) painelDoExato.hidden = true;
 }
 
 /* A cotação em uso. Nasce com a tabela padrão e é editável campo a campo —
@@ -2014,14 +2029,19 @@ function lotMontarExigencias() {
   const alvoGarantia = $('lot-garantia');
   alvoGarantia.innerHTML = '';
   /*
-   * A garantia mínima segue o sorteio, e não a Lotofácil.
+   * A garantia mínima é da modalidade, e só vale enquanto a modalidade estiver
+   * na tela.
    *
-   * `MENOR_GARANTIA` é 11 porque é a partir de 11 que a Lotofácil paga. Num
-   * sorteio de 2 números essa régua não diz nada: ela apagava a fileira
-   * inteira, e a única garantia possível — acertar os 2 — não tinha botão.
-   * Onde o sorteio é grande o piso continua sendo o da modalidade.
+   * `MENOR_GARANTIA` é 11 porque é a partir de 11 que a Lotofácil paga —
+   * abaixo disso a fileira ofereceria escolhas que não compram nada. É uma
+   * verdade sobre a loteria, não sobre cobertura: num sorteio de 4 números,
+   * garantir 2 é um problema legítimo e clássico, e a fileira não o oferecia.
+   * Pior, num sorteio de 2 ela ficava vazia, e o caso ficava inalcançável.
+   *
+   * Com o sorteio nos 15 da modalidade o piso continua sendo 11, exatamente
+   * como antes; fora dela, toda garantia possível aparece.
    */
-  const menorGarantia = Math.min(lotinha.MENOR_GARANTIA, lotSorteio);
+  const menorGarantia = lotSorteio === lotinha.SORTEIO ? lotinha.MENOR_GARANTIA : 1;
   for (let g = lotSorteio; g >= menorGarantia; g--) {
     const b = document.createElement('button');
     b.type = 'button';
@@ -2046,7 +2066,7 @@ function lotMontarExigencias() {
   // O teto é o número de jogos **distintos** que podem conter um mesmo sorteio.
   // Acima dele não há o que comprar: só repetir cartela, que soma prêmio e custo
   // na mesma proporção e não muda nada.
-  const teto = Math.max(lotinha.maximoPremiadas(lotPool, lotJogo, lotGarantia), 1);
+  const teto = Math.max(lotinha.maximoPremiadas(lotPool, lotJogo, lotGarantia, lotSorteio), 1);
   if (lotPremiadas > teto) lotPremiadas = teto;
 
   const escala = [];
@@ -2198,7 +2218,7 @@ function lotPintarExplicacao() {
 
   const { jogos, exato } = lotinha.minimo(lotPool, lotJogo, lotGarantia, lotPremiadas);
   const destino = $('lot-explicacao');
-  const teto = lotinha.maximoPremiadas(lotPool, lotJogo, lotGarantia);
+  const teto = lotinha.maximoPremiadas(lotPool, lotJogo, lotGarantia, lotSorteio);
 
   // O que se está pedindo, em uma frase — antes de dizer quanto custa.
   const pedido =
@@ -2596,6 +2616,7 @@ ligar('lot-iniciar', 'click', async () => {
     }
     $('lot-conferir').hidden = false;
     $('lot-checar').hidden = !pronto;
+    $('lot-provar').hidden = false;
 
     lotPintarEconomia();
 
@@ -2655,6 +2676,17 @@ function lotChamarOExato(numeros) {
   const pedido = pedidoDaTela();
   if (!pedido) return;
 
+  /*
+   * Um motor de cada vez.
+   *
+   * Nos casos leves a busca estocástica parte sozinha ao carregar o fechamento,
+   * e pedir a prova enquanto ela roda deixaria os dois trabalhando: dois
+   * workers no mesmo aparelho, dois relógios, e dois números disputando os
+   * mesmos mostradores. Quem pediu a prova pediu a prova.
+   */
+  desmontarTrabalhador();
+  definirFase('ocioso');
+
   mostrarPainel('buscar');
   $('grupo-exato').hidden = false;
   $('grupo-busca').hidden = true;
@@ -2691,6 +2723,20 @@ exato.ligar({
 });
 
 ligar('ex-parar', 'click', () => exato.pararTudo());
+
+/*
+ * O motor exato, pedido de propósito sobre um fechamento que já existe.
+ *
+ * Banco e fórmula respondem com um número; nenhum dos dois diz se ele é o
+ * menor. Quem diz é o piso, e o piso só sai de uma execução do motor exato. É
+ * por isso que este botão existe mesmo quando a tela já tem cartelas: o
+ * fechamento que ele devolve pode ser o mesmo, e a diferença estará em saber
+ * que não há outro.
+ */
+ligar('lot-provar', 'click', () => {
+  if (lotDezenas.size !== lotPool) return;
+  lotChamarOExato(dezenasEscolhidas());
+});
 
 ligar('lot-otimizar', 'click', () => {
   if (!lotConfiguracao || !lotFechamento) return;

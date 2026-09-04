@@ -60,6 +60,8 @@
  *   fronteira entre lucrar ao acertar e perder mesmo acertando.
  */
 
+import { maximoPremiadas as maximoGeral } from './comum.js';
+
 export const UNIVERSO = 25;
 export const SORTEIO = 15;
 
@@ -153,12 +155,21 @@ export function sorteiosPorJogo(pool, jogo, garantia = SORTEIO) {
  * menos uma dezena, o sorteio deixa 3 dezenas de fora, e só esses 3 jogos o
  * contêm.
  */
-export function maximoPremiadas(pool, jogo, garantia = SORTEIO) {
-  let total = 0;
-  for (let i = garantia; i <= Math.min(jogo, SORTEIO); i++) {
-    total += combinacoes(SORTEIO, i) * combinacoes(pool - SORTEIO, jogo - i);
-  }
-  return total;
+export function maximoPremiadas(pool, jogo, garantia = SORTEIO, sorteio = SORTEIO) {
+  /*
+   * O sorteio é um parâmetro, e não mais a constante da modalidade.
+   *
+   * Ele estava fixo em 15, e onde a tela abriu o sorteio isso dava respostas
+   * sem sentido: com pool 9, jogos de 3 e garantia 2, a soma pedia
+   * `C(9−15, 1)` — um binomial de argumento negativo, que vale zero. O teto
+   * saía 0, o botão de duas cartelas premiadas não existia, e o caso ficava
+   * inalcançável sem que nada dissesse por quê.
+   *
+   * A conta é a de `comum.js`, e é a mesma: aqui ela só ganha o nome e os
+   * padrões da Lotinha. Duas cópias da mesma soma eram duas chances de uma
+   * delas ficar para trás — e uma ficou.
+   */
+  return maximoGeral(pool, jogo, sorteio, garantia);
 }
 
 /**
