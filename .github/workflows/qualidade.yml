@@ -50,3 +50,11 @@ jobs:
         env:
           TUDO: '1'
         run: cargo test --release -p motor-exato --test qualidade -- --ignored --nocapture
+
+      # A garantia parcial tem bancada própria, e o que ela vigia é diferente:
+      # não o tamanho contra o melhor publicado — não há tabela publicada para
+      # `t < j` —, e sim que o motor **entregue** e que o que ele entrega
+      # cubra. A conferência é por força bruta, varrendo todos os sorteios sem
+      # reusar nada do motor.
+      - name: A garantia parcial entrega, e o que entrega confere
+        run: cargo test --release -p motor-exato --test parcial -- --ignored --nocapture
