@@ -180,3 +180,86 @@ fn combinacoes(itens: &[usize], k: usize) -> Vec<Vec<usize>> {
 pub fn todos_os_subconjuntos(v: usize, k: usize) -> Vec<Vec<usize>> {
     combinacoes(&(0..v).collect::<Vec<_>>(), k)
 }
+
+#[cfg(test)]
+mod testes {
+    use super::*;
+
+    /// Toda família construída de fato cobre, e tem o tamanho que a medida
+    /// prometeu.
+    ///
+    /// A construção é recursiva e escolhe entre três ramos comparando números;
+    /// um erro de contagem faria `construir` materializar um ramo diferente do
+    /// que `tamanho` mediu, e o resultado sairia grande demais — ou, pior, com
+    /// buraco. Aqui os dois são cobrados por força bruta: para cada
+    /// `b`-subconjunto de `[v]`, algum membro da família precisa estar contido
+    /// nele.
+    #[test]
+    fn a_construcao_cobre_e_tem_o_tamanho_medido() {
+        let mut memo = HashMap::new();
+        for v in 2..=12usize {
+            for b in 1..=v.min(6) {
+                for a in 1..=b {
+                    let pontos: Vec<usize> = (0..v).collect();
+                    let familia = construir(&pontos, a, b, &mut memo);
+                    let medida = tamanho(v, a, b, &mut memo);
+
+                    assert_eq!(
+                        familia.len() as u64,
+                        medida,
+                        "({v},{a},{b}): construiu {} e mediu {medida}",
+                        familia.len()
+                    );
+
+                    let mascaras: Vec<u32> =
+                        familia.iter().map(|c| c.iter().fold(0u32, |m, &i| m | 1 << i)).collect();
+                    for alvo in 0..(1u32 << v) {
+                        if alvo.count_ones() as usize != b {
+                            continue;
+                        }
+                        assert!(
+                            mascaras.iter().any(|&f| f & alvo == f),
+                            "({v},{a},{b}): o alvo {alvo:b} não contém membro nenhum"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    /// Os três casos em que o valor exato é conhecido de fórmula.
+    #[test]
+    fn os_casos_de_formula() {
+        let mut memo = HashMap::new();
+        for v in 2..=14usize {
+            for b in 1..=v {
+                // `a = b`: todo `b`-conjunto é ele mesmo, e nada menos serve.
+                assert_eq!(tamanho(v, b, b, &mut memo), binomial(v, b), "({v},{b},{b})");
+                // `a = 1`: escolher `v − b + 1` pontos garante que algum caia
+                // em qualquer `b`-conjunto, e um a menos deixa um buraco.
+                assert_eq!(tamanho(v, 1, b, &mut memo), (v - b + 1) as u64, "({v},1,{b})");
+            }
+            // `b = v`: o único `b`-conjunto é tudo, e um membro qualquer basta.
+            assert_eq!(tamanho(v, 2, v, &mut memo), 1, "({v},2,{v})");
+        }
+    }
+
+    /// Alargar o alvo nunca pode exigir mais membros: toda família que serve
+    /// para `b` também serve para `b + 1`, porque um `(b+1)`-conjunto contém um
+    /// `b`-conjunto.
+    #[test]
+    fn alvo_maior_nunca_custa_mais() {
+        let mut memo = HashMap::new();
+        for v in 3..=14usize {
+            for a in 1..=5usize.min(v) {
+                for b in a..v {
+                    assert!(
+                        tamanho(v, a, b, &mut memo) >= tamanho(v, a, b + 1, &mut memo),
+                        "({v},{a},{b}) menor que ({v},{a},{})",
+                        b + 1
+                    );
+                }
+            }
+        }
+    }
+}

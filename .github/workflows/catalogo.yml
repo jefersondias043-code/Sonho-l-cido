@@ -39,6 +39,13 @@ jobs:
           key: catalogo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: catalogo-${{ runner.os }}-
 
+      - name: A matemática do gerador
+        # A construção de Turán escolhe entre três ramos comparando números, e um
+        # erro de contagem faria construir um ramo diferente do medido. Aqui as
+        # famílias pequenas são cobradas por força bruta: todo alvo tem de conter
+        # um membro, e o tamanho tem de bater com a medida.
+        run: cargo test --release -p gerar-catalogo
+
       - name: Compilar o conferidor
         run: cargo build --release --bin conferir-tudo
 
