@@ -17,7 +17,7 @@
  *   5. Trocar preços depois de simular não repete a simulação e dá o mesmo
  *      número que teria dado se os preços fossem aqueles desde o começo.
  *
- *   node web/testar-exato-checagem.mjs
+ *   node web/testar-aritmetica.mjs
  */
 
 import {
@@ -33,7 +33,7 @@ import {
   dinheiroDoSorteio,
   simularVarios,
   dinheiroDaSimulacao,
-} from './exato-checagem.js';
+} from './aritmetica.js';
 
 const passos = [];
 function marcar(certo, descricao, detalhe = '') {

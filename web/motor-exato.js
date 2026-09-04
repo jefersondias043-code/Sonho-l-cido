@@ -28,13 +28,13 @@ import {
   PARCIAL,
   FALHA,
   CONTRADICAO,
-} from './exato-veredito.js';
-import * as historico from './exato-historico.js';
-import * as arquivoDeSessao from './exato-sessao.js';
+} from './veredito.js';
+import * as historico from './historico-exato.js';
+import * as arquivoDeSessao from './sessao-exato.js';
 
 const $ = (id) => document.getElementById(id);
 
-const trabalhador = new Worker('./exato-trabalhador.js', { type: 'module' });
+const trabalhador = new Worker('./motor-exato-trabalhador.js', { type: 'module' });
 
 /*
  * O motor pode morrer sem conseguir avisar, e a tela precisa saber.

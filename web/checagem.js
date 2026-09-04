@@ -3,7 +3,7 @@
  *
  * ## Este módulo deixou de ter matemática própria
  *
- * Ele era cópia de `exato-checagem.js`, com as mesmas contas escritas duas
+ * Ele era cópia de `aritmetica.js`, com as mesmas contas escritas duas
  * vezes — e as duas cópias divergiram, como cópias divergem. `mascaraDe` aceita
  * até 25 aqui e até 31 lá; `bitsEm` usa um algoritmo em cada lado; e o veredito
  * da conferência do Exato passou meses lendo "exatamente `t` acertos" onde a
@@ -32,7 +32,7 @@ import {
   simularVarios as simularGeral,
   sortearDe,
   urnaDoUniverso,
-} from './exato-checagem.js';
+} from './aritmetica.js';
 
 /** O universo da modalidade: dezenas de 1 a 25. */
 export const UNIVERSO = 25;

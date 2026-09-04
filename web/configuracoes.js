@@ -21,7 +21,7 @@
 
 import * as atualizacao from './atualizacao.js';
 import * as historico from './historico.js';
-import * as exatoHistorico from './exato-historico.js';
+import * as exatoHistorico from './historico-exato.js';
 import { quando } from './historico.js';
 
 const $ = (id) => document.getElementById(id);

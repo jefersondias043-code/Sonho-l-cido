@@ -13,7 +13,7 @@
  *
  *   **nunca dizer mais do que os números autorizam.**
  *
- *   node web/testar-exato-veredito.mjs
+ *   node web/testar-veredito.mjs
  */
 
 import {
@@ -26,7 +26,7 @@ import {
   PARCIAL,
   FALHA,
   CONTRADICAO,
-} from './exato-veredito.js';
+} from './veredito.js';
 
 const passos = [];
 function marcar(certo, descricao, detalhe = '') {

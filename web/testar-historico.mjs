@@ -898,7 +898,7 @@ try {
    */
   const atravessado = await pagina.evaluate(async () => {
     const h = await import('./historico.js');
-    const e = await import('./exato-historico.js');
+    const e = await import('./historico-exato.js');
     h.limpar();
     e.limpar();
 

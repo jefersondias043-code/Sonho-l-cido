@@ -764,12 +764,12 @@ crates/
 
 web/                     a interface da plataforma
 ├── index.html           a ferramenta, e app.js / trabalhador.js / historico.js
-├── exato-pipeline.js    o motor exato dentro dela, e exato-trabalhador.js
-├── exato-checagem.js    a aritmética da conferência e do dinheiro, sem DOM
+├── motor-exato.js    o motor exato dentro dela, e motor-exato-trabalhador.js
+├── aritmetica.js    a aritmética da conferência e do dinheiro, sem DOM
 ├── exato-checador.js    o trabalhador das simulações longas
-├── exato-historico.js   os fechamentos guardados, com o estado do motor junto
-├── exato-sessao.js      o arquivo de fechamento: exportar e importar
-├── exato-veredito.js    a regra do que pode ser afirmado, sem DOM e sem wasm
+├── historico-exato.js   os fechamentos guardados, com o estado do motor junto
+├── sessao-exato.js      o arquivo de fechamento: exportar e importar
+├── veredito.js    a regra do que pode ser afirmado, sem DOM e sem wasm
 ├── lotinha.js           a modalidade: banco, construção algébrica e mínimos
 ├── checagem.js          a conferência de um resultado, e checador.js
 ├── comum.js             a aritmética que todos usam, num lugar só
@@ -924,9 +924,9 @@ node web/testar-lotinha.mjs                     # testa a ferramenta
 node web/testar-checagem.mjs                    # testa a conferência de acertos
 node web/testar-construtor.mjs                  # testa o Construtor
 node web/testar-exato.mjs                       # testa o motor exato na ferramenta
-node web/testar-exato-checagem.mjs              # a aritmética do dinheiro, sem navegador
-node web/testar-exato-historico.mjs             # o histórico e o arquivo, sem navegador
-node web/testar-exato-veredito.mjs              # o que ele tem direito de afirmar
+node web/testar-aritmetica.mjs              # a aritmética do dinheiro, sem navegador
+node web/testar-historico-exato.mjs             # o histórico e o arquivo, sem navegador
+node web/testar-veredito.mjs              # o que ele tem direito de afirmar
 cargo run --release --example gerar-lotinha     # regera o banco de fechamentos
 
 python3 -m http.server -d site 8000             # experimenta localmente

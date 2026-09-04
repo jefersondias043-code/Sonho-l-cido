@@ -87,19 +87,19 @@ jobs:
         # único sem teste próprio, e foi por isso que um defeito grave
         # sobreviveu: parar no meio fazia a tela relatar cartelas que não
         # existiam.
-        run: node web/testar-exato-veredito.mjs
+        run: node web/testar-veredito.mjs
 
       - name: Testar o histórico e o arquivo de fechamento
         # Também em node puro. Um histórico que perde trabalho é pior do que não
         # ter histórico: quem não tem sabe que precisa anotar.
-        run: node web/testar-exato-historico.mjs
+        run: node web/testar-historico-exato.mjs
 
       - name: Testar a aritmética da conferência
         # Roda em node puro, sem navegador, e por isso vem antes: aritmética
         # errada numa ferramenta que diz quanto você ganhou é pior do que
         # ferramenta nenhuma, e não faz sentido instalar um navegador para
         # descobrir que a multiplicação está errada.
-        run: node web/testar-exato-checagem.mjs
+        run: node web/testar-aritmetica.mjs
 
       - name: Testar a interface num navegador
         run: |

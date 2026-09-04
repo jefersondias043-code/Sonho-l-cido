@@ -25,9 +25,9 @@ import * as historico from './historico.js';
 import * as lotinha from './lotinha.js';
 import * as checagem from './checagem.js';
 import * as sessao from './sessao.js';
-import * as exato from './exato-pipeline.js';
-import * as exatoHistorico from './exato-historico.js';
-import * as arquivoDoExato from './exato-sessao.js';
+import * as exato from './motor-exato.js';
+import * as exatoHistorico from './historico-exato.js';
+import * as arquivoDoExato from './sessao-exato.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -358,7 +358,7 @@ function noMinimoComprovado(estado) {
  * está. Anunciar "ótimo provado" seria escolher a mentira mais bonita, e o
  * Construtor sabia gritar nessa situação — era o caso `IMPOSSIVEL` do antigo
  * `escada.js`, e a regra veio com ele para cá —,
- * assim como o Construtor Exato passou a saber (`exato-veredito.js`, o caso
+ * assim como o Construtor Exato passou a saber (`veredito.js`, o caso
  * `CONTRADICAO`). Esta tela era a última que ainda não sabia.
  */
 function contradizOMinimo(estado) {

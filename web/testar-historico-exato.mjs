@@ -12,7 +12,7 @@
  * entra no armazenamento e o que entra pelo arquivo — e sobretudo no ponto em
  * que a ficha e o estado do motor poderiam discordar.
  *
- *   node web/testar-exato-historico.mjs
+ *   node web/testar-historico-exato.mjs
  */
 
 /*
@@ -44,8 +44,8 @@ class Armazem {
 
 globalThis.localStorage = new Armazem();
 
-const historico = await import('./exato-historico.js');
-const arquivo = await import('./exato-sessao.js');
+const historico = await import('./historico-exato.js');
+const arquivo = await import('./sessao-exato.js');
 
 const passos = [];
 function marcar(certo, descricao, detalhe = '') {
