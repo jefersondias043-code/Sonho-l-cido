@@ -210,18 +210,18 @@ console.log(`Teste de ponta a ponta — interface no iPhone (servindo em ${BASE}
 try {
   await pagina.goto(`http://localhost:${PORTA}${BASE}`, { waitUntil: 'networkidle' });
 
-  // ─── 1. o aplicativo é a Lotinha ───
+  // ─── 1. o aplicativo é a ferramenta ───
   marcar(await pagina.locator('h1').isVisible(), 'a página carrega');
 
   const abas = await pagina.$$eval('.aba', (b) => b.map((x) => x.textContent.trim()));
   marcar(
-    abas.join(',') === 'Lotinha,Buscar,Resultado,Checar,Dividir,Histórico',
-    'as abas são as seis da Lotinha, sem a tela de configuração',
+    abas.join(',') === 'Montar,Buscar,Resultado,Checar,Dividir,Histórico',
+    'as abas são as seis da ferramenta, sem uma por modalidade',
     abas.join(' · ')
   );
   marcar(
     (await pagina.$eval('.painel.ativo', (e) => e.id)) === 'lotinha',
-    'a Lotinha é a tela de entrada'
+    'montar o pedido é a tela de entrada'
   );
 
   // O carimbo mudou de casa junto com a tela antiga; sem ele não há como

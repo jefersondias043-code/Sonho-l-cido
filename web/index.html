@@ -28,7 +28,12 @@
 </header>
 
 <nav class="abas" role="tablist" aria-label="Telas do aplicativo">
-  <button class="aba ativa" role="tab" id="aba-lotinha" aria-controls="lotinha" aria-selected="true" data-painel="lotinha">Lotinha</button>
+  <!-- O rótulo é "Montar", e não "Lotinha": esta aba deixou de ser uma das três
+       ferramentas para ser o lugar onde qualquer fechamento se pede. O `id`
+       continua `lotinha` de propósito — trocá-lo mexeria em cinco suítes e em
+       dezenas de chamadas sem mudar nada que alguém veja, e um `id` é endereço,
+       não texto. -->
+  <button class="aba ativa" role="tab" id="aba-lotinha" aria-controls="lotinha" aria-selected="true" data-painel="lotinha">Montar</button>
   <button class="aba" role="tab" id="aba-buscar" aria-controls="buscar" aria-selected="false" tabindex="-1" data-painel="buscar">Buscar</button>
   <button class="aba" role="tab" id="aba-resultado" aria-controls="resultado" aria-selected="false" tabindex="-1" data-painel="resultado">Resultado</button>
   <button class="aba" role="tab" id="aba-checar" aria-controls="checar" aria-selected="false" tabindex="-1" data-painel="checar">Checar</button>
