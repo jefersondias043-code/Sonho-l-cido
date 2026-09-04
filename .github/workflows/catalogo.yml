@@ -68,6 +68,13 @@ jobs:
           npx playwright install --with-deps chromium
           node app/testar-tela.mjs
 
+      - name: A prévia de um arquivo só
+        # A costura dos cinco módulos num arquivo é transformação de texto, e
+        # transformação de texto quebra em silêncio.
+        run: |
+          python3 ferramentas/previa-artefato.py previa.html
+          node ferramentas/testar-previa.mjs previa.html
+
       - name: O que sairia publicado
         run: |
           echo "carimbo: $(grep -o "CARIMBO = '[^']*'" publicar/sw.js)"

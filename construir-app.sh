@@ -56,12 +56,23 @@ for arquivo in "$DESTINO"/*; do
 done
 [ "$faltando" -eq 0 ] || exit 1
 
+# O cliente inteiro cabe em menos de 1.500 linhas somando JavaScript, HTML e
+# CSS. Não é meta estética: é o teto que mantém o cliente uma coisa que uma
+# pessoa lê inteira numa tarde. Passar dele quer dizer que alguma decisão foi
+# empurrada para cá em vez de resolvida no catálogo.
+linhas=$(cat "$DESTINO"/*.js "$DESTINO"/*.css "$DESTINO"/*.html | wc -l)
+if [ "$linhas" -ge 1500 ]; then
+  echo "o cliente passou de 1.500 linhas: $linhas" >&2
+  exit 1
+fi
+
 fechamentos=$(find "$DESTINO/catalogo/f" -name '*.json' | wc -l)
 peso=$(du -sk "$DESTINO" | cut -f1)
 casca=$(cat "$DESTINO"/*.js "$DESTINO"/*.css "$DESTINO"/*.html "$DESTINO"/catalogo/*.json |
   gzip -9 | wc -c)
 
 echo "carimbo $carimbo"
+echo "$linhas linhas de cliente (teto: 1.500)"
 echo "$fechamentos fechamentos · ${peso} KiB no total"
 echo "peso inicial (casca + índice, comprimido): $((casca / 1024)) KiB"
 echo "pronto em $DESTINO/"

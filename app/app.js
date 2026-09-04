@@ -12,11 +12,9 @@ import { melhorEstrategia, melhorPool } from './estrategia.js';
 
 const $ = (id) => document.getElementById(id);
 const UNIVERSO = 25;
-const guardar = (chave, valor) => {
-  try { localStorage.setItem(chave, JSON.stringify(valor)); } catch { /* modo privado */ }
-};
-const lembrar = (chave, padrao) => {
-  try { return JSON.parse(localStorage.getItem(chave)) ?? padrao; } catch { return padrao; }
+const guardar = (c, v) => { try { localStorage.setItem(c, JSON.stringify(v)); } catch { /**/ } };
+const lembrar = (c, padrao) => {
+  try { return JSON.parse(localStorage.getItem(c)) ?? padrao; } catch { return padrao; }
 };
 
 const estado = {
@@ -207,10 +205,9 @@ async function pedirAFrase(plano) {
   } catch { /* a frase determinística fica */ }
 }
 
-/// A ressalva que faz a garantia ser verdade inteira: ela vale **se** as 15
-/// sorteadas caírem dentro do pool, e essa chance é `C(v,15)/C(25,15)`,
-/// publicada no catálogo. Sem ela, "garante 15 acertos" num pool de 15 dezenas
-/// soaria como a melhor resposta do aplicativo, quando é a mais rara.
+/// A ressalva que faz a garantia ser verdade inteira: ela só vale se as 15
+/// sorteadas caírem dentro do pool, e essa chance — `C(v,15)/C(25,15)`, vinda do
+/// catálogo — é o que separa uma promessa grande de uma promessa útil.
 function chanceDeCairDentro(v) {
   const p = estado.acaso.dentro[v];
   if (!p) return '';
@@ -258,11 +255,11 @@ function desenharBilhetes() {
       .map((b) => `<li>${b.map((d) => `<span>${String(d).padStart(2, '0')}</span>`).join('')}</li>`)
       .join('')}</ol>
     <div class="linha">
-      <button type="button" data-acao="copiar">Copiar</button>
-      <button type="button" data-acao="texto" class="discreto">Baixar texto</button>
-      <button type="button" data-acao="csv" class="discreto">Baixar CSV</button>
-      <button type="button" data-acao="imprimir" class="discreto">Imprimir volantes</button>
-      <button type="button" data-acao="guardar" class="discreto">Guardar na carteira</button>
+      <button type="button" data-acao="copiar">Copiar</button>${[
+        ['texto', 'Baixar texto'], ['csv', 'Baixar CSV'],
+        ['imprimir', 'Imprimir volantes'], ['guardar', 'Guardar na carteira'],
+      ].map(([a, r]) => `<button type="button" data-acao="${a}" class="discreto">${r}</button>`)
+        .join('')}
     </div>`;
 }
 
@@ -335,21 +332,12 @@ function ligarControles() {
     const d = Number(ev.target.dataset?.dezena);
     if (!d) return;
     estado.dezenas.has(d) ? estado.dezenas.delete(d) : estado.dezenas.add(d);
-    guardar('dezenas', [...estado.dezenas]);
-    estado.link = null;
-    responder();
+    trocarDezenas(estado.dezenas);
   });
 
   $('escolher').addEventListener('click', () =>
-    sortearDezenas(melhorPool(estado.indice, estado.precos, estado.orcamento)),
-  );
-
-  $('limpar').addEventListener('click', () => {
-    estado.dezenas.clear();
-    estado.link = null;
-    guardar('dezenas', []);
-    responder();
-  });
+    sortearDezenas(melhorPool(estado.indice, estado.precos, estado.orcamento)));
+  $('limpar').addEventListener('click', () => trocarDezenas(new Set()));
 
   $('regua').addEventListener('input', () => {
     estado.orcamento = daRegua(Number($('regua').value));
@@ -405,17 +393,23 @@ function ligarControles() {
   $('fechar-painel').addEventListener('click', () => ($('painel').hidden = true));
 }
 
-/// Marca `quantas` dezenas ao acaso. Nenhuma dezena é mais provável que outra,
-/// então não há o que escolher entre elas — quantas, disso cuida `melhorPool`.
+/// Marca `quantas` dezenas ao acaso: nenhuma é mais provável que outra, e de
+/// **quantas** cuida `melhorPool`.
 function sortearDezenas(quantas) {
   const todas = Array.from({ length: UNIVERSO }, (_, i) => i + 1);
   for (let i = todas.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [todas[i], todas[j]] = [todas[j], todas[i]];
   }
-  estado.dezenas = new Set(todas.slice(0, quantas).sort((a, b) => a - b));
+  trocarDezenas(new Set(todas.slice(0, quantas).sort((a, b) => a - b)));
+}
+
+/// Toda troca de dezenas passa por aqui: guarda, desfaz o vínculo com um link de
+/// bolão — as dezenas já não são as daquele bolão — e redesenha.
+function trocarDezenas(novas) {
+  estado.dezenas = novas;
   estado.link = null;
-  guardar('dezenas', [...estado.dezenas]);
+  guardar('dezenas', [...novas]);
   responder();
 }
 
@@ -457,13 +451,12 @@ async function varrerTudo() {
   if (estado.mascaras.length === 0) return;
   const e = estado.plano.escolha;
   $('varredura').textContent = 'Conferindo…';
-  const { sorteios, pior, distribuicao } = await conferir.varrer(estado.mascaras, e.v);
-  const bate = pior >= e.t;
-  $('varredura').innerHTML = bate
+  const { sorteios, pior, comQuinze } = await conferir.varrer(estado.mascaras, e.v, e.t);
+  $('varredura').innerHTML = pior >= e.t
     ? `Varridos os ${sorteios.toLocaleString('pt-BR')} resultados possíveis dentro das suas
        ${e.v} dezenas. No pior deles, o melhor bilhete faz <b>${pior} acertos</b> —
        a garantia de ${e.t} está de pé. ${
-         distribuicao[15] ? `Em ${distribuicao[15].toLocaleString('pt-BR')} deles, 15.` : ''
+         comQuinze ? `Em ${comQuinze.toLocaleString('pt-BR')} deles, alguém acerta os 15.` : ''
        }`
     : `<b>A garantia não se sustentou</b>: existe resultado em que o melhor bilhete faz só
        ${pior} acertos. Não use este fechamento e avise quem publicou.`;
@@ -589,15 +582,9 @@ export function aplicarPedido(pedido) {
   estado.link = null;
   guardar('orcamento', estado.orcamento);
   atualizarDinheiro();
-  if (dezenas.length >= 15) {
-    estado.dezenas = new Set(dezenas);
-    guardar('dezenas', [...estado.dezenas]);
-    responder();
-  } else if (quantas >= 15) {
-    sortearDezenas(quantas);
-  } else {
-    responder();
-  }
+  if (dezenas.length >= 15) trocarDezenas(new Set(dezenas));
+  else if (quantas >= 15) sortearDezenas(quantas);
+  else responder();
   return true;
 }
 

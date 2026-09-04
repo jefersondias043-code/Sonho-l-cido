@@ -112,6 +112,41 @@ const pequenos = await pagina.evaluate(() =>
     .filter((e) => e.offsetParent !== null && e.getBoundingClientRect().height < 44).length);
 conferir('todo controle tem 44 px de altura', pequenos === 0, `${pequenos} abaixo`);
 
+// Contraste WCAG AA em todo texto visível, nos dois temas. Os tokens de cor são
+// declarados uma vez na raiz, então basta medir o que a tela de fato pinta.
+for (const tema of ['light', 'dark']) {
+  await pagina.emulateMedia({ colorScheme: tema });
+  const fracos = await pagina.evaluate(() => {
+    const canal = (c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+    const luz = (cor) => {
+      const [r, g, b] = cor.match(/[\d.]+/g).map(Number).map((n) => canal(n / 255));
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    };
+    const fundoDe = (e) => {
+      for (let n = e; n; n = n.parentElement) {
+        const c = getComputedStyle(n).backgroundColor;
+        if (c && !c.startsWith('rgba(0, 0, 0, 0')) return c;
+      }
+      return 'rgb(255,255,255)';
+    };
+    return [...document.querySelectorAll('main *, footer *')]
+      .filter((e) => e.offsetParent !== null && [...e.childNodes]
+        .some((n) => n.nodeType === 3 && n.textContent.trim()))
+      .map((e) => {
+        const estilo = getComputedStyle(e);
+        const [a, b] = [luz(estilo.color), luz(fundoDe(e))].sort((x, y) => y - x);
+        const razao = (a + 0.05) / (b + 0.05);
+        const grande = Number.parseFloat(estilo.fontSize) >= 24
+          || (Number.parseFloat(estilo.fontSize) >= 18.66 && Number(estilo.fontWeight) >= 700);
+        return { alvo: grande ? 3 : 4.5, razao, classe: e.className, texto: e.innerText.slice(0, 30) };
+      })
+      .filter((m) => m.razao < m.alvo);
+  });
+  conferir(`contraste AA no tema ${tema}`, fracos.length === 0,
+    fracos.map((f) => `${f.classe || f.texto}: ${f.razao.toFixed(2)}`).join(' | '));
+}
+await pagina.emulateMedia({ colorScheme: null });
+
 // Uma coluna, sempre: nada de rolagem horizontal.
 for (const largura of [320, 360, 768, 1280]) {
   await pagina.setViewportSize({ width: largura, height: 740 });

@@ -60,7 +60,6 @@ label { display: block; font-size: 0.95rem; color: var(--tinta-fraca); margin-bo
 }
 
 /* ── dinheiro ── */
-
 #valor {
   width: 100%; font-size: 2.4rem; font-weight: 700; font-variant-numeric: tabular-nums;
   border: 0; border-bottom: 2px solid var(--linha); background: transparent;
@@ -72,7 +71,6 @@ label { display: block; font-size: 0.95rem; color: var(--tinta-fraca); margin-bo
 .degrau { margin: 0; font-size: 0.95rem; color: var(--tinta-fraca); min-height: 1.5em; }
 
 /* ── grade das dezenas: o elemento mais tocado do aplicativo ── */
-
 .grade { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0.5rem; }
 
 .grade button {
@@ -105,7 +103,6 @@ button.discreto { background: transparent; color: var(--realce); }
 :focus-visible { outline: 3px solid var(--realce); outline-offset: 2px; }
 
 /* ── a resposta: o maior elemento da tela ── */
-
 .resposta { text-align: center; padding: 1.5rem 1rem; }
 
 .numero {
@@ -116,11 +113,8 @@ button.discreto { background: transparent; color: var(--realce); }
 .unidade { margin: 0.25rem 0 0.75rem; font-size: 1.25rem; font-weight: 600; }
 .detalhe { margin: 0 0 0.75rem; font-size: 1.05rem; color: var(--tinta-fraca); }
 .selos { margin: 0 0 1rem; }
-
-.selo {
-  display: inline-block; padding: 0.25rem 0.7rem;
-  border-radius: 999px; font-size: 0.85rem; font-weight: 700;
-}
+.selo { display: inline-block; padding: 0.25rem 0.7rem; border-radius: 999px;
+  font-size: 0.85rem; font-weight: 700; }
 
 .selo.provado { background: var(--provado-fundo); color: var(--provado); }
 .selo.conhecido { background: var(--conhecido-fundo); color: var(--conhecido); }
@@ -131,7 +125,6 @@ button.discreto { background: transparent; color: var(--realce); }
 .aviso { color: var(--aviso); font-size: 1.1rem; }
 
 /* ── bilhetes ── */
-
 .bilhetes { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.4rem;
   grid-template-columns: 1fr; }
 
@@ -147,7 +140,6 @@ button.discreto { background: transparent; color: var(--realce); }
 }
 
 /* ── seções abaixo da dobra ── */
-
 hr { border: 0; border-top: 1px solid var(--linha); margin: 2rem 0 1rem; }
 
 details {
@@ -157,17 +149,15 @@ details {
 
 summary { cursor: pointer; padding: 0.9rem 0; font-weight: 600; min-height: 44px; }
 details > div { padding-bottom: 1rem; }
-
 details input[type="text"], details input[type="number"] {
   width: 100%; min-height: 44px; padding: 0 0.6rem; border: 1px solid var(--linha);
   border-radius: 10px; background: var(--fundo); color: var(--tinta); font: inherit;
 }
 
 .precos { margin-bottom: 1rem; }
-.precos label { display: grid; grid-template-columns: 1fr 8rem; align-items: center; gap: 0.5rem;
-  margin-bottom: 0.4rem; }
+.precos label { display: grid; grid-template-columns: 1fr 8rem; align-items: center;
+  gap: 0.5rem; margin-bottom: 0.4rem; }
 .precos input { text-align: right; }
-
 .partes, .registros { padding-left: 1.2rem; }
 .partes li, .registros li { margin-bottom: 0.5rem; }
 
@@ -177,7 +167,6 @@ footer {
 }
 
 /* ── painel deslizante ── */
-
 .painel {
   position: fixed; inset: auto 0 0 0; max-height: 85vh; overflow: auto;
   background: var(--papel); border-top: 1px solid var(--linha);
@@ -197,7 +186,6 @@ footer {
 .painel-corpo { padding: 1rem; }
 
 /* ── volante para imprimir ── */
-
 .volante {
   display: grid; grid-template-columns: repeat(5, 2.2rem);
   gap: 2px; margin: 0 0 1rem; page-break-inside: avoid;
