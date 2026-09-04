@@ -3579,9 +3579,40 @@ function checarSessaoExata(id) {
     avisar('Este trabalho ainda não tem cartelas para conferir.');
     return;
   }
-  lotFechamento = cartelas;
-  chkPintarSeletor('lotinha');
-  abrirChecagem('lotinha');
+
+  /*
+   * A sessão entra como fonte própria, e não pelo "fechamento carregado".
+   *
+   * Ela passava por `lotFechamento`, que é o fechamento **da tela** — e o
+   * seletor e a ficha descrevem esse com os números da tela. Medido: uma
+   * sessão de 11 dezenas com jogos de 8 e sorteios de 5, aberta com a tela em
+   * 20 dezenas e jogos de 17, aparecia rotulada "Fechamento carregado · 20
+   * dezenas · jogos de 17", e a ficha se contradizia em duas linhas — "jogos
+   * de 17" em cima, "dezenas por cartela 8" embaixo.
+   *
+   * E não era só o rótulo: a **configuração** ia junto, então o conferidor e a
+   * Dividir julgavam o fechamento contra universo 25 e sorteios de 15 quando o
+   * problema dele era universo 11 e sorteios de 5. Régua errada, não etiqueta
+   * errada.
+   */
+  const p = sessao.pedido ?? {};
+  const numeros = [...(sessao.numeros ?? [])].sort((a, b) => a - b);
+  chkDoExato = {
+    id: sessao.id,
+    cartelas,
+    descricao: exatoHistorico.descrever(p),
+    configuracao: {
+      universo: Math.max(sessao.universo || 0, ...numeros, p.v ?? 0),
+      pool: numeros,
+      cartela: p.k,
+      alvo: p.j,
+      intersecao: p.t,
+      premiadas: p.r ?? 1,
+      semente: 1,
+    },
+  };
+  chkPintarSeletor(`exato:${sessao.id}`);
+  abrirChecagem(`exato:${sessao.id}`);
 }
 
 /** Guarda um trabalho do exato num arquivo, que é o que sobrevive a tudo. */
@@ -3767,6 +3798,9 @@ let chkMostradas = 0;
 let chkQuantosSorteios = 100;
 /* Qual fechamento a próxima abertura da aba deve escolher. */
 let chkPreferida = null;
+/* O trabalho do motor exato que o histórico mandou checar, com a configuração
+   dele junto — a da tela descreveria outro problema. */
+let chkDoExato = null;
 /* As chaves da última lista pintada, para não repintar sem necessidade.
    Começa em `null` — e não em string vazia — porque a lista vazia é um estado
    legítimo que precisa ser pintado uma vez. */
@@ -3845,6 +3879,20 @@ function chkFontes() {
       criadaEm: null,
       descricao: divParaChecar.descricao,
       configuracao: divParaChecar.configuracao,
+    });
+  }
+
+  // O trabalho do motor exato que alguém mandou checar, com a configuração
+  // **dele**. Vem primeiro pelo mesmo motivo do bloco acima: foi o que a
+  // pessoa acabou de pedir.
+  if (chkDoExato?.cartelas?.length) {
+    fontes.push({
+      chave: `exato:${chkDoExato.id}`,
+      rotulo: `${chkDoExato.descricao} · ${milhares(chkDoExato.cartelas.length)} cartelas`,
+      cartelas: chkDoExato.cartelas,
+      criadaEm: null,
+      descricao: chkDoExato.descricao,
+      configuracao: chkDoExato.configuracao,
     });
   }
 
@@ -3977,11 +4025,33 @@ function chkPintarFicha() {
     `<div class="ficha">` +
     `<div><span>Fechamento</span><b>${escapar(chkFonte.descricao)}</b></div>` +
     quando +
-    `<div><span>Modalidade</span><b>Lotinha · 15 dezenas sorteadas</b></div>` +
+    montarLinhaDaModalidade() +
     `<div><span>Dezenas usadas</span><b>${dezenas.size}</b></div>` +
     `<div><span>Cartelas</span><b>${milhares(cartelas.length)}</b></div>` +
     `<div><span>Dezenas por cartela</span><b>${tamanho}</b></div>` +
     `</div>`;
+}
+
+/**
+ * A linha "Modalidade" da ficha, tirada da configuração do fechamento.
+ *
+ * Estava escrita à mão — `Lotinha · 15 dezenas sorteadas` — de quando esta
+ * ferramenta **era** a Lotinha. Com universo e sorteio abertos, ela afirmava a
+ * modalidade sobre fechamentos que não são dela: um trabalho do motor exato com
+ * universo 11 e sorteios de 5, aberto pelo histórico, aparecia como "Lotinha ·
+ * 15 dezenas sorteadas" logo acima de "dezenas por cartela 8".
+ */
+function montarLinhaDaModalidade() {
+  const c = chkFonte?.configuracao;
+  const universo = Number(c?.universo) || 0;
+  const alvo = Number(c?.alvo) || 0;
+  if (!universo || !alvo) return '';
+
+  const ehLotinha = universo === lotinha.UNIVERSO && alvo === lotinha.SORTEIO;
+  const texto = ehLotinha
+    ? `Lotinha · ${alvo} dezenas sorteadas`
+    : `universo de ${universo} · ${alvo} sorteado${alvo === 1 ? '' : 's'}`;
+  return `<div><span>Modalidade</span><b>${escapar(texto)}</b></div>`;
 }
 
 function chkMostrarErro(mensagem) {

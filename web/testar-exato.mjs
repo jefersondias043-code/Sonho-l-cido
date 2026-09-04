@@ -614,6 +614,49 @@ try {
   );
   await pagina.click('#aba-lotinha');
 
+  // ─── 7a3. checar um trabalho do histórico usa a régua dele ───
+  //
+  // O trabalho guardado passava pelo caminho do "fechamento carregado", que é
+  // o da tela — e o seletor, a ficha e a **configuração** entregue ao
+  // conferidor descrevem esse. Medido antes da correção, com a sessão de 22
+  // dezenas guardada acima e a tela em outro pedido: a ficha dizia "jogos de
+  // 17" numa linha e "dezenas por cartela" outra coisa duas linhas abaixo, e o
+  // conferidor julgava o fechamento contra o universo e o sorteio da tela.
+  //
+  // Não era etiqueta errada: era régua errada.
+  await pagina.click('#aba-lotinha');
+  await marcarNumeros(25, Array.from({ length: 20 }, (_, i) => i + 1));
+  await regras(17, 15, 15);
+  await pagina.click('#aba-historico');
+  await pagina.waitForTimeout(400);
+  await pagina.click('#lista-historico [data-acao="ex-checar"]');
+  await pagina.waitForTimeout(800);
+
+  const fichaDoHistorico = await pagina.evaluate(() => ({
+    rotulo: (document.querySelector('#chk-fechamento option:checked')?.textContent ?? '').trim(),
+    ficha: (document.getElementById('chk-ficha')?.textContent ?? '').replace(/\s+/g, ' '),
+  }));
+  // A sessão guardada é a de 22 dezenas com jogos de 17 garantindo 13; a tela
+  // está em 20 dezenas com jogos de 17 garantindo 15. O que a ficha diz tem de
+  // ser o da sessão.
+  marcar(
+    /22 números/.test(fichaDoHistorico.rotulo) && /garante 13/.test(fichaDoHistorico.rotulo),
+    'checar um trabalho do histórico o rotula com os números dele, não com os da tela',
+    fichaDoHistorico.rotulo
+  );
+  // A tela está num pool de 20; a sessão, num de 22. "Dezenas usadas" acima de
+  // 20 só pode ter vindo da sessão. (Sem espaço no padrão: `textContent` cola o
+  // rótulo no valor, e foi assim que esta asserção falhou da primeira vez.)
+  const usadas = Number(
+    (fichaDoHistorico.ficha.match(/Dezenas usadas\s*(\d+)/) ?? [])[1] ?? 0
+  );
+  marcar(
+    usadas > 20,
+    'e a ficha inteira fala do mesmo fechamento, sem se contradizer',
+    `dezenas usadas ${usadas}, com a tela num pool de 20`
+  );
+  await pagina.click('#aba-lotinha');
+
   // ─── 7b. os três estágios, cada um ligado à mão ───
   //
   // Numa configuração **pequena** em que o piso é comprovadamente inatingível:
