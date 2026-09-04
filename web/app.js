@@ -2162,8 +2162,16 @@ function lotPintarTudo() {
   $('lot-contagem').innerHTML =
     faltam === 0
       ? `<b>${lotPool} de ${lotPool} escolhidas</b> <em>— ` +
-        `${milhares(lotinha.combinacoes(lotPool, 15))} sorteios possíveis dentro delas, ` +
-        `e chance de 1 em ${milhares(1 / lotinha.chanceDe(lotPool))} de o sorteio cair aqui.</em>`
+        `${milhares(lotinha.combinacoes(lotPool, lotSorteio))} sorteios possíveis dentro ` +
+        `delas${
+          // A chance de o sorteio cair inteiro no pool é uma conta da
+          // modalidade: ela divide por `C(25,15)`, o universo da Lotinha. Fora
+          // dela o número seria de outra loteria, então some em vez de mentir.
+          ehLotinhaCanonica()
+            ? `, e chance de 1 em ${milhares(1 / lotinha.chanceDe(lotPool))} de o sorteio ` +
+              'cair aqui'
+            : ''
+        }.</em>`
       : `<b>${lotDezenas.size} de ${lotPool} escolhidas</b> <em>— ${
           faltam === 1 ? 'falta 1 dezena' : `faltam ${faltam} dezenas`
         }.</em>`;
@@ -2242,7 +2250,7 @@ function lotPintarExplicacao() {
 
   // O aviso que o usuário não tem como deduzir sozinho.
   const aviso =
-    lotGarantia === lotinha.SORTEIO && lotPremiadas >= teto && teto > 1
+    lotGarantia === lotSorteio && lotPremiadas >= teto && teto > 1
       ? ` <em>Este é o máximo: só ${teto} jogos distintos podem conter um mesmo ` +
         `sorteio, então pedir mais obrigaria a comprar jogo repetido.</em>`
       : '';
@@ -2250,12 +2258,12 @@ function lotPintarExplicacao() {
   if (lotJogo === lotPool) {
     destino.innerHTML =
       `<b>Um jogo só.</b> <em>Jogar as ${lotPool} dezenas de uma vez é uma aposta ` +
-      `única: ou as 15 caem dentro, ou não. Não há fechamento a fazer — para ` +
-      `fechar, o jogo precisa ser menor que o pool.</em>`;
+      `única: ou os ${lotSorteio} sorteados caem dentro, ou não. Não há fechamento ` +
+      `a fazer — para fechar, o jogo precisa ser menor que o pool.</em>`;
   } else if (exato) {
     const porque =
       lotPool - lotJogo === 1
-        ? `São sempre ${lotinha.SORTEIO} + ${lotPremiadas} quando o jogo tem uma dezena a ` +
+        ? `São sempre ${lotSorteio} + ${lotPremiadas} quando o jogo tem uma dezena a ` +
           `menos que o pool, seja qual for o pool.`
         : 'Vem do teorema de Turán.';
     destino.innerHTML =
@@ -2907,7 +2915,7 @@ ligar('lot-conferir', 'click', async () => {
   }
 
   $('lot-conferencia').textContent = `conferindo ${milhares(
-    lotinha.combinacoes(lotPool, lotinha.SORTEIO)
+    lotinha.combinacoes(lotPool, lotSorteio)
   )} sorteios, um a um…`;
   await new Promise((r) => setTimeout(r, 0));
   lotFechamento = jogos;
