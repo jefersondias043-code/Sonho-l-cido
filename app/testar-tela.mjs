@@ -239,14 +239,32 @@ conferir('a tela diz que não audita os valores', precos.includes('não são aud
 
 // ── segunda visita, sem rede ────────────────────────────────────────────────
 
+// A promessa é a do avião: o que já foi aberto continua abrindo. O catálogo
+// inteiro não fica em cache — são mais de trezentos arquivos, e cada pessoa usa
+// um punhado —, então o que se cobra aqui é que o pedido guardado volte inteiro.
 await pagina.evaluate(() => navigator.serviceWorker.ready);
+
+// Uma visita inteira sob o service worker antes de cortar a rede. Na primeira, o
+// service worker ainda está instalando enquanto a página já pede arquivos, e o
+// que passa antes de ele assumir não entra no cache — o que é a vida real, e não
+// o que este teste quer medir.
+await pagina.goto(endereco, { waitUntil: 'networkidle' });
+await pagina.waitForSelector('.bilhetes li');
+conferir('o service worker assume a página',
+  await pagina.evaluate(() => navigator.serviceWorker.controller !== null));
+
 await contexto.setOffline(true);
 await pagina.goto(endereco, { waitUntil: 'domcontentloaded' });
-await pagina.waitForSelector('.grade button');
-await pagina.click('#escolher');
-await pagina.waitForSelector('.bilhetes li', { timeout: 15000 });
-conferir('a segunda visita funciona sem rede',
+await pagina.waitForSelector('.bilhetes li', { timeout: 20000 });
+conferir('a segunda visita reabre sem rede o que já estava aberto',
   (await pagina.locator('.bilhetes li').count()) > 0);
+
+// E um fechamento que nunca foi aberto: sem rede ele não chega, e a tela não
+// pode ser apagada por isso.
+await pagina.click('#escolher');
+await pagina.waitForTimeout(1500);
+conferir('e uma falha de rede não apaga a resposta',
+  /^\d+$/.test(await pagina.locator('.numero').innerText()));
 await contexto.setOffline(false);
 
 conferir('nenhum erro de JavaScript no caminho todo', erros.length === 0, erros.join(' | '));
