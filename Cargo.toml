@@ -8,6 +8,8 @@ members = [
     "crates/motor-persistencia",
     "crates/motor-cli",
     "crates/motor-web",
+    "motor/gerar-catalogo",
+    "motor/conferir-tudo",
 ]
 
 [workspace.package]

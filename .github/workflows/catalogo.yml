@@ -1,0 +1,74 @@
+name: Catálogo e aplicativo
+
+# A varredura exaustiva das 330 entradas, e o aplicativo inteiro em cima delas.
+#
+# O que decide se este fluxo passa é o binário `conferir-tudo`: ele percorre
+# **todos** os sorteios possíveis de cada fechamento publicado e confirma, um a
+# um, que a garantia se sustenta. Ele não compartilha uma linha de código com o
+# gerador — nem `motor-core`, nem dependência externa nenhuma — porque uma
+# conferência que reusa o gerador só sabe dizer que o gerador concorda consigo
+# mesmo.
+#
+# Uma falha aqui bloqueia a publicação. É o ponto do item 12 da especificação, e
+# é o que separa "o aplicativo diz que garante" de "o aplicativo garante".
+
+on:
+  push:
+    branches: [main, 'claude/**']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  conferir:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Reaproveitar compilações anteriores
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: catalogo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: catalogo-${{ runner.os }}-
+
+      - name: Compilar o conferidor
+        run: cargo build --release --bin conferir-tudo
+
+      - name: Varrer as 330 entradas, sorteio a sorteio
+        run: ./target/release/conferir-tudo catalogo
+
+      - name: A estratégia — a função que decide o que a pessoa compra
+        # Node puro: é função pura sobre o índice, e se precisasse de rede ou de
+        # navegador estaria errada. Aqui se cobra a regra inteira, incluindo que
+        # nenhuma outra opção do catálogo garanta mais pelo mesmo dinheiro.
+        run: node app/testar-estrategia.mjs
+
+      - name: O catálogo — soma de verificação, posições e bolão
+        run: node app/testar-catalogo.mjs
+
+      - name: A varredura do cliente, contra o catálogo publicado
+        # A terceira implementação da mesma pergunta, agora na linguagem que roda
+        # no aparelho de quem apostou.
+        run: node app/testar-conferir.mjs
+
+      - name: Montar o site
+        run: ./construir-app.sh
+
+      - name: A tela, num navegador de verdade
+        run: |
+          npm install --no-save playwright
+          npx playwright install --with-deps chromium
+          node app/testar-tela.mjs
+
+      - name: O que sairia publicado
+        run: |
+          echo "carimbo: $(grep -o "CARIMBO = '[^']*'" publicar/sw.js)"
+          du -sh publicar

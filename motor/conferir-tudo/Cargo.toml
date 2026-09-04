@@ -1,0 +1,18 @@
+# Sem dependência nenhuma, e isso é requisito, não economia.
+#
+# O conferidor existe para discordar do gerador. Se os dois compartilhassem
+# `motor-core`, um erro na aritmética de cobertura passaria pelos dois com a
+# mesma resposta errada — e a conferência viraria uma cópia do gerador
+# afirmando que o gerador está certo.
+[package]
+name = "conferir-tudo"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "conferir-tudo"
+path = "src/main.rs"
+
+[dependencies]

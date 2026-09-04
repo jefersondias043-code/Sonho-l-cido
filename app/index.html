@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b1020">
+<title>Sonho Lúcido — fechamentos da Lotofácil</title>
+<meta name="description" content="Quanto você quer gastar, quais dezenas quer jogar, e os bilhetes prontos com a garantia que o dinheiro compra.">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icone.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icone-180.png">
+<link rel="stylesheet" href="estilo.css">
+</head>
+<body>
+<main>
+
+<h1>Sonho Lúcido</h1>
+
+<section class="cartao" id="secao-dinheiro">
+  <label for="valor">Quanto você quer gastar</label>
+  <input id="valor" type="text" inputmode="decimal" autocomplete="off" value="R$ 50,00">
+  <input id="regua" type="range" min="0" max="100" value="0" aria-label="Quanto você quer gastar">
+  <p class="degrau" id="degrau"></p>
+</section>
+
+<section class="cartao" id="secao-dezenas">
+  <label id="rotulo-grade">Quais dezenas você quer jogar</label>
+  <div class="grade" id="grade" role="group" aria-labelledby="rotulo-grade"></div>
+  <div class="linha">
+    <button type="button" id="escolher">Escolher por mim</button>
+    <button type="button" id="limpar" class="discreto">Limpar</button>
+    <span class="contagem" id="contagem"></span>
+  </div>
+</section>
+
+<section class="resposta" id="resposta" aria-live="polite"></section>
+
+<section id="secao-bilhetes"></section>
+
+<hr>
+
+<details id="det-acaso">
+  <summary>E se eu jogasse no chute?</summary>
+  <div id="acaso"></div>
+</details>
+
+<details id="det-conferir">
+  <summary>Conferir a garantia, sorteio por sorteio</summary>
+  <div>
+    <p class="ajuda">Percorre todos os resultados possíveis dentro das suas dezenas e mostra o pior caso. Nada é enviado para lugar nenhum: a conta é feita aqui.</p>
+    <button type="button" id="varrer">Conferir agora</button>
+    <p id="varredura" aria-live="polite"></p>
+  </div>
+</details>
+
+<details id="det-bolao">
+  <summary>Dividir com outras pessoas</summary>
+  <div>
+    <label for="partes">Em quantas partes</label>
+    <input id="partes" type="number" min="2" max="20" value="2">
+    <div id="bolao"></div>
+  </div>
+</details>
+
+<details id="det-resultado">
+  <summary>Conferir contra o sorteio</summary>
+  <div>
+    <label for="sorteio">As 15 dezenas sorteadas</label>
+    <input id="sorteio" type="text" inputmode="numeric" autocomplete="off" placeholder="1 2 3 4 5 6 7 8 9 10 11 12 13 14 15">
+    <div class="linha"><button type="button" id="buscar-sorteio" class="discreto">Buscar o último concurso</button></div>
+    <div id="conferencia"></div>
+  </div>
+</details>
+
+<details id="det-carteira">
+  <summary>O que eu já joguei</summary>
+  <div id="carteira"></div>
+</details>
+
+<details id="det-dinheiro">
+  <summary>Preços e prêmios</summary>
+  <div>
+    <p class="ajuda">Estes valores não são auditados por este aplicativo. Confira na lotérica e corrija aqui se estiverem diferentes.</p>
+    <div id="tabela-precos"></div>
+    <div class="linha"><button type="button" id="restaurar-precos" class="discreto">Voltar aos valores publicados</button></div>
+  </div>
+</details>
+
+<details id="det-intencao">
+  <summary>Pedir com as próprias palavras</summary>
+  <div>
+    <label for="intencao">Por exemplo: trezentos reais, vinte dezenas, quero garantir 14</label>
+    <input id="intencao" type="text" autocomplete="off">
+    <div class="linha"><button type="button" id="enviar-intencao" class="discreto">Entendi, pode montar</button></div>
+    <p id="aviso-intencao" class="ajuda" aria-live="polite"></p>
+  </div>
+</details>
+
+<footer>
+  <span id="carimbo"></span>
+  <span id="rede"></span>
+</footer>
+
+</main>
+
+<div class="painel" id="painel" hidden>
+  <div class="painel-topo">
+    <strong id="painel-titulo"></strong>
+    <button type="button" id="fechar-painel" aria-label="Fechar">✕</button>
+  </div>
+  <div class="painel-corpo" id="painel-corpo"></div>
+</div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>

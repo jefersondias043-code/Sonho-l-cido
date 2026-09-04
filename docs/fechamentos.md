@@ -1,0 +1,139 @@
+# O aplicativo de fechamentos da Lotofácil
+
+Um segundo aplicativo, ao lado do motor. Ele responde a **uma** pergunta:
+
+> *"Como gasto melhor este dinheiro na Lotofácil?"*
+
+A pessoa diz quanto quer gastar e quais dezenas quer jogar. O aplicativo devolve
+os bilhetes prontos e, numa frase, o que exatamente está garantido.
+
+## A decisão que define o produto: o cliente não resolve nada
+
+O espaço de respostas é **finito e pequeno**. Pool de 15 a 25 dezenas, bilhete
+de 15 até o tamanho do pool, garantia de 11 a 15 acertos: **330 combinações no
+total**. Isso não é espaço para explorar em tempo de execução no aparelho de
+ninguém. É catálogo para publicar.
+
+Daí tudo o mais decorre:
+
+| Camada | O que é | Onde vive |
+|---|---|---|
+| Cliente | PWA sem framework, sem etapa de compilação, zero dependências | `app/` |
+| Catálogo | Um JSON por fechamento, estático, imutável | `catalogo/` |
+| Resolvedor | Rust; roda em CI e na máquina de quem mantém, **nunca** no cliente | `motor/gerar-catalogo` |
+| Conferidor | Rust sem dependência nenhuma, independente do resolvedor | `motor/conferir-tudo` |
+| Servidor | Três funções opcionais; o aplicativo funciona inteiro sem elas | `servidor/` |
+
+Sem WebAssembly no cliente, sem *web workers*, sem banco de sessões, sem retomada
+de trabalho interrompido. Nada disso tem razão de existir quando não há nada a
+esperar. O peso inicial — casca, índice, preços e distribuições — dá **21 KiB
+comprimidos**.
+
+## A matemática, em quatro linhas
+
+Com `a = v − k` (o que falta ao bilhete) e `b = v − 15` (o que falta ao sorteio),
+vale a identidade exata
+
+```
+|B ∩ S| = 15 − a + |B' ∩ S'|   ⟹   |B ∩ S| ≥ t  ⟺  |B' ∩ S'| ≥ t' ,  t' = t + a − 15
+```
+
+e `t'` organiza as 330:
+
+| situação | quantos casos | quem resolve |
+|---|---:|---|
+| `t' ≤ 0` | 145 | aritmética: um bilhete qualquer já garante, e é mínimo provado |
+| `t' = a` e `k = 15` | 10 | fórmula: são todos os `C(v,15)` bilhetes, mínimo provado |
+| `t' = a` | 45 | sistema de Turán por construção fechada, depois o motor |
+| `0 < t' < a` | 130 | o motor, partindo do melhor que houver |
+
+## Mínimo provado e menor conhecido nunca se confundem
+
+Cada entrada carrega o **piso** — o limite inferior provado, pela cota de
+contagem, por Schönheim, pela cota de Turán no avesso ou pela tabela publicada —
+e o **tamanho encontrado**. `provado` é verdade se, e somente se, os dois se
+encontram. Na tela isso vira dois selos que não se parecem:
+
+- **mínimo provado** — nenhum fechamento faz isso com menos bilhetes. Ponto.
+- **menor conhecido** — este é o menor que se achou, e ao lado aparece o piso:
+  *"nenhum fechamento faz isso com menos de 46"*.
+
+Hoje o catálogo tem **202 das 330 no mínimo provado**.
+
+## Nada é publicado sem varredura exaustiva
+
+Três implementações independentes respondem à mesma pergunta, e as três têm de
+concordar:
+
+1. o **gerador** confere o que grava, por bitmask e força bruta;
+2. o binário **`conferir-tudo`** confere de novo, sem `motor-core`, sem
+   dependência externa nenhuma, com leitor de JSON próprio e aritmética própria.
+   É ele que roda em CI, e uma falha dele bloqueia a publicação;
+3. o **`conferir.js` do cliente** varre de novo no aparelho de quem duvidar, sob
+   demanda, em menos de três segundos no pior caso.
+
+Uma conferência que reusa o gerador só sabe dizer que o gerador concorda consigo
+mesmo.
+
+## A IA nunca toca em número
+
+> A IA nunca gera, escolhe, altera ou valida bilhetes. Nunca calcula nem estima
+> mínimos, coberturas ou limites inferiores.
+
+São três usos, todos opcionais, todos com caminho alternativo determinístico:
+
+- **intenção** — texto livre vira `{orcamento, dezenas[], garantiaMinima}` sob
+  esquema estrito. Fora do esquema é silêncio, e um leitor por expressão regular
+  assume;
+- **explicação** — uma frase sobre a troca entre dinheiro e garantia, recebendo
+  **apenas** números que o catálogo já produziu. A frase é descartada se trouxer
+  qualquer número que não estava no pedido, e essa regra é cobrada duas vezes:
+  no servidor e de novo no cliente, antes de tocar a tela;
+- **narração pós-sorteio** — mesma restrição.
+
+A chave nunca sai do servidor. Desligar a IA inteira mantém o aplicativo
+funcional.
+
+## Como mexer
+
+```bash
+# Regerar o catálogo. Sem argumentos, percorre as 330 dando 5s a cada caso em
+# aberto; o catálogo publicado entra como semente, então regerar só pode melhorar.
+cargo run --release --bin gerar-catalogo -- 30
+
+# Só alguns casos, com mais tempo. O resto do catálogo fica como está.
+cargo run --release --bin gerar-catalogo -- 3600 25-16-13 24-16-14
+
+# A varredura exaustiva de tudo. É o que roda em CI.
+cargo run --release --bin conferir-tudo
+
+# O site, em publicar/, com o carimbo da versão calculado do conteúdo.
+./construir-app.sh
+
+# As suítes.
+node app/testar-estrategia.mjs
+node app/testar-catalogo.mjs
+node app/testar-conferir.mjs
+node app/testar-tela.mjs
+```
+
+`CATALOGO_SAIDA` desvia a escrita e `CATALOGO_SEMENTES` acrescenta catálogos à
+leitura — é assim que vários processos buscam casos diferentes ao mesmo tempo e
+os resultados voltam a ser um catálogo só, conferidos de novo antes de gravar.
+
+## O que ainda não está no ar
+
+O fluxo de publicação (`.github/workflows/publicar.yml`) continua publicando o
+aplicativo do motor, em `web/`. Para trocar, o passo `./construir-web.sh` vira
+`./construir-app.sh` e o diretório `site` vira `publicar`. Enquanto isso não
+acontecer, `.github/workflows/catalogo.yml` roda a varredura exaustiva e as
+suítes a cada envio, sem publicar nada.
+
+## As 18 entradas sem bilhetes
+
+Dezoito das 330 guardam só o piso, e por um motivo econômico, não matemático: o
+menor fechamento conhecido passa de oito mil bilhetes, o que descreve compras de
+dezenas de milhares de reais para cima. `k = 15` com `t = 15` num pool de 20, por
+exemplo, é exatamente `C(20,15) = 15.504` bilhetes — mínimo provado, e R$ 54.264
+de aposta. O aplicativo não oferece o que ninguém compraria, e diz que ali não há
+fechamento catalogado em vez de inventar um.
