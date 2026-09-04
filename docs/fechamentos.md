@@ -110,7 +110,8 @@ São três usos, todos opcionais, todos com caminho alternativo determinístico:
 - **narração pós-sorteio** — mesma restrição.
 
 A chave nunca sai do servidor. Desligar a IA inteira mantém o aplicativo
-funcional.
+funcional — é assim que ele está hoje, sem servidor nenhum. Como pôr as três
+funções no ar está em [`servidor/LEIAME.md`](../servidor/LEIAME.md).
 
 ## Como mexer
 
