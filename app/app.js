@@ -8,7 +8,7 @@
 import * as catalogo from './catalogo.js';
 import * as conferir from './conferir.js';
 import * as volante from './volante.js';
-import { melhorEstrategia, melhorPool } from './estrategia.js';
+import { escada, melhorEstrategia, melhorPool } from './estrategia.js';
 
 const $ = (id) => document.getElementById(id);
 const UNIVERSO = 25;
@@ -130,6 +130,10 @@ function responder() {
     garantiaMinima: estado.garantiaMinima,
   });
   estado.plano = plano;
+  // Os degraus viram marcas na régua: arrastar passa a mostrar onde a resposta
+  // muda, em vez de deixar a pessoa procurar às cegas.
+  $('degraus').innerHTML = escada(estado.indice, estado.precos, estado.dezenas.size)
+    .map((e) => `<option value="${paraARegua(e.custo)}" label="${e.t}"></option>`).join('');
   $('degrau').textContent = frasedoDegrau(plano);
   $('resposta').innerHTML = desenharResposta(plano);
   $('varredura').textContent = '';

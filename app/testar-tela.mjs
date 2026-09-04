@@ -169,6 +169,38 @@ conferir('mais dinheiro nunca garante menos', Number(depois) >= Number(antes), `
 conferir('o próximo degrau aparece',
   /Por mais|Não há garantia maior|já cabem/.test(await pagina.locator('#degrau').innerText()));
 
+// A régua percorre a escala inteira, e não um pedaço dela: o valor mínimo é o de
+// uma aposta simples e o máximo passa de dez mil reais. Um `max` que não bate com
+// a escala do código deixa a régua presa nos primeiros reais — e o campo de
+// dinheiro, que é por onde os outros testes passam, esconde isso.
+const naRegua = async (posicao) => {
+  await pagina.fill('#regua', String(posicao));
+  await pagina.dispatchEvent('#regua', 'input');
+  return Number((await pagina.inputValue('#valor')).replace(/[^\d,]/g, '').replace(',', '.'));
+};
+conferir('a régua começa numa aposta simples', (await naRegua(0)) <= 5);
+conferir('e no fim da escala o dinheiro não compra fechamento nenhum',
+  (await pagina.locator('.aviso').innerText()).includes('Faltam'));
+const noTopo = await naRegua(1000);
+conferir('a régua chega às dezenas de milhares', noTopo > 10000, String(noTopo));
+const comMuito = Number(await pagina.locator('.numero').innerText());
+conferir('e no topo da escala a garantia é bem maior', comMuito >= 14, String(comMuito));
+
+// O alvo da especificação: trocar o orçamento devolve resposta nova em menos de
+// 100 ms. Dá para prometer isso porque a resposta já estava calculada — o índice
+// inteiro está na memória e nada é buscado para responder.
+const relogio = await pagina.evaluate(() => {
+  const regua = document.getElementById('regua');
+  const antes = performance.now();
+  for (let p = 300; p < 400; p += 10) {
+    regua.value = String(p);
+    regua.dispatchEvent(new Event('input'));
+  }
+  return (performance.now() - antes) / 10;
+});
+conferir(`cada troca de orçamento responde em menos de 100 ms (${relogio.toFixed(1)} ms)`,
+  relogio < 100);
+
 // ── a comparação com o acaso ────────────────────────────────────────────────
 
 await pagina.click('#det-acaso summary');

@@ -19,7 +19,9 @@
 <section class="cartao" id="secao-dinheiro">
   <label for="valor">Quanto você quer gastar</label>
   <input id="valor" type="text" inputmode="decimal" autocomplete="off" value="R$ 50,00">
-  <input id="regua" type="range" min="0" max="100" value="0" aria-label="Quanto você quer gastar">
+  <input id="regua" type="range" min="0" max="1000" value="0" list="degraus"
+    aria-label="Quanto você quer gastar">
+  <datalist id="degraus"></datalist>
   <p class="degrau" id="degrau"></p>
 </section>
 
