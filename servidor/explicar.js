@@ -35,8 +35,12 @@ export default {
 /// daqui com dado inventado.
 function numerosDe(d) {
   if (!d || typeof d !== 'object') return null;
-  const campos = [d.v, d.k, d.t, d.jogos, d.custo, d.piso, d.degrauT, d.degrauFalta];
-  if (campos.slice(0, 5).some((n) => !Number.isFinite(n))) return null;
+  // Dois assuntos, um contrato: só entram números, e a frase só pode usar os
+  // que entraram. A escolha traz a combinação e o preço; o sorteio, o que saiu.
+  const campos = d.assunto === 'sorteio'
+    ? [d.melhor, d.jogos, d.custo, d.voltou]
+    : [d.v, d.k, d.t, d.jogos, d.custo, d.piso, d.degrauT, d.degrauFalta];
+  if (campos.slice(0, 4).some((n) => !Number.isFinite(n))) return null;
   return new Set(
     campos
       .filter((n) => Number.isFinite(n))
@@ -64,10 +68,13 @@ async function escrever(d, chave) {
         model: MODELO,
         max_tokens: 150,
         system:
-          'Escreva UMA frase em português do Brasil, no máximo 30 palavras, sobre a troca ' +
-          'entre dinheiro e garantia neste fechamento de loteria. Use apenas os números que ' +
-          'estiverem no pedido; não calcule, não some, não arredonde e não invente nenhum ' +
-          'outro. Sem promessa de lucro. Sem exclamação.',
+          `Escreva UMA frase em português do Brasil, no máximo 30 palavras, sobre ${
+            d.assunto === 'sorteio'
+              ? 'o que este fechamento de loteria rendeu no sorteio que acabou de sair'
+              : 'a troca entre dinheiro e garantia neste fechamento de loteria'
+          }. Use apenas os números que estiverem no pedido; não calcule, não some, não ` +
+          'arredonde e não invente nenhum outro. Sem promessa de lucro, sem consolo e sem ' +
+          'previsão do próximo concurso. Sem exclamação.',
         messages: [{ role: 'user', content: JSON.stringify(d) }],
       }),
     });

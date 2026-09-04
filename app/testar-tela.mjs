@@ -221,6 +221,15 @@ conferir('e fecha a conta do dinheiro', /Custou R\$/.test(conferencia));
 
 await pagina.click('[data-acao=guardar]');
 conferir('guardar põe o jogo na carteira', (await pagina.locator('.registros li').count()) === 1);
+conferir('e o registro fecha a conta do sorteio que acabou de ser conferido',
+  /voltou R\$/.test(await pagina.locator('.registros li').innerText()) === false);
+
+// Conferir de novo, agora com o jogo já guardado: a carteira passa a dizer
+// quanto voltou. É o que separa "o que eu joguei" de "o que eu ganhei".
+await pagina.dispatchEvent('#sorteio', 'change');
+conferir('a carteira registra o retorno',
+  /voltou R\$/.test(await pagina.locator('.registros li').innerText()),
+  await pagina.locator('.registros li').innerText());
 
 // ── preços editáveis, e a tela dizendo que não os audita ────────────────────
 

@@ -136,7 +136,9 @@ function responder() {
 
   if (plano.escolha) {
     trazerBilhetes(plano.escolha);
-    pedirAFrase(plano);
+    const { v, k, t, jogos, custo, piso } = plano.escolha;
+    pedirAFrase('.resposta .frase',
+      { v, k, t, jogos, custo, piso, degrauT: plano.degrau?.t, degrauFalta: plano.degrau?.falta });
   } else {
     estado.bilhetes = [];
     estado.mascaras = [];
@@ -179,17 +181,17 @@ function desenharResposta(plano) {
     <p class="ressalva">${chanceDeCairDentro(e.v)}</p>`;
 }
 
-/// Pede ao servidor uma frase sobre a troca entre dinheiro e garantia. A frase
-/// determinística já está na tela; esta troca por outra, ou não troca — e só
-/// troca se não trouxer **nenhum número** que não tenha saído daqui.
-async function pedirAFrase(plano) {
-  const e = plano.escolha;
-  const dados = { v: e.v, k: e.k, t: e.t, jogos: e.jogos, custo: e.custo, piso: e.piso,
-    degrauT: plano.degrau?.t, degrauFalta: plano.degrau?.falta };
+/// Pede ao servidor uma frase sobre os números que já estão na tela — a troca
+/// entre dinheiro e garantia, ou o que o sorteio rendeu. A frase determinística
+/// já está lá; esta troca por outra, ou não troca. E só troca se não trouxer
+/// **nenhum número** que não tenha saído daqui.
+let pedidoDaVez = 0;
+async function pedirAFrase(onde, dados) {
   const permitidos = new Set(
     Object.values(dados).filter(Number.isFinite)
       .flatMap((n) => [String(n), String(Math.round(n / 100))]),
   );
+  const meu = ++pedidoDaVez;  // uma resposta atrasada não sobrescreve a atual
   try {
     const r = await fetch('api/explicar', {
       method: 'POST',
@@ -198,8 +200,8 @@ async function pedirAFrase(plano) {
       signal: AbortSignal.timeout(4000),
     });
     const { frase } = await r.json();
-    const alvo = $('resposta').querySelector('.frase');
-    if (alvo && estado.plano === plano && (frase.match(/\d+/g) ?? []).every((n) => permitidos.has(n))) {
+    const alvo = document.querySelector(onde);
+    if (alvo && meu === pedidoDaVez && (frase.match(/\d+/g) ?? []).every((n) => permitidos.has(n))) {
       alvo.textContent = frase;
     }
   } catch { /* a frase determinística fica */ }
@@ -245,12 +247,9 @@ async function trazerBilhetes(escolha) {
 }
 
 function desenharBilhetes() {
-  const parte = estado.link?.parte != null
-    ? `<p class="ajuda">Esta é a parte ${estado.link.parte + 1} de ${estado.link.partes} de um
-       bolão: só os bilhetes que cabem a você.</p>`
-    : '';
   $('secao-bilhetes').innerHTML = `
-    ${parte}
+    ${estado.link?.parte == null ? '' : `<p class="ajuda">Esta é a parte
+      ${estado.link.parte + 1} de ${estado.link.partes} de um bolão: só os bilhetes seus.</p>`}
     <ol class="bilhetes">${estado.bilhetes
       .map((b) => `<li>${b.map((d) => `<span>${String(d).padStart(2, '0')}</span>`).join('')}</li>`)
       .join('')}</ol>
@@ -296,18 +295,15 @@ function desenharBolao() {
 }
 
 function desenharPrecos() {
-  const linha = (grupo, chave, rotulo) =>
-    `<label>${rotulo}<input type="text" inputmode="decimal" data-grupo="${grupo}"
-      data-chave="${chave}" value="${dinheiro(estado.precos[grupo][chave])}"></label>`;
-  $('tabela-precos').innerHTML =
-    `<div class="precos"><h3>Quanto custa a aposta</h3>${Object.keys(estado.precos.aposta)
-      .map((k) => linha('aposta', k, `${k} dezenas`))
-      .join('')}</div>
-     <div class="precos"><h3>Quanto paga cada faixa</h3>${Object.keys(estado.precos.premio)
-      .map((k) => linha('premio', k, `${k} acertos`))
-      .join('')}</div>
-     <p class="ajuda">Valores de ${estado.precosPublicados.vigencia}.
-       ${estado.precosPublicados.observacao}</p>`;
+  const grupos = [['aposta', 'Quanto custa a aposta', 'dezenas'],
+    ['premio', 'Quanto paga cada faixa', 'acertos']];
+  $('tabela-precos').innerHTML = `${grupos.map(([grupo, titulo, unidade]) =>
+    `<div class="precos"><h3>${titulo}</h3>${Object.keys(estado.precos[grupo]).map((k) =>
+      `<label>${k} ${unidade}<input type="text" inputmode="decimal" data-grupo="${grupo}"
+        data-chave="${k}" value="${dinheiro(estado.precos[grupo][k])}"></label>`).join('')}</div>`)
+    .join('')}
+    <p class="ajuda">Valores de ${estado.precosPublicados.vigencia}.
+      ${estado.precosPublicados.observacao}</p>`;
 }
 
 function desenharCarteira() {
@@ -316,12 +312,12 @@ function desenharCarteira() {
     return;
   }
   $('carteira').innerHTML = `<ol class="registros">${estado.carteira
-    .map(
-      (r, i) => `<li><b>${r.t} acertos garantidos</b> · ${r.jogos} jogos de ${r.k} dezenas ·
-        ${dinheiro(r.custo)} · ${new Date(r.data).toLocaleDateString('pt-BR')}
-        ${r.retorno != null ? `· voltou ${dinheiro(r.retorno)}` : ''}
-        <button type="button" class="discreto" data-apagar="${i}">Apagar</button></li>`,
-    )
+    .map((r, i) => `<li><b>${r.t} acertos garantidos</b> · ${r.jogos} jogos de ${r.k} dezenas ·
+        ${dinheiro(r.custo)} · ${new Date(r.data).toLocaleDateString('pt-BR')}${
+      r.retorno != null
+        ? ` · <b>voltou ${dinheiro(r.retorno)}</b>${r.concurso ? ` no concurso ${r.concurso}` : ''}`
+        : ''}
+        <button type="button" class="discreto" data-apagar="${i}">Apagar</button></li>`)
     .join('')}</ol>`;
 }
 
@@ -338,21 +334,17 @@ function ligarControles() {
   $('escolher').addEventListener('click', () =>
     sortearDezenas(melhorPool(estado.indice, estado.precos, estado.orcamento)));
   $('limpar').addEventListener('click', () => trocarDezenas(new Set()));
-
-  $('regua').addEventListener('input', () => {
-    estado.orcamento = daRegua(Number($('regua').value));
-    $('valor').value = dinheiro(estado.orcamento);
-    guardar('orcamento', estado.orcamento);
-    responder();
-  });
-
-  $('valor').addEventListener('change', () => {
-    const c = emCentavos($('valor').value);
-    if (c != null && c > 0) estado.orcamento = c;
+  // A régua e o campo dizem a mesma coisa de dois jeitos, e um valor que não dá
+  // para ler — texto vazio, "abc" — deixa o orçamento como estava em vez de
+  // zerar a tela.
+  const trocarOrcamento = (centavos) => {
+    if (centavos != null && centavos > 0) estado.orcamento = centavos;
     guardar('orcamento', estado.orcamento);
     atualizarDinheiro();
     responder();
-  });
+  };
+  $('regua').addEventListener('input', () => trocarOrcamento(daRegua(Number($('regua').value))));
+  $('valor').addEventListener('change', () => trocarOrcamento(emCentavos($('valor').value)));
 
   $('secao-bilhetes').addEventListener('click', (ev) => acaoDosBilhetes(ev.target.dataset?.acao));
   $('partes').addEventListener('input', () => estado.bilhetes.length && desenharBolao());
@@ -360,7 +352,6 @@ function ligarControles() {
     const link = ev.target.dataset?.link;
     if (link) ev.target.textContent = (await volante.copiar(link)) ? 'Copiado' : link;
   });
-
   $('carteira').addEventListener('click', (ev) => {
     const i = ev.target.dataset?.apagar;
     if (i == null) return;
@@ -368,7 +359,6 @@ function ligarControles() {
     guardar('carteira', estado.carteira);
     desenharCarteira();
   });
-
   $('tabela-precos').addEventListener('change', (ev) => {
     const { grupo, chave } = ev.target.dataset ?? {};
     if (!grupo) return;
@@ -378,7 +368,6 @@ function ligarControles() {
     desenharPrecos();
     responder();
   });
-
   $('restaurar-precos').addEventListener('click', () => {
     estado.precos = structuredClone(estado.precosPublicados);
     guardar('precos', {});
@@ -504,6 +493,7 @@ function conferirContraOSorteio() {
   const voltou = conferir.retorno(faixas, estado.precos.premio);
   const custo = estado.bilhetes.length * estado.precos.aposta[estado.plano.escolha.k];
   const linhas = [...faixas.entries()].sort((a, b) => b[0] - a[0]);
+  anotarNaCarteira(sorteadas, voltou);
   $('conferencia').innerHTML = `
     <p>Melhor bilhete: <b>${melhor} acertos</b>.</p>
     ${linhas.length
@@ -511,8 +501,25 @@ function conferirContraOSorteio() {
       : '<p>Nenhum bilhete premiado.</p>'}
     <p>Custou ${dinheiro(custo)}, voltou ${dinheiro(voltou)} —
       <b>${voltou >= custo ? 'saldo de' : 'faltaram'} ${dinheiro(Math.abs(voltou - custo))}</b>.</p>
-    <p class="ressalva">Prêmios de 14 e 15 acertos variam a cada concurso; os valores aqui são os
-      da sua tabela.</p>`;
+    <p class="frase narracao">Prêmios de 14 e 15 acertos variam a cada concurso; os valores
+      aqui são os da sua tabela.</p>`;
+  pedirAFrase('#conferencia .narracao',
+    { assunto: 'sorteio', melhor, jogos: estado.bilhetes.length, custo, voltou });
+}
+
+/// Fecha a conta do que está guardado: o que foi jogado, em que concurso, e
+/// quanto voltou. Só mexe no registro que descreve exatamente este fechamento —
+/// conferir um sorteio não pode reescrever a história de outro jogo.
+function anotarNaCarteira(sorteadas, voltou) {
+  const e = estado.plano.escolha;
+  const registro = estado.carteira.find((r) => r.v === e.v && r.k === e.k && r.t === e.t);
+  if (!registro) return;
+  const ultimo = lembrar('ultimo-sorteio', null);
+  const mesmas = (a) => [...a].sort((x, y) => x - y).join(' ');
+  registro.retorno = voltou;
+  registro.concurso = ultimo && mesmas(ultimo.dezenas) === mesmas(sorteadas) ? ultimo.concurso : null;
+  guardar('carteira', estado.carteira);
+  desenharCarteira();
 }
 
 // ── intenção em texto livre ─────────────────────────────────────────────────
