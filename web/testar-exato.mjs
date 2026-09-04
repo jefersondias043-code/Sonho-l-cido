@@ -128,10 +128,18 @@ async function aplicarOPedido() {
   await pagina.waitForTimeout(80);
   await pagina.click(`#lot-garantia .opcao[data-garantia="${p.garantia}"]`);
   await pagina.waitForTimeout(80);
-  if (p.premiadas > 1) {
-    await pagina.click(`#lot-premiadas .opcao[data-premiadas="${p.premiadas}"]`);
-    await pagina.waitForTimeout(80);
-  }
+  /*
+   * As premiadas são clicadas **sempre**, inclusive quando são uma.
+   *
+   * Estava `if (p.premiadas > 1)`, e o 1 é o padrão: pedir uma depois de um
+   * teste que pediu duas não desfazia nada, e a tela seguia com duas. O teste
+   * seguinte resolvia 20 dezenas com jogos de 17 e duas cartelas premiadas
+   * acreditando estar resolvendo com uma — um problema muito maior, com outro
+   * piso, que não fecha nos segundos que ele esperava. O sintoma aparecia num
+   * teste que não tinha nada a ver com premiadas.
+   */
+  await pagina.click(`#lot-premiadas .opcao[data-premiadas="${p.premiadas}"]`);
+  await pagina.waitForTimeout(80);
 }
 
 /*
@@ -403,7 +411,23 @@ try {
     undefined,
     { timeout: 90000 }
   );
-  await pagina.waitForTimeout(5000);
+  /*
+   * Esperar pelo texto, e não pelo relógio.
+   *
+   * Eram cinco segundos cravados, e eles bastavam quando a tela do Exato era a
+   * única coisa rodando. Na ferramenta unificada o caminho até aqui passa pelo
+   * banco — que responde primeiro — e por um motor de busca que sobe e é
+   * desmontado quando a prova é pedida: os primeiros segundos do motor de
+   * Turán deixaram de ser os primeiros segundos da página. O que se cobra
+   * continua sendo o mesmo, e agora sem depender de quanto o resto demorou.
+   */
+  await pagina.waitForFunction(
+    () => /Garantia cumprida com [\d.]+ cartelas/.test(
+      document.getElementById('ex-construcao')?.textContent ?? ''
+    ),
+    undefined,
+    { timeout: 90000 }
+  );
 
   // Vinte dezenas com jogos de 17 é garantia cheia, então quem trabalha aqui é
   // o motor de Turán — e ele entrega um fechamento nos primeiros segundos em vez
@@ -849,7 +873,7 @@ try {
   await writeFile(arquivoRuim, JSON.stringify(remendado));
   await pagina.setInputFiles('#arquivo-sessao', arquivoRuim);
   await pagina.waitForFunction(
-    () => /não serve/.test(document.getElementById('previa-importacao').textContent),
+    () => /não pôde ser aberta/.test(document.getElementById('previa-importacao').textContent),
     undefined,
     { timeout: 15000 }
   );
@@ -860,7 +884,7 @@ try {
     new RegExp(`${cartelasDoResultado} cartelas`).test(await texto('#previa-importacao')) &&
       /9/.test(await texto('#previa-importacao')) &&
       (await pagina.locator('#confirmar-importacao').count()) === 0,
-    'um arquivo cujo estado discorda da ficha é recusado, com os dois números',
+    'um arquivo cujo estado discorda da ficha é recusado, com os dois números e sem botão',
     (await texto('#previa-importacao')).slice(0, 120)
   );
 
@@ -948,15 +972,28 @@ try {
   const relogio = Date.now();
   await pagina.click('#lista-historico [data-acao="ex-continuar"]');
   await esperarResultado(180000);
+  /*
+   * Continuar continua: nunca recomeça, e nunca piora.
+   *
+   * Estava escrito "devolve exatamente a mesma quantidade", e isso valia porque
+   * o caso desta seção já estava no mínimo provado — não havia para onde
+   * melhorar. Neste, não: a escalada retomada acha 16 onde tinha parado em 18,
+   * e cobrar igualdade seria cobrar que continuar não continuasse. O que a
+   * promessa diz de verdade é que o trabalho guardado é o ponto de partida, e é
+   * isso que se mede — nunca acima do que já havia, nunca abaixo do piso.
+   */
+  const aoRetomar = await numero('#ex-encontrado');
+  const pisoAoRetomar = await numero('#ex-provado');
   marcar(
-    (await numero('#ex-encontrado')) === cartelasDoResultado
-      && (await numero('#ex-teto')) === cartelasDoResultado,
-    'abrir um fechamento guardado devolve exatamente a mesma quantidade de cartelas',
-    `${await numero('#ex-encontrado')} cartelas, teto ${await numero('#ex-teto')}`
+    aoRetomar > 0 && aoRetomar <= cartelasDoResultado && aoRetomar >= pisoAoRetomar,
+    'continuar retoma do fechamento guardado, sem recomeçar e sem piorar',
+    `${cartelasDoResultado} guardadas → ${aoRetomar}, piso ${pisoAoRetomar}`
   );
   marcar(
-    new RegExp(`Mínimo exato: ${cartelasDoResultado} cartelas`).test(await texto('#ex-frase')),
-    'e o veredito continua sendo o mesmo',
+    new RegExp(`(Mínimo exato: ${aoRetomar}|Solução encontrada: ${aoRetomar})`).test(
+      `${await texto('#ex-frase')} ${await texto('#ex-resultado-cartao')}`
+    ),
+    'e o veredito fala do número que está na tela, e não de outro',
     (await texto('#ex-frase')).slice(0, 60)
   );
   marcar(
@@ -1046,8 +1083,14 @@ try {
   await esperarResultado(150000);
 
   // ─── 14. o que não é problema é recusado com o motivo ───
+  //
+  // `C(25,12) = 5.200.300` alvos, acima do teto de quatro milhões: a lista não
+  // caberia na memória de um celular, e o motor diz isso antes de tentar
+  // alocá-la. O pedido anterior deste bloco — jogos de 12 num sorteio de 15 —
+  // deixou de ser expressável na tela: com o sorteio na modalidade, o menor
+  // jogo é 15, que é o menor que uma banca vende.
   await marcarNumeros(25, Array.from({ length: 25 }, (_, i) => i + 1));
-  await regras(12, 15, 11);
+  await regras(15, 12, 11);
   await resolver();
   await pagina.waitForFunction(
     () => !document.getElementById('ex-erro').hidden,

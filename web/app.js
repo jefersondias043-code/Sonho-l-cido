@@ -2173,6 +2173,20 @@ function lotPintarTudo() {
   // toca, nada acontece, e nada na tela explica. O rótulo passa a ser a
   // instrução enquanto a seleção não está completa.
   const botao = $('lot-iniciar');
+  /*
+   * Enquanto o motor exato trabalha, o botão diz que está trabalhando.
+   *
+   * Medido no aparelho, na tela que este motor tinha antes: depois do toque o
+   * `scrollY` não mudava um pixel e o botão continuava com o mesmo rótulo — só
+   * um pouco mais apagado. A ação mais importante do aplicativo não mudava nada
+   * que a pessoa conseguisse ver, e o primeiro instinto de quem não vê resposta
+   * é tocar de novo. A rolagem já foi resolvida; o rótulo é a outra metade.
+   */
+  if (exato.estaRodando()) {
+    botao.disabled = true;
+    botao.textContent = 'Procurando…';
+    return;
+  }
   botao.disabled = faltam !== 0;
   botao.textContent =
     faltam === 0
@@ -2697,6 +2711,7 @@ function lotChamarOExato(numeros) {
     universo: lotUniverso,
     esforco: Number($('ex-esforco')?.value) || 4,
   });
+  lotPintarTudo();
 }
 
 exato.ligar({
@@ -2710,6 +2725,10 @@ exato.ligar({
    * as cartelas não muda o que elas são.
    */
   aoTerminar: (cartelas) => {
+    // O rótulo do botão volta primeiro, e sempre: uma corrida que o motor
+    // recusou não produz cartela nenhuma, e deixar "Procurando…" ali seria a
+    // tela afirmando um trabalho que não está acontecendo.
+    lotPintarTudo();
     if (!cartelas?.length) return;
     lotFechamento = cartelas;
     $('lot-checar').hidden = false;
