@@ -19,7 +19,12 @@
 //! 5. **piso** — nenhuma solução fica abaixo do limite inferior, e o limite
 //!    inferior anunciado nunca é menor que a cota de contagem recalculada aqui;
 //! 6. **prova** — a marca `provado` aparece se, e somente se, o tamanho
-//!    encontrado encontra o piso.
+//!    encontrado encontra o piso;
+//! 7. **os mínimos de argumento fechado** — nos 155 casos em que o mínimo não
+//!    depende de cota nenhuma (um bilhete basta, ou `k = 15` com `t = 15` exige
+//!    todos os `C(v,15)`), o índice tem de dizer exatamente o que a aritmética
+//!    diz. Aqui a conferência não confia no gerador nem na literatura: refaz o
+//!    argumento.
 //!
 //! E do catálogo como um todo: que ele tenha as 330 combinações, cada uma uma
 //! única vez.
@@ -139,6 +144,43 @@ fn conferir(raiz: &str, e: &Linha) -> Result<u64, String> {
         ));
     }
 
+    // Dois casos em que o mínimo sai de argumento fechado, e que por isso podem
+    // ser cobrados aqui sem acreditar em cota nenhuma. Cobrem 155 das 330.
+    //
+    // Um bilhete de `k` dezenas e um sorteio de 15, ambos dentro de um pool de
+    // `v`, se cruzam em pelo menos `k + 15 − v` dezenas — não há como não se
+    // cruzarem. Quando isso já alcança `t`, um bilhete qualquer basta; e zero
+    // bilhetes não cobrem sorteio nenhum, então um é o mínimo, ponto.
+    let cruzam = (e.k + SORTEIO).saturating_sub(e.v);
+    if cruzam >= e.t {
+        if e.jogos != Some(1) || e.piso != 1 || !e.provado {
+            return Err(format!(
+                "qualquer bilhete de {} dezenas cruza {cruzam} com qualquer sorteio do pool de \
+                 {}, então o mínimo é 1 — o índice diz piso {} e {:?} bilhetes",
+                e.k, e.v, e.piso, e.jogos
+            ));
+        }
+    } else if e.jogos == Some(1) {
+        return Err(format!(
+            "um bilhete só, e um bilhete de {} dezenas cruza no máximo {cruzam} \
+             garantidas com um sorteio do pool de {}",
+            e.k, e.v
+        ));
+    }
+
+    // E `k = 15` com `t = 15`: para conter as 15 sorteadas, um bilhete de 15
+    // dezenas tem de **ser** o sorteio. Nenhum serve a dois, e são precisos
+    // todos os `C(v,15)`.
+    if e.k == SORTEIO && e.t == SORTEIO
+        && (e.piso != total_sorteios || e.jogos != Some(total_sorteios) || !e.provado)
+    {
+        return Err(format!(
+            "k=15 com t=15 exige exatamente os C({},15) = {total_sorteios} bilhetes, e é mínimo \
+             provado — o índice diz piso {}, {:?} bilhetes, provado={}",
+            e.v, e.piso, e.jogos, e.provado
+        ));
+    }
+
     if let Some(jogos) = e.jogos {
         if jogos < e.piso {
             return Err(format!("{jogos} bilhetes fica abaixo do piso {}", e.piso));
@@ -153,16 +195,9 @@ fn conferir(raiz: &str, e: &Linha) -> Result<u64, String> {
         return Err("marca provado sem tamanho encontrado".to_string());
     }
 
-    // Entrada sem bilhetes publicados: o que ela afirma é só o piso, e o piso
-    // já foi cobrado acima. A exceção é `k = 15, t = 15`, onde o tamanho é
-    // afirmado por fórmula — e a fórmula é conferida aqui, independentemente.
+    // Entrada sem bilhetes publicados: o que ela afirma é só o piso e o tamanho,
+    // e os dois já foram cobrados acima.
     if e.soma == 0 {
-        if e.k == SORTEIO && e.t == SORTEIO && e.jogos != Some(total_sorteios) {
-            return Err(format!(
-                "k=15 e t=15 exigem os C({},15) = {total_sorteios} bilhetes, o índice diz {:?}",
-                e.v, e.jogos
-            ));
-        }
         return Ok(0);
     }
 

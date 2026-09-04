@@ -60,7 +60,20 @@ encontram. Na tela isso vira dois selos que não se parecem:
   *"nenhum fechamento faz isso com menos de 46"*.
 
 Hoje o catálogo tem **206 das 330 no mínimo provado** e 312 com bilhetes
-publicados.
+publicados. E vale dizer em que cada prova se apoia, porque não são todas iguais:
+
+| de onde vem o mínimo | quantas | quem confere |
+|---|---:|---|
+| aritmética fechada — um bilhete de `k` num pool de `v` cruza `k + 15 − v` com qualquer sorteio, e quando isso já alcança `t` o mínimo é 1 | 145 | `conferir-tudo` refaz o argumento |
+| fórmula — `k = 15` com `t = 15` exige que o bilhete **seja** o sorteio, logo todos os `C(v,15)` | 11 | `conferir-tudo` refaz o argumento |
+| cota de Turán no avesso | 34 | a cota vem de `motor-core`, validada lá contra números publicados |
+| cota de Schönheim | 17 | idem |
+
+Nos 155 primeiros o conferidor independente não acredita em ninguém: recalcula. Nos
+51 restantes a prova se apoia numa cota que o `motor-core` implementa e testa
+contra a literatura — e o conferidor só cobra que a cota anunciada não seja menor
+que a cota de contagem que ele mesmo recalcula. É menos do que uma prova
+independente, e é isto que se pode afirmar sem exagero.
 
 ## Nada é publicado sem varredura exaustiva
 
