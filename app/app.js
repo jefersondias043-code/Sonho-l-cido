@@ -93,8 +93,8 @@ function registrarServico() {
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js').catch(() => {});
   }
-  addEventListener('online', () => ($('rede').textContent = ''));
-  addEventListener('offline', () => ($('rede').textContent = 'sem internet'));
+  const rede = () => ($('rede').textContent = navigator.onLine ? '' : 'sem internet');
+  addEventListener('online', rede); addEventListener('offline', rede); rede();
   fetch('sw.js', { cache: 'no-store' })
     .then((r) => r.text())
     .then((t) => ($('carimbo').textContent = `versão ${t.match(/CARIMBO = '([^']+)'/)?.[1] ?? '—'}`))
@@ -252,8 +252,9 @@ async function trazerBilhetes(escolha) {
 
 function desenharBilhetes() {
   $('secao-bilhetes').innerHTML = `
-    ${estado.link?.parte == null ? '' : `<p class="ajuda">Esta é a parte
-      ${estado.link.parte + 1} de ${estado.link.partes} de um bolão: só os bilhetes seus.</p>`}
+    ${estado.link?.parte == null ? '' : `<p class="ajuda">Você é a parte
+      ${estado.link.parte + 1} de ${estado.link.partes} deste bolão: a garantia acima é do bolão
+      inteiro, e estes ${estado.bilhetes.length} bilhetes são os que cabem a você.</p>`}
     <ol class="bilhetes">${estado.bilhetes
       .map((b) => `<li>${b.map((d) => `<span>${String(d).padStart(2, '0')}</span>`).join('')}</li>`)
       .join('')}</ol>
@@ -282,7 +283,9 @@ function desenharAcaso() {
 }
 
 function desenharBolao() {
-  const partes = Math.min(20, Math.max(2, Number($('partes').value) || 2));
+  // Nunca mais partes que bilhetes: um link com zero bilhetes é uma promessa
+  // vazia mandada para uma pessoa de verdade.
+  const partes = Math.min(20, estado.bilhetes.length, Math.max(2, Number($('partes').value) || 2));
   const grupos = volante.dividir(estado.bilhetes, partes);
   const base = location.href.split('#')[0];
   const { v, k, t } = estado.plano.escolha;
@@ -335,8 +338,8 @@ function ligarControles() {
     trocarDezenas(estado.dezenas);
   });
 
-  $('escolher').addEventListener('click', () =>
-    sortearDezenas(melhorPool(estado.indice, estado.precos, estado.orcamento)));
+  $('escolher').addEventListener('click', () => estado.indice
+    && sortearDezenas(melhorPool(estado.indice, estado.precos, estado.orcamento)));
   $('limpar').addEventListener('click', () => trocarDezenas(new Set()));
   // A régua e o campo dizem a mesma coisa de dois jeitos, e um valor que não dá
   // para ler — texto vazio, "abc" — deixa o orçamento como estava em vez de
