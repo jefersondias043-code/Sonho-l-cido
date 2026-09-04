@@ -133,13 +133,26 @@ node ferramentas/testar-previa.mjs previa.html
 leitura — é assim que vários processos buscam casos diferentes ao mesmo tempo e
 os resultados voltam a ser um catálogo só, conferidos de novo antes de gravar.
 
-## O que ainda não está no ar
+## Onde ele vai ao ar
 
-O fluxo de publicação (`.github/workflows/publicar.yml`) continua publicando o
-aplicativo do motor, em `web/`. Para trocar, o passo `./construir-web.sh` vira
-`./construir-app.sh` e o diretório `site` vira `publicar`. Enquanto isso não
-acontecer, `.github/workflows/catalogo.yml` roda a varredura exaustiva e as
-suítes a cada envio, sem publicar nada.
+Numa subpasta, **ao lado** do motor, e não no lugar dele:
+
+| | |
+|---|---|
+| motor | `https://<dono>.github.io/<repo>/` |
+| fechamentos | `https://<dono>.github.io/<repo>/fechamentos/` |
+
+São dois aplicativos com dois públicos, e o endereço de cada um continua sendo o
+que sempre foi — trocar um pelo outro tiraria do ar algo que funciona. O service
+worker de `fechamentos/` tem escopo mais específico que o da raiz, então é ele
+que atende as páginas de lá; e o carimbo é derivado do conteúdo sem o caminho,
+então montar em `publicar/` ou em `site/fechamentos/` dá o mesmo número.
+
+`publicar.yml` monta os dois e, **antes de publicar qualquer um**, roda a
+varredura exaustiva das 330 entradas. Uma falha ali bloqueia a publicação do site
+inteiro, de propósito: pôr no ar metade seria pôr no ar um endereço que promete o
+que não confere. `catalogo.yml` roda a mesma varredura e as sete suítes a cada
+envio, em qualquer branch.
 
 ## As 18 entradas sem bilhetes
 

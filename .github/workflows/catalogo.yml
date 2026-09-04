@@ -75,6 +75,19 @@ jobs:
       - name: Montar o site
         run: ./construir-app.sh
 
+      - name: O carimbo é do conteúdo, e não do caminho
+        # O mesmo site montado em dois lugares tem de sair com o mesmo carimbo.
+        # `sha256sum` imprime o caminho ao lado do resumo, então esta é fácil de
+        # quebrar sem perceber — e o sintoma seria o pior possível: o número que
+        # a pessoa confere no rodapé deixaria de identificar a versão.
+        run: |
+          ./construir-app.sh /tmp/em-outro-lugar >/dev/null
+          aqui=$(grep -o "CARIMBO = '[^']*'" publicar/sw.js)
+          la=$(grep -o "CARIMBO = '[^']*'" /tmp/em-outro-lugar/sw.js)
+          echo "$aqui vs $la"
+          [ "$aqui" = "$la" ]
+          diff -rq publicar /tmp/em-outro-lugar
+
       - name: A tela, num navegador de verdade
         run: |
           npm install --no-save playwright

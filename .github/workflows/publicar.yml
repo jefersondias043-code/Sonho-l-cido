@@ -148,6 +148,29 @@ jobs:
           # a conferência, que o dinheiro na tela seja o que a aritmética diz.
           node web/testar-exato.mjs
 
+      - name: Varrer o catálogo de fechamentos, sorteio a sorteio
+        # O segundo aplicativo deste repositório promete "está garantido", e o
+        # que sustenta a promessa é esta varredura: todos os sorteios possíveis
+        # de cada um dos 312 fechamentos publicados, conferidos por um binário
+        # que não compartilha uma linha com o gerador. Uma falha aqui bloqueia a
+        # publicação do site inteiro, de propósito — publicar metade seria pôr no
+        # ar um endereço que promete o que não confere.
+        run: |
+          cargo build --release --bin conferir-tudo
+          ./target/release/conferir-tudo catalogo
+
+      - name: Construir o aplicativo de fechamentos
+        # Numa subpasta, ao lado do motor, e não no lugar dele: são dois
+        # aplicativos com dois públicos, e o endereço de cada um continua sendo o
+        # que sempre foi. O service worker de `fechamentos/` tem escopo mais
+        # específico que o da raiz, então é ele que atende as páginas de lá.
+        #
+        # Depois de `testar-construcao.sh`, que reconstrói `site/` do zero e
+        # cobra que todo arquivo dali esteja na lista de uso sem internet do
+        # motor — lista que não fala, nem deve falar, dos arquivos do outro
+        # aplicativo.
+        run: ./construir-app.sh site/fechamentos
+
       - name: Publicar na branch gh-pages
         run: |
           set -euo pipefail
@@ -164,8 +187,9 @@ jobs:
           git add -A
           git commit -qm "Publicação de ${GITHUB_SHA::7}
 
-          Conteúdo gerado por construir-web.sh. Esta branch existe apenas para o
-          GitHub Pages servir; não editar aqui."
+          Conteúdo gerado por construir-web.sh (raiz) e construir-app.sh
+          (fechamentos/). Esta branch existe apenas para o GitHub Pages servir;
+          não editar aqui."
 
           git push -q --force \
             "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
@@ -177,4 +201,5 @@ jobs:
         run: |
           dono="${GITHUB_REPOSITORY%%/*}"
           nome="${GITHUB_REPOSITORY#*/}"
-          echo "Publicado em https://${dono}.github.io/${nome}/"
+          echo "Motor:       https://${dono}.github.io/${nome}/"
+          echo "Fechamentos: https://${dono}.github.io/${nome}/fechamentos/"

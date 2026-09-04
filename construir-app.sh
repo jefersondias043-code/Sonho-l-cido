@@ -29,8 +29,15 @@ cp catalogo/indice.json catalogo/precos.json catalogo/acaso.json "$DESTINO/catal
 cp -r catalogo/f "$DESTINO/catalogo/"
 
 # O carimbo: soma de verificação do conteúdo inteiro, em ordem estável.
+#
+# O `cd` não é enfeite. `sha256sum` imprime o caminho ao lado do resumo, então
+# somar `site/fechamentos/app.js` dá um número diferente de somar
+# `publicar/app.js` — e o carimbo, que existe para identificar o **conteúdo**,
+# passaria a depender de onde o site foi montado. O mesmo conteúdo tem de sair
+# com o mesmo carimbo em qualquer destino.
 carimbo=$(
-  find "$DESTINO" -type f -print0 |
+  cd "$DESTINO" &&
+    find . -type f -print0 |
     LC_ALL=C sort -z |
     xargs -0 sha256sum |
     sha256sum |
