@@ -215,7 +215,7 @@ async function pedirAFrase(onde, dados) {
 /// sorteadas caírem dentro do pool, e essa chance — `C(v,15)/C(25,15)`, vinda do
 /// catálogo — é o que separa uma promessa grande de uma promessa útil.
 function chanceDeCairDentro(v) {
-  const p = estado.acaso.dentro[v];
+  const p = estado.acaso.dentro?.[v];
   if (!p) return '';
   if (p === 1) return 'Suas 25 dezenas são todas as que existem: a garantia vale sempre.';
   const uma = Math.round(1 / p).toLocaleString('pt-BR');
@@ -269,7 +269,7 @@ function desenharBilhetes() {
 
 function desenharAcaso() {
   const e = estado.plano.escolha;
-  const p = estado.acaso.chegam[`${e.v}-${e.k}`]?.[e.t];
+  const p = estado.acaso.chegam?.[`${e.v}-${e.k}`]?.[e.t];
   if (p == null) return;
   const noChute = 1 - (1 - p) ** e.jogos;
   $('acaso').innerHTML = `

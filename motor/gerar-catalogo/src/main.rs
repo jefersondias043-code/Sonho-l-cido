@@ -501,8 +501,11 @@ fn escrever_o_acaso(saida: &str) {
         // `C(v,15) / C(25,15)`. É a condição sob a qual a garantia vale, e sem
         // ela o número da tela seria meia verdade — garantir 15 acertos num pool
         // de 15 dezenas é fácil e quase nunca acontece.
+        // Notação científica, e não decimal fixa: `C(15,15)/C(25,15)` é
+        // 3,06 × 10⁻⁷, e doze casas decimais já perdem dígitos significativos
+        // suficientes para o inverso sair 3.268.764 em vez de 3.268.760.
         dentro.push(format!(
-            "\"{v}\":{:.12}",
+            "\"{v}\":{:e}",
             turan::binomial(v, SORTEIO) as f64 / turan::binomial(POOL_MAX, SORTEIO) as f64
         ));
         for k in SORTEIO..=v.min(20) {
@@ -514,7 +517,7 @@ fn escrever_o_acaso(saida: &str) {
                         (turan::binomial(k, i) as f64) * (turan::binomial(v - k, SORTEIO - i) as f64)
                     })
                     .sum();
-                faixas.push(format!("\"{t}\":{:.9}", favoraveis / total));
+                faixas.push(format!("\"{t}\":{:e}", favoraveis / total));
             }
             linhas.push(format!("\"{v}-{k}\":{{{}}}", faixas.join(",")));
         }

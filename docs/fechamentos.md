@@ -26,8 +26,9 @@ Daí tudo o mais decorre:
 
 Sem WebAssembly no cliente, sem *web workers*, sem banco de sessões, sem retomada
 de trabalho interrompido. Nada disso tem razão de existir quando não há nada a
-esperar. O peso inicial — casca, índice, preços e distribuições — dá **21 KiB
-comprimidos**.
+esperar. O cliente inteiro dá **1.496 linhas** somando JavaScript, HTML e CSS —
+teto de 1.500 cobrado pela construção —, e o peso inicial (casca, índice, preços
+e distribuições) dá **24 KiB comprimidos**.
 
 ## A matemática, em quatro linhas
 
@@ -58,7 +59,8 @@ encontram. Na tela isso vira dois selos que não se parecem:
 - **menor conhecido** — este é o menor que se achou, e ao lado aparece o piso:
   *"nenhum fechamento faz isso com menos de 46"*.
 
-Hoje o catálogo tem **202 das 330 no mínimo provado**.
+Hoje o catálogo tem **206 das 330 no mínimo provado** e 312 com bilhetes
+publicados.
 
 ## Nada é publicado sem varredura exaustiva
 
@@ -70,7 +72,10 @@ concordar:
    dependência externa nenhuma, com leitor de JSON próprio e aritmética própria.
    É ele que roda em CI, e uma falha dele bloqueia a publicação;
 3. o **`conferir.js` do cliente** varre de novo no aparelho de quem duvidar, sob
-   demanda, em menos de três segundos no pior caso.
+   demanda. O laço é por bilhete, não por sorteio: geram-se só os sorteios que
+   cada bilhete atende e marca-se um vetor de bits indexado pela máscara do
+   sorteio, o que troca catorze bilhões de operações por vinte milhões. O pior
+   caso do catálogo sai em 1,4 s.
 
 Uma conferência que reusa o gerador só sabe dizer que o gerador concorda consigo
 mesmo.
@@ -111,10 +116,17 @@ cargo run --release --bin conferir-tudo
 ./construir-app.sh
 
 # As suítes.
-node app/testar-estrategia.mjs
-node app/testar-catalogo.mjs
-node app/testar-conferir.mjs
-node app/testar-tela.mjs
+cargo test --release -p gerar-catalogo   # a construção de Turán, por força bruta
+node app/testar-estrategia.mjs           # a função que decide o que se compra
+node app/testar-catalogo.mjs             # soma de verificação, posições, bolão
+node app/testar-conferir.mjs             # a varredura do cliente, contra o catálogo
+node servidor/testar-intencao.mjs        # o leitor que responde sem modelo
+node servidor/testar-explicar.mjs        # a regra que descarta número inventado
+node app/testar-tela.mjs                 # a tela, num navegador de verdade
+
+# E a prévia de arquivo único, para abrir o aplicativo sem servidor de arquivos.
+python3 ferramentas/previa-artefato.py previa.html
+node ferramentas/testar-previa.mjs previa.html
 ```
 
 `CATALOGO_SAIDA` desvia a escrita e `CATALOGO_SEMENTES` acrescenta catálogos à

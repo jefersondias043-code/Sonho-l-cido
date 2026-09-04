@@ -95,6 +95,35 @@ for (const entrada of publicadas) {
     new Set(mascaras).size === mascaras.length);
 }
 
+// ── as distribuições do acaso ───────────────────────────────────────────────
+
+// Um arquivo do catálogo gerado por uma versão antiga do motor abre e lê como
+// JSON válido — só falta um campo, e a tela quebra sem dizer o quê. Aqui os dois
+// campos são cobrados por completo, para todo pool e todo tamanho de jogo que a
+// lotérica aceita.
+const acaso = await catalogo.carregarAcaso();
+for (let v = 15; v <= 25; v++) {
+  conferir(`a chance de o sorteio cair dentro de ${v} dezenas existe`,
+    typeof acaso.dentro?.[v] === 'number' && acaso.dentro[v] > 0 && acaso.dentro[v] <= 1,
+    String(acaso.dentro?.[v]));
+  for (let k = 15; k <= Math.min(v, 20); k++) {
+    const faixas = acaso.chegam?.[`${v}-${k}`];
+    conferir(`a distribuição de ${v}-${k} existe`, faixas != null);
+    for (let t = 11; t <= 15; t++) {
+      conferir(`e cobre a garantia ${t}`,
+        typeof faixas?.[t] === 'number' && faixas[t] >= 0 && faixas[t] <= 1);
+    }
+    conferir(`e desce conforme a garantia sobe (${v}-${k})`,
+      [12, 13, 14, 15].every((t) => faixas[t] <= faixas[t - 1]));
+  }
+}
+
+// A chance de cair dentro de 25 dezenas é o universo inteiro, e a de 15 é uma em
+// C(25,15). Dois valores que a fórmula fixa, e que pegam um arquivo trocado.
+conferir('com 25 dezenas a garantia vale sempre', acaso.dentro[25] === 1);
+conferir('com 15 dezenas ela vale uma vez em 3.268.760',
+  Math.round(1 / acaso.dentro[15]) === 3268760, String(Math.round(1 / acaso.dentro[15])));
+
 // ── posições viram dezenas ──────────────────────────────────────────────────
 
 const dezenas = [3, 7, 11, 19, 25, 2];
