@@ -26,7 +26,7 @@ Daí tudo o mais decorre:
 
 Sem WebAssembly no cliente, sem *web workers*, sem banco de sessões, sem retomada
 de trabalho interrompido. Nada disso tem razão de existir quando não há nada a
-esperar. O cliente inteiro dá **1.496 linhas** somando JavaScript, HTML e CSS —
+esperar. O cliente inteiro dá **1.494 linhas** somando JavaScript, HTML e CSS —
 teto de 1.500 cobrado pela construção —, e o peso inicial (casca, índice, preços
 e distribuições) dá **24 KiB comprimidos**.
 
@@ -88,7 +88,10 @@ concordar:
    demanda. O laço é por bilhete, não por sorteio: geram-se só os sorteios que
    cada bilhete atende e marca-se um vetor de bits indexado pela máscara do
    sorteio, o que troca catorze bilhões de operações por vinte milhões. O pior
-   caso do catálogo sai em 1,4 s.
+   caso do catálogo sai em torno de dois segundos.
+
+E a varredura roda duas vezes em CI: uma sobre `catalogo/`, outra sobre
+`publicar/catalogo/` — os bytes que o navegador de alguém vai baixar.
 
 Uma conferência que reusa o gerador só sabe dizer que o gerador concorda consigo
 mesmo.

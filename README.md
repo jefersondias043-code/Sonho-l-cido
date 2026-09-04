@@ -19,7 +19,7 @@ ao longo do código (§7, §9.4, §36…) referem-se a ela.
 > O motor acima resolve qualquer configuração, sob demanda, dentro do aparelho.
 > O aplicativo de **fechamentos da Lotofácil** faz o oposto: as 330 respostas
 > possíveis já estão resolvidas, conferidas e publicadas como arquivos
-> estáticos, e o cliente só baixa a que precisa — 1.493 linhas, 24 KiB
+> estáticos, e o cliente só baixa a que precisa — 1.494 linhas, 24 KiB
 > comprimidos, zero dependências. Ele vive em `app/`, `catalogo/`, `motor/` e
 > `servidor/`, e está descrito em [`docs/fechamentos.md`](docs/fechamentos.md).
 
