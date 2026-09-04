@@ -1817,6 +1817,9 @@ let lotFechamento = null;
  * e é por isso que as duas coisas andam juntas.
  */
 let lotGeracao = 0;
+/* A geração que o motor exato está resolvendo. Comparada quando ele termina:
+   uma corrida parada por uma troca de pedido não pode pintar a tela nova. */
+let lotGeracaoDoExato = -1;
 /* A configuração da seleção atual, guardada para o botão que liga o motor
    depois — nos casos pesados ele deixou de partir sozinho. */
 let lotConfiguracao = null;
@@ -2713,6 +2716,15 @@ function lotChamarOExato(numeros) {
   $('grupo-exato').hidden = false;
   $('grupo-busca').hidden = true;
 
+  // De qual seleção esta corrida é.
+  //
+  // `lotGeracao` sobe a cada mexida nos cinco números, e é o mesmo carimbo que
+  // a conferência já usava para não pintar por cima de uma seleção nova. O
+  // motor exato precisa dele pelo mesmo motivo, e por um caminho pior: ele
+  // termina **porque** foi parado, e quem o para é justamente quem mexeu no
+  // pedido.
+  lotGeracaoDoExato = lotGeracao;
+
   exato.resolver({
     pedido: { v: pedido.v, k: pedido.k, j: pedido.j, t: pedido.t, r: pedido.r },
     numeros,
@@ -2738,6 +2750,22 @@ exato.ligar({
     // tela afirmando um trabalho que não está acontecendo.
     lotPintarTudo();
     if (!cartelas?.length) return;
+
+    /*
+     * Um resultado de outra seleção não entra na tela.
+     *
+     * Medido: 22 dezenas com jogos de 17 garantindo 13, motor rodando, e a
+     * garantia trocada para 12 no meio. Trocar chama `lotEsquecerFechamento`,
+     * que limpa o fechamento **e para o motor** — e parar o motor faz ele
+     * terminar, e terminar caía aqui repondo tudo. A tela ficava dizendo "ao
+     * menos 12 acertos" ao lado de "R$ 8,00 · 8 jogos", que era o fechamento
+     * da garantia 13, e a aba Checar oferecia esse fechamento para conferir e
+     * dividir.
+     *
+     * O limpar estava certo; era este retorno que desfazia o limpar.
+     */
+    if (lotGeracaoDoExato !== lotGeracao) return;
+
     lotFechamento = cartelas;
     $('lot-checar').hidden = false;
     $('lot-conferir').hidden = false;

@@ -559,6 +559,61 @@ try {
     'e "agora não" fecha a oferta sem apagar o trabalho'
   );
 
+  // ─── 7a2. mexer no pedido no meio da corrida não pode voltar depois ───
+  //
+  // Trocar um dos cinco números limpa o fechamento da tela **e para o motor**.
+  // E parar o motor faz ele terminar, e terminar avisa quem o chamou — que
+  // repunha tudo o que o limpar tinha tirado.
+  //
+  // Medido antes da correção: 22 dezenas com jogos de 17 garantindo 13, motor
+  // rodando, garantia trocada para 12. A tela ficava dizendo "ao menos 12
+  // acertos" ao lado de "R$ 8,00 · 8 jogos" — o fechamento da garantia 13 —, e
+  // a aba Checar oferecia esse fechamento para conferir e dividir. O pior tipo
+  // de defeito que este aplicativo pode ter: duas afirmações verdadeiras sobre
+  // pedidos diferentes, lado a lado, sem nada dizendo qual é qual.
+  await pagina.click('#aba-lotinha');
+  await marcarNumeros(25, Array.from({ length: 22 }, (_, i) => i + 1));
+  await regras(17, 15, 13);
+  await pagina.click('#lot-iniciar');
+  await pagina.waitForSelector('#grupo-exato:not([hidden])', { timeout: 30000 });
+  await pagina.waitForFunction(
+    () => Number(document.getElementById('ex-cartelas-agora').textContent.replace(/\D/g, '')) > 0,
+    undefined,
+    { timeout: 60000 }
+  );
+
+  // A troca acontece com o motor vivo, que é o caso que importa.
+  await pagina.click('#aba-lotinha');
+  await pagina.click('#lot-garantia .opcao[data-garantia="12"]');
+  await pagina.waitForTimeout(6000);
+
+  const depoisDaTroca = await pagina.evaluate(() => ({
+    checar: !document.getElementById('lot-checar').hidden,
+    conferir: !document.getElementById('lot-conferir').hidden,
+    economia: (document.getElementById('lot-economia')?.textContent ?? '').replace(/\s+/g, ' '),
+    explicacao: (document.getElementById('lot-explicacao')?.textContent ?? '').replace(/\s+/g, ' '),
+  }));
+  marcar(
+    !depoisDaTroca.checar && !depoisDaTroca.conferir,
+    'trocar o pedido com o motor rodando não deixa o resultado antigo voltar',
+    `checar ${depoisDaTroca.checar}, conferir ${depoisDaTroca.conferir}`
+  );
+  marcar(
+    /ao menos 12/.test(depoisDaTroca.explicacao)
+      && /piso conhecido|no mínimo/.test(depoisDaTroca.economia),
+    'e a tela fala de um pedido só: o novo',
+    depoisDaTroca.economia.slice(0, 80)
+  );
+  await pagina.click('#aba-checar');
+  await pagina.waitForTimeout(400);
+  marcar(
+    (await pagina.$$eval('#chk-fechamento option', (o) => o.map((x) => x.value))).every(
+      (v) => v !== 'lotinha'
+    ),
+    'e a aba Checar não oferece o fechamento do pedido que saiu de cena'
+  );
+  await pagina.click('#aba-lotinha');
+
   // ─── 7b. os três estágios, cada um ligado à mão ───
   //
   // Numa configuração **pequena** em que o piso é comprovadamente inatingível:
