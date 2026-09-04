@@ -1030,10 +1030,27 @@ try {
     'o banco declara o formato de complementos',
     `formato ${banco.formato}, ${banco.entradas} combinações prontas`
   );
+  /*
+   * A asserção era uma implicação que se satisfazia sozinha.
+   *
+   * Estava `exemplo !== '23,17' || tamanhoDaLinha === 6`: se a chave `23,17`
+   * saísse do banco, `exemplo` viraria outra qualquer, a premissa ficaria falsa
+   * e o teste passaria **sem conferir nada** — exatamente no dia em que o banco
+   * mudou, que é o dia em que ele precisa ser conferido.
+   *
+   * Agora o tamanho esperado sai da própria chave: um fechamento de pool P com
+   * jogos de J guarda o complemento, e complemento tem P − J números. Vale para
+   * a chave que estiver lá, e não há como ficar vazia.
+   */
+  const [poolDoExemplo, jogoDoExemplo] = (banco.exemplo ?? '').split(',').map(Number);
+  const complementoEsperado = poolDoExemplo - jogoDoExemplo;
   marcar(
-    banco.exemplo !== '23,17' || banco.tamanhoDaLinha === 6,
+    Number.isInteger(complementoEsperado)
+      && complementoEsperado > 0
+      && banco.tamanhoDaLinha === complementoEsperado,
     'e guarda o que falta ao jogo, não o jogo',
-    `${banco.exemplo}: ${banco.tamanhoDaLinha} números por linha`
+    `${banco.exemplo}: ${banco.tamanhoDaLinha} números por linha, ` +
+      `${complementoEsperado} esperados`
   );
 
   // ─── 11. a fórmula: caminho rápido, e correto ───
@@ -1100,11 +1117,28 @@ try {
     'nos pools pesados o motor espera ser chamado, em vez de ligar sozinho'
   );
 
-  // A amostra não pode se anunciar como prova.
+  /*
+   * A amostra não pode se anunciar como prova — e o teste tem de saber qual das
+   * duas aconteceu.
+   *
+   * Estava `!afirma100% || dizConferidosUmAUm`, e uma implicação passa de graça
+   * quando a premissa é falsa: uma tela que parasse de anunciar qualquer coisa
+   * satisfaria a asserção sem que nada tivesse sido conferido. As duas saídas
+   * legítimas são nomeadas aqui, e uma terceira reprova.
+   */
+  const varreuTudo = /conferidos um a um/.test(daFormula);
+  const foiAmostra = /ao acaso/.test(daFormula);
   marcar(
-    !/Garantia comprovada: 100%/.test(daFormula) || /conferidos um a um/.test(daFormula),
-    'uma conferência por amostra nunca é apresentada como 100% comprovada',
-    /ao acaso/.test(daFormula) ? 'diz "ao acaso"' : 'varreu tudo'
+    varreuTudo !== foiAmostra,
+    'a conferência diz, sem ambiguidade, se varreu tudo ou amostrou',
+    daFormula.replace(/\s+/g, ' ').slice(0, 80)
+  );
+  marcar(
+    varreuTudo
+      ? /Garantia comprovada: 100%/.test(daFormula)
+      : !/Garantia comprovada: 100%/.test(daFormula),
+    'e só a varredura completa é apresentada como 100% comprovada',
+    varreuTudo ? 'varreu tudo e afirma 100%' : 'amostrou e não afirma 100%'
   );
 
   // ─── 12. o motor escolhe pelo bolso ───
