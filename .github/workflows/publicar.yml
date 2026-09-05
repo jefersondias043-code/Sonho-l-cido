@@ -148,6 +148,44 @@ jobs:
           # a conferência, que o dinheiro na tela seja o que a aritmética diz.
           node web/testar-exato.mjs
 
+      - name: Conferir o aplicativo de fechamentos antes de levá-lo junto
+        # O segundo aplicativo deste repositório promete "está garantido", e o
+        # que sustenta a promessa é a varredura: todos os sorteios possíveis de
+        # cada um dos 312 fechamentos publicados, conferidos por um binário que
+        # não compartilha uma linha com o gerador.
+        #
+        # Uma falha aqui bloqueia a publicação **do site inteiro**, de propósito.
+        # `catalogo.yml` roda o mesmo a cada envio, mas roda em paralelo com este
+        # fluxo: se a decisão de publicar dependesse dele, publicar-se-ia sem
+        # saber. Pôr no ar um endereço que promete o que não confere é pior do
+        # que não publicar a correção de texto que vinha junto.
+        run: |
+          cargo build --release --bin conferir-tudo
+          ./target/release/conferir-tudo catalogo
+          node app/testar-estrategia.mjs
+          node app/testar-catalogo.mjs
+          node app/testar-conferir.mjs
+          node servidor/testar-intencao.mjs
+          node servidor/testar-explicar.mjs
+          ./construir-app.sh
+          node app/testar-tela.mjs "/${GITHUB_REPOSITORY#*/}/fechamentos/"
+          node ferramentas/testar-convivencia.mjs "/${GITHUB_REPOSITORY#*/}/"
+          ./target/release/conferir-tudo publicar/catalogo
+
+      - name: Construir o aplicativo de fechamentos no lugar dele
+        # Numa subpasta, ao lado do motor, e não no lugar dele: são dois
+        # aplicativos com dois públicos, e o endereço de cada um continua sendo o
+        # que sempre foi. O service worker de `fechamentos/` tem escopo mais
+        # específico que o da raiz, então é ele que atende as páginas de lá.
+        #
+        # Depois de `testar-construcao.sh`, que reconstrói `site/` do zero e
+        # cobra que todo arquivo dali esteja na lista de uso sem internet do
+        # motor — lista que não fala, nem deve falar, dos arquivos do outro
+        # aplicativo.
+        run: |
+          ./construir-app.sh site/fechamentos
+          ./target/release/conferir-tudo site/fechamentos/catalogo
+
       - name: Publicar na branch gh-pages
         run: |
           set -euo pipefail
@@ -164,8 +202,9 @@ jobs:
           git add -A
           git commit -qm "Publicação de ${GITHUB_SHA::7}
 
-          Conteúdo gerado por construir-web.sh. Esta branch existe apenas para o
-          GitHub Pages servir; não editar aqui."
+          Conteúdo gerado por construir-web.sh (raiz) e construir-app.sh
+          (fechamentos/). Esta branch existe apenas para o GitHub Pages servir;
+          não editar aqui."
 
           git push -q --force \
             "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
@@ -177,4 +216,5 @@ jobs:
         run: |
           dono="${GITHUB_REPOSITORY%%/*}"
           nome="${GITHUB_REPOSITORY#*/}"
-          echo "Publicado em https://${dono}.github.io/${nome}/"
+          echo "Motor:       https://${dono}.github.io/${nome}/"
+          echo "Fechamentos: https://${dono}.github.io/${nome}/fechamentos/"

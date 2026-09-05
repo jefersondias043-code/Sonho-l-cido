@@ -1,0 +1,135 @@
+name: Catálogo e aplicativo
+
+# A varredura exaustiva das 330 entradas, e o aplicativo inteiro em cima delas.
+#
+# O que decide se este fluxo passa é o binário `conferir-tudo`: ele percorre
+# **todos** os sorteios possíveis de cada fechamento publicado e confirma, um a
+# um, que a garantia se sustenta. Ele não compartilha uma linha de código com o
+# gerador — nem `motor-core`, nem dependência externa nenhuma — porque uma
+# conferência que reusa o gerador só sabe dizer que o gerador concorda consigo
+# mesmo.
+#
+# Uma falha aqui bloqueia a publicação. É o ponto do item 12 da especificação, e
+# é o que separa "o aplicativo diz que garante" de "o aplicativo garante".
+
+on:
+  push:
+    branches: [main, 'claude/**']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  conferir:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Reaproveitar compilações anteriores
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: catalogo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: catalogo-${{ runner.os }}-
+
+      - name: A matemática do gerador
+        # A construção de Turán escolhe entre três ramos comparando números, e um
+        # erro de contagem faria construir um ramo diferente do medido. Aqui as
+        # famílias pequenas são cobradas por força bruta: todo alvo tem de conter
+        # um membro, e o tamanho tem de bater com a medida.
+        run: cargo test --release -p gerar-catalogo
+
+      - name: Compilar o conferidor
+        run: cargo build --release --bin conferir-tudo
+
+      - name: Varrer as 330 entradas, sorteio a sorteio
+        run: ./target/release/conferir-tudo catalogo
+
+      - name: A estratégia — a função que decide o que a pessoa compra
+        # Node puro: é função pura sobre o índice, e se precisasse de rede ou de
+        # navegador estaria errada. Aqui se cobra a regra inteira, incluindo que
+        # nenhuma outra opção do catálogo garanta mais pelo mesmo dinheiro.
+        run: node app/testar-estrategia.mjs
+
+      - name: O catálogo — soma de verificação, posições e bolão
+        run: node app/testar-catalogo.mjs
+
+      - name: O leitor de intenção, que responde quando o modelo não responde
+        run: node servidor/testar-intencao.mjs
+
+      - name: A regra que descarta a frase do modelo com número que ela inventou
+        run: node servidor/testar-explicar.mjs
+
+      - name: A varredura do cliente, contra o catálogo publicado
+        # A terceira implementação da mesma pergunta, agora na linguagem que roda
+        # no aparelho de quem apostou.
+        run: node app/testar-conferir.mjs
+
+      - name: Montar o site
+        run: ./construir-app.sh
+
+      - name: E de novo, nos bytes que sairiam publicados
+        # A varredura acima olhou `catalogo/`; esta olha `publicar/catalogo/`,
+        # que é o que o navegador de alguém vai baixar. São a mesma coisa por
+        # construção — e é justamente por serem "a mesma coisa por construção"
+        # que vale conferir: uma cópia que esquece um arquivo, um `rsync` que
+        # exclui um padrão, um build que roda com a árvore suja.
+        run: ./target/release/conferir-tudo publicar/catalogo
+
+      - name: O carimbo é do conteúdo, e não do caminho
+        # O mesmo site montado em dois lugares tem de sair com o mesmo carimbo.
+        # `sha256sum` imprime o caminho ao lado do resumo, então esta é fácil de
+        # quebrar sem perceber — e o sintoma seria o pior possível: o número que
+        # a pessoa confere no rodapé deixaria de identificar a versão.
+        run: |
+          ./construir-app.sh /tmp/em-outro-lugar >/dev/null
+          aqui=$(grep -o "CARIMBO = '[^']*'" publicar/sw.js)
+          la=$(grep -o "CARIMBO = '[^']*'" /tmp/em-outro-lugar/sw.js)
+          echo "$aqui vs $la"
+          [ "$aqui" = "$la" ]
+          diff -rq publicar /tmp/em-outro-lugar
+
+      - name: A tela, num navegador de verdade
+        # Duas vezes: na raiz e na subpasta em que o site de fato é servido. Um
+        # caminho absoluto esquecido funciona na raiz e quebra só depois de
+        # publicado, que é o pior lugar para descobrir.
+        run: |
+          npm install --no-save playwright
+          npx playwright install --with-deps chromium
+          node app/testar-tela.mjs
+          node app/testar-tela.mjs /Sonho-l-cido/fechamentos/
+
+      - name: Os dois aplicativos no mesmo endereço, um dentro do outro
+        # O service worker do motor tem escopo que contém o da subpasta. Este
+        # teste põe os dois no ar juntos e cobra que a subpasta abra, assuma o
+        # comando das páginas dela e funcione sem rede — sem a raiz perder a sua.
+        run: node ferramentas/testar-convivencia.mjs
+
+      - name: Os números do documento saem do catálogo, e não da memória
+        # `docs/fechamentos.md` cita preços, quantidades e garantias. Cada
+        # passada do motor pode mudá-los, e um preço velho num documento é uma
+        # promessa que o aplicativo não cumpre mais. A ferramenta reescreve a
+        # tabela do catálogo; se o resultado diferir do que está versionado, é
+        # porque alguém esqueceu de rodá-la.
+        run: |
+          python3 ferramentas/numeros-do-catalogo.py --gravar
+          git diff --exit-code docs/fechamentos.md
+
+      - name: A prévia de um arquivo só
+        # A costura dos cinco módulos num arquivo é transformação de texto, e
+        # transformação de texto quebra em silêncio.
+        run: |
+          python3 ferramentas/previa-artefato.py previa.html
+          node ferramentas/testar-previa.mjs previa.html
+
+      - name: O que sairia publicado
+        run: |
+          echo "carimbo: $(grep -o "CARIMBO = '[^']*'" publicar/sw.js)"
+          du -sh publicar
