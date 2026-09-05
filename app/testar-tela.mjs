@@ -11,6 +11,7 @@ import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
 import { chromium } from 'playwright';
+import { exigirConstrucaoFresca } from '../ferramentas/publicar-esta-fresco.mjs';
 
 const BASE = process.argv[2] ?? '/';
 const RAIZ = new URL('../publicar', import.meta.url).pathname;
@@ -19,6 +20,8 @@ const TIPOS = {
   '.json': 'application/json', '.webmanifest': 'application/manifest+json',
   '.svg': 'image/svg+xml', '.png': 'image/png',
 };
+
+exigirConstrucaoFresca();
 
 let feitos = 0;
 const falhas = [];

@@ -426,6 +426,8 @@ node servidor/testar-explicar.mjs        # a regra que descarta número inventad
 node servidor/testar-resultado.mjs       # o sorteio oficial, sem sair para a rede
 python3 ferramentas/provar-o-conferidor.py    # e o conferidor reprovando de propósito
 node app/testar-tela.mjs                 # a tela, num navegador de verdade
+                                         # (exige ./construir-app.sh antes: elas
+                                         #  servem publicar/, não app/)
 node app/testar-tela.mjs /repo/fechamentos/   # e de novo, na subpasta em que vai ao ar
 node ferramentas/testar-convivencia.mjs       # os dois aplicativos no mesmo endereço
 
