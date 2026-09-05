@@ -139,7 +139,7 @@ Daí tudo o mais decorre:
 
 Sem WebAssembly no cliente, sem *web workers*, sem banco de sessões, sem retomada
 de trabalho interrompido. Nada disso tem razão de existir quando não há nada a
-esperar. O cliente inteiro dá **1.662 linhas** somando JavaScript, HTML e CSS —
+esperar. O cliente inteiro dá **1.664 linhas** somando JavaScript, HTML e CSS —
 teto de 1.700 cobrado pela construção —, e o peso inicial (casca, índice, preços
 e distribuições) dá **29 KiB comprimidos**.
 
@@ -269,10 +269,19 @@ falsa. O campo passa a dizer o preço do que foi montado.
 13"* descreve um caminho que esta resposta não percorreu. Aqui ele diz de onde a
 resposta veio.
 
-E o caminho de volta é o que se esperaria: mexer no dinheiro, tocar na grade ou
-pedir *escolher por mim* solta o fechamento fixado e devolve o modo automático
-inteiro. Não há botão de "sair do modo manual" porque não há modo em que entrar —
-há um fechamento nomeado, ou não há.
+E o caminho de volta é o que se esperaria: mexer no dinheiro, tocar na grade,
+limpá-la ou pedir *escolher por mim* solta o fechamento fixado e devolve o modo
+automático inteiro. Não há botão de "sair do modo manual" porque não há modo em
+que entrar — há um fechamento nomeado, ou não há.
+
+Soltar é do mesmo lugar em que se solta o link de bolão: **toda troca de dezenas
+solta os dois**, porque os dois eram de outro conjunto. Duas travessias mostraram
+por quê. Quem chega por um link de bolão recebe uma parte — cinco bilhetes de
+quinze — e, montando outro fechamento à mão com o mesmo número de dezenas,
+recebia um terço do novo, chamado de parte de um bolão que já não estava na tela.
+E limpar a grade com um fechamento de 22 dezenas fixado deixava dezesseis
+bilhetes **vazios** sob uma manchete de garantia: não havia mais dezena nenhuma
+de onde tirar os números.
 
 ## Mínimo provado e menor conhecido nunca se confundem
 

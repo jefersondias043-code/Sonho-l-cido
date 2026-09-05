@@ -469,12 +469,11 @@ function ligarControles() {
     const d = Number(ev.target.dataset?.dezena);
     if (!d) return;
     estado.dezenas.has(d) ? estado.dezenas.delete(d) : estado.dezenas.add(d);
-    estado.fixo = null;  // mexer na grade muda o pool, e o fechamento nomeado era para outro
     trocarDezenas(estado.dezenas);
   });
 
   $('escolher').addEventListener('click', () => estado.indice
-    && ((estado.fixo = null), sortearDezenas(melhorPool(estado.indice, estado.precos, estado.orcamento))));
+    && sortearDezenas(melhorPool(estado.indice, estado.precos, estado.orcamento)));
   $('limpar').addEventListener('click', () => trocarDezenas(new Set()));
   // A régua e o campo dizem a mesma coisa de dois jeitos, e um valor que não dá
   // para ler — texto vazio, "abc" — deixa o orçamento como estava em vez de
@@ -562,11 +561,14 @@ function ajustarPara(quantas) {
   trocarDezenas(new Set([...estado.dezenas, ...fora].slice(0, quantas).sort((a, b) => a - b)));
 }
 
-/// Toda troca de dezenas passa por aqui: guarda, desfaz o vínculo com um link de
-/// bolão — as dezenas já não são as daquele bolão — e redesenha.
+/// Toda troca de dezenas passa por aqui: guarda, desfaz os dois vínculos que
+/// eram de outro conjunto de dezenas — o link de bolão e o fechamento montado à
+/// mão — e redesenha. Sem soltar o fechamento, limpar a grade deixava na tela
+/// quatro bilhetes vazios sob uma manchete de garantia: o fechamento era de 22
+/// dezenas, e não havia mais dezena nenhuma de onde tirar os números.
 function trocarDezenas(novas) {
   estado.dezenas = novas;
-  estado.link = null;
+  estado.link = estado.fixo = null;
   guardar('dezenas', [...novas]);
   responder();
 }

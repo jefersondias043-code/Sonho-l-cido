@@ -691,6 +691,28 @@ conferir('e o rodapé volta a falar de dinheiro e garantia, como no automático'
   doAutomatico.some((r) => r.test(rodape)), rodape);
 conferir('e não sobrou nada dito à mão', !rodape.includes('montou este fechamento à mão'));
 
+// E o caminho de volta ao contrário: fixar de novo à mão e limpar a grade. O
+// fechamento era de 22 dezenas, e sem dezena nenhuma não há de onde tirar os
+// números — a tela mostrava bilhetes vazios sob uma manchete de garantia.
+await opcoesDe(22, '', '', '');
+const deNovo = await pagina.locator('#m-fechamento option').evaluateAll((os) => os.map((o) => o.value));
+await pagina.selectOption('#m-fechamento', deNovo[qual]);
+await pagina.waitForTimeout(1200);
+conferir('fixar de novo à mão volta a valer',
+  (await pagina.locator('#degrau').innerText()).includes('montou este fechamento à mão'));
+await pagina.click('#limpar');
+await pagina.waitForTimeout(1200);
+conferir('limpar a grade solta o fechamento montado à mão',
+  (await pagina.locator('.bilhetes li').count()) === 0,
+  `${await pagina.locator('.bilhetes li').count()} bilhetes com a grade vazia`);
+conferir('e a tela pede dezenas em vez de anunciar garantia',
+  (await pagina.locator('.resposta').innerText()).includes('Marque mais'),
+  (await pagina.locator('.resposta').innerText()).replace(/\s+/g, ' ').slice(0, 100));
+
+// E de volta a um estado utilizável, que é de onde as seções seguintes partem.
+await pagina.click('#escolher');
+await pagina.waitForSelector('.bilhetes li', { timeout: 20000 });
+
 // ── segunda visita, sem rede ────────────────────────────────────────────────
 
 // A promessa é a do avião: o que já foi aberto continua abrindo. O catálogo
