@@ -526,8 +526,8 @@ const opcoesDe = async (pool, teto = '', k = '', t = '') => {
 
 const de23 = await opcoesDe(23);
 conferir('o pool de 23 dezenas abre uma lista de fechamentos', de23.length > 5, `${de23.length}`);
-conferir('e cada linha diz cartelas, tamanho, garantia e preço',
-  de23.every((t) => /^\d+ cartelas? de \d+ dezenas · garante \d+ acertos · R\$ [\d.]+,\d\d$/.test(t)),
+conferir('e cada linha diz garantia, preço, cartelas e tamanho',
+  de23.every((t) => /^garante \d+ acertos · R\$ [\d.]+,\d\d · \d+ cartelas? de \d+ dezenas$/.test(t)),
   de23.slice(0, 3).join(' | '));
 // A lista existe para mostrar o que a escada esconde: sem isso o modo manual
 // seria o automático com outra roupa.
@@ -545,7 +545,7 @@ const de23ate20 = await opcoesDe(23, '20');
 conferir('o teto de cartelas encurta a lista', de23ate20.length < de23.length,
   `${de23ate20.length} de ${de23.length}`);
 conferir('e nada acima do teto sobra',
-  de23ate20.every((t) => Number(t.match(/^(\d+) cartelas?/)[1]) <= 20), de23ate20.join(' | '));
+  de23ate20.every((t) => Number(t.match(/· (\d+) cartelas?/)[1]) <= 20), de23ate20.join(' | '));
 
 // As outras duas características que a pessoa pode pedir direto: quantas
 // dezenas em cada cartela, e que garantia. Cada uma corta a lista, e só oferece
@@ -568,13 +568,13 @@ conferir('pedir 18 dezenas por cartela deixa só cartelas de 18',
 
 const garante13 = await opcoesDe(23, '', '', 13);
 conferir('pedir 13 acertos não devolve nada que garanta menos',
-  garante13.length > 0 && garante13.every((l) => Number(l.match(/garante (\d+)/)[1]) >= 13),
+  garante13.length > 0 && garante13.every((l) => Number(l.match(/^garante (\d+)/)[1]) >= 13),
   garante13.join(' | '));
 
 // Os dois juntos, que é onde um filtro mal-feito devolveria a lista inteira.
 const ambos = await opcoesDe(23, '', 16, 12);
 conferir('os dois filtros juntos valem os dois',
-  ambos.every((l) => /de 16 dezenas/.test(l) && Number(l.match(/garante (\d+)/)[1]) >= 12),
+  ambos.every((l) => /de 16 dezenas$/.test(l) && Number(l.match(/^garante (\d+)/)[1]) >= 12),
   ambos.join(' | '));
 
 // Um pedido impossível não pode deixar a pessoa no escuro: a tela diz o que ela
@@ -607,9 +607,9 @@ const valores = await pagina.locator('#m-fechamento option').evaluateAll(
   (os) => os.map((o) => o.value));
 await pagina.selectOption('#m-fechamento', valores[qual]);
 await pagina.waitForTimeout(1500);
-const jogosPedidos = Number(escolhido.match(/^(\d+) cartelas?/)[1]);
-const kPedido = Number(escolhido.match(/de (\d+) dezenas/)[1]);
-const tPedido = Number(escolhido.match(/garante (\d+) acertos/)[1]);
+const jogosPedidos = Number(escolhido.match(/· (\d+) cartelas?/)[1]);
+const kPedido = Number(escolhido.match(/de (\d+) dezenas$/)[1]);
+const tPedido = Number(escolhido.match(/^garante (\d+) acertos/)[1]);
 const respostaManual = (await pagina.locator('.resposta').innerText()).replace(/\s+/g, ' ');
 conferir('a resposta é o fechamento escolhido, e não outro',
   respostaManual.includes(`${jogosPedidos} jogos de ${kPedido} dezenas`)

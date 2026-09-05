@@ -139,7 +139,7 @@ Daí tudo o mais decorre:
 
 Sem WebAssembly no cliente, sem *web workers*, sem banco de sessões, sem retomada
 de trabalho interrompido. Nada disso tem razão de existir quando não há nada a
-esperar. O cliente inteiro dá **1.649 linhas** somando JavaScript, HTML e CSS —
+esperar. O cliente inteiro dá **1.651 linhas** somando JavaScript, HTML e CSS —
 teto de 1.700 cobrado pela construção —, e o peso inicial (casca, índice, preços
 e distribuições) dá **29 KiB comprimidos**.
 
@@ -211,8 +211,14 @@ queria justamente aquele fica sem entender por que ele não está lá.
 
 Então **montar do meu jeito** mostra a lista inteira, não a escada: para o pool
 escolhido, todos os fechamentos catalogados em cartelas que a lotérica aceita —
-de 15 a 20 dezenas —, do mais barato ao mais caro, cada linha dizendo quantas
-cartelas, de que tamanho, que garantia e quanto custa.
+de 15 a 20 dezenas —, do mais barato ao mais caro, cada linha assim:
+
+```
+garante 12 acertos · R$ 287,00 · 82 cartelas de 15 dezenas
+```
+
+Garantia e preço primeiro porque num telefone a lista fechada mostra só o começo
+do texto, e o começo tem de ser o que faz escolher entre uma linha e outra.
 
 São quatro coisas que se pede, exatamente as quatro que definem um fechamento:
 
@@ -252,8 +258,8 @@ descartado, porque escolher o tamanho é o que este modo oferece.
 
 **Lista vazia sem explicação é aplicativo quebrado.** Quando os quatro pedidos
 juntos não deixam nada, a tela repete o que foi pedido — *"com 25 dezenas não há
-fechamento catalogado com no máximo 1 cartela"* — para a pessoa saber o que
-afrouxar.
+fechamento catalogado com 15 acertos garantidos e no máximo 2 cartelas"* — para
+a pessoa saber o que afrouxar.
 
 **O dinheiro não pode contradizer a resposta.** Montar um fechamento de
 R$ 11.424,00 com R$ 300,00 no campo põe duas afirmações na mesma tela, uma delas

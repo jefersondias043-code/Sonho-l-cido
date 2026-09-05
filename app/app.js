@@ -420,9 +420,11 @@ function desenharManual() {
   const quais = todas
     .filter((e) => e.jogos <= teto && (!k || e.k === k) && (!t || e.t >= t))
     .filter((e, _, ate) => !ate.some((o) => o.k === e.k && o.custo <= e.custo && o.t > e.t));
+  // Garantia e preço primeiro: num telefone a lista fechada mostra só o começo
+  // do texto, e o começo tem de ser o que faz escolher entre uma linha e outra.
   trocarOpcoes('m-fechamento', quais.map((e) => [`${e.k}-${e.t}`,
-    `${e.jogos} ${e.jogos === 1 ? 'cartela' : 'cartelas'} de ${e.k} dezenas ·
-     garante ${e.t} acertos · ${dinheiro(e.custo)}`]));
+    `garante ${e.t} acertos · ${dinheiro(e.custo)} ·
+     ${e.jogos} ${e.jogos === 1 ? 'cartela' : 'cartelas'} de ${e.k} dezenas`]));
   // Lista vazia sem explicação é a pessoa achando que o aplicativo quebrou. A
   // frase nomeia o que ela pediu, para ela saber o que afrouxar.
   const pedido = [k && `${k} dezenas por cartela`, t && `${t} acertos garantidos`,
