@@ -296,6 +296,15 @@ de cada vez, e cobra que ele reprove **pelo motivo daquele defeito**:
 Os dois primeiros são os que importam: tudo o que a forma pode conferir continua
 batendo, e só varrer sorteio a sorteio acha o defeito.
 
+Sete dos oito defeitos estão numa entrada só, e mandar o conferidor varrer as
+outras 311 a cada vez levava seis minutos para provar o que uma entrada já
+prova. Daí o segundo argumento de `conferir-tudo`: `conferir-tudo catalogo
+20-15-13` confere o conjunto das 330 inteiro — que é barato — e varre só aquela.
+Serve também a quem acabou de regerar um fechamento. O que ele imprime começa
+com **CONFERÊNCIA PARCIAL** e diz que não autoriza publicação, para ninguém
+confundir uma coisa com a outra; e o passo do CI que autoriza continua sendo o
+sem recorte. A suíte inteira caiu de 5m44s para 40 segundos.
+
 A primeira versão deste arquivo ficou verde sem testar nada. Ela regravava o
 índice com `json.dumps`, que põe um espaço depois dos dois-pontos; o conferidor
 não usa biblioteca de JSON — tem leitor próprio, de propósito, para não

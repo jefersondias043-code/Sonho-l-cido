@@ -175,21 +175,27 @@ def um_bilhete_a_mais_repetido(c: Catalogo):
 # de saída aceitaria "reprovou por outra coisa", que é como um teste destes fica
 # verde sem testar nada — foi assim que a primeira versão daqui passou, com o
 # índice ilegível reprovando os oito pelo mesmo engano.
+# O quarto campo é o recorte passado ao conferidor. Sete dos oito defeitos estão
+# numa entrada só, e mandá-lo varrer as outras 311 a cada vez levava seis
+# minutos para provar o que uma entrada já prova — o conjunto das 330 continua
+# sendo conferido em todas. O oitavo é sobre o conjunto, e roda inteiro.
+ALVO = '20-15-13'
 DEFEITOS = [
-    ('falta um bilhete, e só a varredura pode ver', sem_um_bilhete, 'não é coberto'),
+    ('falta um bilhete, e só a varredura pode ver', sem_um_bilhete, 'não é coberto', ALVO),
     ('um bilhete trocado por outro, e de novo só a varredura vê',
-     com_bilhete_trocado, 'não é coberto'),
-    ('a soma do índice não é a do arquivo', com_soma_mentirosa, 'soma de verificação'),
-    ('o índice conta um bilhete a mais', com_contagem_mentirosa, 'o índice diz'),
-    ('o tamanho anunciado fica abaixo do piso', abaixo_do_piso, 'abaixo do piso'),
-    ('mínimo provado onde os limites não se encontram', provado_sem_prova, 'marca provado'),
-    ('uma das 330 sumiu do índice', sem_uma_entrada, 'aparece 0 vezes'),
-    ('o mesmo bilhete duas vezes', um_bilhete_a_mais_repetido, 'bilhete repetido'),
+     com_bilhete_trocado, 'não é coberto', ALVO),
+    ('a soma do índice não é a do arquivo', com_soma_mentirosa, 'soma de verificação', ALVO),
+    ('o índice conta um bilhete a mais', com_contagem_mentirosa, 'o índice diz', ALVO),
+    ('o tamanho anunciado fica abaixo do piso', abaixo_do_piso, 'abaixo do piso', ALVO),
+    ('mínimo provado onde os limites não se encontram', provado_sem_prova, 'marca provado', ALVO),
+    ('uma das 330 sumiu do índice', sem_uma_entrada, 'aparece 0 vezes', None),
+    ('o mesmo bilhete duas vezes', um_bilhete_a_mais_repetido, 'bilhete repetido', ALVO),
 ]
 
 
-def rodar(raiz: Path):
-    return subprocess.run([str(BINARIO), str(raiz)], capture_output=True, text=True)
+def rodar(raiz: Path, recorte=None):
+    argumentos = [str(BINARIO), str(raiz)] + ([recorte] if recorte else [])
+    return subprocess.run(argumentos, capture_output=True, text=True)
 
 
 def main():
@@ -200,18 +206,20 @@ def main():
     with tempfile.TemporaryDirectory() as tmp:
         bom = Path(tmp) / 'bom'
         shutil.copytree(ORIGEM, bom)
-        saida = rodar(bom)
+        # A âncora: a mesma entrada que os defeitos estragam, intacta. Se ela
+        # for reprovada, nada do que vem abaixo quer dizer coisa alguma.
+        saida = rodar(bom, ALVO)
         if saida.returncode != 0:
             raise SystemExit(f'o catálogo bom foi reprovado — nada mais faz sentido:\n{saida.stdout}')
         print(f'{len(DEFEITOS) + 1} conferências')
         print('  o catálogo bom passa')
 
-        for nome, estragar, motivo in DEFEITOS:
+        for nome, estragar, motivo, recorte in DEFEITOS:
             with tempfile.TemporaryDirectory() as t2:
                 ruim = Path(t2) / 'ruim'
                 shutil.copytree(ORIGEM, ruim)
                 estragar(Catalogo(ruim))
-                saida = rodar(ruim)
+                saida = rodar(ruim, recorte)
                 if saida.returncode == 0:
                     falhas.append(f'{nome} — PASSOU, e não devia')
                 elif motivo not in saida.stdout:
