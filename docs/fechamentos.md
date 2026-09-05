@@ -367,6 +367,8 @@ node app/testar-catalogo.mjs             # soma de verificação, posições, bo
 node app/testar-conferir.mjs             # a varredura do cliente, contra o catálogo
 node servidor/testar-intencao.mjs        # o leitor que responde sem modelo
 node servidor/testar-explicar.mjs        # a regra que descarta número inventado
+node servidor/testar-resultado.mjs       # o sorteio oficial, sem sair para a rede
+python3 ferramentas/provar-o-conferidor.py    # e o conferidor reprovando de propósito
 node app/testar-tela.mjs                 # a tela, num navegador de verdade
 node app/testar-tela.mjs /repo/fechamentos/   # e de novo, na subpasta em que vai ao ar
 node ferramentas/testar-convivencia.mjs       # os dois aplicativos no mesmo endereço

@@ -80,6 +80,13 @@ jobs:
       - name: A regra que descarta a frase do modelo com número que ela inventou
         run: node servidor/testar-explicar.mjs
 
+      - name: O resultado oficial, que é número de fora entrando na tela
+        # A única das três funções do servidor que fala com um terceiro, e a
+        # única que estava sem suíte. Um número errado aqui não é texto feio: é
+        # uma conferência dizendo que a pessoa não ganhou quando ganhou. O
+        # `fetch` global é trocado no teste, então nada sai para a rede.
+        run: node servidor/testar-resultado.mjs
+
       - name: A varredura do cliente, contra o catálogo publicado
         # A terceira implementação da mesma pergunta, agora na linguagem que roda
         # no aparelho de quem apostou.

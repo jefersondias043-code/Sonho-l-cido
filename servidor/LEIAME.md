@@ -66,10 +66,30 @@ cliente, antes de o texto tocar a tela — e tem teste próprio em
 pelo modelo, um arredondamento, um número inventado, e a frase certa com um
 dígito trocado.
 
+A regra sabe como o Brasil escreve dinheiro. Sem isso ela rejeitava **toda**
+frase com preço: "R$ 199,50" vira os números 199 e 50, e nenhum dos dois estava
+autorizado — o modelo tinha sido chamado justamente para falar de dinheiro. E
+reais inteiros só passam quando o valor é inteiro, porque arredondar é calcular.
+O conjunto de números autorizados sai de `numerosDe`, exportada para que a suíte
+use o que o servidor usa: montá-lo à mão no teste foi o que escondeu isto por
+dias.
+
 `intencao.js` devolve três números e uma lista de dezenas, tudo validado campo a
 campo contra o esquema antes de sair. O cliente valida de novo antes de aplicar.
+E o leitor por expressão regular **recusa** o que não existe em vez de aparar:
+"quero 30 dezenas" não é um pedido de 25. Aparar seria inventar, e o leitor do
+cliente já recusava — o mesmo texto não pode mudar de significado conforme haja
+ou não um servidor no ar.
+
+`resultado.js` é a única das três que fala com um terceiro, e a única cujo erro
+não é um texto feio na tela: um sorteio errado faz a conferência dizer que a
+pessoa não ganhou quando ganhou. A suíte troca o `fetch` global — nada sai para
+a rede — e cobra o que não pode virar resultado: menos de quinze dezenas, uma
+dezena repetida (que completava quinze e passava), uma fora de 1 a 25, concurso
+ausente ou zero, origem fora do ar, rede caída.
 
 ```bash
 node servidor/testar-intencao.mjs
 node servidor/testar-explicar.mjs
+node servidor/testar-resultado.mjs
 ```
