@@ -141,7 +141,7 @@ Sem WebAssembly no cliente, sem *web workers*, sem banco de sessões, sem retoma
 de trabalho interrompido. Nada disso tem razão de existir quando não há nada a
 esperar. O cliente inteiro dá **1.675 linhas** somando JavaScript, HTML e CSS —
 teto de 1.700 cobrado pela construção —, e o peso inicial (casca, índice, preços
-e distribuições) dá **29 KiB comprimidos**.
+e distribuições) dá **30 KiB comprimidos**.
 
 O teto foi 1.500 enquanto havia uma porta de entrada só. Ele não subiu porque o
 cliente passou a resolver mais — resolve exatamente o mesmo, nada —, mas porque
