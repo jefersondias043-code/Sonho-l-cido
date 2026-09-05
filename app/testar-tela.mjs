@@ -592,6 +592,15 @@ conferir('os dois filtros juntos valem os dois',
   ambos.every((l) => /de 16 dezenas$/.test(l) && Number(l.match(/^garante (\d+)/)[1]) >= 12),
   ambos.join(' | '));
 
+// Um campo numérico aceita "-5" e "2,5", e nenhum dos dois é um número de
+// cartelas. Valem como "sem teto" — que é o que a pessoa tinha antes de digitar.
+const semTeto = (await opcoesDe(23)).length;
+conferir('um teto negativo vale como nenhum teto',
+  (await opcoesDe(23, '-5')).length === semTeto, `${(await opcoesDe(23, '-5')).length} de ${semTeto}`);
+conferir('e um teto quebrado desce para o inteiro de baixo',
+  (await opcoesDe(23, '5.5')).length === (await opcoesDe(23, '5')).length,
+  `${(await opcoesDe(23, '5.5')).length} contra ${(await opcoesDe(23, '5')).length}`);
+
 // Um pedido impossível não pode deixar a pessoa no escuro: a tela diz o que ela
 // pediu, para ela saber o que afrouxar, em vez de só não ter opção nenhuma.
 await opcoesDe(25, '1');
@@ -759,6 +768,34 @@ conferir('e uma falha de rede não apaga a resposta',
 await contexto.setOffline(false);
 
 conferir('nenhum erro de JavaScript no caminho todo', erros.length === 0, erros.join(' | '));
+
+// ── primeira visita sem rede, mexendo no que ainda não carregou ─────────────
+//
+// Os controles existem na página antes de o catálogo chegar. Sem rede na
+// primeira visita ele nunca chega — e mexer neles não pode quebrar a tela, que
+// é o que ainda restava para dizer "abra de novo quando houver rede".
+
+const semRede = await navegador.newContext({ viewport: { width: 360, height: 740 } });
+await semRede.route('**/catalogo/**', (rota) => rota.abort());
+const primeira = await semRede.newPage();
+const errosSemRede = [];
+primeira.on('pageerror', (e) => errosSemRede.push(String(e)));
+await primeira.goto(endereco, { waitUntil: 'domcontentloaded' });
+await primeira.waitForTimeout(1500);
+conferir('sem catálogo a tela diz o que fazer',
+  (await primeira.locator('.resposta').innerText()).includes('Sem internet'),
+  await primeira.locator('.resposta').innerText());
+await primeira.click('#det-manual summary');
+await primeira.fill('#m-teto', '7');
+await primeira.dispatchEvent('#m-teto', 'input');
+await primeira.click('.grade [data-dezena="3"]');
+await primeira.waitForTimeout(800);
+conferir('e mexer no modo manual sem catálogo não quebra nada',
+  errosSemRede.length === 0, errosSemRede.join(' | '));
+conferir('e o aviso continua na tela',
+  (await primeira.locator('.resposta').innerText()).includes('Sem internet'),
+  await primeira.locator('.resposta').innerText());
+await semRede.close();
 
 // ── com a memória do aparelho trancada ──────────────────────────────────────
 
