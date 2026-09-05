@@ -132,7 +132,7 @@ details {
 
 summary { cursor: pointer; padding: 0.9rem 0; font-weight: 600; min-height: 44px; }
 details > div { padding-bottom: 1rem; }
-details input[type="text"], details input[type="number"] {
+details select, details input[type="text"], details input[type="number"] {
   width: 100%; min-height: 44px; padding: 0 0.6rem; border-radius: 10px; font: inherit;
   border: 1px solid var(--linha); background: var(--fundo); color: var(--tinta);
 }

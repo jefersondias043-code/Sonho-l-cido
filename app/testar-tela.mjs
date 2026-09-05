@@ -505,6 +505,120 @@ conferir('e a frase determinística continua no lugar',
 
 await pagina.unroute('**/api/explicar');
 
+// ── montar do meu jeito ─────────────────────────────────────────────────────
+//
+// O segundo modo: quem já sabe o fechamento que quer não parte do dinheiro. Ele
+// diz o pool, o teto de cartelas e escolhe na lista — e o modo automático
+// continua intacto do outro lado, o que esta seção também cobra, voltando a ele
+// no fim.
+
+await pagina.click('#det-manual summary');
+
+const opcoesDe = async (pool, teto = '') => {
+  await pagina.selectOption('#m-pool', String(pool));
+  await pagina.fill('#m-teto', teto);
+  await pagina.dispatchEvent('#m-teto', 'input');
+  return (await pagina.locator('#m-fechamento option').allInnerTexts())
+    .map((t) => t.replace(/\s+/g, ' ').trim());
+};
+
+const de23 = await opcoesDe(23);
+conferir('o pool de 23 dezenas abre uma lista de fechamentos', de23.length > 5, `${de23.length}`);
+conferir('e cada linha diz cartelas, tamanho, garantia e preço',
+  de23.every((t) => /^\d+ cartelas? de \d+ dezenas · garante \d+ acertos · R\$ [\d.]+,\d\d$/.test(t)),
+  de23.slice(0, 3).join(' | '));
+// A lista existe para mostrar o que a escada esconde: sem isso o modo manual
+// seria o automático com outra roupa.
+const nasOpcoes = new Set(de23.map((t) => t.match(/de (\d+) dezenas/)[1]));
+conferir('e oferece mais de um tamanho de cartela', nasOpcoes.size > 1, [...nasOpcoes].join(','));
+
+const precoDaLinha = (t) => Number(t.match(/R\$ ([\d.]+),(\d\d)/).slice(1)
+  .reduce((r, c) => r + c.replace(/\./g, ''), ''));
+conferir('e vem do mais barato ao mais caro',
+  de23.every((t, i) => i === 0 || precoDaLinha(de23[i - 1]) <= precoDaLinha(t)));
+
+// O teto de cartelas é o controle de quem sabe quantos jogos vai preencher à
+// mão. Ele corta, e corta pelo número que está escrito na própria linha.
+const de23ate20 = await opcoesDe(23, '20');
+conferir('o teto de cartelas encurta a lista', de23ate20.length < de23.length,
+  `${de23ate20.length} de ${de23.length}`);
+conferir('e nada acima do teto sobra',
+  de23ate20.every((t) => Number(t.match(/^(\d+) cartelas?/)[1]) <= 20), de23ate20.join(' | '));
+
+// Um teto impossível não pode deixar a pessoa no escuro: a tela diz por que a
+// lista está vazia, em vez de simplesmente não ter opção nenhuma.
+await opcoesDe(25, '1');
+conferir('um teto impossível é explicado, e não silencioso',
+  (await pagina.locator('#manual').innerText()).includes('não há fechamento catalogado'),
+  await pagina.locator('#manual').innerText());
+
+// E o essencial: escolher na lista monta *aquele* fechamento. Não o mais
+// próximo, não o que o dinheiro compraria — aquele.
+await opcoesDe(22, '');
+const alvoManual = (await pagina.locator('#m-fechamento option').allInnerTexts())
+  .map((t) => t.replace(/\s+/g, ' ').trim());
+// O texto das opções quebra linha; escolhe-se pelo valor, no mesmo índice.
+const qual = Math.min(3, alvoManual.length - 1);
+const escolhido = alvoManual[qual];
+const valores = await pagina.locator('#m-fechamento option').evaluateAll(
+  (os) => os.map((o) => o.value));
+await pagina.selectOption('#m-fechamento', valores[qual]);
+await pagina.waitForTimeout(1500);
+const jogosPedidos = Number(escolhido.match(/^(\d+) cartelas?/)[1]);
+const kPedido = Number(escolhido.match(/de (\d+) dezenas/)[1]);
+const tPedido = Number(escolhido.match(/garante (\d+) acertos/)[1]);
+const respostaManual = (await pagina.locator('.resposta').innerText()).replace(/\s+/g, ' ');
+conferir('a resposta é o fechamento escolhido, e não outro',
+  respostaManual.includes(`${jogosPedidos} jogos de ${kPedido} dezenas`)
+  || respostaManual.includes(`bilhete de ${kPedido} dezenas`),
+  `pedido ${escolhido} — veio ${respostaManual}`);
+conferir('e a garantia é a que foi pedida',
+  jogosPedidos === 1 || respostaManual.includes(`${tPedido} acertos garantidos`), respostaManual);
+conferir('e a tela entrega esses bilhetes',
+  (await pagina.locator('.bilhetes li').count()) === Math.min(jogosPedidos, 50),
+  `${await pagina.locator('.bilhetes li').count()} para ${jogosPedidos}`);
+
+// O pool pedido é o pool marcado. Escolher "22 dezenas" e receber bilhetes de um
+// pool de 20 seria responder outra pergunta.
+conferir('e o pool marcado passa a ser o pedido',
+  (await pagina.locator('.grade [aria-pressed=true]').count()) === 22,
+  `${await pagina.locator('.grade [aria-pressed=true]').count()}`);
+
+// Duas afirmações na mesma tela, uma delas falsa, é o defeito que este teste
+// existe para pegar: o campo de dinheiro tem de dizer o preço do que está na
+// mão, e não o orçamento de antes.
+const precoPedido = precoDaLinha(escolhido);
+const noCampo = await pagina.inputValue('#valor');
+conferir('e o campo de dinheiro passa a dizer o preço do que foi montado',
+  Number(noCampo.replace(/\D/g, '')) === precoPedido, `${noCampo} para ${escolhido}`);
+
+// A frase do degrau descreve a escada — "por mais tanto você sobe" —, e a escada
+// não é o que está na tela quando o fechamento foi montado à mão.
+conferir('e o rodapé diz que este fechamento foi montado à mão',
+  (await pagina.locator('#degrau').innerText()).includes('montou este fechamento à mão'),
+  await pagina.locator('#degrau').innerText());
+
+// ── e o modo automático continua inteiro ────────────────────────────────────
+//
+// A promessa ao usuário foi que o modo de sempre não mudaria. Mexer no dinheiro
+// é voltar para ele: a resposta volta a ser a que o orçamento compra, e o rodapé
+// volta a ensinar o degrau seguinte.
+await pagina.fill('#valor', 'R$ 300,00');
+await pagina.dispatchEvent('#valor', 'change');
+await pagina.waitForTimeout(800);
+const voltou = (await pagina.locator('.resposta').innerText()).replace(/\s+/g, ' ');
+conferir('mexer no dinheiro devolve o modo automático',
+  /sobram R\$|\bR\$ [\d.]+,\d\d\b/.test(voltou) && !voltou.includes(`${jogosPedidos} jogos`),
+  voltou);
+// O rodapé automático fala de dinheiro e garantia — o degrau seguinte, ou o
+// preço da garantia que a pessoa pediu e ainda não cabe.
+conferir('e o rodapé volta a falar de dinheiro e garantia, como no automático',
+  /Por mais R\$|Garantir \d+ acertos com \d+ dezenas custa|Não há fechamento catalogado que|marque mais dezenas|bilhetes que se completam/
+    .test(await pagina.locator('#degrau').innerText()),
+  await pagina.locator('#degrau').innerText());
+conferir('e não sobrou nada dito à mão',
+  !(await pagina.locator('#degrau').innerText()).includes('montou este fechamento à mão'));
+
 // ── segunda visita, sem rede ────────────────────────────────────────────────
 
 // A promessa é a do avião: o que já foi aberto continua abrindo. O catálogo

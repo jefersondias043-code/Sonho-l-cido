@@ -8,7 +8,7 @@
 import * as catalogo from './catalogo.js';
 import * as conferir from './conferir.js';
 import * as volante from './volante.js';
-import { escada, melhorEstrategia, melhorPool } from './estrategia.js';
+import { escada, fechamentosDe, melhorEstrategia, melhorPool } from './estrategia.js';
 
 const $ = (id) => document.getElementById(id);
 const UNIVERSO = 25;
@@ -21,7 +21,7 @@ const estado = {
   orcamento: lembrar('orcamento', 5000), dezenas: new Set(lembrar('dezenas', [])),
   carteira: lembrar('carteira', []), garantiaMinima: 0,
   indice: null, precos: null, precosPublicados: null, acaso: null,
-  plano: null, bilhetes: [], todos: [], mascaras: [],
+  plano: null, fixo: null, bilhetes: [], todos: [], mascaras: [],
 };
 
 // ── dinheiro ────────────────────────────────────────────────────────────────
@@ -71,6 +71,10 @@ async function arrancar() {
   if (doLink) estado.dezenas = new Set(doLink.dezenas);
   if (dele) [estado.link, estado.orcamento] = [doLink, dele.jogos * estado.precos.aposta[doLink.k]];
 
+  $('m-pool').innerHTML = Array.from({ length: UNIVERSO - 14 }, (_, i) => i + 15)
+    .map((v) => `<option value="${v}"${v === estado.dezenas.size ? ' selected' : ''}>${v}</option>`)
+    .join('');
+  desenharManual();
   desenharPrecos();
   desenharCarteira();
   atualizarDinheiro();
@@ -108,7 +112,7 @@ function responder() {
   desenharGrade();
   if (!estado.indice) return;
 
-  const plano = melhorEstrategia(estado.indice, estado.precos, {
+  const plano = estado.fixo ? planoFixo(estado.fixo) : melhorEstrategia(estado.indice, estado.precos, {
     orcamento: estado.orcamento,
     dezenas: estado.dezenas.size,
     garantiaMinima: estado.garantiaMinima,
@@ -240,6 +244,9 @@ function chanceDeCairDentro(v) {
 /// seguinte, que sempre falta dinheiro: se coubesse, já teria sido escolhido.
 function frasedoDegrau(plano) {
   if (!plano.escolha) return '';
+  // Montado à mão, não há "próximo degrau": a escada é de quem pergunta o que o
+  // dinheiro compra, e aqui a pergunta foi outra.
+  if (estado.fixo) return 'Você montou este fechamento à mão, em "montar do meu jeito".';
   const p = plano.pedido;
   if (p) {
     return p.degrau
@@ -361,6 +368,64 @@ function desenharCarteira() {
     .join('')}</ol>`;
 }
 
+// ── montar do meu jeito ─────────────────────────────────────────────────────
+//
+// O outro caminho. No automático a pessoa diz quanto tem e o aplicativo escolhe
+// a configuração; aqui ela nomeia a configuração e o aplicativo monta. Nenhuma
+// busca acontece nos dois: as 330 combinações já estão resolvidas e conferidas,
+// e nomear uma é escolher uma linha do índice.
+//
+// Fica abaixo da dobra porque é parâmetro técnico, e a tela principal não tem
+// nenhum. Quem quer isto sabe o que quer; quem não quer nunca precisa abrir.
+
+/// O fechamento que a pessoa nomeou, como plano — o mesmo formato que a
+/// estratégia devolve, para a tela desenhar por um caminho só.
+function planoFixo({ v, k, t }) {
+  const escolha = estado.indice.entradas.find((e) => e.v === v && e.k === k && e.t === t && e.jogos);
+  if (!escolha) return { motivo: 'sem-catalogo', escolha: null };
+  const custo = escolha.jogos * estado.precos.aposta[k];
+  return { motivo: escolha.jogos === 1 ? 'um-bilhete' : 'ok', escolha: { ...escolha, custo },
+    sobra: 0, degrau: null, pedido: null };
+}
+
+/// Redesenha as opções do modo manual a partir do catálogo. A lista de
+/// fechamentos depende do pool e do teto de cartelas, e é só o que existe: não
+/// há como pedir uma configuração que o catálogo não tenha.
+function desenharManual() {
+  const pool = Number($('m-pool').value) || estado.dezenas.size || UNIVERSO;
+  const teto = Number($('m-teto').value) || Infinity;
+  // Duas linhas com o mesmo tamanho de cartela e o mesmo preço, uma garantindo
+  // menos, é ruído: ninguém escolheria a menor. A escada some com as dominadas
+  // entre tamanhos diferentes; aqui só somem as dominadas dentro do mesmo
+  // tamanho, porque escolher o tamanho é justamente o que este modo oferece.
+  const quais = fechamentosDe(estado.indice, estado.precos, pool)
+    .filter((e) => e.jogos <= teto)
+    .filter((e, _, todas) => !todas.some((o) => o.k === e.k && o.custo <= e.custo && o.t > e.t));
+  const antes = $('m-fechamento').value;
+  $('m-fechamento').innerHTML = quais.map((e) => `<option value="${e.k}-${e.t}">${e.jogos}
+    ${e.jogos === 1 ? 'cartela' : 'cartelas'} de ${e.k} dezenas · garante ${e.t} acertos ·
+    ${dinheiro(e.custo)}</option>`).join('');
+  if (quais.some((e) => `${e.k}-${e.t}` === antes)) $('m-fechamento').value = antes;
+  $('manual').textContent = quais.length ? ''
+    : `Com ${pool} dezenas não há fechamento catalogado em até ${teto} cartelas.`;
+}
+
+/// Aplica o que foi escolhido: ajusta a marcação ao pool pedido, fixa o
+/// fechamento e deixa a tela responder pelo caminho de sempre.
+function aplicarManual() {
+  const pool = Number($('m-pool').value);
+  const [k, t] = ($('m-fechamento').value || '').split('-').map(Number);
+  if (estado.dezenas.size !== pool) ajustarPara(pool);
+  estado.fixo = k && t ? { v: pool, k, t } : null;
+  // O campo de dinheiro passa a dizer o preço do que foi escolhido. Sem isto ele
+  // continuaria mostrando o orçamento antigo ao lado de uma resposta que custa
+  // outra coisa — duas afirmações na mesma tela, uma delas falsa.
+  const custo = estado.fixo && planoFixo(estado.fixo).escolha?.custo;
+  if (custo) { estado.orcamento = custo; guardar('orcamento', custo); atualizarDinheiro(); }
+  responder();
+  mostrarAResposta();
+}
+
 // ── controles ───────────────────────────────────────────────────────────────
 
 function ligarControles() {
@@ -368,18 +433,21 @@ function ligarControles() {
     const d = Number(ev.target.dataset?.dezena);
     if (!d) return;
     estado.dezenas.has(d) ? estado.dezenas.delete(d) : estado.dezenas.add(d);
+    estado.fixo = null;  // mexer na grade muda o pool, e o fechamento nomeado era para outro
     trocarDezenas(estado.dezenas);
   });
 
   $('escolher').addEventListener('click', () => estado.indice
-    && sortearDezenas(melhorPool(estado.indice, estado.precos, estado.orcamento)));
+    && ((estado.fixo = null), sortearDezenas(melhorPool(estado.indice, estado.precos, estado.orcamento))));
   $('limpar').addEventListener('click', () => trocarDezenas(new Set()));
   // A régua e o campo dizem a mesma coisa de dois jeitos, e um valor que não dá
   // para ler — texto vazio, "abc" — deixa o orçamento como estava em vez de
   // zerar a tela.
   const trocarOrcamento = (centavos) => {
     if (centavos != null && centavos > 0) estado.orcamento = centavos;
-    estado.link = null;  // mexer no dinheiro é sair do bolão de outra pessoa
+    // Mexer no dinheiro é voltar a perguntar "o que isto compra": sai o bolão
+    // de outra pessoa, e sai o fechamento nomeado à mão.
+    estado.link = estado.fixo = null;
     guardar('orcamento', estado.orcamento);
     atualizarDinheiro();
     responder();
@@ -416,6 +484,12 @@ function ligarControles() {
     responder();
   });
 
+  // O pool e o teto redesenham a lista; escolher um fechamento troca a resposta.
+  for (const id of ['m-pool', 'm-teto']) {
+    $(id).addEventListener('input', () => { desenharManual(); aplicarManual(); });
+  }
+  $('m-fechamento').addEventListener('change', aplicarManual);
+
   $('varrer').addEventListener('click', varrerTudo);
   $('buscar-sorteio').addEventListener('click', buscarSorteio);
   $('sorteio').addEventListener('change', conferirContraOSorteio);
@@ -424,17 +498,32 @@ function ligarControles() {
 }
 
 /// Marca `quantas` dezenas ao acaso: nenhuma é mais provável que outra.
-function sortearDezenas(quantas) {
-  const todas = Array.from({ length: UNIVERSO }, (_, i) => i + 1);
-  for (let i = todas.length - 1; i > 0; i--) {
+const embaralhar = (a) => {
+  for (let i = a.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
-    [todas[i], todas[j]] = [todas[j], todas[i]];
+    [a[i], a[j]] = [a[j], a[i]];
   }
-  trocarDezenas(new Set(todas.slice(0, quantas).sort((a, b) => a - b)));
-  // A resposta nasce a quase 800 px do topo, abaixo da dobra em telefone pequeno:
-  // quem pediu que o aplicativo escolhesse não vai procurar o que ele escolheu.
-  $('resposta').scrollIntoView({ block: 'start',
-    behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+  return a;
+};
+
+const todasAsDezenas = () => Array.from({ length: UNIVERSO }, (_, i) => i + 1);
+
+/// A resposta nasce a quase 800 px do topo, abaixo da dobra em telefone pequeno:
+/// quem pediu que o aplicativo escolhesse não vai procurar o que ele escolheu.
+const mostrarAResposta = () => $('resposta').scrollIntoView({ block: 'start',
+  behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+
+function sortearDezenas(quantas) {
+  trocarDezenas(new Set(embaralhar(todasAsDezenas()).slice(0, quantas).sort((a, b) => a - b)));
+  mostrarAResposta();
+}
+
+/// Leva a marcação a `quantas` dezenas **mantendo** as que já estavam marcadas,
+/// e completando ao acaso o que faltar. Quem escolheu as dele não perde a
+/// escolha por mexer no tamanho do pool; encolhendo, saem as últimas marcadas.
+function ajustarPara(quantas) {
+  const fora = embaralhar(todasAsDezenas().filter((d) => !estado.dezenas.has(d)));
+  trocarDezenas(new Set([...estado.dezenas, ...fora].slice(0, quantas).sort((a, b) => a - b)));
 }
 
 /// Toda troca de dezenas passa por aqui: guarda, desfaz o vínculo com um link de

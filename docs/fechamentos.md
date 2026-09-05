@@ -1,11 +1,19 @@
 # O aplicativo de fechamentos da Lotofácil
 
-Um segundo aplicativo, ao lado do motor. Ele responde a **uma** pergunta:
+Um segundo aplicativo, ao lado do motor. Ele responde a **duas** perguntas, e a
+segunda existe porque a primeira, sozinha, deixava gente de fora:
 
 > *"Como gasto melhor este dinheiro na Lotofácil?"*
+>
+> *"Quero este fechamento aqui — me dá os bilhetes."*
 
-A pessoa diz quanto quer gastar e quais dezenas quer jogar. O aplicativo devolve
-os bilhetes prontos e, numa frase, o que exatamente está garantido.
+Na primeira, a pessoa diz quanto quer gastar e quais dezenas quer jogar; o
+aplicativo escolhe o fechamento. Na segunda, ela escolhe o fechamento e o
+aplicativo diz quanto custa. Em qualquer das duas, o que volta são os bilhetes
+prontos e, numa frase, o que exatamente está garantido.
+
+As duas usam o mesmo catálogo, a mesma tela e o mesmo caminho de resposta — o que
+muda é só quem decide. Nada foi tirado da primeira para a segunda existir.
 
 ## O que o dinheiro compra
 
@@ -131,9 +139,15 @@ Daí tudo o mais decorre:
 
 Sem WebAssembly no cliente, sem *web workers*, sem banco de sessões, sem retomada
 de trabalho interrompido. Nada disso tem razão de existir quando não há nada a
-esperar. O cliente inteiro dá **1.499 linhas** somando JavaScript, HTML e CSS —
-teto de 1.500 cobrado pela construção —, e o peso inicial (casca, índice, preços
-e distribuições) dá **26 KiB comprimidos**.
+esperar. O cliente inteiro dá **1.621 linhas** somando JavaScript, HTML e CSS —
+teto de 1.650 cobrado pela construção —, e o peso inicial (casca, índice, preços
+e distribuições) dá **28 KiB comprimidos**.
+
+O teto foi 1.500 até o segundo modo existir. Ele não subiu porque o cliente
+passou a resolver mais — resolve exatamente o mesmo, nada —, mas porque ganhou
+uma segunda porta de entrada: lista de fechamentos, ajuste do pool, plano fixo.
+Escolher é do usuário, e escolha não tem como ser pré-computada num catálogo. As
+159 linhas são essa porta, e o teto voltou a apertar em cima do que existe.
 
 ## A matemática, em quatro linhas
 
@@ -176,6 +190,57 @@ Antes eram três caminhos separados chegando aos mesmos números — e um deles,
 da garantia pedida, chegava a lugar nenhum. A régua marcava os degraus por um
 caminho e a frase abaixo dela falava do "próximo" por outro; nada garantia que
 fossem o mesmo degrau.
+
+## E quem já sabe o que quer não passa pela escada
+
+A escada responde *"o que este dinheiro compra"*, e por isso ela **esconde de
+propósito**: um fechamento que custa mais e garante o mesmo nunca é degrau, e não
+aparece. Para quem parte do dinheiro isso é exatamente certo. Para quem parte de
+outro lugar, é uma porta fechada.
+
+Existe esse outro lugar. Quem já joga em grupo tem regra própria — *"a gente
+sempre preenche vinte cartelas"*, *"nossos volantes são de 18 dezenas"* — e essa
+regra não é sobre dinheiro. Um fechamento de 18 dezenas por cartela pode custar
+mais que um de 15 com a mesma garantia; a escada some com ele, e a pessoa que
+queria justamente aquele fica sem entender por que ele não está lá.
+
+Então **montar do meu jeito** mostra a lista inteira, não a escada: para o pool
+escolhido, todos os fechamentos catalogados em cartelas que a lotérica aceita —
+de 15 a 20 dezenas —, do mais barato ao mais caro, cada linha dizendo quantas
+cartelas, de que tamanho, que garantia e quanto custa.
+
+| | modo automático | montar do meu jeito |
+|---|---|---|
+| o que a pessoa informa | quanto quer gastar | pool, teto de cartelas, fechamento |
+| quem escolhe o fechamento | o aplicativo | a pessoa |
+| o que a lista mostra | os degraus | todos os fechamentos do pool |
+| o campo de dinheiro | é o que ela digitou | vira o preço do que ela montou |
+| o rodapé | o degrau seguinte | *"você montou este fechamento à mão"* |
+
+Quatro coisas mereceram cuidado, e as quatro são de tela e não de matemática:
+
+**O descarte que sobra.** Só um: linha do mesmo tamanho de cartela, mesmo preço
+ou mais caro, garantindo menos. Com 15 dezenas o catálogo tem cinco entradas —
+garantias de 11 a 15 — e as cinco são o mesmo bilhete de R$ 3,50; mostrar as
+cinco seria mentir sobre haver escolha. Entre tamanhos **diferentes** nada é
+descartado, porque escolher o tamanho é o que este modo oferece.
+
+**O teto de cartelas.** Quem preenche volante à mão sabe quantos aguenta. O teto
+corta pelo número que está escrito na própria linha, e quando não sobra nada a
+tela diz por quê em vez de ficar com a lista vazia.
+
+**O dinheiro não pode contradizer a resposta.** Montar um fechamento de
+R$ 11.424,00 com R$ 300,00 no campo põe duas afirmações na mesma tela, uma delas
+falsa. O campo passa a dizer o preço do que foi montado.
+
+**O rodapé não pode falar de escada.** *"Por mais tanto você sobe de 12 para
+13"* descreve um caminho que esta resposta não percorreu. Aqui ele diz de onde a
+resposta veio.
+
+E o caminho de volta é o que se esperaria: mexer no dinheiro, tocar na grade ou
+pedir *escolher por mim* solta o fechamento fixado e devolve o modo automático
+inteiro. Não há botão de "sair do modo manual" porque não há modo em que entrar —
+há um fechamento nomeado, ou não há.
 
 ## Mínimo provado e menor conhecido nunca se confundem
 

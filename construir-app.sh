@@ -71,13 +71,20 @@ for arquivo in "$PARCIAL"/*; do
 done
 [ "$faltando" -eq 0 ] || exit 1
 
-# O cliente inteiro cabe em menos de 1.500 linhas somando JavaScript, HTML e
+# O cliente inteiro cabe em menos de 1.650 linhas somando JavaScript, HTML e
 # CSS. Não é meta estética: é o teto que mantém o cliente uma coisa que uma
 # pessoa lê inteira numa tarde. Passar dele quer dizer que alguma decisão foi
 # empurrada para cá em vez de resolvida no catálogo.
+#
+# O teto foi 1.500 até o aplicativo passar a ter dois modos. O modo manual —
+# quem já sabe o fechamento que quer e monta direto, sem partir do dinheiro —
+# é uma segunda porta de entrada inteira: lista de fechamentos, ajuste do
+# pool, plano fixo. Isso não é decisão empurrada para o cliente; é um jeito de
+# usar que o catálogo não tem como resolver sozinho, porque a escolha é do
+# usuário. As 159 linhas a mais são essa porta, e o teto voltou a apertar.
 linhas=$(cat "$PARCIAL"/*.js "$PARCIAL"/*.css "$PARCIAL"/*.html | wc -l)
-if [ "$linhas" -ge 1500 ]; then
-  echo "o cliente passou de 1.500 linhas: $linhas" >&2
+if [ "$linhas" -ge 1650 ]; then
+  echo "o cliente passou de 1.650 linhas: $linhas" >&2
   exit 1
 fi
 
@@ -87,7 +94,7 @@ casca=$(cat "$PARCIAL"/*.js "$PARCIAL"/*.css "$PARCIAL"/*.html "$PARCIAL"/catalo
   gzip -9 | wc -c)
 
 echo "carimbo $carimbo"
-echo "$linhas linhas de cliente (teto: 1.500)"
+echo "$linhas linhas de cliente (teto: 1.650)"
 echo "$fechamentos fechamentos · ${peso} KiB no total"
 echo "peso inicial (casca + índice, comprimido): $((casca / 1024)) KiB"
 # Tudo passou: só agora a pasta publicável passa a existir.

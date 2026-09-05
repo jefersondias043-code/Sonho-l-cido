@@ -26,14 +26,30 @@ export function custoDe(entrada, precos) {
 /// garante mais que todos os anteriores. Uma escada assim responde tudo sem mais
 /// nenhuma busca — a escolha é o último degrau que cabe no bolso, o próximo
 /// passo é o seguinte, e o preço de uma garantia pedida é o primeiro que a alcança.
+///
+/// A escada é feita a partir de `fechamentosDe`, logo abaixo — a lista sem
+/// descarte nenhum, que é a matéria-prima dela e também o que o modo manual
+/// mostra por inteiro.
+
+/// Todos os fechamentos compráveis para um número de dezenas, do mais barato ao
+/// mais caro. É a lista inteira, e não só os degraus: quem monta do próprio
+/// jeito pode querer 18 dezenas por cartela mesmo quando 15 garante o mesmo por
+/// menos, e a escada — que existe para responder "o que este dinheiro compra" —
+/// esconderia essa opção de propósito.
+export function fechamentosDe(indice, precos, dezenas) {
+  return indice.entradas
+    .filter((e) => e.v === dezenas && e.soma !== 0 && e.jogos != null
+      && JOGOS_QUE_A_LOTERICA_ACEITA.includes(e.k) && precos.aposta[e.k])
+    .map((e) => ({ ...e, custo: custoDe(e, precos) }))
+    .sort((a, b) => a.custo - b.custo || b.t - a.t);
+}
+
+/// A escada propriamente dita, descrita no bloco acima.
 export function escada(indice, precos, dezenas) {
   const porGarantia = new Map();
-  for (const e of indice.entradas) {
-    if (e.v !== dezenas || e.soma === 0 || e.jogos == null) continue;
-    if (!JOGOS_QUE_A_LOTERICA_ACEITA.includes(e.k) || !precos.aposta[e.k]) continue;
-    const com = { ...e, custo: custoDe(e, precos) };
+  for (const e of fechamentosDe(indice, precos, dezenas)) {
     const atual = porGarantia.get(e.t);
-    if (!atual || com.custo < atual.custo) porGarantia.set(e.t, com);
+    if (!atual || e.custo < atual.custo) porGarantia.set(e.t, e);
   }
   const degraus = [];
   let melhorAteAqui = 0;
