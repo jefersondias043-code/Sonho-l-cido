@@ -17,7 +17,7 @@ que quase nunca se cobra.
 <!-- a tabela do dinheiro: gerada por ferramentas/numeros-do-catalogo.py -->
 | orçamento | dezenas | garantia | fechamento | custo | |
 |---:|---:|---|---|---:|---|
-| R$ 5,00 | 19 | **11 acertos** | 1 jogo de 15 dezenas | R$ 3,50 | mínimo provado |
+| R$ 5,00 | 19 | — | 1 bilhete de 15 dezenas | R$ 3,50 | não é fechamento |
 | R$ 25,00 | 22 | **11 acertos** | 6 jogos de 15 dezenas | R$ 21,00 | piso 3 |
 | R$ 100,00 | 23 | **11 acertos** | 18 jogos de 15 dezenas | R$ 63,00 | piso 4 |
 | R$ 400,00 | 25 | **11 acertos** | 57 jogos de 15 dezenas | R$ 199,50 | piso 10 |
@@ -25,9 +25,10 @@ que quase nunca se cobra.
 | R$ 15.000,00 | 25 | **13 acertos** | 4198 jogos de 15 dezenas | R$ 14.693,00 | piso 671 |
 <!-- fim de a tabela do dinheiro -->
 
-A linha dos quatrocentos reais é o produto inteiro num lugar só: as vinte e
-cinco dezenas inteiras, onze acertos garantidos, e troco. Ninguém compõe isso de
-cabeça. A última coluna diz o que se pode afirmar de cada linha: **mínimo
+A primeira linha é a mais importante do produto: com cinco reais não há
+fechamento, e a tabela diz isso em vez de ficar calada. A dos quatrocentos é o
+produto inteiro num lugar só — as vinte e cinco dezenas inteiras, onze acertos
+garantidos, e troco. Ninguém compõe isso de cabeça. A última coluna diz o que se pode afirmar de cada linha: **mínimo
 provado** quando nenhum fechamento faz aquilo com menos bilhetes, e o piso
 conhecido quando não.
 
