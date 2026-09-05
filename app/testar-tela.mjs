@@ -524,6 +524,21 @@ const opcoesDe = async (pool, teto = '', k = '', t = '') => {
     .map((t) => t.replace(/\s+/g, ' ').trim());
 };
 
+// A grade e o select do pool dizem a mesma coisa, e têm de dizer o mesmo número:
+// marcar dezenas lá e encontrar outro valor aqui faz a primeira escolha refazer
+// em silêncio a marcação que a pessoa acabou de fazer.
+await pagina.click('#limpar');
+for (const d of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]) {
+  await pagina.click(`.grade [data-dezena="${d}"]`);
+}
+await pagina.waitForTimeout(1200);
+conferir('o pool do modo manual acompanha a grade',
+  (await pagina.inputValue('#m-pool')) === '18', await pagina.inputValue('#m-pool'));
+conferir('e a lista já é a desse pool',
+  (await pagina.locator('#m-fechamento option').allInnerTexts())
+    .every((l) => /de 1[5-8] dezenas/.test(l.replace(/\s+/g, ' '))),
+  (await pagina.locator('#m-fechamento option').allInnerTexts()).join(' | '));
+
 const de23 = await opcoesDe(23);
 conferir('o pool de 23 dezenas abre uma lista de fechamentos', de23.length > 5, `${de23.length}`);
 conferir('e cada linha diz garantia, preço, cartelas e tamanho',

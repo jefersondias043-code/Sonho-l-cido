@@ -75,10 +75,6 @@ async function arrancar() {
   if (doLink) estado.dezenas = new Set(doLink.dezenas);
   if (dele) [estado.link, estado.orcamento] = [doLink, dele.jogos * estado.precos.aposta[doLink.k]];
 
-  $('m-pool').innerHTML = Array.from({ length: UNIVERSO - 14 }, (_, i) => i + 15)
-    .map((v) => `<option value="${v}"${v === estado.dezenas.size ? ' selected' : ''}>${v}</option>`)
-    .join('');
-  desenharManual();
   desenharPrecos();
   desenharCarteira();
   atualizarDinheiro();
@@ -126,6 +122,7 @@ function responder() {
   // muda, em vez de deixar a pessoa procurar às cegas.
   $('degraus').innerHTML = escada(estado.indice, estado.precos, estado.dezenas.size)
     .map((e) => `<option value="${paraARegua(e.custo)}" label="${e.t}"></option>`).join('');
+  desenharManual();
   $('degrau').textContent = frasedoDegrau(plano);
   $('resposta').innerHTML = desenharResposta(plano);
   $('varredura').textContent = '';
@@ -409,7 +406,12 @@ function trocarOpcoes(id, opcoes) {
 /// oferecem o que existe: não há como pedir uma configuração que o catálogo não
 /// tenha, nem chegar a uma tela vazia sem saber por quê.
 function desenharManual() {
-  const pool = Number($('m-pool').value) || estado.dezenas.size || UNIVERSO;
+  // O pool é o que está marcado na grade, e não o que o select guardou: são a
+  // mesma coisa dita de dois jeitos, e duas fontes discordando faziam a primeira
+  // escolha aqui refazer em silêncio a marcação que a pessoa tinha feito lá.
+  const pool = estado.dezenas.size >= 15 ? estado.dezenas.size : UNIVERSO;
+  trocarOpcoes('m-pool', Array.from({ length: UNIVERSO - 14 }, (_, i) => [i + 15, `${i + 15}`]));
+  $('m-pool').value = String(pool);
   const teto = Number($('m-teto').value) || Infinity;
   const todas = fechamentosDe(estado.indice, estado.precos, pool);
   // Os dois filtros listam só os valores que este pool tem. Oferecer "18 por
@@ -519,8 +521,10 @@ function ligarControles() {
     responder();
   });
 
-  // O pool e o teto redesenham a lista; escolher um fechamento troca a resposta.
-  for (const id of ['m-pool', 'm-teto', 'm-k', 'm-t']) {
+  // Trocar o pool mexe na grade, e o redesenho vem de lá — redesenhar aqui
+  // devolveria o pool anterior antes de `aplicarManual` chegar a ler o novo.
+  $('m-pool').addEventListener('input', aplicarManual);
+  for (const id of ['m-teto', 'm-k', 'm-t']) {
     $(id).addEventListener('input', () => { desenharManual(); aplicarManual(); });
   }
   $('m-fechamento').addEventListener('change', aplicarManual);

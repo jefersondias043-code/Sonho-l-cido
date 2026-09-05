@@ -139,7 +139,7 @@ Daí tudo o mais decorre:
 
 Sem WebAssembly no cliente, sem *web workers*, sem banco de sessões, sem retomada
 de trabalho interrompido. Nada disso tem razão de existir quando não há nada a
-esperar. O cliente inteiro dá **1.664 linhas** somando JavaScript, HTML e CSS —
+esperar. O cliente inteiro dá **1.668 linhas** somando JavaScript, HTML e CSS —
 teto de 1.700 cobrado pela construção —, e o peso inicial (casca, índice, preços
 e distribuições) dá **29 KiB comprimidos**.
 
@@ -224,7 +224,7 @@ São quatro coisas que se pede, exatamente as quatro que definem um fechamento:
 
 | o que se pede | como | deixando em branco |
 |---|---|---|
-| quantas dezenas no pool | lista de 15 a 25 | usa as que já estão marcadas |
+| quantas dezenas no pool | lista de 15 a 25, espelhando a grade | fica como está |
 | quantas em cada cartela | lista, só os tamanhos que este pool tem | tanto faz |
 | que garantia de acertos | lista, só as garantias que este pool tem, e vale como mínimo | tanto faz |
 | no máximo quantas cartelas | número livre | todas |
@@ -240,12 +240,18 @@ resposta. E os dois modos, lado a lado:
 | o campo de dinheiro | é o que ela digitou | vira o preço do que ela montou |
 | o rodapé | o degrau seguinte | *"você montou este fechamento à mão"* |
 
-Seis coisas mereceram cuidado, e as seis são de tela e não de matemática:
+Sete coisas mereceram cuidado, e as sete são de tela e não de matemática:
 
 **Nenhum filtro oferece um beco.** As listas de tamanho de cartela e de garantia
 são feitas do próprio pool: se não existe fechamento de 18 dezenas por cartela
 com 19 no pool, "18" não aparece. Um filtro que oferece o que não existe
 transforma escolha em tentativa e erro.
+
+**A grade e o pool são a mesma coisa dita de dois jeitos.** O select do pool
+espelha o que está marcado, e escolher nele remarca a grade. Duas fontes
+discordando davam o pior dos resultados silenciosos: marcar vinte dezenas na
+grade, abrir o modo manual — que ainda dizia vinte e cinco — e ver a primeira
+escolha refazer a marcação sem avisar.
 
 **A garantia vale como mínimo, e não como igual.** Quem pede 13 acertos aceita
 14 — o que não se aceita é receber 12 tendo pedido 13.
