@@ -285,8 +285,13 @@ conferir('e a página não vira quatrocentas telas',
   listaGrande.altura < 20000, `${listaGrande.altura} px`);
 conferir('e o DOM continua do tamanho de uma página',
   listaGrande.nos < 3000, `${listaGrande.nos} nós`);
+// Sem fixar o número: quantos bilhetes este fechamento tem é coisa que a busca
+// muda, e um teste que o congela quebra quando o catálogo melhora.
+const quantosDizQueTem = Number(
+  (listaGrande.aviso.match(/São ([\d.]+) bilhetes/)?.[1] ?? '0').replace(/\./g, ''));
 conferir('e a tela diz quantos existem de verdade',
-  /4\.\d\d\d bilhetes/.test(listaGrande.aviso.replace(/\s+/g, ' ')), listaGrande.aviso);
+  quantosDizQueTem > listaGrande.desenhados && quantosDizQueTem > 1000,
+  listaGrande.aviso);
 
 // E a conferência exaustiva continua vendo o fechamento inteiro — o que a tela
 // desenha é a lista, não o que ela guarda.
