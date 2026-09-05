@@ -12,8 +12,8 @@ import { escada, melhorEstrategia, melhorPool } from './estrategia.js';
 
 const $ = (id) => document.getElementById(id);
 const UNIVERSO = 25;
-// Quantos bilhetes a lista desenha. Com os 4.198 que R$ 15.000 compram, a página
-// passava de 339 mil pixels — quatrocentas telas até a conferência e o bolão.
+// Quantos bilhetes a lista desenha. Com os milhares que R$ 15.000 compram, a
+// página passava de 339 mil pixels — quatrocentas telas até a conferência.
 const MOSTRA = 50;
 const guardar = (c, v) => { try { localStorage.setItem(c, JSON.stringify(v)); } catch { /**/ } };
 const lembrar = (c, p) => { try { return JSON.parse(localStorage.getItem(c)) ?? p; } catch { return p; } };

@@ -110,6 +110,14 @@ for (const reais of [5, 25, 100, 400, 1500, 15000]) {
   const p = m.melhorEstrategia(indice, precos, { orcamento: c, dezenas: v });
   if (!p.escolha) continue;
   const e = p.escolha;
+  // A resposta de R$ 400 é a que o documento cita em prosa, com o retorno médio
+  // dela ao lado. Sai daqui para não envelhecer sozinha lá.
+  if (reais === 400) {
+    const solto = JSON.parse(readFileSync('catalogo/acaso.json')).chegam[`25-${e.k}`];
+    const media = e.jogos * [11, 12, 13].reduce(
+      (soma, f) => soma + ((solto[f] ?? 0) - (solto[f + 1] ?? 0)) * precos.premio[f], 0);
+    console.error(JSON.stringify({ custo: dinheiro(e.custo), media: dinheiro(Math.round(media)) }));
+  }
   // Um bilhete não é fechamento, e a linha some se a tabela só souber falar de
   // fechamento — some justamente a linha de quem tem menos dinheiro.
   if (p.motivo === 'um-bilhete') {
@@ -126,6 +134,7 @@ r = subprocess.run(['node', '--input-type=module', '-e', ESTRATEGIA],
                    capture_output=True, text=True)
 if r.returncode != 0:
     raise SystemExit(r.stderr.strip() or 'node falhou sem dizer por quê')
+quatrocentos = json.loads(r.stderr.strip())
 
 TABELAS = {
     'a tabela do dinheiro': '\n'.join([
@@ -179,6 +188,10 @@ NA_PROSA = {
         'as entradas sem bilhetes': f'## As {sem_bilhetes} entradas sem bilhetes',
         'linhas do cliente': f'**{milhar(linhas)} linhas**',
         'peso inicial': f'**{peso} KiB comprimidos**',
+        # A resposta de R$ 400 e o que ela devolve em média. São dois números do
+        # catálogo citados em prosa, e a busca move os dois.
+        'o retorno médio da resposta de R$ 400': f'**{quatrocentos["media"]}** por concurso',
+        'o custo da resposta de R$ 400': f'Contra {quatrocentos["custo"]} gastos',
     },
     LEIAME: {
         'quantas respostas': f'as {len(E)} respostas',

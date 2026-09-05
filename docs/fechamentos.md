@@ -100,10 +100,10 @@ passou a dizer também quanto custa o que a pessoa quer.
 Ao lado de *"em média os dois pagam o mesmo"* — que era uma frase que se lê como
 consolo — agora vem o número:
 
-> *…que aqui é **R$ 51,20** por concurso nas faixas de 11, 12 e 13 acertos —
+> *…que aqui é **R$ 50,30** por concurso nas faixas de 11, 12 e 13 acertos —
 > mais o que sair de 14 e 15, que é rateado e ninguém sabe de antemão.*
 
-Contra R$ 199,50 gastos. É exato e é hipergeométrico, não simulado: sai das
+Contra R$ 196,00 gastos. É exato e é hipergeométrico, não simulado: sai das
 distribuições de `acaso.json` por diferença, e a suíte refaz a mesma média
 direto da definição, sem tocar no arquivo, para as duas baterem ao centavo. Um
 bilhete simples devolve **25,7%** do que custa nas faixas fixas — e é o mesmo
@@ -341,8 +341,8 @@ janela, e o fim de "acertos garantidos" também.
 
 ## Uma lista que ninguém rola
 
-Os 4.198 bilhetes que R$ 15.000 compram viravam **339 mil pixels** de página e
-67 mil nós no DOM. Quatrocentas telas de rolagem entre a lista e tudo o que vem
+Os milhares de bilhetes que R$ 15.000 compram viravam **339 mil pixels** de
+página e 67 mil nós no DOM — eram 4.198 no dia da medição. Quatrocentas telas de rolagem entre a lista e tudo o que vem
 depois dela — a conferência sorteio a sorteio, o bolão, a carteira, a tabela de
 preços. Na prática, com um fechamento grande, metade do aplicativo deixava de
 existir; e num telefone barato aquilo é memória que não há.
