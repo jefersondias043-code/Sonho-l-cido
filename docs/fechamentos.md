@@ -304,19 +304,32 @@ A chave nunca sai do servidor. Desligar a IA inteira mantém o aplicativo
 funcional — é assim que ele está hoje, sem servidor nenhum. Como pôr as três
 funções no ar está em [`servidor/LEIAME.md`](../servidor/LEIAME.md).
 
-## Recomeçar em vez de insistir
+## Recomeçar em vez de insistir, e por que não
 
 A busca é estocástica e a variância entre sementes é grande — o próprio
 `motor-busca` registra uma medição em que trocar a semente mudou o resultado em
-28 cartelas, mais do que o parâmetro que estava sendo medido. E o gerador usava
-**uma semente fixa**: uma trajetória azarada não melhorava por durar mais, só
-ficava mais longa.
+28 cartelas, mais do que o parâmetro que estava sendo medido. O gerador usa uma
+**semente fixa**, então uma trajetória azarada não melhora por durar mais: só
+fica mais longa. Daí a hipótese de dividir o orçamento em recomeços com
+sementes diferentes, cada um partindo do melhor já achado.
 
-Agora o orçamento de cada caso é dividido em recomeços de cinco minutos, cada um
-com outra semente e partindo do melhor que já se achou — então recomeçar nunca
-custa terreno. `CATALOGO_RECOMECOS` fixa o número de recomeços, e com 1 o
-gerador volta a ser a corrida única de antes: é assim que a medição abaixo foi
-feita, e é assim que se refaz.
+Medido, com o mesmo tempo total, cada caso partindo do zero:
+
+| caso | 1 corrida | 2 recomeços | 4 recomeços |
+|---|---:|---:|---:|
+| 21-15-13 | 117 | 117 | 117 |
+| 22-15-13 | 296 | **294** | 299 |
+| 23-15-12 | **83** | — | 88 |
+
+Um empate, um ganho de 0,7% e duas perdas, de 1% e de 6%. Cada recomeço devolve
+ao motor uma fase de aquecimento que ele já tinha pago, e num orçamento de uma
+hora isso se repetiria doze vezes.
+
+A hipótese era razoável e está errada. O código dos recomeços saiu — um botão
+que ninguém deve girar é código para manter à toa —, e fica o número, que é o
+que o próximo a ter a mesma ideia precisa ver. As três medições que decidiram
+isto estão reproduzíveis: `CATALOGO_SAIDA` e um catálogo de saída vazio dão a
+corrida do zero.
 
 ## A resposta estava fora da tela
 
