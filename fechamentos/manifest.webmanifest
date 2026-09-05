@@ -1,0 +1,20 @@
+{
+  "name": "Sonho Lúcido — fechamentos da Lotofácil",
+  "short_name": "Sonho Lúcido",
+  "description": "Quanto você quer gastar, quais dezenas quer jogar, e os bilhetes prontos com a garantia que esse dinheiro compra.",
+  "lang": "pt-BR",
+  "dir": "ltr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0b1020",
+  "theme_color": "#0b1020",
+  "categories": ["utilities", "finance"],
+  "icons": [
+    { "src": "./icone-180.png", "sizes": "180x180", "type": "image/png", "purpose": "any" },
+    { "src": "./icone-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "./icone-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "./icone.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
