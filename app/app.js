@@ -406,6 +406,9 @@ function trocarOpcoes(id, opcoes) {
 /// oferecem o que existe: não há como pedir uma configuração que o catálogo não
 /// tenha, nem chegar a uma tela vazia sem saber por quê.
 function desenharManual() {
+  // Sem catálogo não há lista: na primeira visita sem rede os controles existem
+  // na página antes de o índice chegar, e mexer neles não pode quebrar a tela.
+  if (!estado.indice) return;
   // O pool é o que está marcado na grade, e não o que o select guardou: são a
   // mesma coisa dita de dois jeitos, e duas fontes discordando faziam a primeira
   // escolha aqui refazer em silêncio a marcação que a pessoa tinha feito lá.
@@ -447,6 +450,7 @@ function desenharManual() {
 /// Aplica o que foi escolhido: ajusta a marcação ao pool pedido, fixa o
 /// fechamento e deixa a tela responder pelo caminho de sempre.
 function aplicarManual() {
+  if (!estado.indice) return;
   const pool = Number($('m-pool').value);
   const [k, t] = ($('m-fechamento').value || '').split('-').map(Number);
   if (estado.dezenas.size !== pool) ajustarPara(pool);
