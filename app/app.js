@@ -22,7 +22,7 @@ const estado = {
   orcamento: lembrar('orcamento', 5000), dezenas: new Set(lembrar('dezenas', [])),
   carteira: lembrar('carteira', []), garantiaMinima: 0,
   indice: null, precos: null, precosPublicados: null, acaso: null,
-  plano: null, bilhetes: [], mascaras: [],
+  plano: null, bilhetes: [], todos: [], mascaras: [],
 };
 
 // ── dinheiro ────────────────────────────────────────────────────────────────
@@ -125,7 +125,7 @@ function responder() {
     if (plano.motivo === 'ok') pedirAFrase('.resposta .frase',
       { v, k, t, jogos, custo, piso, degrauT: plano.degrau?.t, degrauFalta: plano.degrau?.falta });
   } else {
-    estado.bilhetes = [];
+    estado.bilhetes = estado.todos = [];
     estado.mascaras = [];
     for (const id of ['secao-bilhetes', 'acaso', 'bolao']) $(id).innerHTML = '';
   }
@@ -271,10 +271,10 @@ async function trazerBilhetes(escolha) {
   }
   if (estado.plano?.escolha !== escolha) return; // a pessoa mudou de ideia no meio
 
-  estado.bilhetes = catalogo.emDezenas(estado.mascaras, estado.dezenas);
-  if (estado.link?.parte != null) {
-    estado.bilhetes = volante.dividir(estado.bilhetes, estado.link.partes)[estado.link.parte];
-  }
+  // `todos` é o fechamento inteiro; `bilhetes`, o que cabe a quem está olhando.
+  estado.todos = catalogo.emDezenas(estado.mascaras, estado.dezenas);
+  estado.bilhetes = estado.link?.parte == null ? estado.todos
+    : volante.dividir(estado.todos, estado.link.partes)[estado.link.parte];
   desenharBilhetes();
   desenharAcaso();
   desenharBolao();
@@ -323,10 +323,12 @@ function desenharAcaso() {
 }
 
 function desenharBolao() {
-  // Nunca mais partes que bilhetes: um link com zero bilhetes é uma promessa
-  // vazia mandada para uma pessoa de verdade.
-  const partes = Math.min(20, estado.bilhetes.length, Math.max(2, Number($('partes').value) || 2));
-  const grupos = volante.dividir(estado.bilhetes, partes);
+  // Sempre o fechamento inteiro, mesmo para quem chegou por um link de parte: o
+  // link daqui diz "parte i de n **do fechamento**", e dividir a parte de alguém
+  // faria a tela contar um conjunto e o link entregar outro. E nunca mais partes
+  // que bilhetes: um link com zero bilhetes é promessa vazia a gente de verdade.
+  const partes = Math.min(20, estado.todos.length, Math.max(2, Number($('partes').value) || 2));
+  const grupos = volante.dividir(estado.todos, partes);
   const base = location.href.split('#')[0], { v, k, t } = estado.plano.escolha;
   $('bolao').innerHTML = `<ol class="partes">${grupos
     .map((g, i) => {
@@ -352,9 +354,8 @@ function desenharCarteira() {
   $('carteira').innerHTML = `<ol class="registros">${estado.carteira
     .map((r, i) => `<li><b>${r.t} acertos garantidos</b> · ${r.jogos} jogos de ${r.k} dezenas ·
         ${dinheiro(r.custo)} · ${new Date(r.data).toLocaleDateString('pt-BR')}${
-      r.retorno != null
-        ? ` · <b>voltou ${dinheiro(r.retorno)}</b>${r.concurso ? ` no concurso ${r.concurso}` : ''}`
-        : ''}
+      r.retorno == null ? ''
+        : ` · <b>voltou ${dinheiro(r.retorno)}</b>${r.concurso ? ` no concurso ${r.concurso}` : ''}`}
         <button type="button" class="discreto" data-apagar="${i}">Apagar</button></li>`)
     .join('')}</ol>`;
 }
@@ -385,7 +386,7 @@ function ligarControles() {
   $('valor').addEventListener('change', () => trocarOrcamento(emCentavos($('valor').value)));
 
   $('secao-bilhetes').addEventListener('click', (ev) => acaoDosBilhetes(ev.target.dataset?.acao));
-  $('partes').addEventListener('input', () => estado.bilhetes.length && desenharBolao());
+  $('partes').addEventListener('input', () => estado.todos.length && desenharBolao());
   $('bolao').addEventListener('click', async (ev) => {
     const link = ev.target.dataset?.link;
     if (link) ev.target.textContent = (await volante.copiar(link)) ? 'Copiado' : link;
@@ -514,8 +515,7 @@ async function buscarSorteio() {
 function conferirContraOSorteio() {
   const sorteadas = dezenasDoTexto($('sorteio').value);
   if (!sorteadas || estado.bilhetes.length === 0) {
-    $('conferencia').innerHTML = sorteadas
-      ? ''
+    $('conferencia').innerHTML = sorteadas ? ''
       : '<p class="ajuda">Escreva as 15 dezenas sorteadas, separadas por espaço.</p>';
     return;
   }

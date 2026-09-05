@@ -330,6 +330,20 @@ await outra.waitForSelector('.bilhetes li');
 const naParte = await outra.locator('.bilhetes li').count();
 conferir('quem abre o link recebe só a sua parte', naParte > 0 && naParte < noFechamento,
   `${naParte} de ${noFechamento}`);
+
+// E quem chegou por um link de parte, se dividir de novo, divide o **fechamento
+// inteiro** — não a parte dele. O link que sai daqui diz "parte i de n do
+// fechamento", e é isso que quem o abrir vai receber: dividindo a parte, a
+// contagem na tela seria de um conjunto e o link entregaria outro.
+await outra.click('#det-bolao summary');
+await outra.fill('#partes', '2');
+await outra.dispatchEvent('#partes', 'input');
+const partesNaParte = await outra.locator('.partes li').allInnerTexts();
+const somaDasPartes = partesNaParte
+  .map((t) => Number(t.match(/(\d+) bilhetes/)[1]))
+  .reduce((a, b) => a + b, 0);
+conferir('quem é parte divide o fechamento inteiro, e não a parte dele',
+  somaDasPartes === noFechamento, `${somaDasPartes} de ${noFechamento} (parte tem ${naParte})`);
 await outra.close();
 
 // ── conferir contra o sorteio ───────────────────────────────────────────────

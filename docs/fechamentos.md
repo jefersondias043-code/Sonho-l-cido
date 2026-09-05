@@ -123,6 +123,19 @@ jogos passasse a ignorar uma dezena, o aplicativo pediria para marcar 25 e
 jogaria 24 sem dizer nada — o tipo de silêncio que só aparece quando alguém
 confere o bilhete impresso.
 
+## O bolão dividido duas vezes
+
+Quem abre um link de parte vê os bilhetes dele. Se então mexesse em "dividir com
+outras pessoas", o aplicativo dividia **a parte** e gerava links que dizem
+"parte *i* de *n* do fechamento" — e quem abrisse aquele link receberia outra
+coisa, maior, do que a contagem que estava na tela de quem enviou.
+
+Agora a divisão é sempre do fechamento inteiro, para todo mundo. É o que o link
+sabe expressar, e é o que faz sentido: quem organiza um bolão divide o
+fechamento; quem recebeu uma parte não tem o que redividir. A suíte cobra que a
+soma das partes vistas por um participante seja o fechamento inteiro, e não a
+parte dele.
+
 ## A resposta estava fora da tela
 
 Medido, em vez de suposto: depois do toque em *"escolher por mim"*, o número da
