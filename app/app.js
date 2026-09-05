@@ -57,9 +57,8 @@ async function arrancar() {
     [estado.indice, estado.precosPublicados, estado.acaso] = await Promise.all(
       [catalogo.carregarIndice(), catalogo.carregarPrecos(), catalogo.carregarAcaso()]);
   } catch {
-    $('resposta').innerHTML =
-      '<p class="aviso">Sem internet na primeira visita. Abra de novo quando houver rede — ' +
-      'depois disso o aplicativo funciona sem ela.</p>';
+    $('resposta').innerHTML = '<p class="aviso">Sem internet na primeira visita. Abra de novo '
+      + 'quando houver rede — depois disso o aplicativo funciona sem ela.</p>';
     return;
   }
   estado.precos = { ...estado.precosPublicados, ...lembrar('precos', {}) };
@@ -212,9 +211,8 @@ async function pedirAFrase(onde, dados) {
   } catch { /* a frase determinística fica */ }
 }
 
-/// Quanto a garantia vale em dinheiro. Sem este número, "garantido" se lê como
-/// lucro garantido — e não é: nas faixas fixas o prêmio de uma cartela costuma
-/// ficar abaixo do que o fechamento inteiro custou.
+/// Quanto a garantia vale em dinheiro. Sem este número "garantido" se lê como
+/// lucro garantido, e nas faixas fixas o prêmio fica abaixo do que se gastou.
 function quantoPagaAGarantia(t) {
   if (t > 13) return `O prêmio de ${t} acertos é rateado e muda a cada concurso.`;
   return `Esses ${t} acertos pagam ${dinheiro(estado.precos.premio[t])} por cartela premiada —
@@ -222,8 +220,8 @@ function quantoPagaAGarantia(t) {
 }
 
 /// A ressalva que faz a garantia ser verdade inteira: ela só vale se as 15
-/// sorteadas caírem dentro do pool, e essa chance — `C(v,15)/C(25,15)`, vinda do
-/// catálogo — é o que separa uma promessa grande de uma promessa útil.
+/// sorteadas caírem no pool, e essa chance — `C(v,15)/C(25,15)`, do catálogo — é
+/// o que separa uma promessa grande de uma promessa útil.
 function chanceDeCairDentro(v) {
   const p = estado.acaso.dentro?.[v];
   if (!p) return '';
@@ -421,8 +419,7 @@ function ligarControles() {
   $('fechar-painel').addEventListener('click', () => ($('painel').hidden = true));
 }
 
-/// Marca `quantas` dezenas ao acaso: nenhuma é mais provável que outra, e de
-/// **quantas** cuida `melhorPool`.
+/// Marca `quantas` dezenas ao acaso: nenhuma é mais provável que outra.
 function sortearDezenas(quantas) {
   const todas = Array.from({ length: UNIVERSO }, (_, i) => i + 1);
   for (let i = todas.length - 1; i > 0; i--) {
@@ -462,8 +459,11 @@ async function acaoDosBilhetes(acao) {
     $('painel').hidden = false;
     print();
   } else if (acao === 'guardar') {
-    estado.carteira.unshift({ data: Date.now(), v: e.v, k: e.k, t: e.t, jogos: e.jogos,
-      custo: e.custo, dezenas: [...estado.dezenas].sort((a, b) => a - b) });
+    // O que **esta pessoa** jogou: num bolão, a parte dela. Guardar o fechamento
+    // inteiro punha na carteira um custo que ela não pagou, com o retorno só dela.
+    estado.carteira.unshift({ data: Date.now(), v: e.v, k: e.k, t: e.t,
+      jogos: estado.bilhetes.length, custo: estado.bilhetes.length * estado.precos.aposta[e.k],
+      dezenas: [...estado.dezenas].sort((a, b) => a - b) });
     guardar('carteira', estado.carteira);
     desenharCarteira();
     $('det-carteira').open = true;

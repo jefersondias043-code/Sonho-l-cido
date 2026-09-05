@@ -375,6 +375,10 @@ outras pessoas", o aplicativo dividia **a parte** e gerava links que dizem
 "parte *i* de *n* do fechamento" — e quem abrisse aquele link receberia outra
 coisa, maior, do que a contagem que estava na tela de quem enviou.
 
+E a carteira de quem é parte guardava o fechamento inteiro: um custo que essa
+pessoa não pagou, ao lado de um retorno que é só o dela. A conta não fechava
+para ninguém.
+
 Agora a divisão é sempre do fechamento inteiro, para todo mundo. É o que o link
 sabe expressar, e é o que faz sentido: quem organiza um bolão divide o
 fechamento; quem recebeu uma parte não tem o que redividir. A suíte cobra que a

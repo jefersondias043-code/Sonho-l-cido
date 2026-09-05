@@ -352,6 +352,18 @@ const somaDasPartes = partesNaParte
   .reduce((a, b) => a + b, 0);
 conferir('quem é parte divide o fechamento inteiro, e não a parte dele',
   somaDasPartes === noFechamento, `${somaDasPartes} de ${noFechamento} (parte tem ${naParte})`);
+
+// E a carteira de quem é parte guarda o que **essa pessoa** jogou. Guardar o
+// fechamento inteiro punha ali um custo que ela não pagou, ao lado de um retorno
+// que é só o dela: a conta não fechava para ninguém.
+await outra.click('[data-acao=guardar]');
+const naCarteira = (await outra.locator('.registros li').first().innerText()).replace(/\s+/g, ' ');
+// Comparado como número, e não como pedaço de texto: com 15 jogos guardados e
+// 5 na mão, `includes('5 jogos')` acha "15 jogos" e o teste passa sobre o
+// defeito. Foi o que aconteceu na primeira versão desta conferência.
+const jogosNaCarteira = Number(naCarteira.match(/· (\d+) jogos/)?.[1]);
+conferir('a carteira de quem é parte guarda a parte, e não o bolão',
+  jogosNaCarteira === naParte, `${jogosNaCarteira} guardados, ${naParte} na mão`);
 await outra.close();
 
 // ── conferir contra o sorteio ───────────────────────────────────────────────
