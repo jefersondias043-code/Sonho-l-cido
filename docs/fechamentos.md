@@ -19,10 +19,10 @@ que quase nunca se cobra.
 |---:|---:|---|---|---:|---|
 | R$ 5,00 | 19 | — | 1 bilhete de 15 dezenas | R$ 3,50 | não é fechamento |
 | R$ 25,00 | 22 | **11 acertos** | 6 jogos de 15 dezenas | R$ 21,00 | piso 3 |
-| R$ 100,00 | 23 | **11 acertos** | 18 jogos de 15 dezenas | R$ 63,00 | piso 4 |
-| R$ 400,00 | 25 | **11 acertos** | 57 jogos de 15 dezenas | R$ 199,50 | piso 10 |
-| R$ 1.500,00 | 25 | **12 acertos** | 341 jogos de 15 dezenas | R$ 1.193,50 | piso 55 |
-| R$ 15.000,00 | 25 | **13 acertos** | 4198 jogos de 15 dezenas | R$ 14.693,00 | piso 671 |
+| R$ 100,00 | 23 | **11 acertos** | 15 jogos de 15 dezenas | R$ 52,50 | piso 4 |
+| R$ 400,00 | 25 | **11 acertos** | 56 jogos de 15 dezenas | R$ 196,00 | piso 10 |
+| R$ 1.500,00 | 25 | **12 acertos** | 334 jogos de 15 dezenas | R$ 1.169,00 | piso 55 |
+| R$ 15.000,00 | 25 | **13 acertos** | 3715 jogos de 15 dezenas | R$ 13.002,50 | piso 671 |
 <!-- fim de a tabela do dinheiro -->
 
 A primeira linha é a mais importante do produto: com cinco reais não há
@@ -44,6 +44,40 @@ aumenta a garantia, que é a única coisa que este aplicativo sabe prometer.
 A tabela sai de `ferramentas/numeros-do-catalogo.py --gravar`, que a reescreve
 aqui a partir de `catalogo/indice.json`. Cada passada do motor pode mudá-la, e um
 preço velho num documento é uma promessa que o aplicativo não cumpre mais.
+
+## Chegar à tela em 3G
+
+O alvo da especificação é **primeira renderização útil em menos de 1 s em 3G
+rápido**, e ele nunca tinha sido medido. Medido — servido como o GitHub Pages
+serve, HTTP/2 com compressão, sob a rede "3G rápido" do próprio Chrome
+(1,6 Mbps, 562 ms de ida e volta):
+
+| | antes | agora |
+|---|---:|---:|
+| primeira pintura | 1.200 ms | 1.260 ms |
+| grade tocável | 1.880 ms | 1.360 ms |
+| resposta na tela | 2.500 ms | 1.370 ms |
+| pedidos | 14 | 9 |
+
+A resposta chegava em duas ondas encadeadas desnecessárias. O navegador só
+descobre `catalogo.js`, `conferir.js`, `estrategia.js` e `volante.js` depois de
+baixar e ler `app.js`; e só pede os três arquivos do catálogo depois de executar
+os módulos. Com 562 ms de latência, cada onda custa mais de meio segundo.
+
+Sete `<link>` no cabeçalho resolvem: `modulepreload` para os quatro módulos e
+`preload` para os três JSON. Tudo passa a ser pedido junto, numa onda só.
+
+O `crossorigin` nos três `preload` não é enfeite: sem ele o navegador baixava o
+arquivo, não conseguia casá-lo com o `fetch` do aplicativo e **baixava de novo**
+— dobrando o tráfego e mantendo a segunda onda. A cascata mostrava os dois
+pedidos, um em cada onda.
+
+O que resta é o piso: duas idas e voltas — o HTML, e tudo o que ele referencia.
+Com os 562 ms do preset do Chrome isso são 1,13 s, e não há folga abaixo disso
+sem embutir o CSS e o JavaScript no HTML, o que custaria a etapa de compilação
+que este aplicativo não tem. Com uma latência de 3G real (150 a 300 ms) as
+mesmas duas idas e voltas dão 300 a 600 ms, dentro do alvo. Fica registrado
+assim, com a latência dita, em vez de escolhido o número que passa.
 
 ## A decisão que define o produto: o cliente não resolve nada
 
