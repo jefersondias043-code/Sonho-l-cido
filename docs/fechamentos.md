@@ -265,6 +265,38 @@ concordar:
 E a varredura roda duas vezes em CI: uma sobre `catalogo/`, outra sobre
 `publicar/catalogo/` — os bytes que o navegador de alguém vai baixar.
 
+### E o conferidor reprova?
+
+Rodá-lo sobre o catálogo bom prova que ele aceita o que é bom, e não prova nada
+sobre o que ele faria com o que é ruim. Um laço de cobertura quebrado, uma
+comparação invertida, um `return Ok` fora do lugar: nenhum apareceria nunca,
+porque o catálogo publicado está certo e ele diria que sim. E é dele que a
+publicação inteira depende para dizer não.
+
+`ferramentas/provar-o-conferidor.py` estraga o catálogo de propósito, um defeito
+de cada vez, e cobra que ele reprove **pelo motivo daquele defeito**:
+
+| defeito | tem de reprovar dizendo |
+|---|---|
+| falta um bilhete, com contagem e soma refeitas | *não é coberto* |
+| um bilhete trocado por outro válido e distinto | *não é coberto* |
+| a soma do índice não é a do arquivo | *soma de verificação* |
+| o índice conta um bilhete a mais | *o índice diz* |
+| o tamanho anunciado fica abaixo do piso | *abaixo do piso* |
+| mínimo provado onde os limites não se encontram | *marca provado* |
+| uma das 330 sumiu do índice | *aparece 0 vezes* |
+| o mesmo bilhete duas vezes | *bilhete repetido* |
+
+Os dois primeiros são os que importam: tudo o que a forma pode conferir continua
+batendo, e só varrer sorteio a sorteio acha o defeito.
+
+A primeira versão deste arquivo ficou verde sem testar nada. Ela regravava o
+índice com `json.dumps`, que põe um espaço depois dos dois-pontos; o conferidor
+não usa biblioteca de JSON — tem leitor próprio, de propósito, para não
+compartilhar nada com o gerador — e procura a sequência exata `"entradas":[`.
+Lia zero entradas e reprovava por isso, oito vezes, pelo mesmo engano. Foi por
+cobrar o **motivo**, e não só o código de saída, que isso apareceu.
+
 Uma conferência que reusa o gerador só sabe dizer que o gerador concorda consigo
 mesmo.
 

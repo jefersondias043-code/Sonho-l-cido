@@ -52,6 +52,19 @@ jobs:
       - name: Varrer as 330 entradas, sorteio a sorteio
         run: ./target/release/conferir-tudo catalogo
 
+      - name: E o conferidor reprova o que tem de reprovar
+        # Rodar o conferidor sobre o catálogo bom prova que ele aceita o que é
+        # bom, e não prova nada sobre o que ele faria com o que é ruim. Um laço
+        # de cobertura quebrado passaria despercebido para sempre, porque o
+        # catálogo publicado está certo e ele diria que sim — e a publicação
+        # inteira depende dele dizer não.
+        #
+        # Aqui o catálogo é estragado de propósito, oito vezes, um defeito de
+        # cada vez, e se cobra que ele reprove cada um **pelo motivo daquele
+        # defeito**. Reprovar por outra coisa é o jeito de um teste destes ficar
+        # verde sem testar nada.
+        run: python3 ferramentas/provar-o-conferidor.py
+
       - name: A estratégia — a função que decide o que a pessoa compra
         # Node puro: é função pura sobre o índice, e se precisasse de rede ou de
         # navegador estaria errada. Aqui se cobra a regra inteira, incluindo que
