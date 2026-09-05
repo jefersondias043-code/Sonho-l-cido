@@ -15,10 +15,8 @@ export function comoCsv(bilhetes) {
 /// Uma cartela desenhada como o volante: cinco colunas, 1 a 25, marcadas.
 export function comoVolante(bilhete, universo = 25) {
   const marcadas = new Set(bilhete);
-  const celulas = [];
-  for (let d = 1; d <= universo; d++) {
-    celulas.push(`<i class="${marcadas.has(d) ? 'marcada' : ''}">${doisDigitos(d)}</i>`);
-  }
+  const celulas = Array.from({ length: universo }, (_, i) =>
+    `<i class="${marcadas.has(i + 1) ? 'marcada' : ''}">${doisDigitos(i + 1)}</i>`);
   return `<div class="volante">${celulas.join('')}</div>`;
 }
 

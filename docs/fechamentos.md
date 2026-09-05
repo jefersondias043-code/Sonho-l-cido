@@ -57,9 +57,9 @@ Daí tudo o mais decorre:
 
 Sem WebAssembly no cliente, sem *web workers*, sem banco de sessões, sem retomada
 de trabalho interrompido. Nada disso tem razão de existir quando não há nada a
-esperar. O cliente inteiro dá **1.494 linhas** somando JavaScript, HTML e CSS —
+esperar. O cliente inteiro dá **1.499 linhas** somando JavaScript, HTML e CSS —
 teto de 1.500 cobrado pela construção —, e o peso inicial (casca, índice, preços
-e distribuições) dá **24 KiB comprimidos**.
+e distribuições) dá **25 KiB comprimidos**.
 
 ## A matemática, em quatro linhas
 
@@ -80,6 +80,64 @@ e `t'` organiza as 330:
 | `t' = a` | 45 | sistema de Turán por construção fechada, depois o motor |
 | `0 < t' < a` | 130 | o motor, partindo do melhor que houver |
 <!-- fim de a tabela das famílias -->
+
+## Um bilhete não é fechamento
+
+Com dinheiro para um bilhete só, a tela chegava a dizer **"11 acertos
+garantidos"**. Era verdade e era engano: um bilhete não tem com quem se
+completar, e a garantia ali é tautologia — ele acerta o que acertar. Pior, num
+pool de 19 dezenas esse bilhete leva 15, e as outras quatro que a pessoa marcou
+nunca são jogadas; a tela não dizia isso.
+
+Agora a manchete é o que ela comprou:
+
+> **1**
+> bilhete de 15 dezenas
+> R$ 3,50
+>
+> *Um bilhete não é fechamento: não há vários jogos se completando para cobrir o
+> que falta a cada um, então não há garantia a comprar — só a sorte de sempre. E
+> das suas 19 dezenas, só 15 entram nele.*
+
+E a linha do degrau deixa de partir de uma garantia que a tela não anunciou:
+*"por mais R$ 10,50 você compra 4 bilhetes que se completam e garantem 12
+acertos"*.
+
+Que só o fechamento de um bilhete deixe dezenas de fora não é observação: é
+cobrado em `conferir-tudo`, entrada por entrada. Se um fechamento de vários
+jogos passasse a ignorar uma dezena, o aplicativo pediria para marcar 25 e
+jogaria 24 sem dizer nada — o tipo de silêncio que só aparece quando alguém
+confere o bilhete impresso.
+
+## A garantia pedida virou pergunta com resposta
+
+`garantiaMinima` atravessava o aplicativo inteiro — o esquema do servidor, o
+leitor por expressão regular, a validação do cliente — e chegava num filtro que
+não filtrava nada: ele escolhia entre "a maior garantia que cabe" e "a maior
+garantia que cabe". Quem escrevia *"quero garantir 14"* tinha o 14 lido,
+validado e descartado em silêncio.
+
+Agora ele responde à pergunta que foi feita:
+
+> *Garantir 14 acertos com 20 dezenas custa R$ 1.582,00 — faltam R$ 1.282,00.*
+
+É a outra metade do produto. O aplicativo já dizia o que o dinheiro compra;
+passou a dizer também quanto custa o que a pessoa quer.
+
+## Quanto isso devolve, em média
+
+Ao lado de *"em média os dois pagam o mesmo"* — que era uma frase que se lê como
+consolo — agora vem o número:
+
+> *…que aqui é **R$ 51,20** por concurso nas faixas de 11, 12 e 13 acertos —
+> mais o que sair de 14 e 15, que é rateado e ninguém sabe de antemão.*
+
+Contra R$ 199,50 gastos. É exato e é hipergeométrico, não simulado: sai das
+distribuições de `acaso.json` por diferença, e a suíte refaz a mesma média
+direto da definição, sem tocar no arquivo, para as duas baterem ao centavo. Um
+bilhete simples devolve **25,7%** do que custa nas faixas fixas — e é o mesmo
+para qualquer arranjo dos mesmos bilhetes, que é justamente o que faz dele a
+prova de que o fechamento compra certeza, e não lucro.
 
 ## Mínimo provado e menor conhecido nunca se confundem
 
@@ -109,6 +167,42 @@ Nos 155 primeiros o conferidor independente não acredita em ninguém: recalcula
 contra a literatura — e o conferidor só cobra que a cota anunciada não seja menor
 que a cota de contagem que ele mesmo recalcula. É menos do que uma prova
 independente, e é isto que se pode afirmar sem exagero.
+
+## A escada decide sozinha
+
+Para um número de dezenas, a **escada** é a lista de degraus que alguém
+compraria: por garantia, o mais barato; e fora quem custa o mesmo ou mais e
+garante menos. Ela é construída em ordem de preço, e só entra quem garante mais
+que todos os anteriores — então **preço e garantia sobem juntos, sempre**. Não é
+propriedade do catálogo: é da função, e vale para qualquer catálogo futuro.
+
+Daí sai o módulo inteiro sem mais nenhuma busca:
+
+| pergunta | resposta |
+|---|---|
+| o que este dinheiro compra | o último degrau que cabe |
+| e se eu tivesse mais | o degrau seguinte |
+| quanto custa garantir 14 | o primeiro degrau que alcança 14 |
+| é um fechamento ou um bilhete | o degrau escolhido tem um jogo, ou mais |
+
+Antes eram três caminhos separados chegando aos mesmos números — e um deles, o
+da garantia pedida, chegava a lugar nenhum. A régua marcava os degraus por um
+caminho e a frase abaixo dela falava do "próximo" por outro; nada garantia que
+fossem o mesmo degrau.
+
+## Recomeçar em vez de insistir
+
+A busca é estocástica e a variância entre sementes é grande — o próprio
+`motor-busca` registra uma medição em que trocar a semente mudou o resultado em
+28 cartelas, mais do que o parâmetro que estava sendo medido. E o gerador usava
+**uma semente fixa**: uma trajetória azarada não melhorava por durar mais, só
+ficava mais longa.
+
+Agora o orçamento de cada caso é dividido em recomeços de cinco minutos, cada um
+com outra semente e partindo do melhor que já se achou — então recomeçar nunca
+custa terreno. `CATALOGO_RECOMECOS` fixa o número de recomeços, e com 1 o
+gerador volta a ser a corrida única de antes: é assim que a medição abaixo foi
+feita, e é assim que se refaz.
 
 ## Nada é publicado sem varredura exaustiva
 

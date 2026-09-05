@@ -13,9 +13,7 @@ import { escada, melhorEstrategia, melhorPool } from './estrategia.js';
 const $ = (id) => document.getElementById(id);
 const UNIVERSO = 25;
 const guardar = (c, v) => { try { localStorage.setItem(c, JSON.stringify(v)); } catch { /**/ } };
-const lembrar = (c, padrao) => {
-  try { return JSON.parse(localStorage.getItem(c)) ?? padrao; } catch { return padrao; }
-};
+const lembrar = (c, p) => { try { return JSON.parse(localStorage.getItem(c)) ?? p; } catch { return p; } };
 
 const estado = {
   orcamento: lembrar('orcamento', 5000), dezenas: new Set(lembrar('dezenas', [])),
@@ -79,9 +77,7 @@ async function arrancar() {
 }
 
 function registrarServico() {
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js').catch(() => {});
-  }
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
   const rede = () => ($('rede').textContent = navigator.onLine ? '' : 'sem internet');
   addEventListener('online', rede); addEventListener('offline', rede); rede();
   fetch('sw.js', { cache: 'no-store' }).then((r) => r.text()).then((t) => {
@@ -129,14 +125,13 @@ function responder() {
   if (plano.escolha) {
     trazerBilhetes(plano.escolha);
     const { v, k, t, jogos, custo, piso } = plano.escolha;
-    pedirAFrase('.resposta .frase',
+    // Um bilhete só não tem troca entre dinheiro e garantia para explicar.
+    if (plano.motivo === 'ok') pedirAFrase('.resposta .frase',
       { v, k, t, jogos, custo, piso, degrauT: plano.degrau?.t, degrauFalta: plano.degrau?.falta });
   } else {
     estado.bilhetes = [];
     estado.mascaras = [];
-    $('secao-bilhetes').innerHTML = '';
-    $('acaso').innerHTML = '';
-    $('bolao').innerHTML = '';
+    for (const id of ['secao-bilhetes', 'acaso', 'bolao']) $(id).innerHTML = '';
   }
 }
 
@@ -151,11 +146,25 @@ function desenharResposta(plano) {
       ${dinheiro(plano.maisBarato.custo)}. Faltam ${dinheiro(plano.falta)} — ou marque menos
       dezenas.</p>`;
   }
-  if (plano.motivo !== 'ok') {
+  if (!plano.escolha) {
     return `<p class="aviso">Não há fechamento catalogado para ${estado.dezenas.size} dezenas.</p>`;
   }
 
   const e = plano.escolha;
+  // Um bilhete só. Mostrar "11 acertos garantidos" aqui seria verdade e seria
+  // engano: com um bilhete a garantia é tautologia — ele acerta o que acertar.
+  // O que a pessoa comprou é um bilhete, e é isso que a tela diz.
+  if (plano.motivo === 'um-bilhete') {
+    return `
+      <p class="numero">1</p>
+      <p class="unidade">bilhete de ${e.k} dezenas</p>
+      <p class="detalhe"><b>${dinheiro(e.custo)}</b>${
+      plano.sobra ? ` · sobram ${dinheiro(plano.sobra)}` : ''}</p>
+      <p class="frase">Um bilhete não é fechamento: não há vários jogos se completando para
+        cobrir o que falta a cada um, então não há garantia a comprar — só a sorte de sempre.${
+      e.k < e.v ? ` E das suas ${e.v} dezenas, só ${e.k} entram nele.` : ''}</p>
+      <p class="ressalva">${chanceDeCairDentro(e.v)}</p>`;
+  }
   const selo = e.provado
     ? '<span class="selo provado">mínimo provado</span>'
     : `<span class="selo conhecido">menor conhecido</span>
@@ -220,13 +229,29 @@ function chanceDeCairDentro(v) {
     o que acontece em cerca de 1 concurso a cada ${uma}.`;
 }
 
-/// O degrau sempre falta dinheiro: se coubesse no orçamento, ele já teria sido
-/// escolhido — a resposta é a maior garantia que cabe.
+/// A linha logo abaixo da régua. Quando a pessoa pediu uma garantia que não
+/// coube, ela responde ao pedido — é a pergunta que a pessoa fez, e cobra
+/// resposta antes da que o aplicativo faria sozinho. Senão, mostra o degrau
+/// seguinte, que sempre falta dinheiro: se coubesse, já teria sido escolhido.
 function frasedoDegrau(plano) {
-  if (plano.motivo !== 'ok') return '';
+  if (!plano.escolha) return '';
+  const p = plano.pedido;
+  if (p) {
+    return p.degrau
+      ? `Garantir ${p.t} acertos com ${plano.escolha.v} dezenas custa
+         ${dinheiro(p.degrau.custo)} — faltam ${dinheiro(p.degrau.falta)}.`
+      : `Não há fechamento catalogado que garanta ${p.t} acertos com ${plano.escolha.v} dezenas.`;
+  }
   const d = plano.degrau;
   if (!d) return `Não há garantia maior para comprar com ${plano.escolha.v} dezenas.`;
-  return `Por mais ${dinheiro(d.falta)} você sobe de ${d.de} para ${d.t} acertos garantidos.`;
+  // Depois de um bilhete só, o degrau seguinte não é "subir de 11 para 12": é
+  // passar a ter fechamento. A tela não disse 11 nenhum, e não pode partir dele.
+  if (plano.motivo === 'um-bilhete') {
+    return `Por mais ${dinheiro(d.falta)} você compra ${d.jogos} bilhetes que se completam e
+      garantem ${d.t} acertos.`;
+  }
+  return `Por mais ${dinheiro(d.falta)} você sobe de ${plano.escolha.t} para ${d.t} acertos
+    garantidos.`;
 }
 
 async function trazerBilhetes(escolha) {
@@ -270,13 +295,22 @@ function desenharAcaso() {
   const p = estado.acaso.chegam?.[`${e.v}-${e.k}`]?.[e.t];
   if (p == null) return;
   const noChute = 1 - (1 - p) ** e.jogos;
+  // E quanto isso devolve por concurso, em média. Só as faixas de prêmio fixo:
+  // 14 e 15 são rateadas, e somá-las trocaria um número exato por um palpite.
+  // Hipergeométrico, não simulado, e igual para qualquer arranjo dos mesmos
+  // bilhetes — que é justamente o que faz dele a prova de "certeza, não lucro".
+  const solto = estado.acaso.chegam?.[`${UNIVERSO}-${e.k}`] ?? {};
+  const media = e.jogos * [11, 12, 13].reduce(
+    (soma, f) => soma + ((solto[f] ?? 0) - (solto[f + 1] ?? 0)) * estado.precos.premio[f], 0);
   $('acaso').innerHTML = `
     <p>Com ${dinheiro(e.custo)} você compra ${e.jogos} ${e.jogos === 1 ? 'bilhete' : 'bilhetes'}
       de ${e.k} dezenas. Se eles fossem escolhidos no chute, chegariam a ${e.t} acertos em
       <b>${(noChute * 100).toFixed(noChute > 0.995 ? 2 : 1)}%</b> dos sorteios que caem dentro das
       suas ${e.v} dezenas. Com o fechamento, em <b>100%</b>.</p>
     <p class="ressalva">Em média os dois pagam o mesmo: a mesma quantidade de bilhetes do mesmo
-      tamanho tem a mesma expectativa de prêmio, com fechamento ou sem. O que o fechamento
+      tamanho tem a mesma expectativa de prêmio, com fechamento ou sem${media ? `, que aqui é
+      <b>${dinheiro(Math.round(media))}</b> por concurso nas faixas de 11, 12 e 13 acertos — mais
+      o que sair de 14 e 15, que é rateado e ninguém sabe de antemão` : ''}. O que o fechamento
       compra não é lucro — é certeza no lugar de sorte.</p>`;
 }
 
@@ -307,8 +341,7 @@ function desenharPrecos() {
       `<label>${k} ${unidade}<input type="text" inputmode="decimal" data-grupo="${grupo}"
         data-chave="${k}" value="${dinheiro(estado.precos[grupo][k])}"></label>`).join('')}</div>`)
     .join('')}
-    <p class="ajuda">Valores de ${estado.precosPublicados.vigencia}.
-      ${estado.precosPublicados.observacao}</p>`;
+    <p class="ajuda">Valores de ${estado.precosPublicados.vigencia}.</p>`;
 }
 
 function desenharCarteira() {
@@ -510,10 +543,14 @@ function conferirContraOSorteio() {
 /// conferir um sorteio não pode reescrever a história de outro jogo.
 function anotarNaCarteira(sorteadas, voltou) {
   const e = estado.plano.escolha;
-  const registro = estado.carteira.find((r) => r.v === e.v && r.k === e.k && r.t === e.t);
+  const mesmas = (a) => [...(a ?? [])].sort((x, y) => x - y).join(' ');
+  // As dezenas entram na comparação: dois jogos podem ter o mesmo tamanho e a
+  // mesma garantia e ainda assim ser jogos diferentes, e o retorno é de um só.
+  const registro = estado.carteira.find(
+    (r) => r.v === e.v && r.k === e.k && r.t === e.t &&
+      mesmas(r.dezenas) === mesmas(estado.dezenas));
   if (!registro) return;
   const ultimo = lembrar('ultimo-sorteio', null);
-  const mesmas = (a) => [...a].sort((x, y) => x - y).join(' ');
   registro.retorno = voltou;
   registro.concurso = ultimo && mesmas(ultimo.dezenas) === mesmas(sorteadas) ? ultimo.concurso : null;
   guardar('carteira', estado.carteira);

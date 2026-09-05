@@ -124,6 +124,41 @@ conferir('com 25 dezenas a garantia vale sempre', acaso.dentro[25] === 1);
 conferir('com 15 dezenas ela vale uma vez em 3.268.760',
   Math.round(1 / acaso.dentro[15]) === 3268760, String(Math.round(1 / acaso.dentro[15])));
 
+// ── o retorno médio, que a tela mostra e que ninguém pode arredondar ────────
+//
+// `acaso.json` guarda "chega a t acertos **ou mais**"; a tela precisa de
+// "exatamente t", e tira uma da outra por diferença. É uma conta de uma linha, e
+// uma conta de uma linha errada aqui viraria uma promessa de dinheiro errada na
+// tela. Então aqui a mesma média é refeita do zero, pela definição
+// hipergeométrica, sem tocar no arquivo — e as duas têm de bater ao centavo.
+const precos = await catalogo.carregarPrecos();
+const combinacoes = (n, k) => {
+  if (k < 0 || k > n) return 0;
+  let r = 1;
+  for (let i = 0; i < Math.min(k, n - k); i++) r = (r * (n - i)) / (i + 1);
+  return Math.round(r);
+};
+for (let k = 15; k <= 20; k++) {
+  const solto = acaso.chegam[`25-${k}`];
+  const porDiferenca = [11, 12, 13].reduce(
+    (soma, f) => soma + ((solto[f] ?? 0) - (solto[f + 1] ?? 0)) * precos.premio[f], 0);
+  const daDefinicao = [11, 12, 13].reduce(
+    (soma, f) => soma +
+      (combinacoes(k, f) * combinacoes(25 - k, 15 - f)) / combinacoes(25, 15) * precos.premio[f], 0);
+  conferir(`a média de um bilhete de ${k} bate com a definição`,
+    Math.abs(porDiferenca - daDefinicao) < 0.01,
+    `${porDiferenca.toFixed(4)} vs ${daDefinicao.toFixed(4)}`);
+}
+
+// E o número que a tela de fato mostra hoje, ancorado: um bilhete simples
+// devolve 25,7% do que custa nas faixas fixas. Se um dia a tabela de prêmios ou
+// a de preços mudar, este teste é quem avisa que a conta da tela mudou junto.
+const deUmBilhete = [11, 12, 13].reduce(
+  (soma, f) => soma + ((acaso.chegam['25-15'][f] ?? 0) - (acaso.chegam['25-15'][f + 1] ?? 0)) *
+    precos.premio[f], 0);
+conferir('um bilhete de 15 devolve, em média, cerca de 90 centavos dos R$ 3,50',
+  Math.round(deUmBilhete) === 90, `${(deUmBilhete / 100).toFixed(4)}`);
+
 // ── posições viram dezenas ──────────────────────────────────────────────────
 
 const dezenas = [3, 7, 11, 19, 25, 2];

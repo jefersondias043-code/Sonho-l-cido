@@ -237,6 +237,25 @@ fn conferir(raiz: &str, e: &Linha) -> Result<u64, String> {
         return Err("há bilhete repetido".to_string());
     }
 
+    // Toda dezena do pool entra em algum bilhete — a menos que o fechamento
+    // seja um bilhete só, e aí ele leva `k` das `v` e as outras ficam de fora.
+    //
+    // A tela conta com isso ao pé da letra: só na resposta de um bilhete ela
+    // avisa que parte do que a pessoa marcou não vai ser jogada. Se um
+    // fechamento de vários jogos passasse a deixar dezenas de fora, o
+    // aplicativo pediria para marcar 25 e jogaria 24 sem dizer nada — o tipo de
+    // silêncio que só aparece quando alguém confere o bilhete impresso.
+    let uniao = bilhetes.iter().fold(0u32, |a, b| a | b);
+    let usadas = uniao.count_ones() as usize;
+    let esperadas = if bilhetes.len() == 1 { e.k } else { e.v };
+    if usadas != esperadas {
+        return Err(format!(
+            "os {} bilhetes usam {usadas} dezenas do pool de {}, esperadas {esperadas}",
+            bilhetes.len(),
+            e.v
+        ));
+    }
+
     // A varredura. Todo sorteio de 15 dezenas dentro do pool, um a um.
     let teto: u32 = 1 << e.v;
     let mut sorteio: u32 = (1 << SORTEIO) - 1;

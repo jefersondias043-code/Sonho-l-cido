@@ -1,35 +1,22 @@
-/* Tokens. Dois temas, um conjunto de nomes. */
+/* Tokens. Dois temas, um conjunto de nomes, agrupados aos pares: cor e fundo
+   de um selo são uma decisão só, e separá-los em duas linhas convida a
+   mexer numa e esquecer a outra. */
 :root {
-  --fundo: #f6f7fb;
-  --papel: #ffffff;
-  --tinta: #14181f;
-  --tinta-fraca: #4b5563;
-  --linha: #d7dbe4;
-  --realce: #1d4ed8;
-  --realce-tinta: #ffffff;
-  --provado: #0f6b3f;
-  --provado-fundo: #d8f2e3;
-  --conhecido: #7a4a06;
-  --conhecido-fundo: #fdeccd;
-  --aviso: #8a1c1c;
-  --raio: 14px;
-  --coluna: 34rem;
-  color-scheme: light dark;
+  --fundo: #f6f7fb; --papel: #ffffff;
+  --tinta: #14181f; --tinta-fraca: #4b5563; --linha: #d7dbe4;
+  --realce: #1d4ed8; --realce-tinta: #ffffff;
+  --provado: #0f6b3f; --provado-fundo: #d8f2e3;
+  --conhecido: #7a4a06; --conhecido-fundo: #fdeccd;
+  --aviso: #8a1c1c; --raio: 14px; --coluna: 34rem; color-scheme: light dark;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --fundo: #0b1020;
-    --papel: #151b2c;
-    --tinta: #eef1f7;
-    --tinta-fraca: #a7b0c0;
-    --linha: #2b3550;
-    --realce: #7aa2ff;
-    --realce-tinta: #0b1020;
-    --provado: #7ff0b8;
-    --provado-fundo: #10361f;
-    --conhecido: #ffd28a;
-    --conhecido-fundo: #3a2a08;
+    --fundo: #0b1020; --papel: #151b2c;
+    --tinta: #eef1f7; --tinta-fraca: #a7b0c0; --linha: #2b3550;
+    --realce: #7aa2ff; --realce-tinta: #0b1020;
+    --provado: #7ff0b8; --provado-fundo: #10361f;
+    --conhecido: #ffd28a; --conhecido-fundo: #3a2a08;
     --aviso: #ff9a9a;
   }
 }

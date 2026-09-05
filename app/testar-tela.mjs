@@ -209,6 +209,13 @@ conferir('o acaso é comparado em porcentagem', acaso.includes('%'));
 conferir('e o aplicativo diz que a média é a mesma', acaso.includes('pagam o mesmo'));
 conferir('e não promete ganho', !/vai ganhar|garante lucro|vale a pena/i.test(acaso), acaso);
 
+// O número mais desconfortável que este aplicativo mostra, e o mais honesto: o
+// que os bilhetes devolvem em média por concurso. Sem ele, "em média os dois
+// pagam o mesmo" é uma frase que se lê como consolo; com ele, é uma conta.
+conferir('e diz quanto isso devolve por concurso, em dinheiro',
+  /R\$ [\d.,]+ por concurso nas faixas de 11, 12 e 13 acertos/.test(acaso.replace(/\s+/g, ' ')),
+  acaso);
+
 // ── a varredura exaustiva ───────────────────────────────────────────────────
 
 await pagina.click('#det-conferir summary');
@@ -285,6 +292,16 @@ conferir('e ajusta o dinheiro', (await pagina.inputValue('#valor')).includes('30
   await pagina.inputValue('#valor'));
 conferir('e nenhum aviso de erro sobra', (await pagina.locator('#aviso-intencao').innerText()) === '');
 
+// "quero garantir 14" com R$ 300 não cabe, e antes disto o número era lido,
+// validado e jogado fora: a tela respondia como se ninguém tivesse pedido nada.
+// Agora ela responde **a pergunta que a pessoa fez** — quanto custa aquilo.
+// Colapsando os espaços, que é como a tela desenha e como a pessoa lê: a frase
+// nasce de um literal quebrado em duas linhas no código.
+const linhaDoPedido = (await pagina.locator('#degrau').innerText()).replace(/\s+/g, ' ');
+conferir('e a garantia pedida vira preço na tela, em vez de sumir',
+  /Garantir 14 acertos com 20 dezenas custa R\$ [\d.,]+ — faltam R\$ [\d.,]+/.test(linhaDoPedido),
+  linhaDoPedido);
+
 // E um pedido que ninguém entende diz isso, em vez de mexer no estado.
 await pagina.fill('#intencao', 'bom dia');
 await pagina.click('#enviar-intencao');
@@ -347,6 +364,27 @@ await semMemoria.waitForSelector('.bilhetes li', { timeout: 20000 });
 conferir('sem poder guardar nada, o aplicativo ainda responde',
   (await semMemoria.locator('.bilhetes li').count()) > 0);
 conferir('e sem erro de JavaScript', errosSemMemoria.length === 0, errosSemMemoria.join(' | '));
+
+// ── um bilhete não se veste de garantia ─────────────────────────────────────
+//
+// Com dinheiro para um bilhete só, a manchete deixa de ser um número de acertos
+// e passa a ser o que a pessoa comprou. "11 acertos garantidos" ali seria
+// verdade e seria engano: um bilhete não tem com quem se completar, e a
+// garantia é tautologia — ele acerta o que acertar.
+await semMemoria.fill('#valor', 'R$ 3,50');
+await semMemoria.dispatchEvent('#valor', 'change');
+await semMemoria.click('#escolher');
+await semMemoria.waitForSelector('.bilhetes li', { timeout: 20000 });
+const manchete = await semMemoria.locator('.resposta').innerText();
+conferir('com um bilhete a manchete é o bilhete', /bilhete de \d+ dezenas/.test(manchete), manchete);
+conferir('e não promete acertos garantidos', !/acertos garantidos/.test(manchete), manchete);
+conferir('e diz que um bilhete não é fechamento', manchete.includes('não é fechamento'), manchete);
+conferir('e a tela entrega esse um bilhete',
+  (await semMemoria.locator('.bilhetes li').count()) === 1);
+conferir('e o degrau ensina onde o fechamento começa, sem partir de garantia nenhuma',
+  /bilhetes que se completam/.test(await semMemoria.locator('#degrau').innerText()),
+  await semMemoria.locator('#degrau').innerText());
+
 await trancado.close();
 
 await navegador.close();

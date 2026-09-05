@@ -281,7 +281,7 @@ fn resolver(
     }
 
     if !orcamento.is_zero() {
-        let achado = buscar(&problema, &melhor, orcamento);
+        let achado = buscar(&problema, &melhor, orcamento, (v, k, t), piso);
         if !achado.is_empty() && (melhor.is_empty() || achado.len() < melhor.len()) {
             melhor = achado;
             origem = "motor";
@@ -330,9 +330,72 @@ fn resolver(
     }
 }
 
+/// De quanto em quanto tempo a busca recomeça, com outra semente.
+///
+/// A busca é estocástica, e a variância entre sementes é grande: o próprio
+/// `motor-busca` registra uma medição em que trocar a semente mudou o resultado
+/// em 28 cartelas — mais do que o parâmetro que estava sendo medido. Com uma
+/// semente fixa, uma trajetória azarada não melhorava por durar mais: só ficava
+/// mais longa.
+///
+/// Recomeçar não custa terreno porque cada recomeço parte do melhor que já se
+/// achou. O que se troca é a metade final de uma corrida sem progresso por uma
+/// corrida nova a partir do mesmo lugar. Cinco minutos é o tamanho da fatia
+/// porque abaixo disso o motor mal sai da fase de destruição e reconstrução em
+/// casos grandes, e acima disso um orçamento de uma hora daria poucos sorteios
+/// de dado.
+const FATIA_DE_RECOMECO: u64 = 300;
+const MAXIMO_DE_RECOMECOS: u64 = 12;
+
 /// Põe o motor persistente para trabalhar a partir do que já houver.
-fn buscar(problema: &Problema, inicial: &[Cartela], orcamento: Duration) -> Vec<Cartela> {
-    let config = Configuracao { semente: 20260904, intervalo_progresso: 0, ..Default::default() };
+fn buscar(
+    problema: &Problema,
+    inicial: &[Cartela],
+    orcamento: Duration,
+    caso: (usize, usize, usize),
+    piso: u64,
+) -> Vec<Cartela> {
+    // `CATALOGO_RECOMECOS` fixa o número de recomeços. Existe para que a medição
+    // que justifica este desenho possa ser refeita — com 1 recomeço o gerador
+    // volta a ser a corrida única de semente fixa que era antes.
+    let recomecos = std::env::var("CATALOGO_RECOMECOS")
+        .ok()
+        .and_then(|n| n.parse::<u64>().ok())
+        .filter(|n| *n > 0)
+        .unwrap_or_else(|| (orcamento.as_secs() / FATIA_DE_RECOMECO).clamp(1, MAXIMO_DE_RECOMECOS));
+    let fatia = orcamento / recomecos as u32;
+    let mut melhor = inicial.to_vec();
+
+    for rodada in 0..recomecos {
+        // A semente sai do caso e da rodada, e não do relógio: o catálogo tem
+        // de sair igual em duas máquinas, senão a conferência independente
+        // deixa de ser conferência de nada.
+        let (v, k, t) = caso;
+        let semente = 20260904
+            ^ (v as u64) << 48
+            ^ (k as u64) << 40
+            ^ (t as u64) << 32
+            ^ rodada.wrapping_mul(0x9e37_79b9_7f4a_7c15);
+        let achado = uma_corrida(problema, &melhor, fatia, semente);
+        if !achado.is_empty() && (melhor.is_empty() || achado.len() < melhor.len()) {
+            melhor = achado;
+        }
+        // Chegou ao piso provado: não há o que procurar, e continuar seria
+        // gastar o orçamento das outras entradas.
+        if !melhor.is_empty() && melhor.len() as u64 <= piso {
+            break;
+        }
+    }
+    melhor
+}
+
+fn uma_corrida(
+    problema: &Problema,
+    inicial: &[Cartela],
+    orcamento: Duration,
+    semente: u64,
+) -> Vec<Cartela> {
+    let config = Configuracao { semente, intervalo_progresso: 0, ..Default::default() };
     let Ok(mut motor) = MotorBusca::novo(problema.clone(), config) else {
         return Vec::new();
     };

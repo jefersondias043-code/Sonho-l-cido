@@ -136,11 +136,66 @@ const pedindo14 = melhorEstrategia(indice, precos, {
 });
 conferir('pedir garantia 14 e poder pagar entrega ao menos 14', pedindo14.escolha.t >= 14);
 
+conferir('quem consegue o que pediu não recebe cobrança nenhuma', pedindo14.pedido === null);
+
+// Pedir mais do que cabe não é erro nem é ignorado: o aplicativo passa a
+// responder **a pergunta que a pessoa fez** — quanto custa aquilo — em vez de
+// só entregar o que coube e ficar calado sobre o resto.
 const pedindoDemais = melhorEstrategia(indice, precos, {
-  orcamento: 3000, dezenas: 20, garantiaMinima: 15,
+  orcamento: 3000, dezenas: 20, garantiaMinima: 14,
 });
 conferir('pedir o que não cabe entrega o melhor que cabe', pedindoDemais.motivo === 'ok');
-conferir('e diz que ficou abaixo do pedido', pedindoDemais.abaixoDoPedido === true);
+conferir('e a escolha fica abaixo do pedido', pedindoDemais.escolha.t < 14);
+conferir('e o pedido volta com o preço do que se pediu', pedindoDemais.pedido?.t === 14);
+conferir('que é o degrau mais barato que alcança 14',
+  pedindoDemais.pedido.degrau.t >= 14 &&
+  !escada(indice, precos, 20).some((e) => e.t >= 14 && e.custo < pedindoDemais.pedido.degrau.custo));
+conferir('e que não cabe no bolso, senão já teria sido a resposta',
+  pedindoDemais.pedido.degrau.falta > 0);
+
+// E quando o catálogo não alcança, dizer isso é a resposta certa — melhor do
+// que oferecer calado uma garantia menor como se fosse o que se pediu. Hoje o
+// catálogo publicado alcança 15 acertos em todo pool, então este caminho só se
+// cobra podando o índice: é defesa contra um catálogo futuro mais pobre, e uma
+// defesa que nunca se testa é uma defesa que não existe.
+const podado = {
+  universo: indice.universo,
+  entradas: indice.entradas.filter((e) => e.t <= 12),
+};
+const pedindoOImpossivel = melhorEstrategia(podado, precos, {
+  orcamento: 100000000, dezenas: 25, garantiaMinima: 15,
+});
+conferir('o que o catálogo não alcança volta como pedido sem degrau',
+  pedindoOImpossivel.pedido?.t === 15 && pedindoOImpossivel.pedido.degrau === null,
+  JSON.stringify(pedindoOImpossivel.pedido));
+
+// E o catálogo publicado, hoje, alcança tudo: em todo pool jogável a escada
+// termina em 15 acertos garantidos. Se um dia deixar de terminar, este teste
+// avisa antes de a tela dizer "não há" para alguém.
+conferir('toda escada publicada chega aos 15 acertos',
+  [15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25].every(
+    (v) => escada(indice, precos, v).at(-1).t === 15));
+
+// ── um bilhete não é fechamento ─────────────────────────────────────────────
+//
+// Com dinheiro para um bilhete só, chamar o resultado de "garantia" seria
+// verdade e seria engano: um bilhete acerta o que acertar, e não há vários
+// jogos se completando. O motivo é outro, e a tela conta com isso para trocar
+// a manchete inteira.
+const umBilhete = melhorEstrategia(indice, precos, { orcamento: 350, dezenas: 19 });
+conferir('R$ 3,50 com 19 dezenas é um bilhete, não um fechamento',
+  umBilhete.motivo === 'um-bilhete', umBilhete.motivo);
+conferir('e ele custa o que um bilhete custa', umBilhete.escolha.jogos === 1);
+conferir('e o degrau seguinte já tem mais de um jogo', umBilhete.degrau.jogos > 1);
+
+conferir(
+  'todo plano de um jogo só vem marcado como um bilhete, e nenhum outro',
+  [15, 16, 18, 19, 20, 22, 25].every((v) =>
+    [350, 1400, 6300, 20000, 200000, 2000000].every((o) => {
+      const plano = melhorEstrategia(indice, precos, { orcamento: o, dezenas: v });
+      return !plano.escolha || (plano.motivo === 'um-bilhete') === (plano.escolha.jogos === 1);
+    })),
+);
 
 // ── escolher por mim ────────────────────────────────────────────────────────
 
@@ -149,11 +204,11 @@ for (const orcamento of [400, 500, 2000, 5000, 30000, 500000]) {
   const quantas = melhorPool(indice, precos, orcamento);
   conferir(`o pool escolhido é jogável (R$ ${orcamento / 100})`, quantas >= 15 && quantas <= 25);
   conferir(`e tem resposta dentro do orçamento (R$ ${orcamento / 100})`,
-    melhorEstrategia(indice, precos, { orcamento, dezenas: quantas }).motivo === 'ok');
+    melhorEstrategia(indice, precos, { orcamento, dezenas: quantas }).escolha != null);
   for (let v = quantas + 1; v <= 25; v++) {
     conferir(
       `nenhum pool maior caberia (R$ ${orcamento / 100}, ${v} dezenas)`,
-      melhorEstrategia(indice, precos, { orcamento, dezenas: v }).motivo !== 'ok',
+      melhorEstrategia(indice, precos, { orcamento, dezenas: v }).escolha == null,
     );
   }
   conferir(`mais dinheiro nunca escolhe pool menor (R$ ${orcamento / 100})`,
