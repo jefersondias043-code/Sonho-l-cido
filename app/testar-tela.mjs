@@ -253,6 +253,58 @@ const varredura = await pagina.locator('#varredura').innerText();
 conferir('a varredura confirma a garantia', varredura.includes('está de pé'), varredura);
 conferir('e diz quantos resultados percorreu', /\d[\d.]* resultados possíveis/.test(varredura));
 
+// ── uma lista que ninguém rola ──────────────────────────────────────────────
+//
+// Os 4.198 bilhetes que R$ 15.000 compram davam uma página de 339 mil pixels e
+// 67 mil nós no DOM: a conferência, o bolão e a carteira ficavam a quatrocentas
+// telas de distância, e num telefone barato aquilo é memória que não existe. A
+// lista passou a mostrar os primeiros; o estado continua com todos, e é com
+// todos que se confere, divide e imprime.
+await pagina.fill('#valor', 'R$ 20.000,00');
+await pagina.dispatchEvent('#valor', 'change');
+await pagina.click('#escolher');
+await pagina.waitForSelector('.bilhetes li', { timeout: 30000 });
+await pagina.waitForTimeout(500);
+const listaGrande = await pagina.evaluate(() => ({
+  desenhados: document.querySelectorAll('.bilhetes li').length,
+  altura: document.documentElement.scrollHeight,
+  nos: document.querySelectorAll('*').length,
+  aviso: document.querySelector('#secao-bilhetes .ajuda')?.innerText ?? '',
+}));
+conferir('a lista não desenha milhares de bilhetes',
+  listaGrande.desenhados > 0 && listaGrande.desenhados <= 50, `${listaGrande.desenhados}`);
+conferir('e a página não vira quatrocentas telas',
+  listaGrande.altura < 20000, `${listaGrande.altura} px`);
+conferir('e o DOM continua do tamanho de uma página',
+  listaGrande.nos < 3000, `${listaGrande.nos} nós`);
+conferir('e a tela diz quantos existem de verdade',
+  /4\.\d\d\d bilhetes/.test(listaGrande.aviso.replace(/\s+/g, ' ')), listaGrande.aviso);
+
+// E a conferência exaustiva continua vendo o fechamento inteiro — o que a tela
+// desenha é a lista, não o que ela guarda.
+await pagina.evaluate(() => { document.getElementById('det-conferir').open = true; });
+await pagina.click('#varrer');
+await pagina.waitForFunction(
+  () => document.getElementById('varredura').innerText.includes('Varridos'), null,
+  { timeout: 120000 });
+conferir('e a varredura ainda cobre o fechamento inteiro',
+  (await pagina.locator('#varredura').innerText()).includes('está de pé'),
+  await pagina.locator('#varredura').innerText());
+
+// De volta a um fechamento que cabe inteiro na lista, para o que vem abaixo
+// poder contar `<li>` e saber que está contando bilhetes, e não o limite do
+// desenho.
+await pagina.fill('#valor', 'R$ 65,00');
+await pagina.dispatchEvent('#valor', 'change');
+await pagina.click('#escolher');
+await pagina.waitForSelector('.bilhetes li', { timeout: 20000 });
+await pagina.waitForTimeout(500);
+const cabeInteiro = await pagina.locator('.bilhetes li').count();
+conferir('um fechamento pequeno é desenhado inteiro', cabeInteiro > 0 && cabeInteiro < 50,
+  `${cabeInteiro}`);
+conferir('e sem aviso de lista cortada',
+  (await pagina.locator('#secao-bilhetes .ajuda').count()) === 0);
+
 // ── bolão ───────────────────────────────────────────────────────────────────
 
 await pagina.click('#det-bolao summary');

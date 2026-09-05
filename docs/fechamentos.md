@@ -57,7 +57,7 @@ Daí tudo o mais decorre:
 
 Sem WebAssembly no cliente, sem *web workers*, sem banco de sessões, sem retomada
 de trabalho interrompido. Nada disso tem razão de existir quando não há nada a
-esperar. O cliente inteiro dá **1.498 linhas** somando JavaScript, HTML e CSS —
+esperar. O cliente inteiro dá **1.499 linhas** somando JavaScript, HTML e CSS —
 teto de 1.500 cobrado pela construção —, e o peso inicial (casca, índice, preços
 e distribuições) dá **26 KiB comprimidos**.
 
@@ -129,6 +129,20 @@ que não rolar.
 
 A suíte da tela mede isso num contexto de 390×667: o topo do número dentro da
 janela, e o fim de "acertos garantidos" também.
+
+## Uma lista que ninguém rola
+
+Os 4.198 bilhetes que R$ 15.000 compram viravam **339 mil pixels** de página e
+67 mil nós no DOM. Quatrocentas telas de rolagem entre a lista e tudo o que vem
+depois dela — a conferência sorteio a sorteio, o bolão, a carteira, a tabela de
+preços. Na prática, com um fechamento grande, metade do aplicativo deixava de
+existir; e num telefone barato aquilo é memória que não há.
+
+A lista passou a desenhar os primeiros cinquenta e a dizer quantos existem. O
+que o aplicativo **guarda** não mudou: a varredura exaustiva, a divisão em
+bolão, a conferência contra o sorteio e a impressão dos volantes continuam
+vendo o fechamento inteiro — e a suíte cobra as duas metades, que a lista foi
+cortada e que a varredura ainda cobre tudo.
 
 ## A garantia pedida virou pergunta com resposta
 

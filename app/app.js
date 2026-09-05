@@ -12,6 +12,9 @@ import { escada, melhorEstrategia, melhorPool } from './estrategia.js';
 
 const $ = (id) => document.getElementById(id);
 const UNIVERSO = 25;
+// Quantos bilhetes a lista desenha. Com os 4.198 que R$ 15.000 compram, a página
+// passava de 339 mil pixels — quatrocentas telas até a conferência e o bolão.
+const MOSTRA = 50;
 const guardar = (c, v) => { try { localStorage.setItem(c, JSON.stringify(v)); } catch { /**/ } };
 const lembrar = (c, p) => { try { return JSON.parse(localStorage.getItem(c)) ?? p; } catch { return p; } };
 
@@ -278,14 +281,15 @@ function desenharBilhetes() {
     ${estado.link?.parte == null ? '' : `<p class="ajuda">Você é a parte
       ${estado.link.parte + 1} de ${estado.link.partes} deste bolão: a garantia acima é do bolão
       inteiro, e estes ${estado.bilhetes.length} bilhetes são os que cabem a você.</p>`}
-    <ol class="bilhetes">${estado.bilhetes
-      .map((b) => `<li>${b.map((d) => `<span>${String(d).padStart(2, '0')}</span>`).join('')}</li>`)
-      .join('')}</ol>
+    ${estado.bilhetes.length <= MOSTRA ? '' : `<p class="ajuda">São
+      ${estado.bilhetes.length.toLocaleString('pt-BR')} bilhetes, e a lista mostra os ${MOSTRA}
+      primeiros — copie, baixe ou imprima para ter todos. O que se confere abaixo usa todos.</p>`}
+    <ol class="bilhetes">${estado.bilhetes.slice(0, MOSTRA).map((b) =>
+      `<li>${b.map((d) => `<span>${String(d).padStart(2, '0')}</span>`).join('')}</li>`).join('')}</ol>
     <div class="linha">
-      <button type="button" data-acao="copiar">Copiar</button>${[
-        ['texto', 'Baixar texto'], ['csv', 'Baixar CSV'],
-        ['imprimir', 'Imprimir volantes'], ['guardar', 'Guardar na carteira'],
-      ].map(([a, r]) => `<button type="button" data-acao="${a}" class="discreto">${r}</button>`)
+      <button type="button" data-acao="copiar">Copiar</button>${[['texto', 'Baixar texto'],
+        ['csv', 'Baixar CSV'], ['imprimir', 'Imprimir volantes'], ['guardar', 'Guardar na carteira']]
+        .map(([a, r]) => `<button type="button" data-acao="${a}" class="discreto">${r}</button>`)
         .join('')}
     </div>`;
 }
@@ -344,10 +348,7 @@ function desenharPrecos() {
 }
 
 function desenharCarteira() {
-  if (estado.carteira.length === 0) {
-    $('carteira').innerHTML = '<p class="ajuda">Nada guardado ainda.</p>';
-    return;
-  }
+  if (!estado.carteira.length) { $('carteira').innerHTML = '<p class="ajuda">Nada guardado.</p>'; return; }
   $('carteira').innerHTML = `<ol class="registros">${estado.carteira
     .map((r, i) => `<li><b>${r.t} acertos garantidos</b> · ${r.jogos} jogos de ${r.k} dezenas ·
         ${dinheiro(r.custo)} · ${new Date(r.data).toLocaleDateString('pt-BR')}${
