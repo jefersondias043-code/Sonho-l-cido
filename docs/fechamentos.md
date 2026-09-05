@@ -140,6 +140,8 @@ node app/testar-conferir.mjs             # a varredura do cliente, contra o cat�
 node servidor/testar-intencao.mjs        # o leitor que responde sem modelo
 node servidor/testar-explicar.mjs        # a regra que descarta número inventado
 node app/testar-tela.mjs                 # a tela, num navegador de verdade
+node app/testar-tela.mjs /repo/fechamentos/   # e de novo, na subpasta em que vai ao ar
+node ferramentas/testar-convivencia.mjs       # os dois aplicativos no mesmo endereço
 
 # E a prévia de arquivo único, para abrir o aplicativo sem servidor de arquivos.
 python3 ferramentas/previa-artefato.py previa.html
@@ -164,6 +166,12 @@ que sempre foi — trocar um pelo outro tiraria do ar algo que funciona. O servi
 worker de `fechamentos/` tem escopo mais específico que o da raiz, então é ele
 que atende as páginas de lá; e o carimbo é derivado do conteúdo sem o caminho,
 então montar em `publicar/` ou em `site/fechamentos/` dá o mesmo número.
+
+Que os dois convivem não é suposição: `ferramentas/testar-convivencia.mjs` põe os
+dois no ar juntos, com o service worker do motor já instalado e no comando, e
+cobra que a subpasta abra inteira, assuma as páginas dela e funcione sem rede —
+sem a raiz perder a sua. E a suíte da tela roda duas vezes, na raiz e na subpasta:
+um caminho absoluto esquecido funciona na raiz e quebra só depois de publicado.
 
 `publicar.yml` monta os dois e, **antes de publicar qualquer um**, roda a
 varredura exaustiva das 330 entradas. Uma falha ali bloqueia a publicação do site

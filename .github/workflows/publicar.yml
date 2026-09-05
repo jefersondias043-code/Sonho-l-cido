@@ -168,7 +168,8 @@ jobs:
           node servidor/testar-intencao.mjs
           node servidor/testar-explicar.mjs
           ./construir-app.sh
-          node app/testar-tela.mjs
+          node app/testar-tela.mjs "/${GITHUB_REPOSITORY#*/}/fechamentos/"
+          node ferramentas/testar-convivencia.mjs "/${GITHUB_REPOSITORY#*/}/"
           ./target/release/conferir-tudo publicar/catalogo
 
       - name: Construir o aplicativo de fechamentos no lugar dele

@@ -97,10 +97,20 @@ jobs:
           diff -rq publicar /tmp/em-outro-lugar
 
       - name: A tela, num navegador de verdade
+        # Duas vezes: na raiz e na subpasta em que o site de fato é servido. Um
+        # caminho absoluto esquecido funciona na raiz e quebra só depois de
+        # publicado, que é o pior lugar para descobrir.
         run: |
           npm install --no-save playwright
           npx playwright install --with-deps chromium
           node app/testar-tela.mjs
+          node app/testar-tela.mjs /Sonho-l-cido/fechamentos/
+
+      - name: Os dois aplicativos no mesmo endereço, um dentro do outro
+        # O service worker do motor tem escopo que contém o da subpasta. Este
+        # teste põe os dois no ar juntos e cobra que a subpasta abra, assuma o
+        # comando das páginas dela e funcione sem rede — sem a raiz perder a sua.
+        run: node ferramentas/testar-convivencia.mjs
 
       - name: A prévia de um arquivo só
         # A costura dos cinco módulos num arquivo é transformação de texto, e
