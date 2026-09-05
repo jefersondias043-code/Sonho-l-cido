@@ -442,6 +442,10 @@ function aplicarManual() {
   const [k, t] = ($('m-fechamento').value || '').split('-').map(Number);
   if (estado.dezenas.size !== pool) ajustarPara(pool);
   estado.fixo = k && t ? { v: pool, k, t } : null;
+  // Quem chegou por um link de bolão recebe uma parte, não o fechamento inteiro.
+  // Montando outro fechamento à mão, aquela parte era de outro conjunto — e sem
+  // isto a tela entregaria um terço do novo dizendo ser a parte do bolão antigo.
+  if (estado.fixo) estado.link = null;
   // O campo de dinheiro passa a dizer o preço do que foi escolhido. Sem isto ele
   // continuaria mostrando o orçamento antigo ao lado de uma resposta que custa
   // outra coisa — duas afirmações na mesma tela, uma delas falsa.

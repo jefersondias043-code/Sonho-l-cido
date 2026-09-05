@@ -641,6 +641,35 @@ conferir('e o rodapé diz que este fechamento foi montado à mão',
   (await pagina.locator('#degrau').innerText()).includes('montou este fechamento à mão'),
   await pagina.locator('#degrau').innerText());
 
+// Quem chegou por um link de bolão recebe uma parte. Montando outro fechamento à
+// mão, essa parte era de outro conjunto: entregar um terço do novo chamando de
+// "parte 1 de 3 deste bolão" seria descrever um bolão que não existe mais.
+const daParte = await contexto.newPage();
+await daParte.goto(linkDaParte, { waitUntil: 'networkidle' });
+await daParte.waitForSelector('.bilhetes li');
+const comoParte = await daParte.locator('.bilhetes li').count();
+conferir('quem abre o link ainda recebe a parte dele', comoParte > 0);
+conferir('e a tela diz que é uma parte',
+  (await daParte.locator('#secao-bilhetes').innerText()).includes('Você é a parte'),
+  await daParte.locator('#secao-bilhetes').innerText());
+await daParte.click('#det-manual summary');
+const poolDaParte = await daParte.locator('.grade [aria-pressed=true]').count();
+await daParte.selectOption('#m-pool', String(poolDaParte));
+await daParte.waitForTimeout(500);
+const opcoesDaParte = await daParte.locator('#m-fechamento option').evaluateAll(
+  (os) => os.map((o) => o.value));
+await daParte.selectOption('#m-fechamento', opcoesDaParte[0]);
+await daParte.waitForTimeout(1500);
+const jogosDoNovo = Number((await daParte.locator('.resposta').innerText())
+  .replace(/\s+/g, ' ').match(/(\d+) jogos de/)?.[1] ?? 1);
+conferir('montar à mão desfaz o vínculo com o bolão',
+  !(await daParte.locator('#secao-bilhetes').innerText()).includes('Você é a parte'),
+  (await daParte.locator('#secao-bilhetes').innerText()).replace(/\s+/g, ' ').slice(0, 120));
+conferir('e entrega o fechamento inteiro, não um pedaço dele',
+  (await daParte.locator('.bilhetes li').count()) === Math.min(jogosDoNovo, 50),
+  `${await daParte.locator('.bilhetes li').count()} de ${jogosDoNovo}`);
+await daParte.close();
+
 // ── e o modo automático continua inteiro ────────────────────────────────────
 //
 // A promessa ao usuário foi que o modo de sempre não mudaria. Mexer no dinheiro
