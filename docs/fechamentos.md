@@ -20,9 +20,9 @@ que quase nunca se cobra.
 | R$ 5,00 | 19 | — | 1 bilhete de 15 dezenas | R$ 3,50 | não é fechamento |
 | R$ 25,00 | 22 | **11 acertos** | 6 jogos de 15 dezenas | R$ 21,00 | piso 3 |
 | R$ 100,00 | 23 | **11 acertos** | 15 jogos de 15 dezenas | R$ 52,50 | piso 4 |
-| R$ 400,00 | 25 | **11 acertos** | 56 jogos de 15 dezenas | R$ 196,00 | piso 10 |
-| R$ 1.500,00 | 25 | **12 acertos** | 334 jogos de 15 dezenas | R$ 1.169,00 | piso 55 |
-| R$ 15.000,00 | 25 | **13 acertos** | 3715 jogos de 15 dezenas | R$ 13.002,50 | piso 671 |
+| R$ 400,00 | 25 | **11 acertos** | 55 jogos de 15 dezenas | R$ 192,50 | piso 10 |
+| R$ 1.500,00 | 25 | **12 acertos** | 331 jogos de 15 dezenas | R$ 1.158,50 | piso 55 |
+| R$ 15.000,00 | 25 | **13 acertos** | 3634 jogos de 15 dezenas | R$ 12.719,00 | piso 671 |
 <!-- fim de a tabela do dinheiro -->
 
 A primeira linha é a mais importante do produto: com cinco reais não há
@@ -102,10 +102,10 @@ passou a dizer também quanto custa o que a pessoa quer.
 Ao lado de *"em média os dois pagam o mesmo"* — que era uma frase que se lê como
 consolo — agora vem o número:
 
-> *…que aqui é **R$ 50,30** por concurso nas faixas de 11, 12 e 13 acertos —
+> *…que aqui é **R$ 49,41** por concurso nas faixas de 11, 12 e 13 acertos —
 > mais o que sair de 14 e 15, que é rateado e ninguém sabe de antemão.*
 
-Contra R$ 196,00 gastos. É exato e é hipergeométrico, não simulado: sai das
+Contra R$ 192,50 gastos. É exato e é hipergeométrico, não simulado: sai das
 distribuições de `acaso.json` por diferença, e a suíte refaz a mesma média
 direto da definição, sem tocar no arquivo, para as duas baterem ao centavo. Um
 bilhete simples devolve **25,7%** do que custa nas faixas fixas — e é o mesmo
