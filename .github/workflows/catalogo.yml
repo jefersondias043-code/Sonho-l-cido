@@ -112,6 +112,16 @@ jobs:
         # comando das páginas dela e funcione sem rede — sem a raiz perder a sua.
         run: node ferramentas/testar-convivencia.mjs
 
+      - name: Os números do documento saem do catálogo, e não da memória
+        # `docs/fechamentos.md` cita preços, quantidades e garantias. Cada
+        # passada do motor pode mudá-los, e um preço velho num documento é uma
+        # promessa que o aplicativo não cumpre mais. A ferramenta reescreve a
+        # tabela do catálogo; se o resultado diferir do que está versionado, é
+        # porque alguém esqueceu de rodá-la.
+        run: |
+          python3 ferramentas/numeros-do-catalogo.py --gravar
+          git diff --exit-code docs/fechamentos.md
+
       - name: A prévia de um arquivo só
         # A costura dos cinco módulos num arquivo é transformação de texto, e
         # transformação de texto quebra em silêncio.

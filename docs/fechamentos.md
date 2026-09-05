@@ -7,6 +7,37 @@ Um segundo aplicativo, ao lado do motor. Ele responde a **uma** pergunta:
 A pessoa diz quanto quer gastar e quais dezenas quer jogar. O aplicativo devolve
 os bilhetes prontos e, numa frase, o que exatamente está garantido.
 
+## O que o dinheiro compra
+
+Não é figura de retórica: é o catálogo respondendo. A pessoa diz quanto tem, e o
+aplicativo escolhe o maior pool que cabe no bolso e, dentro dele, a maior
+garantia paga — nesta ordem, porque garantia alta num pool pequeno é uma promessa
+que quase nunca se cobra.
+
+<!-- a tabela do dinheiro: gerada por ferramentas/numeros-do-catalogo.py -->
+| orçamento | dezenas | garantia | fechamento | custo | |
+|---:|---:|---|---|---:|---|
+| R$ 5,00 | 19 | **11 acertos** | 1 jogo de 15 dezenas | R$ 3,50 | mínimo provado |
+| R$ 25,00 | 22 | **11 acertos** | 6 jogos de 15 dezenas | R$ 21,00 | piso 3 |
+| R$ 100,00 | 23 | **11 acertos** | 18 jogos de 15 dezenas | R$ 63,00 | piso 4 |
+| R$ 400,00 | 25 | **11 acertos** | 57 jogos de 15 dezenas | R$ 199,50 | piso 10 |
+| R$ 1.500,00 | 25 | **12 acertos** | 341 jogos de 15 dezenas | R$ 1.193,50 | piso 55 |
+| R$ 15.000,00 | 25 | **13 acertos** | 4198 jogos de 15 dezenas | R$ 14.693,00 | piso 671 |
+<!-- fim de a tabela do dinheiro -->
+
+A linha dos quatrocentos reais é o produto inteiro num lugar só: as vinte e
+cinco dezenas inteiras, onze acertos garantidos, e troco. Ninguém compõe isso de
+cabeça. A última coluna diz o que se pode afirmar de cada linha: **mínimo
+provado** quando nenhum fechamento faz aquilo com menos bilhetes, e o piso
+conhecido quando não.
+
+Nenhum número acima está escrito à mão — nem no texto ao redor, de propósito: um
+preço citado em prosa é o que envelhece primeiro.
+
+A tabela sai de `ferramentas/numeros-do-catalogo.py --gravar`, que a reescreve
+aqui a partir de `catalogo/indice.json`. Cada passada do motor pode mudá-la, e um
+preço velho num documento é uma promessa que o aplicativo não cumpre mais.
+
 ## A decisão que define o produto: o cliente não resolve nada
 
 O espaço de respostas é **finito e pequeno**. Pool de 15 a 25 dezenas, bilhete
@@ -41,12 +72,14 @@ vale a identidade exata
 
 e `t'` organiza as 330:
 
+<!-- a tabela das famílias: gerada por ferramentas/numeros-do-catalogo.py -->
 | situação | quantos casos | quem resolve |
 |---|---:|---|
 | `t' ≤ 0` | 145 | aritmética: um bilhete qualquer já garante, e é mínimo provado |
 | `t' = a` e `k = 15` | 10 | fórmula: são todos os `C(v,15)` bilhetes, mínimo provado |
 | `t' = a` | 45 | sistema de Turán por construção fechada, depois o motor |
 | `0 < t' < a` | 130 | o motor, partindo do melhor que houver |
+<!-- fim de a tabela das famílias -->
 
 ## Mínimo provado e menor conhecido nunca se confundem
 
@@ -62,12 +95,14 @@ encontram. Na tela isso vira dois selos que não se parecem:
 Hoje o catálogo tem **206 das 330 no mínimo provado** e 312 com bilhetes
 publicados. E vale dizer em que cada prova se apoia, porque não são todas iguais:
 
+<!-- a tabela das provas: gerada por ferramentas/numeros-do-catalogo.py -->
 | de onde vem o mínimo | quantas | quem confere |
 |---|---:|---|
 | aritmética fechada — um bilhete de `k` num pool de `v` cruza `k + 15 − v` com qualquer sorteio, e quando isso já alcança `t` o mínimo é 1 | 145 | `conferir-tudo` refaz o argumento |
-| fórmula — `k = 15` com `t = 15` exige que o bilhete **seja** o sorteio, logo todos os `C(v,15)` | 11 | `conferir-tudo` refaz o argumento |
+| fórmula — `k = 15` com `t = 15` exige que o bilhete **seja** o sorteio, logo todos os `C(v,15)` | 10 | `conferir-tudo` refaz o argumento |
 | cota de Turán no avesso | 34 | a cota vem de `motor-core`, validada lá contra números publicados |
-| cota de Schönheim | 17 | idem |
+| cota de Schönheim | 17 | a cota vem de `motor-core`, validada lá contra números publicados |
+<!-- fim de a tabela das provas -->
 
 Nos 155 primeiros o conferidor independente não acredita em ninguém: recalcula. Nos
 51 restantes a prova se apoia numa cota que o `motor-core` implementa e testa
@@ -146,6 +181,9 @@ node ferramentas/testar-convivencia.mjs       # os dois aplicativos no mesmo end
 # E a prévia de arquivo único, para abrir o aplicativo sem servidor de arquivos.
 python3 ferramentas/previa-artefato.py previa.html
 node ferramentas/testar-previa.mjs previa.html
+
+# Os números que este documento cita, recalculados do catálogo.
+python3 ferramentas/numeros-do-catalogo.py --gravar
 ```
 
 `CATALOGO_SAIDA` desvia a escrita e `CATALOGO_SEMENTES` acrescenta catálogos à
