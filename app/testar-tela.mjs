@@ -766,9 +766,27 @@ conferir('e não fala de uma garantia que acabou de negar',
   !manchete.includes('A garantia só vale'), manchete);
 conferir('e a tela entrega esse um bilhete',
   (await semMemoria.locator('.bilhetes li').count()) === 1);
+
 conferir('e o degrau ensina onde o fechamento começa, sem partir de garantia nenhuma',
   /bilhetes que se completam/.test(await semMemoria.locator('#degrau').innerText()),
   await semMemoria.locator('#degrau').innerText());
+
+// "1 bilhetes", "1 jogos", "1 cartelas": o erro que faz a pessoa desconfiar do
+// resto da tela. Com um bilhete só na mão, a página inteira — resposta,
+// carteira, bolão, a lista do modo manual — não pode escrever nenhum deles.
+await semMemoria.click('[data-acao=guardar]');
+await semMemoria.click('#det-bolao summary');
+await semMemoria.click('#det-manual summary');
+await semMemoria.selectOption('#m-pool', '15');
+await semMemoria.waitForTimeout(800);
+const aPaginaToda = await semMemoria.locator('body').innerText();
+const singularErrado = ['1 bilhetes', '1 jogos', '1 cartelas', '1 dezenas', '1 partes']
+  .filter((erro) => aPaginaToda.includes(erro));
+conferir('e nenhum plural sobra num contador de um só', singularErrado.length === 0,
+  singularErrado.join(', '));
+conferir('a carteira guarda "1 jogo", no singular',
+  /· 1 jogo de \d+ dezenas/.test(aPaginaToda.replace(/\s+/g, ' ')),
+  await semMemoria.locator('.registros li').innerText());
 
 // Marcar exatamente as quinze favoritas é o que muita gente faz de primeira, e
 // ali não há fechamento nenhum — nem um degrau acima para comprar. A tela tem de

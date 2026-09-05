@@ -28,6 +28,10 @@ const estado = {
 
 const reais = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 const dinheiro = (centavos) => reais.format((centavos ?? 0) / 100);
+/// "1 bilhete", "2 bilhetes". Um fechamento de uma cartela é raro no modo
+/// automático e comum no manual, e "1 bilhetes" é o tipo de erro que faz a
+/// pessoa desconfiar do resto da tela.
+const plural = (n, um, muitos) => `${n} ${n === 1 ? um : muitos}`;
 
 function emCentavos(texto) {
   const limpo = String(texto).replace(/[^\d,.]/g, '').replace(/\.(?=\d{3}\b)/g, '');
@@ -176,7 +180,7 @@ function desenharResposta(plano) {
   return `
     <p class="numero">${e.t}</p>
     <p class="unidade">acertos garantidos</p>
-    <p class="detalhe">${e.jogos} ${e.jogos === 1 ? 'jogo' : 'jogos'} de ${e.k} dezenas ·
+    <p class="detalhe">${plural(e.jogos, 'jogo', 'jogos')} de ${e.k} dezenas ·
       <b>${dinheiro(e.custo)}</b>${plano.sobra ? ` · sobram ${dinheiro(plano.sobra)}, que não
       compram garantia maior` : ''}</p>
     <p class="selos">${selo}</p>
@@ -292,7 +296,8 @@ function desenharBilhetes() {
   $('secao-bilhetes').innerHTML = `
     ${estado.link?.parte == null ? '' : `<p class="ajuda">Você é a parte
       ${estado.link.parte + 1} de ${estado.link.partes} deste bolão: a garantia acima é do bolão
-      inteiro, e estes ${estado.bilhetes.length} bilhetes são os que cabem a você.</p>`}
+      inteiro, e ${plural(estado.bilhetes.length, 'este bilhete é o que cabe',
+        'estes bilhetes são os que cabem')} a você.</p>`}
     ${estado.bilhetes.length <= MOSTRA ? '' : `<p class="ajuda">São
       ${estado.bilhetes.length.toLocaleString('pt-BR')} bilhetes, e a lista mostra os ${MOSTRA}
       primeiros — copie, baixe ou imprima para ter todos. O que se confere abaixo usa todos.</p>`}
@@ -341,7 +346,8 @@ function desenharBolao() {
   $('bolao').innerHTML = `<ol class="partes">${grupos
     .map((g, i) => {
       const link = volante.linkDaParte(base, { dezenas: estado.dezenas, v, k, t, parte: i, partes });
-      return `<li><b>Parte ${i + 1}</b> — ${g.length} bilhetes · ${dinheiro(g.length * estado.precos.aposta[k])}
+      return `<li><b>Parte ${i + 1}</b> — ${plural(g.length, 'bilhete', 'bilhetes')} ·
+        ${dinheiro(g.length * estado.precos.aposta[k])}
         <button type="button" class="discreto" data-link="${link}">Copiar link</button></li>`;
     })
     .join('')}</ol>`;
@@ -360,7 +366,8 @@ function desenharPrecos() {
 function desenharCarteira() {
   if (!estado.carteira.length) { $('carteira').innerHTML = '<p class="ajuda">Nada guardado.</p>'; return; }
   $('carteira').innerHTML = `<ol class="registros">${estado.carteira
-    .map((r, i) => `<li><b>${r.t} acertos garantidos</b> · ${r.jogos} jogos de ${r.k} dezenas ·
+    .map((r, i) => `<li><b>${r.t} acertos garantidos</b> ·
+        ${plural(r.jogos, 'jogo', 'jogos')} de ${r.k} dezenas ·
         ${dinheiro(r.custo)} · ${new Date(r.data).toLocaleDateString('pt-BR')}${
       r.retorno == null ? ''
         : ` · <b>voltou ${dinheiro(r.retorno)}</b>${r.concurso ? ` no concurso ${r.concurso}` : ''}`}
@@ -424,11 +431,11 @@ function desenharManual() {
   // do texto, e o começo tem de ser o que faz escolher entre uma linha e outra.
   trocarOpcoes('m-fechamento', quais.map((e) => [`${e.k}-${e.t}`,
     `garante ${e.t} acertos · ${dinheiro(e.custo)} ·
-     ${e.jogos} ${e.jogos === 1 ? 'cartela' : 'cartelas'} de ${e.k} dezenas`]));
+     ${plural(e.jogos, 'cartela', 'cartelas')} de ${e.k} dezenas`]));
   // Lista vazia sem explicação é a pessoa achando que o aplicativo quebrou. A
   // frase nomeia o que ela pediu, para ela saber o que afrouxar.
   const pedido = [k && `${k} dezenas por cartela`, t && `${t} acertos garantidos`,
-    teto !== Infinity && `no máximo ${teto} ${teto === 1 ? 'cartela' : 'cartelas'}`].filter(Boolean);
+    teto !== Infinity && `no máximo ${plural(teto, 'cartela', 'cartelas')}`].filter(Boolean);
   const frase = pedido.length < 2 ? pedido.join('')
     : `${pedido.slice(0, -1).join(', ')} e ${pedido.at(-1)}`;
   $('manual').textContent = quais.length ? ''
