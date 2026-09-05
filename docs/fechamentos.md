@@ -57,7 +57,7 @@ Daí tudo o mais decorre:
 
 Sem WebAssembly no cliente, sem *web workers*, sem banco de sessões, sem retomada
 de trabalho interrompido. Nada disso tem razão de existir quando não há nada a
-esperar. O cliente inteiro dá **1.499 linhas** somando JavaScript, HTML e CSS —
+esperar. O cliente inteiro dá **1.498 linhas** somando JavaScript, HTML e CSS —
 teto de 1.500 cobrado pela construção —, e o peso inicial (casca, índice, preços
 e distribuições) dá **26 KiB comprimidos**.
 
@@ -108,6 +108,27 @@ cobrado em `conferir-tudo`, entrada por entrada. Se um fechamento de vários
 jogos passasse a ignorar uma dezena, o aplicativo pediria para marcar 25 e
 jogaria 24 sem dizer nada — o tipo de silêncio que só aparece quando alguém
 confere o bilhete impresso.
+
+## A resposta estava fora da tela
+
+Medido, em vez de suposto: depois do toque em *"escolher por mim"*, o número da
+resposta nascia a **788 px** do topo. Num iPhone SE (390×667) isso é 121 px
+abaixo da dobra — a pessoa tocava no botão e continuava olhando para a grade de
+dezenas, sem nada que dissesse que havia uma resposta mais abaixo. Num iPhone 12
+o número aparecia pela metade e "acertos garantidos" ficava cortado.
+
+O aplicativo tem uma tela só, e a especificação pede que o número da resposta
+seja o maior elemento dela — e era, num lugar que ninguém via.
+
+Agora, quando a pessoa pede que o aplicativo escolha, a tela vai até a resposta:
+o número, o que ele significa, o preço e a ressalva cabem juntos na menor tela
+que ainda se vende. A rolagem é suave, e instantânea para quem pediu menos
+movimento ao sistema. Rolar não acontece quando a pessoa marca dezenas na mão —
+ali ela está trabalhando na grade, e puxar a tela debaixo do dedo seria pior do
+que não rolar.
+
+A suíte da tela mede isso num contexto de 390×667: o topo do número dentro da
+janela, e o fim de "acertos garantidos" também.
 
 ## A garantia pedida virou pergunta com resposta
 

@@ -106,6 +106,32 @@ const tamanhos = await pagina.evaluate(() => {
 conferir('o número da resposta é o maior da tela', tamanhos.resposta === tamanhos.maior,
   `${tamanhos.resposta} vs ${tamanhos.maior}`);
 
+// A resposta tem de estar à vista depois do toque.
+//
+// Ela nasce a quase 800 px do topo: num telefone pequeno, quem tocava em
+// "escolher por mim" ficava olhando para a grade, com a resposta inteira fora
+// da tela. Aqui se cobra na menor tela que ainda se vende — 390x667 — que o
+// número e o que ele é estejam visíveis sem procurar.
+const naDobra = await (async () => {
+  const pequeno = await navegador.newContext({ viewport: { width: 390, height: 667 } });
+  const tela = await pequeno.newPage();
+  await tela.goto(endereco, { waitUntil: 'networkidle' });
+  await tela.click('#escolher');
+  await tela.waitForSelector('.bilhetes li', { timeout: 20000 });
+  await tela.waitForTimeout(800);  // a rolagem é suave
+  const medido = await tela.evaluate(() => {
+    const r = (s) => document.querySelector(s).getBoundingClientRect();
+    return { numero: r('.numero').top, fim: r('.unidade').bottom, altura: innerHeight };
+  });
+  await pequeno.close();
+  return medido;
+})();
+conferir('depois do toque, o número da resposta está na tela',
+  naDobra.numero >= 0 && naDobra.numero < naDobra.altura,
+  `topo em ${Math.round(naDobra.numero)} de ${naDobra.altura}`);
+conferir('e o que ele significa também',
+  naDobra.fim <= naDobra.altura, `acaba em ${Math.round(naDobra.fim)} de ${naDobra.altura}`);
+
 // Alvos de toque de 44 px.
 const pequenos = await pagina.evaluate(() =>
   [...document.querySelectorAll('button, summary, input[type=range]')]
@@ -437,6 +463,11 @@ const manchete = await semMemoria.locator('.resposta').innerText();
 conferir('com um bilhete a manchete é o bilhete', /bilhete de \d+ dezenas/.test(manchete), manchete);
 conferir('e não promete acertos garantidos', !/acertos garantidos/.test(manchete), manchete);
 conferir('e diz que um bilhete não é fechamento', manchete.includes('não é fechamento'), manchete);
+// E não fala d*a* garantia logo depois de dizer que não há garantia nenhuma: a
+// ressalva sobre o sorteio cair dentro do pool é sobre uma promessa que esta
+// resposta não faz.
+conferir('e não fala de uma garantia que acabou de negar',
+  !manchete.includes('A garantia só vale'), manchete);
 conferir('e a tela entrega esse um bilhete',
   (await semMemoria.locator('.bilhetes li').count()) === 1);
 conferir('e o degrau ensina onde o fechamento começa, sem partir de garantia nenhuma',

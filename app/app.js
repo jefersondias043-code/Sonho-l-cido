@@ -51,11 +51,8 @@ async function arrancar() {
   registrarServico();
 
   try {
-    [estado.indice, estado.precosPublicados, estado.acaso] = await Promise.all([
-      catalogo.carregarIndice(),
-      catalogo.carregarPrecos(),
-      catalogo.carregarAcaso(),
-    ]);
+    [estado.indice, estado.precosPublicados, estado.acaso] = await Promise.all(
+      [catalogo.carregarIndice(), catalogo.carregarPrecos(), catalogo.carregarAcaso()]);
   } catch {
     $('resposta').innerHTML =
       '<p class="aviso">Sem internet na primeira visita. Abra de novo quando houver rede — ' +
@@ -158,8 +155,7 @@ function desenharResposta(plano) {
       plano.sobra ? ` · sobram ${dinheiro(plano.sobra)}` : ''}</p>
       <p class="frase">Um bilhete não é fechamento: não há vários jogos se completando para
         cobrir o que falta a cada um, então não há garantia a comprar — só a sorte de sempre.${
-      e.k < e.v ? ` E das suas ${e.v} dezenas, só ${e.k} entram nele.` : ''}</p>
-      <p class="ressalva">${chanceDeCairDentro(e.v)}</p>`;
+      e.k < e.v ? ` E das suas ${e.v} dezenas, só ${e.k} entram nele.` : ''}</p>`;
   }
   const selo = e.provado
     ? '<span class="selo provado">mínimo provado</span>'
@@ -338,8 +334,7 @@ function desenharBolao() {
 }
 
 function desenharPrecos() {
-  const grupos = [['aposta', 'Quanto custa a aposta', 'dezenas'],
-    ['premio', 'Quanto paga cada faixa', 'acertos']];
+  const grupos = [['aposta', 'Quanto custa a aposta', 'dezenas'], ['premio', 'Quanto paga cada faixa', 'acertos']];
   $('tabela-precos').innerHTML = `${grupos.map(([grupo, titulo, unidade]) =>
     `<div class="precos"><h3>${titulo}</h3>${Object.keys(estado.precos[grupo]).map((k) =>
       `<label>${k} ${unidade}<input type="text" inputmode="decimal" data-grupo="${grupo}"
@@ -433,6 +428,10 @@ function sortearDezenas(quantas) {
     [todas[i], todas[j]] = [todas[j], todas[i]];
   }
   trocarDezenas(new Set(todas.slice(0, quantas).sort((a, b) => a - b)));
+  // A resposta nasce a quase 800 px do topo, abaixo da dobra em telefone pequeno:
+  // quem pediu que o aplicativo escolhesse não vai procurar o que ele escolheu.
+  $('resposta').scrollIntoView({ block: 'start',
+    behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
 }
 
 /// Toda troca de dezenas passa por aqui: guarda, desfaz o vínculo com um link de
