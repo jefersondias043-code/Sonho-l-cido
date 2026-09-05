@@ -655,12 +655,12 @@ conferir('mexer no dinheiro devolve o modo automático',
   voltou);
 // O rodapé automático fala de dinheiro e garantia — o degrau seguinte, ou o
 // preço da garantia que a pessoa pediu e ainda não cabe.
+const doAutomatico = [/Por mais R\$/, /Garantir \d+ acertos com \d+ dezenas custa/,
+  /Não há fechamento catalogado que/, /marque mais dezenas/, /bilhetes que se completam/];
+const rodape = await pagina.locator('#degrau').innerText();
 conferir('e o rodapé volta a falar de dinheiro e garantia, como no automático',
-  /Por mais R\$|Garantir \d+ acertos com \d+ dezenas custa|Não há fechamento catalogado que|marque mais dezenas|bilhetes que se completam/
-    .test(await pagina.locator('#degrau').innerText()),
-  await pagina.locator('#degrau').innerText());
-conferir('e não sobrou nada dito à mão',
-  !(await pagina.locator('#degrau').innerText()).includes('montou este fechamento à mão'));
+  doAutomatico.some((r) => r.test(rodape)), rodape);
+conferir('e não sobrou nada dito à mão', !rodape.includes('montou este fechamento à mão'));
 
 // ── segunda visita, sem rede ────────────────────────────────────────────────
 

@@ -430,7 +430,7 @@ function desenharManual() {
   const frase = pedido.length < 2 ? pedido.join('')
     : `${pedido.slice(0, -1).join(', ')} e ${pedido.at(-1)}`;
   $('manual').textContent = quais.length ? ''
-    : `Com ${pool} dezenas não há fechamento catalogado ${frase ? `com ${frase}` : ''}.`.replace(' .', '.');
+    : `Com ${pool} dezenas não há fechamento catalogado${frase ? ` com ${frase}` : ''}.`;
 }
 
 /// Aplica o que foi escolhido: ajusta a marcação ao pool pedido, fixa o
