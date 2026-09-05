@@ -246,7 +246,10 @@ function frasedoDegrau(plano) {
       : `Não há fechamento catalogado que garanta ${p.t} acertos com ${plano.escolha.v} dezenas.`;
   }
   const d = plano.degrau;
-  if (!d) return `Não há garantia maior para comprar com ${plano.escolha.v} dezenas.`;
+  // Marcar as quinze favoritas é natural, e dava numa saída sem porta.
+  if (!d) return plano.motivo === 'um-bilhete'
+    ? `Com ${plano.escolha.v} dezenas não há fechamento a comprar: marque mais dezenas.`
+    : `Não há garantia maior para comprar com ${plano.escolha.v} dezenas.`;
   // Depois de um bilhete só, o degrau seguinte não é "subir de 11 para 12": é
   // passar a ter fechamento. A tela não disse 11 nenhum, e não pode partir dele.
   if (plano.motivo === 'um-bilhete') {
@@ -323,13 +326,10 @@ function desenharBolao() {
   // vazia mandada para uma pessoa de verdade.
   const partes = Math.min(20, estado.bilhetes.length, Math.max(2, Number($('partes').value) || 2));
   const grupos = volante.dividir(estado.bilhetes, partes);
-  const base = location.href.split('#')[0];
-  const { v, k, t } = estado.plano.escolha;
+  const base = location.href.split('#')[0], { v, k, t } = estado.plano.escolha;
   $('bolao').innerHTML = `<ol class="partes">${grupos
     .map((g, i) => {
-      const link = volante.linkDaParte(base, {
-        dezenas: estado.dezenas, v, k, t, parte: i, partes,
-      });
+      const link = volante.linkDaParte(base, { dezenas: estado.dezenas, v, k, t, parte: i, partes });
       return `<li><b>Parte ${i + 1}</b> — ${g.length} bilhetes ·
         ${dinheiro(g.length * estado.precos.aposta[k])}
         <button type="button" class="discreto" data-link="${link}">Copiar link</button></li>`;

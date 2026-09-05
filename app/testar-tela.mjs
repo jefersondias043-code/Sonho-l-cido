@@ -526,6 +526,18 @@ conferir('e o degrau ensina onde o fechamento começa, sem partir de garantia ne
   /bilhetes que se completam/.test(await semMemoria.locator('#degrau').innerText()),
   await semMemoria.locator('#degrau').innerText());
 
+// Marcar exatamente as quinze favoritas é o que muita gente faz de primeira, e
+// ali não há fechamento nenhum — nem um degrau acima para comprar. A tela tem de
+// dizer o que fazer, e não só constatar que não há o que comprar.
+await semMemoria.click('#limpar');
+for (const d of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]) {
+  await semMemoria.click(`.grade [data-dezena="${d}"]`);
+}
+await semMemoria.waitForSelector('.bilhetes li', { timeout: 20000 });
+conferir('com as quinze marcadas, a tela diz o que fazer em vez de dar em nada',
+  (await semMemoria.locator('#degrau').innerText()).includes('marque mais dezenas'),
+  await semMemoria.locator('#degrau').innerText());
+
 await trancado.close();
 
 await navegador.close();

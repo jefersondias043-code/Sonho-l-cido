@@ -103,6 +103,13 @@ E a linha do degrau deixa de partir de uma garantia que a tela não anunciou:
 *"por mais R$ 10,50 você compra 4 bilhetes que se completam e garantem 12
 acertos"*.
 
+Um caso do mesmo tipo: marcar exatamente as quinze dezenas favoritas é o que
+muita gente faz de primeira, e ali não há fechamento nenhum — com 15 dezenas o
+bilhete **é** o pool, e não há degrau acima. A tela dizia *"não há garantia
+maior para comprar com 15 dezenas"*, que é verdade e é uma saída sem porta.
+Agora diz o que fazer: *"com 15 dezenas não há fechamento a comprar: marque mais
+dezenas"*.
+
 Que só o fechamento de um bilhete deixe dezenas de fora não é observação: é
 cobrado em `conferir-tudo`, entrada por entrada. Se um fechamento de vários
 jogos passasse a ignorar uma dezena, o aplicativo pediria para marcar 25 e
