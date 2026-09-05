@@ -364,6 +364,22 @@ const naCarteira = (await outra.locator('.registros li').first().innerText()).re
 const jogosNaCarteira = Number(naCarteira.match(/· (\d+) jogos/)?.[1]);
 conferir('a carteira de quem é parte guarda a parte, e não o bolão',
   jogosNaCarteira === naParte, `${jogosNaCarteira} guardados, ${naParte} na mão`);
+// E o defeito que só aparece no aparelho de outra pessoa: o link carrega o
+// fechamento (`f=v-k-t`), e quem o abre tem de receber bilhetes **daquele**
+// fechamento. Se o aplicativo escolher pelo orçamento guardado ali, cada
+// participante joga um bolão diferente — e a cobertura combinada, que é a razão
+// de existir do bolão, deixa de valer.
+const outroAparelho = await navegador.newContext({ viewport: { width: 390, height: 844 } });
+await outroAparelho.addInitScript(() => localStorage.setItem('orcamento', '2000000'));
+const deOutrem = await outroAparelho.newPage();
+await deOutrem.goto(linkDaParte, { waitUntil: 'networkidle' });
+await deOutrem.waitForSelector('.bilhetes li');
+await deOutrem.waitForTimeout(500);
+const naOutraMao = await deOutrem.locator('.bilhetes li').count();
+conferir('o link entrega a mesma parte em qualquer aparelho',
+  naOutraMao === naParte, `${naOutraMao} aqui, ${naParte} no aparelho de quem dividiu`);
+await outroAparelho.close();
+
 await outra.close();
 
 // ── conferir contra o sorteio ───────────────────────────────────────────────

@@ -375,6 +375,17 @@ outras pessoas", o aplicativo dividia **a parte** e gerava links que dizem
 "parte *i* de *n* do fechamento" — e quem abrisse aquele link receberia outra
 coisa, maior, do que a contagem que estava na tela de quem enviou.
 
+E o pior deles, que só aparece no aparelho de outra pessoa: o link carrega o
+fechamento em `f=v-k-t`, e o aplicativo **ignorava** isso. Os bilhetes vinham do
+fechamento que o orçamento guardado naquele aparelho escolheria. Medido: com
+R$ 20.000 guardados, quem recebia uma parte de cinco bilhetes abria outra coisa
+inteira. Cada participante jogava um bolão diferente, e a cobertura combinada —
+que é a razão de existir do bolão — não valia nada.
+
+Agora o link fixa o fechamento, pondo o orçamento no preço exato dele: a escada
+para naquele degrau, pelo caminho de sempre. E mexer no dinheiro desfaz o
+vínculo com o link, porque a pergunta deixou de ser a do bolão.
+
 E a carteira de quem é parte guardava o fechamento inteiro: um custo que essa
 pessoa não pagou, ao lado de um retorno que é só o dela. A conta não fechava
 para ninguém.

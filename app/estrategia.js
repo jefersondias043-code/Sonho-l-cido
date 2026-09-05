@@ -21,12 +21,11 @@ export function custoDe(entrada, precos) {
 /// fora, e mostrá-la faria a escada mentir sobre o que o dinheiro compra. Em 20
 /// dezenas, garantir 11 e garantir 12 custam os mesmos R$ 14: só o 12 é degrau.
 ///
-/// Daí sai uma propriedade que decide o resto do módulo: **preço e garantia
-/// sobem juntos**, porque a lista é percorrida em ordem de preço e só entra
-/// quem garante mais que todos os anteriores. Uma escada assim responde tudo
-/// sem mais nenhuma busca — a escolha é o último degrau que cabe no bolso, o
-/// próximo passo é o degrau seguinte, e o preço de uma garantia pedida é o
-/// primeiro degrau que a alcança.
+/// Daí sai a propriedade que decide o resto do módulo: **preço e garantia sobem
+/// juntos**, porque a lista é percorrida em ordem de preço e só entra quem
+/// garante mais que todos os anteriores. Uma escada assim responde tudo sem mais
+/// nenhuma busca — a escolha é o último degrau que cabe no bolso, o próximo
+/// passo é o seguinte, e o preço de uma garantia pedida é o primeiro que a alcança.
 export function escada(indice, precos, dezenas) {
   const porGarantia = new Map();
   for (const e of indice.entradas) {
@@ -106,11 +105,10 @@ export function melhorEstrategia(indice, precos, pedido) {
 /// dinheiro cobre.
 ///
 /// Perseguir a maior garantia daria o contrário, e daria errado: garantir 15
-/// acertos num pool de 15 dezenas custa um bilhete só, e vale quase nada —
-/// o sorteio cai dentro de 15 dezenas escolhidas uma vez em 3.268.760. A
-/// garantia só existe quando as 15 sorteadas caem no pool, então o que decide
-/// não é o tamanho da promessa: é a chance de ela valer. E essa chance cresce
-/// com o pool, sempre.
+/// acertos num pool de 15 custa um bilhete só e vale quase nada — o sorteio cai
+/// dentro de 15 dezenas escolhidas uma vez em 3.268.760. A garantia só existe
+/// quando as 15 sorteadas caem no pool, então o que decide não é o tamanho da
+/// promessa: é a chance de ela valer, e essa chance cresce com o pool, sempre.
 export function melhorPool(indice, precos, orcamento) {
   for (let v = indice.universo; v > 15; v--) {
     if (melhorEstrategia(indice, precos, { orcamento, dezenas: v }).escolha) return v;

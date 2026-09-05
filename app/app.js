@@ -12,8 +12,7 @@ import { escada, melhorEstrategia, melhorPool } from './estrategia.js';
 
 const $ = (id) => document.getElementById(id);
 const UNIVERSO = 25;
-// Quantos bilhetes a lista desenha. Com os milhares que R$ 15.000 compram, a
-// página passava de 339 mil pixels — quatrocentas telas até a conferência.
+// Quantos a lista desenha: os milhares de R$ 15.000 davam 339 mil pixels de página.
 const MOSTRA = 50;
 const guardar = (c, v) => { try { localStorage.setItem(c, JSON.stringify(v)); } catch { /**/ } };
 const lembrar = (c, p) => { try { return JSON.parse(localStorage.getItem(c)) ?? p; } catch { return p; } };
@@ -63,8 +62,14 @@ async function arrancar() {
   }
   estado.precos = { ...estado.precosPublicados, ...lembrar('precos', {}) };
 
+  // Um link de bolão **fixa** o fechamento: sem isto quem o abre recebe o que o
+  // orçamento guardado no aparelho dele escolheria, e cada um joga um bolão
+  // diferente — sem a cobertura combinada, que é a razão de existir do bolão.
   const doLink = volante.lerLink(location.hash, UNIVERSO);
-  if (doLink) { estado.dezenas = new Set(doLink.dezenas); estado.link = doLink; }
+  const dele = doLink && estado.indice.entradas.find(
+    (e) => e.v === doLink.v && e.k === doLink.k && e.t === doLink.t && e.jogos);
+  if (doLink) estado.dezenas = new Set(doLink.dezenas);
+  if (dele) [estado.link, estado.orcamento] = [doLink, dele.jogos * estado.precos.aposta[doLink.k]];
 
   desenharPrecos();
   desenharCarteira();
@@ -179,13 +184,11 @@ function desenharResposta(plano) {
 
 /// Pede ao servidor uma frase sobre os números que já estão na tela — a troca
 /// entre dinheiro e garantia, ou o que o sorteio rendeu. A frase determinística
-/// já está lá; esta troca por outra, ou não troca. E só troca se não trouxer
-/// **nenhum número** que não tenha saído daqui.
-///
-/// Dinheiro entra na forma em que o Brasil o escreve, e é aí que a regra
-/// falhava: "R$ 199,50" virava os números 199 e 50, nenhum autorizado, e a
-/// frase caía justamente quando dizia o que o modelo foi chamado a explicar.
-/// Reais inteiros, só quando o valor é inteiro — arredondar é calcular.
+/// já está lá; esta troca por outra, ou não troca, e só troca se não trouxer
+/// **nenhum número** que não tenha saído daqui. Dinheiro entra na forma em que
+/// o Brasil o escreve, que é onde a regra falhava: "R$ 199,50" virava 199 e 50,
+/// nenhum autorizado. Reais inteiros só quando o valor é inteiro — arredondar
+/// é calcular.
 const CENTAVOS = { minimumFractionDigits: 2, maximumFractionDigits: 2 };
 const EM_DINHEIRO = new Set(['custo', 'degrauFalta', 'voltou']);
 const NUMEROS = /\d+(?:\.\d{3})*(?:,\d+)?/g;
@@ -376,6 +379,7 @@ function ligarControles() {
   // zerar a tela.
   const trocarOrcamento = (centavos) => {
     if (centavos != null && centavos > 0) estado.orcamento = centavos;
+    estado.link = null;  // mexer no dinheiro é sair do bolão de outra pessoa
     guardar('orcamento', estado.orcamento);
     atualizarDinheiro();
     responder();
@@ -477,10 +481,9 @@ async function varrerTudo() {
   const { sorteios, pior, comQuinze } = await conferir.varrer(estado.mascaras, e.v, e.t);
   $('varredura').innerHTML = pior >= e.t
     ? `Varridos os ${sorteios.toLocaleString('pt-BR')} resultados possíveis dentro das suas
-       ${e.v} dezenas. No pior deles, o melhor bilhete faz <b>${pior} acertos</b> —
-       a garantia de ${e.t} está de pé. ${
-         comQuinze ? `Em ${comQuinze.toLocaleString('pt-BR')} deles, alguém acerta os 15.` : ''
-       }`
+       ${e.v} dezenas. No pior deles, o melhor bilhete faz <b>${pior} acertos</b> — a garantia de
+       ${e.t} está de pé. ${comQuinze
+      ? `Em ${comQuinze.toLocaleString('pt-BR')} deles, alguém acerta os 15.` : ''}`
     : `<b>A garantia não se sustentou</b>: existe resultado em que o melhor bilhete faz só
        ${pior} acertos. Não use este fechamento e avise quem publicou.`;
 }
@@ -526,11 +529,10 @@ function conferirContraOSorteio() {
   anotarNaCarteira(sorteadas, voltou);
   $('conferencia').innerHTML = `
     <p>Melhor bilhete: <b>${melhor} acertos</b>.</p>
-    ${linhas.length
-      ? `<ul>${linhas.map(([a, q]) => `<li>${q} × ${a} acertos</li>`).join('')}</ul>`
+    ${linhas.length ? `<ul>${linhas.map(([a, q]) => `<li>${q} × ${a} acertos</li>`).join('')}</ul>`
       : '<p>Nenhum bilhete premiado.</p>'}
-    <p>Custou ${dinheiro(custo)}, voltou ${dinheiro(voltou)} —
-      <b>${voltou >= custo ? 'saldo de' : 'faltaram'} ${dinheiro(Math.abs(voltou - custo))}</b>.</p>
+    <p>Custou ${dinheiro(custo)}, voltou ${dinheiro(voltou)} — <b>${voltou >= custo ? 'saldo de'
+      : 'faltaram'} ${dinheiro(Math.abs(voltou - custo))}</b>.</p>
     <p class="frase narracao">Prêmios de 14 e 15 acertos variam a cada concurso; os valores
       aqui são os da sua tabela.</p>`;
   pedirAFrase('#conferencia .narracao',
