@@ -6,7 +6,7 @@
 //     node app/testar-estrategia.mjs
 
 import { readFileSync } from 'node:fs';
-import { melhorEstrategia, escada, melhorPool, custoDe } from './estrategia.js';
+import { melhorEstrategia, escada, fechamentosDe, melhorPool, custoDe } from './estrategia.js';
 
 let feitos = 0;
 const falhas = [];
@@ -214,6 +214,71 @@ for (const orcamento of [400, 500, 2000, 5000, 30000, 500000]) {
   conferir(`mais dinheiro nunca escolhe pool menor (R$ ${orcamento / 100})`,
     quantas >= poolAnterior, `${poolAnterior} → ${quantas}`);
   poolAnterior = quantas;
+}
+
+// ── a lista do modo manual ──────────────────────────────────────────────────
+//
+// A escada existe para responder "o que este dinheiro compra" e por isso
+// esconde de propósito o que é caro sem ser melhor. Quem monta do próprio jeito
+// quer ver tudo — inclusive o que a escada esconde.
+
+const ACEITOS = [15, 16, 17, 18, 19, 20];
+
+for (let v = 15; v <= 25; v++) {
+  const lista = fechamentosDe(indice, precos, v);
+  conferir(`a lista de ${v} dezenas só tem fechamentos desse pool`,
+    lista.every((e) => e.v === v));
+  conferir(`a lista de ${v} dezenas só tem cartelas que a lotérica aceita`,
+    lista.every((e) => ACEITOS.includes(e.k)));
+  conferir(`a lista de ${v} dezenas só tem fechamento com bilhetes`,
+    lista.every((e) => e.jogos > 0 && e.soma !== 0));
+  conferir(`a lista de ${v} dezenas vem do mais barato ao mais caro`,
+    lista.every((e, i) => i === 0 || lista[i - 1].custo <= e.custo));
+  conferir(`todo item da lista de ${v} dezenas traz o próprio custo`,
+    lista.every((e) => e.custo === e.jogos * precos.aposta[e.k]));
+
+  // O ponto da lista: ela contém a escada inteira, e mais.
+  const degraus = escada(indice, precos, v);
+  const naLista = new Set(lista.map((e) => `${e.k}-${e.t}`));
+  conferir(`a lista de ${v} dezenas contém todos os degraus`,
+    degraus.every((d) => naLista.has(`${d.k}-${d.t}`)),
+    `${degraus.length} degraus, ${lista.length} na lista`);
+  conferir(`a lista de ${v} dezenas não é menor que a escada`,
+    lista.length >= degraus.length);
+}
+
+// Com 15 dezenas só existe um bilhete possível, e ele acerta tudo o que der
+// para acertar. O catálogo guarda as cinco garantias separadas — 11 a 15 —
+// porque são cinco perguntas diferentes; a lista traz as cinco e o filtro da
+// tela deixa a única que interessa, a de 15.
+const lista15 = fechamentosDe(indice, precos, 15);
+conferir('com 15 dezenas toda a lista é o mesmo bilhete',
+  lista15.length === 5 && lista15.every((e) => e.jogos === 1 && e.k === 15));
+conferir('e o filtro da tela reduz isso a uma linha só',
+  lista15.filter((e) => !lista15.some(
+    (o) => o.k === e.k && o.custo <= e.custo && o.t > e.t)).length === 1);
+
+// A lista maior que a escada é o que justifica ela existir: se as duas fossem
+// sempre iguais, o modo manual não estaria mostrando nada de novo.
+conferir('em algum pool a lista mostra mais do que a escada',
+  [...Array(11)].some((_, i) => fechamentosDe(indice, precos, 15 + i).length
+    > escada(indice, precos, 15 + i).length));
+
+// O filtro da tela: nada de mesmo tamanho de cartela, mesmo preço ou mais caro,
+// e garantia pior. É o único descarte que o modo manual faz, e é descarte de
+// coisa que ninguém escolheria sabendo.
+for (let v = 16; v <= 25; v++) {
+  const lista = fechamentosDe(indice, precos, v);
+  const visivel = lista.filter((e) => !lista.some(
+    (o) => o.k === e.k && o.custo <= e.custo && o.t > e.t));
+  conferir(`o filtro de ${v} dezenas nunca esconde a melhor garantia de um preço`,
+    ACEITOS.every((k) => {
+      const doK = lista.filter((e) => e.k === k);
+      if (!doK.length) return true;
+      const melhorT = Math.max(...doK.map((e) => e.t));
+      return visivel.some((e) => e.k === k && e.t === melhorT);
+    }));
+  conferir(`o filtro de ${v} dezenas deixa alguma coisa`, visivel.length > 0);
 }
 
 // ── preço editado pelo usuário muda a resposta ──────────────────────────────

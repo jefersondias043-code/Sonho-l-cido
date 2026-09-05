@@ -54,6 +54,28 @@
   <div id="acaso"></div>
 </details>
 
+<details id="det-manual">
+  <summary>Montar do meu jeito</summary>
+  <div>
+    <p class="ajuda">Aqui o dinheiro não manda. Você diz quantas dezenas quer no
+      pool, quantas em cada cartela, que garantia quer e no máximo quantas cartelas topa
+      jogar — e o que sobrar disso aparece na lista, do mais barato ao mais caro. Deixe
+      "tanto faz" no que não importar. Cartelas de 15 a 20 dezenas, que são as que a
+      lotérica aceita.</p>
+    <label for="m-pool">Quantas dezenas no pool</label>
+    <select id="m-pool"></select>
+    <label for="m-teto">No máximo quantas cartelas <span class="ajuda">(em branco: todas)</span></label>
+    <input id="m-teto" type="number" min="1" inputmode="numeric" autocomplete="off">
+    <label for="m-k">Dezenas em cada cartela</label>
+    <select id="m-k"></select>
+    <label for="m-t">Garantia de acertos <span class="ajuda">(no mínimo)</span></label>
+    <select id="m-t"></select>
+    <label for="m-fechamento">Qual fechamento montar</label>
+    <select id="m-fechamento"></select>
+    <p id="manual" class="ajuda" aria-live="polite"></p>
+  </div>
+</details>
+
 <details id="det-conferir">
   <summary>Conferir a garantia, sorteio por sorteio</summary>
   <div>

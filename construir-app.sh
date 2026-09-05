@@ -71,13 +71,24 @@ for arquivo in "$PARCIAL"/*; do
 done
 [ "$faltando" -eq 0 ] || exit 1
 
-# O cliente inteiro cabe em menos de 1.500 linhas somando JavaScript, HTML e
+# O cliente inteiro cabe em menos de 1.700 linhas somando JavaScript, HTML e
 # CSS. Não é meta estética: é o teto que mantém o cliente uma coisa que uma
-# pessoa lê inteira numa tarde. Passar dele quer dizer que alguma decisão foi
-# empurrada para cá em vez de resolvida no catálogo.
+# pessoa lê inteira numa tarde.
+#
+# O teto foi 1.500 enquanto havia uma porta de entrada só — a pessoa diz quanto
+# tem, o aplicativo escolhe. A segunda porta, em que ela mesma escolhe o
+# fechamento, custou cerca de duzentas linhas: a lista do catálogo, os quatro
+# filtros, o plano fixo e o ajuste do pool. Nenhuma delas resolve nada; todas
+# são de escolher, e escolha é do usuário, não tem como ser pré-computada.
+#
+# O que este teto protege de verdade — que o cliente não resolva nada — quem
+# cobra é `app/testar-conferir.mjs`, varrendo os fechamentos publicados sorteio
+# a sorteio contra o que o catálogo promete. O número aqui é só o lembrete de
+# que crescer tem preço. Se for preciso subi-lo de novo, que seja por uma porta
+# nova, e não por decisão que devia ter ficado no catálogo.
 linhas=$(cat "$PARCIAL"/*.js "$PARCIAL"/*.css "$PARCIAL"/*.html | wc -l)
-if [ "$linhas" -ge 1500 ]; then
-  echo "o cliente passou de 1.500 linhas: $linhas" >&2
+if [ "$linhas" -ge 1700 ]; then
+  echo "o cliente passou de 1.700 linhas: $linhas" >&2
   exit 1
 fi
 
@@ -87,7 +98,7 @@ casca=$(cat "$PARCIAL"/*.js "$PARCIAL"/*.css "$PARCIAL"/*.html "$PARCIAL"/catalo
   gzip -9 | wc -c)
 
 echo "carimbo $carimbo"
-echo "$linhas linhas de cliente (teto: 1.500)"
+echo "$linhas linhas de cliente (teto: 1.700)"
 echo "$fechamentos fechamentos · ${peso} KiB no total"
 echo "peso inicial (casca + índice, comprimido): $((casca / 1024)) KiB"
 # Tudo passou: só agora a pasta publicável passa a existir.
