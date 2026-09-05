@@ -592,6 +592,15 @@ conferir('os dois filtros juntos valem os dois',
   ambos.every((l) => /de 16 dezenas$/.test(l) && Number(l.match(/^garante (\d+)/)[1]) >= 12),
   ambos.join(' | '));
 
+// Um campo numérico aceita "-5" e "2,5", e nenhum dos dois é um número de
+// cartelas. Valem como "sem teto" — que é o que a pessoa tinha antes de digitar.
+const semTeto = (await opcoesDe(23)).length;
+conferir('um teto negativo vale como nenhum teto',
+  (await opcoesDe(23, '-5')).length === semTeto, `${(await opcoesDe(23, '-5')).length} de ${semTeto}`);
+conferir('e um teto quebrado desce para o inteiro de baixo',
+  (await opcoesDe(23, '5.5')).length === (await opcoesDe(23, '5')).length,
+  `${(await opcoesDe(23, '5.5')).length} contra ${(await opcoesDe(23, '5')).length}`);
+
 // Um pedido impossível não pode deixar a pessoa no escuro: a tela diz o que ela
 // pediu, para ela saber o que afrouxar, em vez de só não ter opção nenhuma.
 await opcoesDe(25, '1');

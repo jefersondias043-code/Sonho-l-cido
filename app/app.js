@@ -415,7 +415,10 @@ function desenharManual() {
   const pool = estado.dezenas.size >= 15 ? estado.dezenas.size : UNIVERSO;
   trocarOpcoes('m-pool', Array.from({ length: UNIVERSO - 14 }, (_, i) => [i + 15, `${i + 15}`]));
   $('m-pool').value = String(pool);
-  const teto = Number($('m-teto').value) || Infinity;
+  // "2,5 cartelas" e "-5 cartelas" são pedidos que não existem; um campo numérico
+  // aceita os dois. Valem como "sem teto", que é o que a pessoa tinha antes.
+  const pedidoDeTeto = Math.floor(Number($('m-teto').value));
+  const teto = pedidoDeTeto >= 1 ? pedidoDeTeto : Infinity;
   const todas = fechamentosDe(estado.indice, estado.precos, pool);
   // Os dois filtros listam só os valores que este pool tem. Oferecer "18 por
   // cartela" onde não existe fechamento de 18 não é dar escolha, é dar um beco.
