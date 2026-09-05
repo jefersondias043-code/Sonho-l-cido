@@ -10,6 +10,14 @@
 <link rel="icon" href="icone.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icone-180.png">
 <link rel="stylesheet" href="estilo.css">
+<link rel="modulepreload" href="estrategia.js">
+<link rel="modulepreload" href="catalogo.js">
+<link rel="modulepreload" href="conferir.js">
+<link rel="modulepreload" href="volante.js">
+<link rel="preload" href="catalogo/indice.json" as="fetch" crossorigin>
+<link rel="preload" href="catalogo/precos.json" as="fetch" crossorigin>
+<link rel="preload" href="catalogo/acaso.json" as="fetch" crossorigin>
+<script type="module" src="app.js"></script>
 </head>
 <body>
 <main>
@@ -113,6 +121,5 @@
   <div class="painel-corpo" id="painel-corpo"></div>
 </div>
 
-<script type="module" src="app.js"></script>
 </body>
 </html>
