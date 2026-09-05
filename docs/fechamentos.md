@@ -139,15 +139,20 @@ Daí tudo o mais decorre:
 
 Sem WebAssembly no cliente, sem *web workers*, sem banco de sessões, sem retomada
 de trabalho interrompido. Nada disso tem razão de existir quando não há nada a
-esperar. O cliente inteiro dá **1.621 linhas** somando JavaScript, HTML e CSS —
-teto de 1.650 cobrado pela construção —, e o peso inicial (casca, índice, preços
-e distribuições) dá **28 KiB comprimidos**.
+esperar. O cliente inteiro dá **1.648 linhas** somando JavaScript, HTML e CSS —
+teto de 1.700 cobrado pela construção —, e o peso inicial (casca, índice, preços
+e distribuições) dá **29 KiB comprimidos**.
 
-O teto foi 1.500 até o segundo modo existir. Ele não subiu porque o cliente
-passou a resolver mais — resolve exatamente o mesmo, nada —, mas porque ganhou
-uma segunda porta de entrada: lista de fechamentos, ajuste do pool, plano fixo.
-Escolher é do usuário, e escolha não tem como ser pré-computada num catálogo. As
-159 linhas são essa porta, e o teto voltou a apertar em cima do que existe.
+O teto foi 1.500 enquanto havia uma porta de entrada só. Ele não subiu porque o
+cliente passou a resolver mais — resolve exatamente o mesmo, nada —, mas porque
+ganhou a segunda porta: a lista do catálogo, os quatro filtros, o plano fixo e o
+ajuste do pool, cerca de duzentas linhas em que não há uma conta de cobertura.
+Escolher é do usuário, e escolha não tem como ser pré-computada.
+
+E o que esse teto de fato protege — que o cliente não resolva nada — quem cobra
+não é ele: é `app/testar-conferir.mjs`, varrendo os fechamentos publicados
+sorteio a sorteio contra o que o catálogo promete. O número na construção é o
+lembrete de que crescer tem preço.
 
 ## A matemática, em quatro linhas
 
@@ -209,15 +214,35 @@ escolhido, todos os fechamentos catalogados em cartelas que a lotérica aceita �
 de 15 a 20 dezenas —, do mais barato ao mais caro, cada linha dizendo quantas
 cartelas, de que tamanho, que garantia e quanto custa.
 
+São quatro coisas que se pede, exatamente as quatro que definem um fechamento:
+
+| o que se pede | como | deixando em branco |
+|---|---|---|
+| quantas dezenas no pool | lista de 15 a 25 | usa as que já estão marcadas |
+| quantas em cada cartela | lista, só os tamanhos que este pool tem | tanto faz |
+| que garantia de acertos | lista, só as garantias que este pool tem, e vale como mínimo | tanto faz |
+| no máximo quantas cartelas | número livre | todas |
+
+O que sobra dos quatro é a lista de fechamentos, e escolher um deles é a
+resposta. E os dois modos, lado a lado:
+
 | | modo automático | montar do meu jeito |
 |---|---|---|
-| o que a pessoa informa | quanto quer gastar | pool, teto de cartelas, fechamento |
+| o que a pessoa informa | quanto quer gastar | as quatro características acima |
 | quem escolhe o fechamento | o aplicativo | a pessoa |
-| o que a lista mostra | os degraus | todos os fechamentos do pool |
+| o que a lista mostra | os degraus | todos os fechamentos que sobram dos filtros |
 | o campo de dinheiro | é o que ela digitou | vira o preço do que ela montou |
 | o rodapé | o degrau seguinte | *"você montou este fechamento à mão"* |
 
-Quatro coisas mereceram cuidado, e as quatro são de tela e não de matemática:
+Cinco coisas mereceram cuidado, e as cinco são de tela e não de matemática:
+
+**Nenhum filtro oferece um beco.** As listas de tamanho de cartela e de garantia
+são feitas do próprio pool: se não existe fechamento de 18 dezenas por cartela
+com 19 no pool, "18" não aparece. Um filtro que oferece o que não existe
+transforma escolha em tentativa e erro.
+
+**A garantia vale como mínimo, e não como igual.** Quem pede 13 acertos aceita
+14 — o que não se aceita é receber 12 tendo pedido 13.
 
 **O descarte que sobra.** Só um: linha do mesmo tamanho de cartela, mesmo preço
 ou mais caro, garantindo menos. Com 15 dezenas o catálogo tem cinco entradas —
@@ -225,9 +250,10 @@ garantias de 11 a 15 — e as cinco são o mesmo bilhete de R$ 3,50; mostrar as
 cinco seria mentir sobre haver escolha. Entre tamanhos **diferentes** nada é
 descartado, porque escolher o tamanho é o que este modo oferece.
 
-**O teto de cartelas.** Quem preenche volante à mão sabe quantos aguenta. O teto
-corta pelo número que está escrito na própria linha, e quando não sobra nada a
-tela diz por quê em vez de ficar com a lista vazia.
+**Lista vazia sem explicação é aplicativo quebrado.** Quando os quatro pedidos
+juntos não deixam nada, a tela repete o que foi pedido — *"com 25 dezenas não há
+fechamento catalogado com no máximo 1 cartela"* — para a pessoa saber o que
+afrouxar.
 
 **O dinheiro não pode contradizer a resposta.** Montar um fechamento de
 R$ 11.424,00 com R$ 300,00 no campo põe duas afirmações na mesma tela, uma delas

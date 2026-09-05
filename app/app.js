@@ -388,26 +388,48 @@ function planoFixo({ v, k, t }) {
     sobra: 0, degrau: null, pedido: null };
 }
 
-/// Redesenha as opções do modo manual a partir do catálogo. A lista de
-/// fechamentos depende do pool e do teto de cartelas, e é só o que existe: não
-/// há como pedir uma configuração que o catálogo não tenha.
+/// Troca as opções de um `select` mantendo a escolha, quando ela sobrevive.
+/// Redesenhar sem isto apagaria o que a pessoa acabou de escolher a cada tecla
+/// digitada no teto de cartelas.
+function trocarOpcoes(id, opcoes) {
+  const antes = $(id).value;
+  $(id).innerHTML = opcoes.map(([v, texto]) => `<option value="${v}">${texto}</option>`).join('');
+  if (opcoes.some(([v]) => String(v) === antes)) $(id).value = antes;
+}
+
+/// Redesenha o modo manual a partir do catálogo. Quatro coisas se pede aqui —
+/// pool, dezenas por cartela, garantia e quantas cartelas —, e as quatro só
+/// oferecem o que existe: não há como pedir uma configuração que o catálogo não
+/// tenha, nem chegar a uma tela vazia sem saber por quê.
 function desenharManual() {
   const pool = Number($('m-pool').value) || estado.dezenas.size || UNIVERSO;
   const teto = Number($('m-teto').value) || Infinity;
+  const todas = fechamentosDe(estado.indice, estado.precos, pool);
+  // Os dois filtros listam só os valores que este pool tem. Oferecer "18 por
+  // cartela" onde não existe fechamento de 18 não é dar escolha, é dar um beco.
+  for (const [id, campo, rotulo] of [['m-k', 'k', 'por cartela'], ['m-t', 't', 'acertos']]) {
+    trocarOpcoes(id, [['', 'tanto faz'], ...[...new Set(todas.map((e) => e[campo]))]
+      .sort((a, b) => a - b).map((n) => [n, `${n} ${rotulo}`])]);
+  }
+  const k = Number($('m-k').value);
+  const t = Number($('m-t').value);
   // Duas linhas com o mesmo tamanho de cartela e o mesmo preço, uma garantindo
   // menos, é ruído: ninguém escolheria a menor. A escada some com as dominadas
   // entre tamanhos diferentes; aqui só somem as dominadas dentro do mesmo
   // tamanho, porque escolher o tamanho é justamente o que este modo oferece.
-  const quais = fechamentosDe(estado.indice, estado.precos, pool)
-    .filter((e) => e.jogos <= teto)
-    .filter((e, _, todas) => !todas.some((o) => o.k === e.k && o.custo <= e.custo && o.t > e.t));
-  const antes = $('m-fechamento').value;
-  $('m-fechamento').innerHTML = quais.map((e) => `<option value="${e.k}-${e.t}">${e.jogos}
-    ${e.jogos === 1 ? 'cartela' : 'cartelas'} de ${e.k} dezenas · garante ${e.t} acertos ·
-    ${dinheiro(e.custo)}</option>`).join('');
-  if (quais.some((e) => `${e.k}-${e.t}` === antes)) $('m-fechamento').value = antes;
+  const quais = todas
+    .filter((e) => e.jogos <= teto && (!k || e.k === k) && (!t || e.t >= t))
+    .filter((e, _, ate) => !ate.some((o) => o.k === e.k && o.custo <= e.custo && o.t > e.t));
+  trocarOpcoes('m-fechamento', quais.map((e) => [`${e.k}-${e.t}`,
+    `${e.jogos} ${e.jogos === 1 ? 'cartela' : 'cartelas'} de ${e.k} dezenas ·
+     garante ${e.t} acertos · ${dinheiro(e.custo)}`]));
+  // Lista vazia sem explicação é a pessoa achando que o aplicativo quebrou. A
+  // frase nomeia o que ela pediu, para ela saber o que afrouxar.
+  const pedido = [k && `${k} dezenas por cartela`, t && `${t} acertos garantidos`,
+    teto !== Infinity && `no máximo ${teto} ${teto === 1 ? 'cartela' : 'cartelas'}`]
+    .filter(Boolean).join(', ');
   $('manual').textContent = quais.length ? ''
-    : `Com ${pool} dezenas não há fechamento catalogado em até ${teto} cartelas.`;
+    : `Com ${pool} dezenas não há fechamento catalogado ${pedido ? `com ${pedido}` : ''}.`;
 }
 
 /// Aplica o que foi escolhido: ajusta a marcação ao pool pedido, fixa o
@@ -485,7 +507,7 @@ function ligarControles() {
   });
 
   // O pool e o teto redesenham a lista; escolher um fechamento troca a resposta.
-  for (const id of ['m-pool', 'm-teto']) {
+  for (const id of ['m-pool', 'm-teto', 'm-k', 'm-t']) {
     $(id).addEventListener('input', () => { desenharManual(); aplicarManual(); });
   }
   $('m-fechamento').addEventListener('change', aplicarManual);

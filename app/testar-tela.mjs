@@ -514,8 +514,10 @@ await pagina.unroute('**/api/explicar');
 
 await pagina.click('#det-manual summary');
 
-const opcoesDe = async (pool, teto = '') => {
+const opcoesDe = async (pool, teto = '', k = '', t = '') => {
   await pagina.selectOption('#m-pool', String(pool));
+  await pagina.selectOption('#m-k', String(k));
+  await pagina.selectOption('#m-t', String(t));
   await pagina.fill('#m-teto', teto);
   await pagina.dispatchEvent('#m-teto', 'input');
   return (await pagina.locator('#m-fechamento option').allInnerTexts())
@@ -545,16 +547,48 @@ conferir('o teto de cartelas encurta a lista', de23ate20.length < de23.length,
 conferir('e nada acima do teto sobra',
   de23ate20.every((t) => Number(t.match(/^(\d+) cartelas?/)[1]) <= 20), de23ate20.join(' | '));
 
-// Um teto impossível não pode deixar a pessoa no escuro: a tela diz por que a
-// lista está vazia, em vez de simplesmente não ter opção nenhuma.
+// As outras duas características que a pessoa pode pedir direto: quantas
+// dezenas em cada cartela, e que garantia. Cada uma corta a lista, e só oferece
+// valores que este pool tem — pedir 18 por cartela onde não há fechamento de 18
+// seria oferecer um beco.
+const valoresDe = async (id) => (await pagina.locator(`#${id} option`)
+  .evaluateAll((os) => os.map((o) => o.value))).filter(Boolean).map(Number);
+
+await opcoesDe(23);
+const porCartela = await valoresDe('m-k');
+const garantias = await valoresDe('m-t');
+conferir('o filtro de dezenas por cartela oferece só o que a lotérica aceita',
+  porCartela.length > 1 && porCartela.every((k) => k >= 15 && k <= 20), porCartela.join(','));
+conferir('e o de garantia, só acertos que existem no catálogo',
+  garantias.length > 1 && garantias.every((t) => t >= 11 && t <= 15), garantias.join(','));
+
+const so18 = await opcoesDe(23, '', 18);
+conferir('pedir 18 dezenas por cartela deixa só cartelas de 18',
+  so18.length > 0 && so18.every((l) => /de 18 dezenas/.test(l)), so18.join(' | '));
+
+const garante13 = await opcoesDe(23, '', '', 13);
+conferir('pedir 13 acertos não devolve nada que garanta menos',
+  garante13.length > 0 && garante13.every((l) => Number(l.match(/garante (\d+)/)[1]) >= 13),
+  garante13.join(' | '));
+
+// Os dois juntos, que é onde um filtro mal-feito devolveria a lista inteira.
+const ambos = await opcoesDe(23, '', 16, 12);
+conferir('os dois filtros juntos valem os dois',
+  ambos.every((l) => /de 16 dezenas/.test(l) && Number(l.match(/garante (\d+)/)[1]) >= 12),
+  ambos.join(' | '));
+
+// Um pedido impossível não pode deixar a pessoa no escuro: a tela diz o que ela
+// pediu, para ela saber o que afrouxar, em vez de só não ter opção nenhuma.
 await opcoesDe(25, '1');
+const semSaida = await pagina.locator('#manual').innerText();
 conferir('um teto impossível é explicado, e não silencioso',
-  (await pagina.locator('#manual').innerText()).includes('não há fechamento catalogado'),
-  await pagina.locator('#manual').innerText());
+  semSaida.includes('não há fechamento catalogado'), semSaida);
+conferir('e a explicação nomeia o que foi pedido',
+  semSaida.includes('no máximo 1 cartela'), semSaida);
 
 // E o essencial: escolher na lista monta *aquele* fechamento. Não o mais
 // próximo, não o que o dinheiro compraria — aquele.
-await opcoesDe(22, '');
+await opcoesDe(22, '', '', '');
 const alvoManual = (await pagina.locator('#m-fechamento option').allInnerTexts())
   .map((t) => t.replace(/\s+/g, ' ').trim());
 // O texto das opções quebra linha; escolhe-se pelo valor, no mesmo índice.
