@@ -240,7 +240,7 @@ resposta. E os dois modos, lado a lado:
 | o campo de dinheiro | é o que ela digitou | vira o preço do que ela montou |
 | o rodapé | o degrau seguinte | *"você montou este fechamento à mão"* |
 
-Cinco coisas mereceram cuidado, e as cinco são de tela e não de matemática:
+Seis coisas mereceram cuidado, e as seis são de tela e não de matemática:
 
 **Nenhum filtro oferece um beco.** As listas de tamanho de cartela e de garantia
 são feitas do próprio pool: se não existe fechamento de 18 dezenas por cartela
