@@ -22,6 +22,9 @@ import sys
 from collections import Counter
 
 DOC = 'docs/fechamentos.md'
+# O README também cita os mesmos números, num parágrafo só — e envelhecia
+# sozinho, porque a guarda só olhava para o documento longo.
+LEIAME = 'README.md'
 SORTEIO = 15
 
 
@@ -101,12 +104,34 @@ const indice = { universo: b.universo, entradas: b.entradas.map(
   ([v,k,t,piso,jogos,provado,metodo,soma]) =>
     ({v,k,t,piso,jogos,provado:provado===1,metodo:b.metodos[metodo],soma})) };
 const dinheiro = (c) => (c/100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+// O exemplo da garantia pedida, que o documento cita em prosa: com R$ 300 e 20
+// dezenas, quanto custa garantir 14 e quanto falta para lá.
+const pedido = m.escada(indice, precos, 20).find((e) => e.t >= 14);
+console.error(JSON.stringify({
+  pedidoCusto: dinheiro(pedido.custo), pedidoFalta: dinheiro(pedido.custo - 30000),
+}));
 for (const reais of [5, 25, 100, 400, 1500, 15000]) {
   const c = reais * 100;
   const v = m.melhorPool(indice, precos, c);
   const p = m.melhorEstrategia(indice, precos, { orcamento: c, dezenas: v });
-  if (p.motivo !== 'ok') continue;
+  if (!p.escolha) continue;
   const e = p.escolha;
+  // A resposta de R$ 400 é a que o documento cita em prosa, com o retorno médio
+  // dela ao lado. Sai daqui para não envelhecer sozinha lá.
+  if (reais === 400) {
+    const solto = JSON.parse(readFileSync('catalogo/acaso.json')).chegam[`25-${e.k}`];
+    const media = e.jogos * [11, 12, 13].reduce(
+      (soma, f) => soma + ((solto[f] ?? 0) - (solto[f + 1] ?? 0)) * precos.premio[f], 0);
+    console.error(JSON.stringify({ custo: dinheiro(e.custo), media: dinheiro(Math.round(media)) }));
+  }
+  // Um bilhete não é fechamento, e a linha some se a tabela só souber falar de
+  // fechamento — some justamente a linha de quem tem menos dinheiro.
+  if (p.motivo === 'um-bilhete') {
+    console.log(`| ${dinheiro(c)} | ${e.v} | — | 1 bilhete de ${e.k} dezenas | `
+      + `${dinheiro(e.custo)} | não é fechamento |`);
+    continue;
+  }
   console.log(`| ${dinheiro(c)} | ${e.v} | **${e.t} acertos** | ${e.jogos} ${e.jogos === 1 ? 'jogo' : 'jogos'} de ${e.k} dezenas | `
     + `${dinheiro(e.custo)} | ${e.provado ? 'mínimo provado' : 'piso ' + e.piso} |`);
 }
@@ -116,6 +141,10 @@ r = subprocess.run(['node', '--input-type=module', '-e', ESTRATEGIA],
                    capture_output=True, text=True)
 if r.returncode != 0:
     raise SystemExit(r.stderr.strip() or 'node falhou sem dizer por quê')
+# O node escreve os números citados em prosa no `stderr`, uma linha JSON cada.
+citados = {}
+for linha in r.stderr.strip().splitlines():
+    citados.update(json.loads(linha))
 
 TABELAS = {
     'a tabela do dinheiro': '\n'.join([
@@ -155,42 +184,60 @@ for nome, tabela in TABELAS.items():
 # como um documento perde a voz. Então em vez de gerar, cobra-se: cada um tem de
 # aparecer no texto, e some se alguém mexer no catálogo sem mexer aqui.
 
+# Por arquivo, e não num monte só: os dois citam os mesmos números, e conferir a
+# soma dos textos deixaria um cobrir o outro — foi o que aconteceu na primeira
+# tentativa desta guarda, que passou com o README ainda dizendo 1.494 linhas.
+milhar = lambda n: f'{n:,}'.replace(',', '.')
 NA_PROSA = {
-    'entradas no total': f'**{len(E)} combinações no total**',
-    'quantas estão no mínimo provado': f'**{len(prov)} das {len(E)} no mínimo provado**',
-    'quantas têm bilhetes': f'{com_bilhetes} com bilhetes',
-    'quantas o conferidor refaz sozinho': f'Nos {sem_cota} primeiros',
-    'quantas se apoiam numa cota': f'{len(prov) - sem_cota} restantes',
-    'as entradas sem bilhetes': f'## As {sem_bilhetes} entradas sem bilhetes',
-    'linhas do cliente': f'**{linhas:,} linhas**'.replace(',', '.'),
-    'peso inicial': f'**{peso} KiB comprimidos**',
+    DOC: {
+        'entradas no total': f'**{len(E)} combinações no total**',
+        'quantas estão no mínimo provado': f'**{len(prov)} das {len(E)} no mínimo provado**',
+        'quantas têm bilhetes': f'{com_bilhetes} com bilhetes',
+        'quantas o conferidor refaz sozinho': f'Nos {sem_cota} primeiros',
+        'quantas se apoiam numa cota': f'{len(prov) - sem_cota} restantes',
+        'as entradas sem bilhetes': f'## As {sem_bilhetes} entradas sem bilhetes',
+        'linhas do cliente': f'**{milhar(linhas)} linhas**',
+        'peso inicial': f'**{peso} KiB comprimidos**',
+        # A resposta de R$ 400 e o que ela devolve em média. São dois números do
+        # catálogo citados em prosa, e a busca move os dois.
+        'o retorno médio da resposta de R$ 400': f'**{citados["media"]}** por concurso',
+        'o custo da resposta de R$ 400': f'Contra {citados["custo"]} gastos',
+        'o preço da garantia pedida': (f'Garantir 14 acertos com 20 dezenas custa '
+                                       f'{citados["pedidoCusto"]} — faltam {citados["pedidoFalta"]}'),
+    },
+    LEIAME: {
+        'quantas respostas': f'as {len(E)} respostas',
+        'linhas do cliente': f'{milhar(linhas)} linhas',
+        'peso inicial': f'{peso} KiB',
+    },
 }
 
-texto = open(DOC).read()
+documento = open(DOC).read()
 for nome, tabela in TABELAS.items():
     abre, fecha = marca(nome)
-    i, f = texto.find(abre), texto.find(fecha)
+    i, f = documento.find(abre), documento.find(fecha)
     if i < 0 or f < 0:
         raise SystemExit(f'{DOC} não tem as marcas de {nome}')
-    texto = texto[:i] + abre + '\n' + tabela + '\n' + texto[f:]
-
+    documento = documento[:i] + abre + '\n' + tabela + '\n' + documento[f:]
 # A prosa quebra linha onde couber, e uma frase quebrada no meio do número
 # continua sendo a mesma frase. Compara-se com os espaços achatados.
-corrido = re.sub(r'\s+', ' ', texto)
-faltando = [f'{nome}: esperava {trecho!r}'
-            for nome, trecho in NA_PROSA.items()
-            if re.sub(r'\s+', ' ', trecho) not in corrido]
+achatar = lambda t: re.sub(r'\s+', ' ', t)
+faltando = []
+for arquivo, esperados in NA_PROSA.items():
+    corrido = achatar(documento if arquivo == DOC else open(arquivo).read())
+    faltando += [f'{arquivo} — {nome}: esperava {trecho!r}'
+                 for nome, trecho in esperados.items() if achatar(trecho) not in corrido]
 
 if '--gravar' in sys.argv:
     antes = open(DOC).read()
-    if texto != antes:
-        open(DOC, 'w').write(texto)
+    if documento != antes:
+        open(DOC, 'w').write(documento)
         print(f'\n{DOC}: tabelas atualizadas')
     else:
         print(f'\n{DOC}: já estava igual ao catálogo')
 
 if faltando:
-    print(f'\n{DOC} — números que a prosa deveria citar e não cita:', file=sys.stderr)
+    print('\nnúmeros que a prosa deveria citar e não cita:', file=sys.stderr)
     for f in faltando:
         print(f'  {f}', file=sys.stderr)
     raise SystemExit(1)

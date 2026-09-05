@@ -14,26 +14,39 @@ export function custoDe(entrada, precos) {
   return entrada.jogos * unitario;
 }
 
-// Candidatas a resposta: mesmo pool, bilhetes publicados, tamanho de jogo que
-// a lotérica aceita, preço conhecido.
-function candidatas(indice, precos, dezenas) {
-  return indice.entradas
-    .filter(
-      (e) =>
-        e.v === dezenas &&
-        e.soma !== 0 &&
-        e.jogos != null &&
-        JOGOS_QUE_A_LOTERICA_ACEITA.includes(e.k) &&
-        precos.aposta[e.k],
-    )
-    .map((e) => ({ ...e, custo: custoDe(e, precos) }))
-    // Mais garantia primeiro. Empatada a garantia, o mais barato — é o que
-    // deixa a escada fazer sentido: o degrau seguinte é sempre mais caro
-    // porque garante mais, nunca porque a resposta atual foi mal escolhida.
-    // E empatado o preço, quem tem mais bilhetes, que é mais chance pelo mesmo
-    // dinheiro.
-    .sort((a, b) => b.t - a.t || a.custo - b.custo || b.jogos - a.jogos);
+/// A escada: em que valores de orçamento a resposta muda, e para o quê.
+///
+/// Só os degraus que alguém compraria. Uma opção que custa o mesmo (ou mais) e
+/// garante menos que outra já listada não é degrau nenhum — é dinheiro jogado
+/// fora, e mostrá-la faria a escada mentir sobre o que o dinheiro compra. Em 20
+/// dezenas, garantir 11 e garantir 12 custam os mesmos R$ 14: só o 12 é degrau.
+///
+/// Daí sai a propriedade que decide o resto do módulo: **preço e garantia sobem
+/// juntos**, porque a lista é percorrida em ordem de preço e só entra quem
+/// garante mais que todos os anteriores. Uma escada assim responde tudo sem mais
+/// nenhuma busca — a escolha é o último degrau que cabe no bolso, o próximo
+/// passo é o seguinte, e o preço de uma garantia pedida é o primeiro que a alcança.
+export function escada(indice, precos, dezenas) {
+  const porGarantia = new Map();
+  for (const e of indice.entradas) {
+    if (e.v !== dezenas || e.soma === 0 || e.jogos == null) continue;
+    if (!JOGOS_QUE_A_LOTERICA_ACEITA.includes(e.k) || !precos.aposta[e.k]) continue;
+    const com = { ...e, custo: custoDe(e, precos) };
+    const atual = porGarantia.get(e.t);
+    if (!atual || com.custo < atual.custo) porGarantia.set(e.t, com);
+  }
+  const degraus = [];
+  let melhorAteAqui = 0;
+  for (const e of [...porGarantia.values()].sort((a, b) => a.custo - b.custo || b.t - a.t)) {
+    if (e.t <= melhorAteAqui) continue;
+    melhorAteAqui = e.t;
+    degraus.push(e);
+  }
+  return degraus;
 }
+
+const passo = (degrau, orcamento) =>
+  (degrau ? { ...degrau, falta: degrau.custo - orcamento } : null);
 
 /// A resposta do aplicativo a "como gasto melhor este dinheiro".
 ///
@@ -46,69 +59,43 @@ export function melhorEstrategia(indice, precos, pedido) {
     return { motivo: 'poucas-dezenas', faltam: 15 - dezenas, escolha: null };
   }
 
-  const lista = candidatas(indice, precos, dezenas);
-  if (lista.length === 0) {
-    return { motivo: 'sem-catalogo', escolha: null };
-  }
+  const degraus = escada(indice, precos, dezenas);
+  if (degraus.length === 0) return { motivo: 'sem-catalogo', escolha: null };
 
-  const cabem = lista.filter((e) => e.custo <= orcamento);
-  if (cabem.length === 0) {
+  // A escada sobe de preço, então o que cabe no bolso é sempre um prefixo dela.
+  const cabem = degraus.filter((e) => e.custo <= orcamento).length;
+  if (cabem === 0) {
     // Nem o mais barato cabe. Dizer isso, e dizer quanto falta, vale mais do
     // que uma tela vazia.
-    const maisBarato = lista.reduce((a, b) => (b.custo < a.custo ? b : a));
     return {
       motivo: 'sem-dinheiro',
       escolha: null,
-      maisBarato,
-      falta: maisBarato.custo - orcamento,
+      maisBarato: degraus[0],
+      falta: degraus[0].custo - orcamento,
     };
   }
 
-  // O pedido de garantia mínima é uma preferência, não uma ordem: se não couber
-  // no dinheiro, a resposta é a melhor que cabe, dizendo que ficou abaixo.
-  const noPedido = cabem.filter((e) => e.t >= garantiaMinima);
-  const escolha = (noPedido.length ? noPedido : cabem)[0];
-
+  const escolha = degraus[cabem - 1];
   return {
-    motivo: 'ok',
+    // Um bilhete só não é fechamento: não há jogos se completando para cobrir
+    // o que falta a cada um. Chamar aquilo de garantia esconde da pessoa o que
+    // ela comprou, que é um bilhete — e, se ela marcou mais dezenas do que
+    // cabem nele, esconde também que parte do que ela escolheu não vai ser
+    // jogada.
+    motivo: escolha.jogos === 1 ? 'um-bilhete' : 'ok',
     escolha,
     sobra: orcamento - escolha.custo,
-    abaixoDoPedido: garantiaMinima > escolha.t,
-    degrau: degrauSeguinte(lista, escolha, orcamento),
+    // O próximo degrau: a garantia seguinte, e quanto falta para ela. É o
+    // número que ensina a economia do problema sem uma linha de explicação
+    // técnica — *"por mais R$ 118 você sobe de 13 para 14 acertos garantidos"*.
+    degrau: passo(degraus[cabem], orcamento),
+    // E o outro lado da mesma pergunta: quando a pessoa diz de quanto quer a
+    // garantia, quanto custa exatamente isso. `degrau: null` aqui quer dizer
+    // que o catálogo não alcança tanto com estas dezenas.
+    pedido: garantiaMinima > escolha.t
+      ? { t: garantiaMinima, degrau: passo(degraus.find((e) => e.t >= garantiaMinima), orcamento) }
+      : null,
   };
-}
-
-/// O próximo degrau: a garantia seguinte mais barata, e quanto falta para ela.
-///
-/// É o número que ensina a economia do problema sem uma linha de explicação
-/// técnica — *"por mais R$ 118 você sobe de 13 para 14 acertos garantidos"*.
-function degrauSeguinte(lista, escolha, orcamento) {
-  const acima = lista.filter((e) => e.t > escolha.t);
-  if (acima.length === 0) return null;
-  const alvo = acima.reduce((a, b) => (b.custo < a.custo ? b : a));
-  return { ...alvo, falta: Math.max(0, alvo.custo - orcamento), de: escolha.t };
-}
-
-/// A escada: em que valores de orçamento a resposta muda, e para o quê.
-///
-/// Só os degraus que alguém compraria. Uma opção que custa o mesmo (ou mais) e
-/// garante menos que outra já listada não é degrau nenhum — é dinheiro jogado
-/// fora, e mostrá-la faria a escada mentir sobre o que o dinheiro compra. Em 20
-/// dezenas, garantir 11 e garantir 12 custam os mesmos R$ 14: só o 12 é degrau.
-export function escada(indice, precos, dezenas) {
-  const porGarantia = new Map();
-  for (const e of candidatas(indice, precos, dezenas)) {
-    const atual = porGarantia.get(e.t);
-    if (!atual || e.custo < atual.custo) porGarantia.set(e.t, e);
-  }
-  const degraus = [];
-  let melhorAteAqui = 0;
-  for (const e of [...porGarantia.values()].sort((a, b) => a.custo - b.custo || b.t - a.t)) {
-    if (e.t <= melhorAteAqui) continue;
-    melhorAteAqui = e.t;
-    degraus.push(e);
-  }
-  return degraus;
 }
 
 /// Quantas dezenas marcar, quando a pessoa pede que o aplicativo escolha.
@@ -118,11 +105,10 @@ export function escada(indice, precos, dezenas) {
 /// dinheiro cobre.
 ///
 /// Perseguir a maior garantia daria o contrário, e daria errado: garantir 15
-/// acertos num pool de 15 dezenas custa um bilhete só, e vale quase nada —
-/// o sorteio cai dentro de 15 dezenas escolhidas uma vez em 3.268.760. A
-/// garantia só existe quando as 15 sorteadas caem no pool, então o que decide
-/// não é o tamanho da promessa: é a chance de ela valer. E essa chance cresce
-/// com o pool, sempre.
+/// acertos num pool de 15 custa um bilhete só e vale quase nada — o sorteio cai
+/// dentro de 15 dezenas escolhidas uma vez em 3.268.760. A garantia só existe
+/// quando as 15 sorteadas caem no pool, então o que decide não é o tamanho da
+/// promessa: é a chance de ela valer, e essa chance cresce com o pool, sempre.
 export function melhorPool(indice, precos, orcamento) {
   for (let v = indice.universo; v > 15; v--) {
     if (melhorEstrategia(indice, precos, { orcamento, dezenas: v }).escolha) return v;

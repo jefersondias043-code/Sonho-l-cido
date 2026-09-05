@@ -331,6 +331,22 @@ fn resolver(
 }
 
 /// Põe o motor persistente para trabalhar a partir do que já houver.
+///
+/// Uma corrida só, com semente fixa. Chegou a ser dividida em recomeços de
+/// cinco minutos com sementes diferentes, pela hipótese de que uma trajetória
+/// azarada não melhora por durar mais — o próprio `motor-busca` registra uma
+/// medição em que trocar a semente mudou o resultado em 28 cartelas. Medido,
+/// não se sustentou: com o mesmo tempo total, do zero,
+///
+///     caso        1 corrida   2 recomeços   4 recomeços
+///     21-15-13          117           117           117
+///     22-15-13          296           294           299
+///     23-15-12           83             —            88
+///
+/// Um empate, um ganho de 0,7% e duas perdas, de 1% e de 6%. Cada recomeço
+/// devolve ao motor uma fase de aquecimento que ele já tinha pago, e num
+/// orçamento de uma hora isso se repetiria doze vezes. A hipótese era razoável e
+/// está errada; fica o número, e a corrida única.
 fn buscar(problema: &Problema, inicial: &[Cartela], orcamento: Duration) -> Vec<Cartela> {
     let config = Configuracao { semente: 20260904, intervalo_progresso: 0, ..Default::default() };
     let Ok(mut motor) = MotorBusca::novo(problema.clone(), config) else {

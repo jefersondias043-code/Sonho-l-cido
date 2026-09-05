@@ -25,12 +25,17 @@ export default {
       if (!oficial.ok) throw new Error(String(oficial.status));
 
       const bruto = await oficial.json();
-      const dezenas = (bruto.listaDezenas ?? bruto.dezenasSorteadasOrdemSorteio ?? [])
-        .map(Number)
-        .filter((d) => Number.isInteger(d) && d >= 1 && d <= 25)
-        .sort((a, b) => a - b);
+      // O `Set` não é asseio: uma dezena repetida passaria pelo filtro, faria a
+      // contagem chegar a 15 e entraria na tela como sorteio válido. Melhor
+      // recusar e deixar a pessoa digitar do que conferir contra um sorteio que
+      // não houve.
+      const dezenas = [...new Set(
+        (bruto.listaDezenas ?? bruto.dezenasSorteadasOrdemSorteio ?? [])
+          .map(Number)
+          .filter((d) => Number.isInteger(d) && d >= 1 && d <= 25),
+      )].sort((a, b) => a - b);
 
-      if (dezenas.length !== 15 || !Number.isInteger(bruto.numero)) {
+      if (dezenas.length !== 15 || !Number.isInteger(bruto.numero) || bruto.numero <= 0) {
         throw new Error('resposta da origem fora do formato');
       }
 

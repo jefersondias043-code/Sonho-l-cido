@@ -13,4 +13,6 @@ node_modules/
 capturas/
 /site/
 /publicar/
+/publicar.parcial/
+# (o `trap` da construção apaga; isto é para o caso de ela ser morta no meio)
 /previa.html

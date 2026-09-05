@@ -12,16 +12,16 @@ import { escada, melhorEstrategia, melhorPool } from './estrategia.js';
 
 const $ = (id) => document.getElementById(id);
 const UNIVERSO = 25;
+// Quantos a lista desenha: os milhares de R$ 15.000 davam 339 mil pixels de página.
+const MOSTRA = 50;
 const guardar = (c, v) => { try { localStorage.setItem(c, JSON.stringify(v)); } catch { /**/ } };
-const lembrar = (c, padrao) => {
-  try { return JSON.parse(localStorage.getItem(c)) ?? padrao; } catch { return padrao; }
-};
+const lembrar = (c, p) => { try { return JSON.parse(localStorage.getItem(c)) ?? p; } catch { return p; } };
 
 const estado = {
   orcamento: lembrar('orcamento', 5000), dezenas: new Set(lembrar('dezenas', [])),
   carteira: lembrar('carteira', []), garantiaMinima: 0,
   indice: null, precos: null, precosPublicados: null, acaso: null,
-  plano: null, bilhetes: [], mascaras: [],
+  plano: null, bilhetes: [], todos: [], mascaras: [],
 };
 
 // ── dinheiro ────────────────────────────────────────────────────────────────
@@ -53,24 +53,23 @@ async function arrancar() {
   registrarServico();
 
   try {
-    [estado.indice, estado.precosPublicados, estado.acaso] = await Promise.all([
-      catalogo.carregarIndice(),
-      catalogo.carregarPrecos(),
-      catalogo.carregarAcaso(),
-    ]);
+    [estado.indice, estado.precosPublicados, estado.acaso] = await Promise.all(
+      [catalogo.carregarIndice(), catalogo.carregarPrecos(), catalogo.carregarAcaso()]);
   } catch {
-    $('resposta').innerHTML =
-      '<p class="aviso">Sem internet na primeira visita. Abra de novo quando houver rede — ' +
-      'depois disso o aplicativo funciona sem ela.</p>';
+    $('resposta').innerHTML = '<p class="aviso">Sem internet na primeira visita. Abra de novo '
+      + 'quando houver rede — depois disso o aplicativo funciona sem ela.</p>';
     return;
   }
   estado.precos = { ...estado.precosPublicados, ...lembrar('precos', {}) };
 
+  // Um link de bolão **fixa** o fechamento: sem isto quem o abre recebe o que o
+  // orçamento guardado no aparelho dele escolheria, e cada um joga um bolão
+  // diferente — sem a cobertura combinada, que é a razão de existir do bolão.
   const doLink = volante.lerLink(location.hash, UNIVERSO);
-  if (doLink) {
-    estado.dezenas = new Set(doLink.dezenas);
-    estado.link = doLink;
-  }
+  const dele = doLink && estado.indice.entradas.find(
+    (e) => e.v === doLink.v && e.k === doLink.k && e.t === doLink.t && e.jogos);
+  if (doLink) estado.dezenas = new Set(doLink.dezenas);
+  if (dele) [estado.link, estado.orcamento] = [doLink, dele.jogos * estado.precos.aposta[doLink.k]];
 
   desenharPrecos();
   desenharCarteira();
@@ -79,9 +78,7 @@ async function arrancar() {
 }
 
 function registrarServico() {
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js').catch(() => {});
-  }
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
   const rede = () => ($('rede').textContent = navigator.onLine ? '' : 'sem internet');
   addEventListener('online', rede); addEventListener('offline', rede); rede();
   fetch('sw.js', { cache: 'no-store' }).then((r) => r.text()).then((t) => {
@@ -98,8 +95,7 @@ function atualizarDinheiro() {
 
 function desenharGrade() {
   for (const botao of $('grade').children) {
-    const marcada = estado.dezenas.has(Number(botao.dataset.dezena));
-    botao.setAttribute('aria-pressed', String(marcada));
+    botao.setAttribute('aria-pressed', String(estado.dezenas.has(Number(botao.dataset.dezena))));
   }
   const n = estado.dezenas.size;
   $('contagem').textContent = n === 0 ? '' : `${n} ${n === 1 ? 'dezena' : 'dezenas'}`;
@@ -129,14 +125,13 @@ function responder() {
   if (plano.escolha) {
     trazerBilhetes(plano.escolha);
     const { v, k, t, jogos, custo, piso } = plano.escolha;
-    pedirAFrase('.resposta .frase',
+    // Um bilhete só não tem troca entre dinheiro e garantia para explicar.
+    if (plano.motivo === 'ok') pedirAFrase('.resposta .frase',
       { v, k, t, jogos, custo, piso, degrauT: plano.degrau?.t, degrauFalta: plano.degrau?.falta });
   } else {
-    estado.bilhetes = [];
+    estado.bilhetes = estado.todos = [];
     estado.mascaras = [];
-    $('secao-bilhetes').innerHTML = '';
-    $('acaso').innerHTML = '';
-    $('bolao').innerHTML = '';
+    for (const id of ['secao-bilhetes', 'acaso', 'bolao']) $(id).innerHTML = '';
   }
 }
 
@@ -151,11 +146,24 @@ function desenharResposta(plano) {
       ${dinheiro(plano.maisBarato.custo)}. Faltam ${dinheiro(plano.falta)} — ou marque menos
       dezenas.</p>`;
   }
-  if (plano.motivo !== 'ok') {
+  if (!plano.escolha) {
     return `<p class="aviso">Não há fechamento catalogado para ${estado.dezenas.size} dezenas.</p>`;
   }
 
   const e = plano.escolha;
+  // Um bilhete só. Mostrar "11 acertos garantidos" aqui seria verdade e seria
+  // engano: com um bilhete a garantia é tautologia — ele acerta o que acertar.
+  // O que a pessoa comprou é um bilhete, e é isso que a tela diz.
+  if (plano.motivo === 'um-bilhete') {
+    return `
+      <p class="numero">1</p>
+      <p class="unidade">bilhete de ${e.k} dezenas</p>
+      <p class="detalhe"><b>${dinheiro(e.custo)}</b>${
+      plano.sobra ? ` · sobram ${dinheiro(plano.sobra)}` : ''}</p>
+      <p class="frase">Um bilhete não é fechamento: não há vários jogos se completando para
+        cobrir o que falta a cada um, então não há garantia a comprar — só a sorte de sempre.${
+      e.k < e.v ? ` E das suas ${e.v} dezenas, só ${e.k} entram nele.` : ''}</p>`;
+  }
   const selo = e.provado
     ? '<span class="selo provado">mínimo provado</span>'
     : `<span class="selo conhecido">menor conhecido</span>
@@ -165,7 +173,8 @@ function desenharResposta(plano) {
     <p class="numero">${e.t}</p>
     <p class="unidade">acertos garantidos</p>
     <p class="detalhe">${e.jogos} ${e.jogos === 1 ? 'jogo' : 'jogos'} de ${e.k} dezenas ·
-      <b>${dinheiro(e.custo)}</b>${plano.sobra ? ` · sobram ${dinheiro(plano.sobra)}` : ''}</p>
+      <b>${dinheiro(e.custo)}</b>${plano.sobra ? ` · sobram ${dinheiro(plano.sobra)}, que não
+      compram garantia maior` : ''}</p>
     <p class="selos">${selo}</p>
     <p class="frase">Se as 15 dezenas sorteadas saírem todas entre as suas ${e.v},
       ao menos um destes bilhetes terá <b>${e.t} acertos ou mais</b>. Não é probabilidade:
@@ -175,14 +184,20 @@ function desenharResposta(plano) {
 
 /// Pede ao servidor uma frase sobre os números que já estão na tela — a troca
 /// entre dinheiro e garantia, ou o que o sorteio rendeu. A frase determinística
-/// já está lá; esta troca por outra, ou não troca. E só troca se não trouxer
-/// **nenhum número** que não tenha saído daqui.
+/// já está lá; esta troca por outra, ou não troca, e só troca se não trouxer
+/// **nenhum número** que não tenha saído daqui. Dinheiro entra na forma em que
+/// o Brasil o escreve, que é onde a regra falhava: "R$ 199,50" virava 199 e 50,
+/// nenhum autorizado. Reais inteiros só quando o valor é inteiro — arredondar
+/// é calcular.
+const CENTAVOS = { minimumFractionDigits: 2, maximumFractionDigits: 2 };
+const EM_DINHEIRO = new Set(['custo', 'degrauFalta', 'voltou']);
+const NUMEROS = /\d+(?:\.\d{3})*(?:,\d+)?/g;
 let pedidoDaVez = 0;
 async function pedirAFrase(onde, dados) {
-  const permitidos = new Set(
-    Object.values(dados).filter(Number.isFinite)
-      .flatMap((n) => [String(n), String(Math.round(n / 100))]),
-  );
+  const permitidos = new Set(Object.entries(dados).flatMap(([campo, n]) => (!Number.isFinite(n) ? []
+    : EM_DINHEIRO.has(campo)
+      ? [`${n}`, (n / 100).toLocaleString('pt-BR', CENTAVOS), ...(n % 100 ? [] : [`${n / 100}`])]
+      : [`${n}`])));
   const meu = ++pedidoDaVez;  // uma resposta atrasada não sobrescreve a atual
   try {
     const r = await fetch('api/explicar', {
@@ -193,15 +208,14 @@ async function pedirAFrase(onde, dados) {
     });
     const { frase } = await r.json();
     const alvo = document.querySelector(onde);
-    if (alvo && meu === pedidoDaVez && (frase.match(/\d+/g) ?? []).every((n) => permitidos.has(n))) {
+    if (alvo && meu === pedidoDaVez && (frase.match(NUMEROS) ?? []).every((n) => permitidos.has(n))) {
       alvo.textContent = frase;
     }
   } catch { /* a frase determinística fica */ }
 }
 
-/// Quanto a garantia vale em dinheiro. Sem este número, "garantido" se lê como
-/// lucro garantido — e não é: nas faixas fixas o prêmio de uma cartela costuma
-/// ficar abaixo do que o fechamento inteiro custou.
+/// Quanto a garantia vale em dinheiro. Sem este número "garantido" se lê como
+/// lucro garantido, e nas faixas fixas o prêmio fica abaixo do que se gastou.
 function quantoPagaAGarantia(t) {
   if (t > 13) return `O prêmio de ${t} acertos é rateado e muda a cada concurso.`;
   return `Esses ${t} acertos pagam ${dinheiro(estado.precos.premio[t])} por cartela premiada —
@@ -209,8 +223,8 @@ function quantoPagaAGarantia(t) {
 }
 
 /// A ressalva que faz a garantia ser verdade inteira: ela só vale se as 15
-/// sorteadas caírem dentro do pool, e essa chance — `C(v,15)/C(25,15)`, vinda do
-/// catálogo — é o que separa uma promessa grande de uma promessa útil.
+/// sorteadas caírem no pool, e essa chance — `C(v,15)/C(25,15)`, do catálogo — é
+/// o que separa uma promessa grande de uma promessa útil.
 function chanceDeCairDentro(v) {
   const p = estado.acaso.dentro?.[v];
   if (!p) return '';
@@ -220,13 +234,32 @@ function chanceDeCairDentro(v) {
     o que acontece em cerca de 1 concurso a cada ${uma}.`;
 }
 
-/// O degrau sempre falta dinheiro: se coubesse no orçamento, ele já teria sido
-/// escolhido — a resposta é a maior garantia que cabe.
+/// A linha logo abaixo da régua. Quando a pessoa pediu uma garantia que não
+/// coube, ela responde ao pedido — é a pergunta que a pessoa fez, e cobra
+/// resposta antes da que o aplicativo faria sozinho. Senão, mostra o degrau
+/// seguinte, que sempre falta dinheiro: se coubesse, já teria sido escolhido.
 function frasedoDegrau(plano) {
-  if (plano.motivo !== 'ok') return '';
+  if (!plano.escolha) return '';
+  const p = plano.pedido;
+  if (p) {
+    return p.degrau
+      ? `Garantir ${p.t} acertos com ${plano.escolha.v} dezenas custa
+         ${dinheiro(p.degrau.custo)} — faltam ${dinheiro(p.degrau.falta)}.`
+      : `Não há fechamento catalogado que garanta ${p.t} acertos com ${plano.escolha.v} dezenas.`;
+  }
   const d = plano.degrau;
-  if (!d) return `Não há garantia maior para comprar com ${plano.escolha.v} dezenas.`;
-  return `Por mais ${dinheiro(d.falta)} você sobe de ${d.de} para ${d.t} acertos garantidos.`;
+  // Marcar as quinze favoritas é natural, e dava numa saída sem porta.
+  if (!d) return plano.motivo === 'um-bilhete'
+    ? `Com ${plano.escolha.v} dezenas não há fechamento a comprar: marque mais dezenas.`
+    : `Não há garantia maior para comprar com ${plano.escolha.v} dezenas.`;
+  // Depois de um bilhete só, o degrau seguinte não é "subir de 11 para 12": é
+  // passar a ter fechamento. A tela não disse 11 nenhum, e não pode partir dele.
+  if (plano.motivo === 'um-bilhete') {
+    return `Por mais ${dinheiro(d.falta)} você compra ${d.jogos} bilhetes que se completam e
+      garantem ${d.t} acertos.`;
+  }
+  return `Por mais ${dinheiro(d.falta)} você sobe de ${plano.escolha.t} para ${d.t} acertos
+    garantidos.`;
 }
 
 async function trazerBilhetes(escolha) {
@@ -239,10 +272,10 @@ async function trazerBilhetes(escolha) {
   }
   if (estado.plano?.escolha !== escolha) return; // a pessoa mudou de ideia no meio
 
-  estado.bilhetes = catalogo.emDezenas(estado.mascaras, estado.dezenas);
-  if (estado.link?.parte != null) {
-    estado.bilhetes = volante.dividir(estado.bilhetes, estado.link.partes)[estado.link.parte];
-  }
+  // `todos` é o fechamento inteiro; `bilhetes`, o que cabe a quem está olhando.
+  estado.todos = catalogo.emDezenas(estado.mascaras, estado.dezenas);
+  estado.bilhetes = estado.link?.parte == null ? estado.todos
+    : volante.dividir(estado.todos, estado.link.partes)[estado.link.parte];
   desenharBilhetes();
   desenharAcaso();
   desenharBolao();
@@ -253,14 +286,15 @@ function desenharBilhetes() {
     ${estado.link?.parte == null ? '' : `<p class="ajuda">Você é a parte
       ${estado.link.parte + 1} de ${estado.link.partes} deste bolão: a garantia acima é do bolão
       inteiro, e estes ${estado.bilhetes.length} bilhetes são os que cabem a você.</p>`}
-    <ol class="bilhetes">${estado.bilhetes
-      .map((b) => `<li>${b.map((d) => `<span>${String(d).padStart(2, '0')}</span>`).join('')}</li>`)
-      .join('')}</ol>
+    ${estado.bilhetes.length <= MOSTRA ? '' : `<p class="ajuda">São
+      ${estado.bilhetes.length.toLocaleString('pt-BR')} bilhetes, e a lista mostra os ${MOSTRA}
+      primeiros — copie, baixe ou imprima para ter todos. O que se confere abaixo usa todos.</p>`}
+    <ol class="bilhetes">${estado.bilhetes.slice(0, MOSTRA).map((b) =>
+      `<li>${b.map((d) => `<span>${String(d).padStart(2, '0')}</span>`).join('')}</li>`).join('')}</ol>
     <div class="linha">
-      <button type="button" data-acao="copiar">Copiar</button>${[
-        ['texto', 'Baixar texto'], ['csv', 'Baixar CSV'],
-        ['imprimir', 'Imprimir volantes'], ['guardar', 'Guardar na carteira'],
-      ].map(([a, r]) => `<button type="button" data-acao="${a}" class="discreto">${r}</button>`)
+      <button type="button" data-acao="copiar">Copiar</button>${[['texto', 'Baixar texto'],
+        ['csv', 'Baixar CSV'], ['imprimir', 'Imprimir volantes'], ['guardar', 'Guardar na carteira']]
+        .map(([a, r]) => `<button type="button" data-acao="${a}" class="discreto">${r}</button>`)
         .join('')}
     </div>`;
 }
@@ -270,58 +304,59 @@ function desenharAcaso() {
   const p = estado.acaso.chegam?.[`${e.v}-${e.k}`]?.[e.t];
   if (p == null) return;
   const noChute = 1 - (1 - p) ** e.jogos;
+  // E quanto isso devolve por concurso, em média. Só as faixas de prêmio fixo:
+  // 14 e 15 são rateadas, e somá-las trocaria um número exato por um palpite.
+  // Hipergeométrico, não simulado, e igual para qualquer arranjo dos mesmos
+  // bilhetes — que é justamente o que faz dele a prova de "certeza, não lucro".
+  const solto = estado.acaso.chegam?.[`${UNIVERSO}-${e.k}`] ?? {};
+  const media = e.jogos * [11, 12, 13].reduce(
+    (soma, f) => soma + ((solto[f] ?? 0) - (solto[f + 1] ?? 0)) * estado.precos.premio[f], 0);
   $('acaso').innerHTML = `
     <p>Com ${dinheiro(e.custo)} você compra ${e.jogos} ${e.jogos === 1 ? 'bilhete' : 'bilhetes'}
       de ${e.k} dezenas. Se eles fossem escolhidos no chute, chegariam a ${e.t} acertos em
       <b>${(noChute * 100).toFixed(noChute > 0.995 ? 2 : 1)}%</b> dos sorteios que caem dentro das
       suas ${e.v} dezenas. Com o fechamento, em <b>100%</b>.</p>
     <p class="ressalva">Em média os dois pagam o mesmo: a mesma quantidade de bilhetes do mesmo
-      tamanho tem a mesma expectativa de prêmio, com fechamento ou sem. O que o fechamento
+      tamanho tem a mesma expectativa de prêmio, com fechamento ou sem${media ? `, que aqui é
+      <b>${dinheiro(Math.round(media))}</b> por concurso nas faixas de 11, 12 e 13 acertos — mais
+      o que sair de 14 e 15, que é rateado e ninguém sabe de antemão` : ''}. O que o fechamento
       compra não é lucro — é certeza no lugar de sorte.</p>`;
 }
 
 function desenharBolao() {
-  // Nunca mais partes que bilhetes: um link com zero bilhetes é uma promessa
-  // vazia mandada para uma pessoa de verdade.
-  const partes = Math.min(20, estado.bilhetes.length, Math.max(2, Number($('partes').value) || 2));
-  const grupos = volante.dividir(estado.bilhetes, partes);
-  const base = location.href.split('#')[0];
-  const { v, k, t } = estado.plano.escolha;
+  // Sempre o fechamento inteiro, mesmo para quem chegou por um link de parte: o
+  // link daqui diz "parte i de n **do fechamento**", e dividir a parte de alguém
+  // faria a tela contar um conjunto e o link entregar outro. E nunca mais partes
+  // que bilhetes: um link com zero bilhetes é promessa vazia a gente de verdade.
+  const partes = Math.min(20, estado.todos.length, Math.max(2, Number($('partes').value) || 2));
+  const grupos = volante.dividir(estado.todos, partes);
+  const base = location.href.split('#')[0], { v, k, t } = estado.plano.escolha;
   $('bolao').innerHTML = `<ol class="partes">${grupos
     .map((g, i) => {
-      const link = volante.linkDaParte(base, {
-        dezenas: estado.dezenas, v, k, t, parte: i, partes,
-      });
-      return `<li><b>Parte ${i + 1}</b> — ${g.length} bilhetes ·
-        ${dinheiro(g.length * estado.precos.aposta[k])}
+      const link = volante.linkDaParte(base, { dezenas: estado.dezenas, v, k, t, parte: i, partes });
+      return `<li><b>Parte ${i + 1}</b> — ${g.length} bilhetes · ${dinheiro(g.length * estado.precos.aposta[k])}
         <button type="button" class="discreto" data-link="${link}">Copiar link</button></li>`;
     })
     .join('')}</ol>`;
 }
 
 function desenharPrecos() {
-  const grupos = [['aposta', 'Quanto custa a aposta', 'dezenas'],
-    ['premio', 'Quanto paga cada faixa', 'acertos']];
+  const grupos = [['aposta', 'Quanto custa a aposta', 'dezenas'], ['premio', 'Quanto paga cada faixa', 'acertos']];
   $('tabela-precos').innerHTML = `${grupos.map(([grupo, titulo, unidade]) =>
     `<div class="precos"><h3>${titulo}</h3>${Object.keys(estado.precos[grupo]).map((k) =>
       `<label>${k} ${unidade}<input type="text" inputmode="decimal" data-grupo="${grupo}"
         data-chave="${k}" value="${dinheiro(estado.precos[grupo][k])}"></label>`).join('')}</div>`)
     .join('')}
-    <p class="ajuda">Valores de ${estado.precosPublicados.vigencia}.
-      ${estado.precosPublicados.observacao}</p>`;
+    <p class="ajuda">Valores de ${estado.precosPublicados.vigencia}.</p>`;
 }
 
 function desenharCarteira() {
-  if (estado.carteira.length === 0) {
-    $('carteira').innerHTML = '<p class="ajuda">Nada guardado ainda.</p>';
-    return;
-  }
+  if (!estado.carteira.length) { $('carteira').innerHTML = '<p class="ajuda">Nada guardado.</p>'; return; }
   $('carteira').innerHTML = `<ol class="registros">${estado.carteira
     .map((r, i) => `<li><b>${r.t} acertos garantidos</b> · ${r.jogos} jogos de ${r.k} dezenas ·
         ${dinheiro(r.custo)} · ${new Date(r.data).toLocaleDateString('pt-BR')}${
-      r.retorno != null
-        ? ` · <b>voltou ${dinheiro(r.retorno)}</b>${r.concurso ? ` no concurso ${r.concurso}` : ''}`
-        : ''}
+      r.retorno == null ? ''
+        : ` · <b>voltou ${dinheiro(r.retorno)}</b>${r.concurso ? ` no concurso ${r.concurso}` : ''}`}
         <button type="button" class="discreto" data-apagar="${i}">Apagar</button></li>`)
     .join('')}</ol>`;
 }
@@ -344,6 +379,7 @@ function ligarControles() {
   // zerar a tela.
   const trocarOrcamento = (centavos) => {
     if (centavos != null && centavos > 0) estado.orcamento = centavos;
+    estado.link = null;  // mexer no dinheiro é sair do bolão de outra pessoa
     guardar('orcamento', estado.orcamento);
     atualizarDinheiro();
     responder();
@@ -352,7 +388,7 @@ function ligarControles() {
   $('valor').addEventListener('change', () => trocarOrcamento(emCentavos($('valor').value)));
 
   $('secao-bilhetes').addEventListener('click', (ev) => acaoDosBilhetes(ev.target.dataset?.acao));
-  $('partes').addEventListener('input', () => estado.bilhetes.length && desenharBolao());
+  $('partes').addEventListener('input', () => estado.todos.length && desenharBolao());
   $('bolao').addEventListener('click', async (ev) => {
     const link = ev.target.dataset?.link;
     if (link) ev.target.textContent = (await volante.copiar(link)) ? 'Copiado' : link;
@@ -387,8 +423,7 @@ function ligarControles() {
   $('fechar-painel').addEventListener('click', () => ($('painel').hidden = true));
 }
 
-/// Marca `quantas` dezenas ao acaso: nenhuma é mais provável que outra, e de
-/// **quantas** cuida `melhorPool`.
+/// Marca `quantas` dezenas ao acaso: nenhuma é mais provável que outra.
 function sortearDezenas(quantas) {
   const todas = Array.from({ length: UNIVERSO }, (_, i) => i + 1);
   for (let i = todas.length - 1; i > 0; i--) {
@@ -396,6 +431,10 @@ function sortearDezenas(quantas) {
     [todas[i], todas[j]] = [todas[j], todas[i]];
   }
   trocarDezenas(new Set(todas.slice(0, quantas).sort((a, b) => a - b)));
+  // A resposta nasce a quase 800 px do topo, abaixo da dobra em telefone pequeno:
+  // quem pediu que o aplicativo escolhesse não vai procurar o que ele escolheu.
+  $('resposta').scrollIntoView({ block: 'start',
+    behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
 }
 
 /// Toda troca de dezenas passa por aqui: guarda, desfaz o vínculo com um link de
@@ -424,10 +463,11 @@ async function acaoDosBilhetes(acao) {
     $('painel').hidden = false;
     print();
   } else if (acao === 'guardar') {
-    estado.carteira.unshift({
-      data: Date.now(), v: e.v, k: e.k, t: e.t, jogos: e.jogos, custo: e.custo,
-      dezenas: [...estado.dezenas].sort((a, b) => a - b),
-    });
+    // O que **esta pessoa** jogou: num bolão, a parte dela. Guardar o fechamento
+    // inteiro punha na carteira um custo que ela não pagou, com o retorno só dela.
+    estado.carteira.unshift({ data: Date.now(), v: e.v, k: e.k, t: e.t,
+      jogos: estado.bilhetes.length, custo: estado.bilhetes.length * estado.precos.aposta[e.k],
+      dezenas: [...estado.dezenas].sort((a, b) => a - b) });
     guardar('carteira', estado.carteira);
     desenharCarteira();
     $('det-carteira').open = true;
@@ -441,10 +481,9 @@ async function varrerTudo() {
   const { sorteios, pior, comQuinze } = await conferir.varrer(estado.mascaras, e.v, e.t);
   $('varredura').innerHTML = pior >= e.t
     ? `Varridos os ${sorteios.toLocaleString('pt-BR')} resultados possíveis dentro das suas
-       ${e.v} dezenas. No pior deles, o melhor bilhete faz <b>${pior} acertos</b> —
-       a garantia de ${e.t} está de pé. ${
-         comQuinze ? `Em ${comQuinze.toLocaleString('pt-BR')} deles, alguém acerta os 15.` : ''
-       }`
+       ${e.v} dezenas. No pior deles, o melhor bilhete faz <b>${pior} acertos</b> — a garantia de
+       ${e.t} está de pé. ${comQuinze
+      ? `Em ${comQuinze.toLocaleString('pt-BR')} deles, alguém acerta os 15.` : ''}`
     : `<b>A garantia não se sustentou</b>: existe resultado em que o melhor bilhete faz só
        ${pior} acertos. Não use este fechamento e avise quem publicou.`;
 }
@@ -469,21 +508,17 @@ async function buscarSorteio() {
     $('buscar-sorteio').textContent = `Concurso ${concurso}`;
   } catch {
     const guardado = lembrar('ultimo-sorteio', null);
-    if (guardado) {
-      $('sorteio').value = guardado.dezenas.join(' ');
-      conferirContraOSorteio();
-      $('buscar-sorteio').textContent = `Concurso ${guardado.concurso} (guardado)`;
-    } else {
-      $('buscar-sorteio').textContent = 'Sem resultado — digite as 15 dezenas';
-    }
+    if (!guardado) { $('buscar-sorteio').textContent = 'Sem resultado — digite as 15 dezenas'; return; }
+    $('sorteio').value = guardado.dezenas.join(' ');
+    conferirContraOSorteio();
+    $('buscar-sorteio').textContent = `Concurso ${guardado.concurso} (guardado)`;
   }
 }
 
 function conferirContraOSorteio() {
   const sorteadas = dezenasDoTexto($('sorteio').value);
   if (!sorteadas || estado.bilhetes.length === 0) {
-    $('conferencia').innerHTML = sorteadas
-      ? ''
+    $('conferencia').innerHTML = sorteadas ? ''
       : '<p class="ajuda">Escreva as 15 dezenas sorteadas, separadas por espaço.</p>';
     return;
   }
@@ -494,11 +529,10 @@ function conferirContraOSorteio() {
   anotarNaCarteira(sorteadas, voltou);
   $('conferencia').innerHTML = `
     <p>Melhor bilhete: <b>${melhor} acertos</b>.</p>
-    ${linhas.length
-      ? `<ul>${linhas.map(([a, q]) => `<li>${q} × ${a} acertos</li>`).join('')}</ul>`
+    ${linhas.length ? `<ul>${linhas.map(([a, q]) => `<li>${q} × ${a} acertos</li>`).join('')}</ul>`
       : '<p>Nenhum bilhete premiado.</p>'}
-    <p>Custou ${dinheiro(custo)}, voltou ${dinheiro(voltou)} —
-      <b>${voltou >= custo ? 'saldo de' : 'faltaram'} ${dinheiro(Math.abs(voltou - custo))}</b>.</p>
+    <p>Custou ${dinheiro(custo)}, voltou ${dinheiro(voltou)} — <b>${voltou >= custo ? 'saldo de'
+      : 'faltaram'} ${dinheiro(Math.abs(voltou - custo))}</b>.</p>
     <p class="frase narracao">Prêmios de 14 e 15 acertos variam a cada concurso; os valores
       aqui são os da sua tabela.</p>`;
   pedirAFrase('#conferencia .narracao',
@@ -510,10 +544,14 @@ function conferirContraOSorteio() {
 /// conferir um sorteio não pode reescrever a história de outro jogo.
 function anotarNaCarteira(sorteadas, voltou) {
   const e = estado.plano.escolha;
-  const registro = estado.carteira.find((r) => r.v === e.v && r.k === e.k && r.t === e.t);
+  const mesmas = (a) => [...(a ?? [])].sort((x, y) => x - y).join(' ');
+  // As dezenas entram na comparação: dois jogos podem ter o mesmo tamanho e a
+  // mesma garantia e ainda assim ser jogos diferentes, e o retorno é de um só.
+  const registro = estado.carteira.find(
+    (r) => r.v === e.v && r.k === e.k && r.t === e.t &&
+      mesmas(r.dezenas) === mesmas(estado.dezenas));
   if (!registro) return;
   const ultimo = lembrar('ultimo-sorteio', null);
-  const mesmas = (a) => [...a].sort((x, y) => x - y).join(' ');
   registro.retorno = voltou;
   registro.concurso = ultimo && mesmas(ultimo.dezenas) === mesmas(sorteadas) ? ultimo.concurso : null;
   guardar('carteira', estado.carteira);
@@ -557,8 +595,10 @@ async function enviarIntencao() {
 /// garantir 14" não há valor, e ler o 14 como catorze reais seria pior do que
 /// não entender.
 const EM_REAIS = { cem: 100, duzentos: 200, trezentos: 300, quinhentos: 500, mil: 1000 };
-const QUANTAS = ['quinze', 'dezesseis', 'dezessete', 'dezoito', 'dezenove', 'vinte e cinco',
-  'vinte e quatro', 'vinte e três', 'vinte e dois', 'vinte e um', 'vinte'];
+// Em pares, e os compostos antes dos simples: "vinte e cinco" contém "vinte".
+const QUANTAS = [['quinze', 15], ['dezesseis', 16], ['dezessete', 17], ['dezoito', 18],
+  ['dezenove', 19], ['vinte e cinco', 25], ['vinte e quatro', 24], ['vinte e três', 23],
+  ['vinte e dois', 22], ['vinte e um', 21], ['vinte', 20]];
 function ler(texto) {
   const t = texto.toLowerCase();
   const achado = t.match(/(?:r\$\s*)?(\d[\d.]*(?:,\d{1,2})?)\s*(?:reais|conto|pila)/)
@@ -567,12 +607,11 @@ function ler(texto) {
     ? Number(achado[1].replace(/\./g, '').replace(',', '.'))
     : (Object.entries(EM_REAIS).find(([palavra]) => t.includes(palavra))?.[1] ?? 0);
   if (!orcamento) return null;
-  const nomeada = QUANTAS.findIndex((palavra) => t.includes(palavra));
+  const nomeada = QUANTAS.find(([palavra]) => t.includes(palavra));
   return {
     orcamento,
     dezenas: [],
-    quantasDezenas: Number(t.match(/(\d{2})\s*dezenas/)?.[1] ?? 0)
-      || (nomeada < 0 ? 0 : [15, 16, 17, 18, 19, 25, 24, 23, 22, 21, 20][nomeada]),
+    quantasDezenas: Number(t.match(/(\d{2})\s*dezenas/)?.[1] ?? 0) || nomeada?.[1] || 0,
     garantiaMinima: Number(t.match(/garant\w*\s*(?:de\s*)?(\d{2})/)?.[1] ?? 0),
   };
 }

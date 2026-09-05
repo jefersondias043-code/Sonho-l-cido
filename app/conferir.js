@@ -116,17 +116,12 @@ function quantosBits(bits) {
   return total;
 }
 
-function contar(n) {
-  let c = 0;
-  for (let m = n; m; m &= m - 1) c++;
-  return c;
-}
+const contar = (n) => { let c = 0; for (let m = n; m; m &= m - 1) c++; return c; };
 
 function binomial(n, k) {
-  if (k > n) return 0;
   let r = 1;
   for (let i = 0; i < Math.min(k, n - k); i++) r = (r * (n - i)) / (i + 1);
-  return Math.round(r);
+  return k > n ? 0 : Math.round(r);
 }
 
 /// Quantos acertos cada bilhete fez num sorteio de verdade. `bilhetes` são

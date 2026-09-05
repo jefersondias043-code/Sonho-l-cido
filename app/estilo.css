@@ -1,35 +1,22 @@
-/* Tokens. Dois temas, um conjunto de nomes. */
+/* Tokens. Dois temas, um conjunto de nomes, agrupados aos pares: cor e fundo
+   de um selo são uma decisão só, e separá-los em duas linhas convida a
+   mexer numa e esquecer a outra. */
 :root {
-  --fundo: #f6f7fb;
-  --papel: #ffffff;
-  --tinta: #14181f;
-  --tinta-fraca: #4b5563;
-  --linha: #d7dbe4;
-  --realce: #1d4ed8;
-  --realce-tinta: #ffffff;
-  --provado: #0f6b3f;
-  --provado-fundo: #d8f2e3;
-  --conhecido: #7a4a06;
-  --conhecido-fundo: #fdeccd;
-  --aviso: #8a1c1c;
-  --raio: 14px;
-  --coluna: 34rem;
-  color-scheme: light dark;
+  --fundo: #f6f7fb; --papel: #ffffff;
+  --tinta: #14181f; --tinta-fraca: #4b5563; --linha: #d7dbe4;
+  --realce: #1d4ed8; --realce-tinta: #ffffff;
+  --provado: #0f6b3f; --provado-fundo: #d8f2e3;
+  --conhecido: #7a4a06; --conhecido-fundo: #fdeccd;
+  --aviso: #8a1c1c; --raio: 14px; --coluna: 34rem; color-scheme: light dark;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --fundo: #0b1020;
-    --papel: #151b2c;
-    --tinta: #eef1f7;
-    --tinta-fraca: #a7b0c0;
-    --linha: #2b3550;
-    --realce: #7aa2ff;
-    --realce-tinta: #0b1020;
-    --provado: #7ff0b8;
-    --provado-fundo: #10361f;
-    --conhecido: #ffd28a;
-    --conhecido-fundo: #3a2a08;
+    --fundo: #0b1020; --papel: #151b2c;
+    --tinta: #eef1f7; --tinta-fraca: #a7b0c0; --linha: #2b3550;
+    --realce: #7aa2ff; --realce-tinta: #0b1020;
+    --provado: #7ff0b8; --provado-fundo: #10361f;
+    --conhecido: #ffd28a; --conhecido-fundo: #3a2a08;
     --aviso: #ff9a9a;
   }
 }
@@ -77,9 +64,8 @@ label { display: block; font-size: 0.95rem; color: var(--tinta-fraca); margin-bo
   /* `padding` e `min-width` zerados de propósito: o botão genérico tem 1rem de
      folga lateral, e numa grade de cinco colunas a 320 px isso empurra a linha
      para fora da tela. */
-  min-height: 52px; padding: 0; min-width: 0;
-  font-size: 1.1rem; font-variant-numeric: tabular-nums;
-  border: 1px solid var(--linha); border-radius: 10px;
+  min-height: 52px; padding: 0; min-width: 0; font-size: 1.1rem;
+  border: 1px solid var(--linha); border-radius: 10px; font-variant-numeric: tabular-nums;
   background: var(--papel); color: var(--tinta); cursor: pointer;
 }
 
@@ -93,9 +79,9 @@ label { display: block; font-size: 0.95rem; color: var(--tinta-fraca); margin-bo
 .contagem { color: var(--tinta-fraca); font-size: 0.9rem; }
 
 button {
-  min-height: 44px; padding: 0 1rem; border-radius: 10px;
+  min-height: 44px; padding: 0 1rem; border-radius: 10px; font: inherit; font-weight: 600;
   border: 1px solid var(--realce); background: var(--realce); color: var(--realce-tinta);
-  font: inherit; font-weight: 600; cursor: pointer;
+  cursor: pointer;
 }
 
 button.discreto { background: transparent; color: var(--realce); }
@@ -113,8 +99,7 @@ button.discreto { background: transparent; color: var(--realce); }
 .unidade { margin: 0.25rem 0 0.75rem; font-size: 1.25rem; font-weight: 600; }
 .detalhe { margin: 0 0 0.75rem; font-size: 1.05rem; color: var(--tinta-fraca); }
 .selos { margin: 0 0 1rem; }
-.selo { display: inline-block; padding: 0.25rem 0.7rem; border-radius: 999px;
-  font-size: 0.85rem; font-weight: 700; }
+.selo { display: inline-block; padding: 0.25rem 0.7rem; border-radius: 999px; font-weight: 700; font-size: 0.85rem; }
 
 .selo.provado { background: var(--provado-fundo); color: var(--provado); }
 .selo.conhecido { background: var(--conhecido-fundo); color: var(--conhecido); }
@@ -125,13 +110,11 @@ button.discreto { background: transparent; color: var(--realce); }
 .aviso { color: var(--aviso); font-size: 1.1rem; }
 
 /* ── bilhetes ── */
-.bilhetes { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.4rem;
-  grid-template-columns: 1fr; }
+.bilhetes { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.4rem; grid-template-columns: 1fr; }
 
 .bilhetes li {
   background: var(--papel); border: 1px solid var(--linha); border-radius: 10px;
-  padding: 0.5rem; display: flex; flex-wrap: wrap; gap: 0.25rem;
-  font-variant-numeric: tabular-nums;
+  padding: 0.5rem; display: flex; flex-wrap: wrap; gap: 0.25rem; font-variant-numeric: tabular-nums;
 }
 
 .bilhetes span {
@@ -150,13 +133,12 @@ details {
 summary { cursor: pointer; padding: 0.9rem 0; font-weight: 600; min-height: 44px; }
 details > div { padding-bottom: 1rem; }
 details input[type="text"], details input[type="number"] {
-  width: 100%; min-height: 44px; padding: 0 0.6rem; border: 1px solid var(--linha);
-  border-radius: 10px; background: var(--fundo); color: var(--tinta); font: inherit;
+  width: 100%; min-height: 44px; padding: 0 0.6rem; border-radius: 10px; font: inherit;
+  border: 1px solid var(--linha); background: var(--fundo); color: var(--tinta);
 }
 
 .precos { margin-bottom: 1rem; }
-.precos label { display: grid; grid-template-columns: 1fr 8rem; align-items: center;
-  gap: 0.5rem; margin-bottom: 0.4rem; }
+.precos label { display: grid; grid-template-columns: 1fr 8rem; align-items: center; gap: 0.5rem; margin-bottom: 0.4rem; }
 .precos input { text-align: right; }
 .partes, .registros { padding-left: 1.2rem; }
 .partes li, .registros li { margin-bottom: 0.5rem; }
@@ -170,16 +152,15 @@ footer {
 .painel {
   position: fixed; inset: auto 0 0 0; max-height: 85vh; overflow: auto;
   background: var(--papel); border-top: 1px solid var(--linha);
-  border-radius: var(--raio) var(--raio) 0 0;
-  box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.25); animation: subir 0.25s ease-out;
+  border-radius: var(--raio) var(--raio) 0 0; animation: subir 0.25s ease-out;
+  box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.25);
 }
 
 @keyframes subir { from { transform: translateY(100%); } to { transform: none; } }
 
 .painel-topo {
-  display: flex; justify-content: space-between; align-items: center;
-  padding: 0.75rem 1rem; border-bottom: 1px solid var(--linha);
-  position: sticky; top: 0; background: var(--papel);
+  display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0;
+  padding: 0.75rem 1rem; border-bottom: 1px solid var(--linha); background: var(--papel);
 }
 
 .painel-topo button { background: transparent; color: var(--tinta); border: 0; }
@@ -187,14 +168,13 @@ footer {
 
 /* ── volante para imprimir ── */
 .volante {
-  display: grid; grid-template-columns: repeat(5, 2.2rem);
-  gap: 2px; margin: 0 0 1rem; page-break-inside: avoid;
+  display: grid; grid-template-columns: repeat(5, 2.2rem); gap: 2px; margin: 0 0 1rem;
+  page-break-inside: avoid;
 }
 
 .volante i {
   font-style: normal; font-size: 0.8rem; text-align: center; padding: 0.3rem 0;
-  border: 1px solid var(--linha); border-radius: 4px; font-variant-numeric: tabular-nums;
-}
+  border: 1px solid var(--linha); border-radius: 4px; font-variant-numeric: tabular-nums; }
 
 .volante i.marcada { background: var(--tinta); color: var(--papel); font-weight: 700; }
 

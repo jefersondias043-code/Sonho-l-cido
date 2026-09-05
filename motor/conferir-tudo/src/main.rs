@@ -30,11 +30,18 @@
 //! única vez.
 //!
 //! ```bash
-//! cargo run --release --bin conferir-tudo -- [catalogo]
+//! cargo run --release --bin conferir-tudo -- [catalogo] [v-k-t]
 //! ```
 //!
 //! Sai com código 1 na primeira reprovação. Uma falha aqui bloqueia a
 //! publicação, e é para isso que ele serve.
+//!
+//! Com `v-k-t`, a varredura profunda fica só naquela entrada — o conjunto das
+//! 330 continua sendo conferido inteiro, que é barato. Serve a quem acabou de
+//! regerar um fechamento e quer conferi-lo sem esperar os outros 311, e à suíte
+//! que estraga o catálogo de propósito, oito vezes, para cobrar que ele reprove.
+//! O que ele imprime diz, em letras, que foi uma conferência parcial: ninguém
+//! pode confundir isso com a que autoriza publicar.
 
 use std::process::ExitCode;
 
@@ -45,6 +52,10 @@ const GARANTIA_MIN: usize = 11;
 
 fn main() -> ExitCode {
     let raiz = std::env::args().nth(1).unwrap_or_else(|| "catalogo".to_string());
+    let so_esta: Option<(usize, usize, usize)> = std::env::args().nth(2).and_then(|a| {
+        let n: Vec<usize> = a.split('-').filter_map(|p| p.parse().ok()).collect();
+        (n.len() == 3).then(|| (n[0], n[1], n[2]))
+    });
 
     let texto = match std::fs::read_to_string(format!("{raiz}/indice.json")) {
         Ok(t) => t,
@@ -55,13 +66,23 @@ fn main() -> ExitCode {
     };
 
     let entradas = ler_indice(&texto);
-    println!("Conferindo {} entradas de {raiz}/", entradas.len());
+    match so_esta {
+        None => println!("Conferindo {} entradas de {raiz}/", entradas.len()),
+        Some((v, k, t)) => println!(
+            "CONFERÊNCIA PARCIAL de {raiz}/: o conjunto das {} entradas, e a varredura só de \
+             ({v},{k},{t}). Isto não autoriza publicação.",
+            entradas.len()
+        ),
+    }
 
     let mut reprovadas = Vec::new();
     let mut publicadas = 0usize;
     let mut sorteios_varridos: u64 = 0;
 
     for e in &entradas {
+        if so_esta.is_some_and(|alvo| alvo != (e.v, e.k, e.t)) {
+            continue;
+        }
         match conferir(&raiz, e) {
             Ok(varridos) => {
                 sorteios_varridos += varridos;
@@ -235,6 +256,25 @@ fn conferir(raiz: &str, e: &Linha) -> Result<u64, String> {
     ordenados.dedup();
     if ordenados.len() != bilhetes.len() {
         return Err("há bilhete repetido".to_string());
+    }
+
+    // Toda dezena do pool entra em algum bilhete — a menos que o fechamento
+    // seja um bilhete só, e aí ele leva `k` das `v` e as outras ficam de fora.
+    //
+    // A tela conta com isso ao pé da letra: só na resposta de um bilhete ela
+    // avisa que parte do que a pessoa marcou não vai ser jogada. Se um
+    // fechamento de vários jogos passasse a deixar dezenas de fora, o
+    // aplicativo pediria para marcar 25 e jogaria 24 sem dizer nada — o tipo de
+    // silêncio que só aparece quando alguém confere o bilhete impresso.
+    let uniao = bilhetes.iter().fold(0u32, |a, b| a | b);
+    let usadas = uniao.count_ones() as usize;
+    let esperadas = if bilhetes.len() == 1 { e.k } else { e.v };
+    if usadas != esperadas {
+        return Err(format!(
+            "os {} bilhetes usam {usadas} dezenas do pool de {}, esperadas {esperadas}",
+            bilhetes.len(),
+            e.v
+        ));
     }
 
     // A varredura. Todo sorteio de 15 dezenas dentro do pool, um a um.

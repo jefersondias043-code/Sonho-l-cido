@@ -25,6 +25,7 @@ import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
 import { chromium } from 'playwright';
+import { exigirConstrucaoFresca } from './publicar-esta-fresco.mjs';
 
 // A subpasta em que o GitHub Pages serve o repositório. Configurável porque o
 // nome do repositório é o prefixo, e um teste que o fixa mente sobre onde o
@@ -37,6 +38,8 @@ const TIPOS = {
   '.json': 'application/json', '.webmanifest': 'application/manifest+json',
   '.svg': 'image/svg+xml', '.png': 'image/png',
 };
+
+exigirConstrucaoFresca();
 
 let feitos = 0;
 const falhas = [];

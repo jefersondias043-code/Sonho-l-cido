@@ -11,6 +11,7 @@ import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
 import { chromium } from 'playwright';
+import { exigirConstrucaoFresca } from '../ferramentas/publicar-esta-fresco.mjs';
 
 const BASE = process.argv[2] ?? '/';
 const RAIZ = new URL('../publicar', import.meta.url).pathname;
@@ -19,6 +20,8 @@ const TIPOS = {
   '.json': 'application/json', '.webmanifest': 'application/manifest+json',
   '.svg': 'image/svg+xml', '.png': 'image/png',
 };
+
+exigirConstrucaoFresca();
 
 let feitos = 0;
 const falhas = [];
@@ -87,6 +90,14 @@ conferir('e diz o que o número é',
 
 const selo = await pagina.locator('.selo').first().innerText();
 conferir('o selo é um dos dois estados', ['mínimo provado', 'menor conhecido'].includes(selo), selo);
+
+// O troco não fica sozinho. Depois que a tela rola até a resposta, a linha que
+// explicava o troco — o próximo degrau, lá em cima, junto da régua — está fora
+// da tela, e "sobram R$ 29,00" sem mais nada convida a pensar que o aplicativo
+// não soube gastar o dinheiro.
+const detalhe = (await pagina.locator('.resposta .detalhe').innerText()).replace(/\s+/g, ' ');
+conferir('e o troco diz por que é troco',
+  !detalhe.includes('sobram') || detalhe.includes('não compram garantia maior'), detalhe);
 if (selo === 'menor conhecido') {
   conferir('e sem prova o piso aparece ao lado',
     (await pagina.locator('.piso').innerText()).includes('menos de'));
@@ -105,6 +116,32 @@ const tamanhos = await pagina.evaluate(() => {
 });
 conferir('o número da resposta é o maior da tela', tamanhos.resposta === tamanhos.maior,
   `${tamanhos.resposta} vs ${tamanhos.maior}`);
+
+// A resposta tem de estar à vista depois do toque.
+//
+// Ela nasce a quase 800 px do topo: num telefone pequeno, quem tocava em
+// "escolher por mim" ficava olhando para a grade, com a resposta inteira fora
+// da tela. Aqui se cobra na menor tela que ainda se vende — 390x667 — que o
+// número e o que ele é estejam visíveis sem procurar.
+const naDobra = await (async () => {
+  const pequeno = await navegador.newContext({ viewport: { width: 390, height: 667 } });
+  const tela = await pequeno.newPage();
+  await tela.goto(endereco, { waitUntil: 'networkidle' });
+  await tela.click('#escolher');
+  await tela.waitForSelector('.bilhetes li', { timeout: 20000 });
+  await tela.waitForTimeout(800);  // a rolagem é suave
+  const medido = await tela.evaluate(() => {
+    const r = (s) => document.querySelector(s).getBoundingClientRect();
+    return { numero: r('.numero').top, fim: r('.unidade').bottom, altura: innerHeight };
+  });
+  await pequeno.close();
+  return medido;
+})();
+conferir('depois do toque, o número da resposta está na tela',
+  naDobra.numero >= 0 && naDobra.numero < naDobra.altura,
+  `topo em ${Math.round(naDobra.numero)} de ${naDobra.altura}`);
+conferir('e o que ele significa também',
+  naDobra.fim <= naDobra.altura, `acaba em ${Math.round(naDobra.fim)} de ${naDobra.altura}`);
 
 // Alvos de toque de 44 px.
 const pequenos = await pagina.evaluate(() =>
@@ -209,6 +246,13 @@ conferir('o acaso é comparado em porcentagem', acaso.includes('%'));
 conferir('e o aplicativo diz que a média é a mesma', acaso.includes('pagam o mesmo'));
 conferir('e não promete ganho', !/vai ganhar|garante lucro|vale a pena/i.test(acaso), acaso);
 
+// O número mais desconfortável que este aplicativo mostra, e o mais honesto: o
+// que os bilhetes devolvem em média por concurso. Sem ele, "em média os dois
+// pagam o mesmo" é uma frase que se lê como consolo; com ele, é uma conta.
+conferir('e diz quanto isso devolve por concurso, em dinheiro',
+  /R\$ [\d.,]+ por concurso nas faixas de 11, 12 e 13 acertos/.test(acaso.replace(/\s+/g, ' ')),
+  acaso);
+
 // ── a varredura exaustiva ───────────────────────────────────────────────────
 
 await pagina.click('#det-conferir summary');
@@ -219,6 +263,63 @@ await pagina.waitForFunction(
 const varredura = await pagina.locator('#varredura').innerText();
 conferir('a varredura confirma a garantia', varredura.includes('está de pé'), varredura);
 conferir('e diz quantos resultados percorreu', /\d[\d.]* resultados possíveis/.test(varredura));
+
+// ── uma lista que ninguém rola ──────────────────────────────────────────────
+//
+// Os 4.198 bilhetes que R$ 15.000 compram davam uma página de 339 mil pixels e
+// 67 mil nós no DOM: a conferência, o bolão e a carteira ficavam a quatrocentas
+// telas de distância, e num telefone barato aquilo é memória que não existe. A
+// lista passou a mostrar os primeiros; o estado continua com todos, e é com
+// todos que se confere, divide e imprime.
+await pagina.fill('#valor', 'R$ 20.000,00');
+await pagina.dispatchEvent('#valor', 'change');
+await pagina.click('#escolher');
+await pagina.waitForSelector('.bilhetes li', { timeout: 30000 });
+await pagina.waitForTimeout(500);
+const listaGrande = await pagina.evaluate(() => ({
+  desenhados: document.querySelectorAll('.bilhetes li').length,
+  altura: document.documentElement.scrollHeight,
+  nos: document.querySelectorAll('*').length,
+  aviso: document.querySelector('#secao-bilhetes .ajuda')?.innerText ?? '',
+}));
+conferir('a lista não desenha milhares de bilhetes',
+  listaGrande.desenhados > 0 && listaGrande.desenhados <= 50, `${listaGrande.desenhados}`);
+conferir('e a página não vira quatrocentas telas',
+  listaGrande.altura < 20000, `${listaGrande.altura} px`);
+conferir('e o DOM continua do tamanho de uma página',
+  listaGrande.nos < 3000, `${listaGrande.nos} nós`);
+// Sem fixar o número: quantos bilhetes este fechamento tem é coisa que a busca
+// muda, e um teste que o congela quebra quando o catálogo melhora.
+const quantosDizQueTem = Number(
+  (listaGrande.aviso.match(/São ([\d.]+) bilhetes/)?.[1] ?? '0').replace(/\./g, ''));
+conferir('e a tela diz quantos existem de verdade',
+  quantosDizQueTem > listaGrande.desenhados && quantosDizQueTem > 1000,
+  listaGrande.aviso);
+
+// E a conferência exaustiva continua vendo o fechamento inteiro — o que a tela
+// desenha é a lista, não o que ela guarda.
+await pagina.evaluate(() => { document.getElementById('det-conferir').open = true; });
+await pagina.click('#varrer');
+await pagina.waitForFunction(
+  () => document.getElementById('varredura').innerText.includes('Varridos'), null,
+  { timeout: 120000 });
+conferir('e a varredura ainda cobre o fechamento inteiro',
+  (await pagina.locator('#varredura').innerText()).includes('está de pé'),
+  await pagina.locator('#varredura').innerText());
+
+// De volta a um fechamento que cabe inteiro na lista, para o que vem abaixo
+// poder contar `<li>` e saber que está contando bilhetes, e não o limite do
+// desenho.
+await pagina.fill('#valor', 'R$ 65,00');
+await pagina.dispatchEvent('#valor', 'change');
+await pagina.click('#escolher');
+await pagina.waitForSelector('.bilhetes li', { timeout: 20000 });
+await pagina.waitForTimeout(500);
+const cabeInteiro = await pagina.locator('.bilhetes li').count();
+conferir('um fechamento pequeno é desenhado inteiro', cabeInteiro > 0 && cabeInteiro < 50,
+  `${cabeInteiro}`);
+conferir('e sem aviso de lista cortada',
+  (await pagina.locator('#secao-bilhetes .ajuda').count()) === 0);
 
 // ── bolão ───────────────────────────────────────────────────────────────────
 
@@ -237,6 +338,48 @@ await outra.waitForSelector('.bilhetes li');
 const naParte = await outra.locator('.bilhetes li').count();
 conferir('quem abre o link recebe só a sua parte', naParte > 0 && naParte < noFechamento,
   `${naParte} de ${noFechamento}`);
+
+// E quem chegou por um link de parte, se dividir de novo, divide o **fechamento
+// inteiro** — não a parte dele. O link que sai daqui diz "parte i de n do
+// fechamento", e é isso que quem o abrir vai receber: dividindo a parte, a
+// contagem na tela seria de um conjunto e o link entregaria outro.
+await outra.click('#det-bolao summary');
+await outra.fill('#partes', '2');
+await outra.dispatchEvent('#partes', 'input');
+const partesNaParte = await outra.locator('.partes li').allInnerTexts();
+const somaDasPartes = partesNaParte
+  .map((t) => Number(t.match(/(\d+) bilhetes/)[1]))
+  .reduce((a, b) => a + b, 0);
+conferir('quem é parte divide o fechamento inteiro, e não a parte dele',
+  somaDasPartes === noFechamento, `${somaDasPartes} de ${noFechamento} (parte tem ${naParte})`);
+
+// E a carteira de quem é parte guarda o que **essa pessoa** jogou. Guardar o
+// fechamento inteiro punha ali um custo que ela não pagou, ao lado de um retorno
+// que é só o dela: a conta não fechava para ninguém.
+await outra.click('[data-acao=guardar]');
+const naCarteira = (await outra.locator('.registros li').first().innerText()).replace(/\s+/g, ' ');
+// Comparado como número, e não como pedaço de texto: com 15 jogos guardados e
+// 5 na mão, `includes('5 jogos')` acha "15 jogos" e o teste passa sobre o
+// defeito. Foi o que aconteceu na primeira versão desta conferência.
+const jogosNaCarteira = Number(naCarteira.match(/· (\d+) jogos/)?.[1]);
+conferir('a carteira de quem é parte guarda a parte, e não o bolão',
+  jogosNaCarteira === naParte, `${jogosNaCarteira} guardados, ${naParte} na mão`);
+// E o defeito que só aparece no aparelho de outra pessoa: o link carrega o
+// fechamento (`f=v-k-t`), e quem o abre tem de receber bilhetes **daquele**
+// fechamento. Se o aplicativo escolher pelo orçamento guardado ali, cada
+// participante joga um bolão diferente — e a cobertura combinada, que é a razão
+// de existir do bolão, deixa de valer.
+const outroAparelho = await navegador.newContext({ viewport: { width: 390, height: 844 } });
+await outroAparelho.addInitScript(() => localStorage.setItem('orcamento', '2000000'));
+const deOutrem = await outroAparelho.newPage();
+await deOutrem.goto(linkDaParte, { waitUntil: 'networkidle' });
+await deOutrem.waitForSelector('.bilhetes li');
+await deOutrem.waitForTimeout(500);
+const naOutraMao = await deOutrem.locator('.bilhetes li').count();
+conferir('o link entrega a mesma parte em qualquer aparelho',
+  naOutraMao === naParte, `${naOutraMao} aqui, ${naParte} no aparelho de quem dividiu`);
+await outroAparelho.close();
+
 await outra.close();
 
 // ── conferir contra o sorteio ───────────────────────────────────────────────
@@ -285,6 +428,27 @@ conferir('e ajusta o dinheiro', (await pagina.inputValue('#valor')).includes('30
   await pagina.inputValue('#valor'));
 conferir('e nenhum aviso de erro sobra', (await pagina.locator('#aviso-intencao').innerText()) === '');
 
+// "quero garantir 14" com R$ 300 não cabe, e antes disto o número era lido,
+// validado e jogado fora: a tela respondia como se ninguém tivesse pedido nada.
+// Agora ela responde **a pergunta que a pessoa fez** — quanto custa aquilo.
+// Colapsando os espaços, que é como a tela desenha e como a pessoa lê: a frase
+// nasce de um literal quebrado em duas linhas no código.
+const linhaDoPedido = (await pagina.locator('#degrau').innerText()).replace(/\s+/g, ' ');
+conferir('e a garantia pedida vira preço na tela, em vez de sumir',
+  /Garantir 14 acertos com 20 dezenas custa R\$ [\d.,]+ — faltam R\$ [\d.,]+/.test(linhaDoPedido),
+  linhaDoPedido);
+
+// Um pedido impossível também não vira estado. "30 dezenas" não é um pedido de
+// 25: aparar seria inventar, e o leitor do servidor faz igual — o mesmo texto
+// não pode mudar de significado conforme haja ou não um servidor no ar.
+await pagina.fill('#intencao', 'R$ 300 com 30 dezenas');
+await pagina.click('#enviar-intencao');
+await pagina.waitForFunction(
+  () => document.getElementById('aviso-intencao').innerText.includes('Não consegui'), null,
+  { timeout: 15000 });
+conferir('trinta dezenas não viram vinte e cinco',
+  (await pagina.locator('.grade [aria-pressed=true]').count()) === 20);
+
 // E um pedido que ninguém entende diz isso, em vez de mexer no estado.
 await pagina.fill('#intencao', 'bom dia');
 await pagina.click('#enviar-intencao');
@@ -293,6 +457,53 @@ await pagina.waitForFunction(
   { timeout: 15000 });
 conferir('um pedido ilegível não vira estado',
   (await pagina.inputValue('#valor')).includes('300,00'));
+
+// ── a frase do modelo, e a regra que decide se ela entra ───────────────────
+//
+// Nos outros testes não há servidor e `api/explicar` responde 404 — o que prova
+// que o aplicativo funciona sem IA, e não prova nada sobre o caminho com ela.
+// Aqui um servidor é fingido, e o que se cobra é a regra: uma frase que só usa
+// os números do pedido entra, e uma que inventa qualquer outro é descartada
+// **sem apagar** a frase determinística que já estava na tela.
+//
+// Esta é a prova que faltava. A regra rejeitava toda frase com preço, porque
+// "R$ 199,50" vira os números 199 e 50 e nenhum dos dois estava autorizado —
+// e o modelo tinha sido chamado justamente para falar de dinheiro.
+const emReais = (c) =>
+  (c / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+let doModelo = null;
+await pagina.route('**/api/explicar', async (rota) => {
+  const d = JSON.parse(rota.request().postData());
+  await rota.fulfill({
+    contentType: 'application/json',
+    body: JSON.stringify({ frase: doModelo(d) }),
+  });
+});
+
+const trocarOrcamento = async (texto) => {
+  await pagina.fill('#valor', texto);
+  await pagina.dispatchEvent('#valor', 'change');
+  await pagina.waitForTimeout(600);
+  return (await pagina.locator('.resposta .frase').innerText()).replace(/\s+/g, ' ');
+};
+
+// Uma frase com o preço escrito como o Brasil escreve preço.
+doModelo = (d) => `São ${d.jogos} jogos de ${d.k} dezenas por R$ ${emReais(d.custo)}, `
+  + `com ${d.t} acertos garantidos entre as suas ${d.v}.`;
+const comPreco = await trocarOrcamento('R$ 250,00');
+conferir('uma frase do modelo com preço em reais chega à tela',
+  /por R\$ [\d.]+,\d\d/.test(comPreco), comPreco);
+
+// E a mesma frase com um número que ninguém mandou: descartada, e a frase
+// determinística fica onde estava.
+doModelo = (d) => `São ${d.jogos} jogos que cobrem 87% dos resultados possíveis.`;
+const comInvencao = await trocarOrcamento('R$ 260,00');
+conferir('uma frase com número inventado não chega à tela',
+  !comInvencao.includes('87%'), comInvencao);
+conferir('e a frase determinística continua no lugar',
+  comInvencao.includes('Não é probabilidade'), comInvencao);
+
+await pagina.unroute('**/api/explicar');
 
 // ── segunda visita, sem rede ────────────────────────────────────────────────
 
@@ -347,6 +558,44 @@ await semMemoria.waitForSelector('.bilhetes li', { timeout: 20000 });
 conferir('sem poder guardar nada, o aplicativo ainda responde',
   (await semMemoria.locator('.bilhetes li').count()) > 0);
 conferir('e sem erro de JavaScript', errosSemMemoria.length === 0, errosSemMemoria.join(' | '));
+
+// ── um bilhete não se veste de garantia ─────────────────────────────────────
+//
+// Com dinheiro para um bilhete só, a manchete deixa de ser um número de acertos
+// e passa a ser o que a pessoa comprou. "11 acertos garantidos" ali seria
+// verdade e seria engano: um bilhete não tem com quem se completar, e a
+// garantia é tautologia — ele acerta o que acertar.
+await semMemoria.fill('#valor', 'R$ 3,50');
+await semMemoria.dispatchEvent('#valor', 'change');
+await semMemoria.click('#escolher');
+await semMemoria.waitForSelector('.bilhetes li', { timeout: 20000 });
+const manchete = await semMemoria.locator('.resposta').innerText();
+conferir('com um bilhete a manchete é o bilhete', /bilhete de \d+ dezenas/.test(manchete), manchete);
+conferir('e não promete acertos garantidos', !/acertos garantidos/.test(manchete), manchete);
+conferir('e diz que um bilhete não é fechamento', manchete.includes('não é fechamento'), manchete);
+// E não fala d*a* garantia logo depois de dizer que não há garantia nenhuma: a
+// ressalva sobre o sorteio cair dentro do pool é sobre uma promessa que esta
+// resposta não faz.
+conferir('e não fala de uma garantia que acabou de negar',
+  !manchete.includes('A garantia só vale'), manchete);
+conferir('e a tela entrega esse um bilhete',
+  (await semMemoria.locator('.bilhetes li').count()) === 1);
+conferir('e o degrau ensina onde o fechamento começa, sem partir de garantia nenhuma',
+  /bilhetes que se completam/.test(await semMemoria.locator('#degrau').innerText()),
+  await semMemoria.locator('#degrau').innerText());
+
+// Marcar exatamente as quinze favoritas é o que muita gente faz de primeira, e
+// ali não há fechamento nenhum — nem um degrau acima para comprar. A tela tem de
+// dizer o que fazer, e não só constatar que não há o que comprar.
+await semMemoria.click('#limpar');
+for (const d of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]) {
+  await semMemoria.click(`.grade [data-dezena="${d}"]`);
+}
+await semMemoria.waitForSelector('.bilhetes li', { timeout: 20000 });
+conferir('com as quinze marcadas, a tela diz o que fazer em vez de dar em nada',
+  (await semMemoria.locator('#degrau').innerText()).includes('marque mais dezenas'),
+  await semMemoria.locator('#degrau').innerText());
+
 await trancado.close();
 
 await navegador.close();

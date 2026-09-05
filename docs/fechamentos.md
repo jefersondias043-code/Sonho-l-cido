@@ -17,26 +17,100 @@ que quase nunca se cobra.
 <!-- a tabela do dinheiro: gerada por ferramentas/numeros-do-catalogo.py -->
 | orçamento | dezenas | garantia | fechamento | custo | |
 |---:|---:|---|---|---:|---|
-| R$ 5,00 | 19 | **11 acertos** | 1 jogo de 15 dezenas | R$ 3,50 | mínimo provado |
+| R$ 5,00 | 19 | — | 1 bilhete de 15 dezenas | R$ 3,50 | não é fechamento |
 | R$ 25,00 | 22 | **11 acertos** | 6 jogos de 15 dezenas | R$ 21,00 | piso 3 |
-| R$ 100,00 | 23 | **11 acertos** | 18 jogos de 15 dezenas | R$ 63,00 | piso 4 |
-| R$ 400,00 | 25 | **11 acertos** | 57 jogos de 15 dezenas | R$ 199,50 | piso 10 |
-| R$ 1.500,00 | 25 | **12 acertos** | 341 jogos de 15 dezenas | R$ 1.193,50 | piso 55 |
-| R$ 15.000,00 | 25 | **13 acertos** | 4198 jogos de 15 dezenas | R$ 14.693,00 | piso 671 |
+| R$ 100,00 | 23 | **11 acertos** | 15 jogos de 15 dezenas | R$ 52,50 | piso 4 |
+| R$ 400,00 | 25 | **11 acertos** | 55 jogos de 15 dezenas | R$ 192,50 | piso 10 |
+| R$ 1.500,00 | 25 | **12 acertos** | 331 jogos de 15 dezenas | R$ 1.158,50 | piso 55 |
+| R$ 15.000,00 | 25 | **13 acertos** | 3634 jogos de 15 dezenas | R$ 12.719,00 | piso 671 |
 <!-- fim de a tabela do dinheiro -->
 
-A linha dos quatrocentos reais é o produto inteiro num lugar só: as vinte e
-cinco dezenas inteiras, onze acertos garantidos, e troco. Ninguém compõe isso de
-cabeça. A última coluna diz o que se pode afirmar de cada linha: **mínimo
-provado** quando nenhum fechamento faz aquilo com menos bilhetes, e o piso
-conhecido quando não.
+A primeira linha é a mais importante do produto: com cinco reais não há
+fechamento, e a tabela diz isso em vez de ficar calada. A dos quatrocentos é o
+produto inteiro num lugar só — as vinte e cinco dezenas inteiras, onze acertos
+garantidos, e troco. Ninguém compõe isso de cabeça.
+
+A última coluna diz o que se pode afirmar de cada linha: **mínimo provado**
+quando nenhum fechamento faz aquilo com menos bilhetes, e o piso conhecido
+quando não.
 
 Nenhum número acima está escrito à mão — nem no texto ao redor, de propósito: um
 preço citado em prosa é o que envelhece primeiro.
 
+O troco aparece dizendo o que é: *"sobram tanto, que não compram garantia
+maior"*. Não é figura de linguagem nem consolo — é o degrau seguinte custando
+mais do que se tem, e o aplicativo não empurra bilhete a mais para gastar o
+resto. Comprar mais bilhetes com o troco aumenta a chance de prêmio e **não**
+aumenta a garantia, que é a única coisa que este aplicativo sabe prometer.
+
 A tabela sai de `ferramentas/numeros-do-catalogo.py --gravar`, que a reescreve
 aqui a partir de `catalogo/indice.json`. Cada passada do motor pode mudá-la, e um
 preço velho num documento é uma promessa que o aplicativo não cumpre mais.
+
+## Um bilhete não é fechamento
+
+Com dinheiro para um bilhete só, a tela chegava a dizer **"11 acertos
+garantidos"**. Era verdade e era engano: um bilhete não tem com quem se
+completar, e a garantia ali é tautologia — ele acerta o que acertar. Pior, num
+pool de 19 dezenas esse bilhete leva 15, e as outras quatro que a pessoa marcou
+nunca são jogadas; a tela não dizia isso.
+
+Agora a manchete é o que ela comprou:
+
+> **1**
+> bilhete de 15 dezenas
+> R$ 3,50
+>
+> *Um bilhete não é fechamento: não há vários jogos se completando para cobrir o
+> que falta a cada um, então não há garantia a comprar — só a sorte de sempre. E
+> das suas 19 dezenas, só 15 entram nele.*
+
+E a linha do degrau deixa de partir de uma garantia que a tela não anunciou:
+*"por mais R$ 10,50 você compra 4 bilhetes que se completam e garantem 12
+acertos"*.
+
+Um caso do mesmo tipo: marcar exatamente as quinze dezenas favoritas é o que
+muita gente faz de primeira, e ali não há fechamento nenhum — com 15 dezenas o
+bilhete **é** o pool, e não há degrau acima. A tela dizia *"não há garantia
+maior para comprar com 15 dezenas"*, que é verdade e é uma saída sem porta.
+Agora diz o que fazer: *"com 15 dezenas não há fechamento a comprar: marque mais
+dezenas"*.
+
+Que só o fechamento de um bilhete deixe dezenas de fora não é observação: é
+cobrado em `conferir-tudo`, entrada por entrada. Se um fechamento de vários
+jogos passasse a ignorar uma dezena, o aplicativo pediria para marcar 25 e
+jogaria 24 sem dizer nada — o tipo de silêncio que só aparece quando alguém
+confere o bilhete impresso.
+
+## A garantia pedida virou pergunta com resposta
+
+`garantiaMinima` atravessava o aplicativo inteiro — o esquema do servidor, o
+leitor por expressão regular, a validação do cliente — e chegava num filtro que
+não filtrava nada: ele escolhia entre "a maior garantia que cabe" e "a maior
+garantia que cabe". Quem escrevia *"quero garantir 14"* tinha o 14 lido,
+validado e descartado em silêncio.
+
+Agora ele responde à pergunta que foi feita:
+
+> *Garantir 14 acertos com 20 dezenas custa R$ 1.582,00 — faltam R$ 1.282,00.*
+
+É a outra metade do produto. O aplicativo já dizia o que o dinheiro compra;
+passou a dizer também quanto custa o que a pessoa quer.
+
+## Quanto isso devolve, em média
+
+Ao lado de *"em média os dois pagam o mesmo"* — que era uma frase que se lê como
+consolo — agora vem o número:
+
+> *…que aqui é **R$ 49,41** por concurso nas faixas de 11, 12 e 13 acertos —
+> mais o que sair de 14 e 15, que é rateado e ninguém sabe de antemão.*
+
+Contra R$ 192,50 gastos. É exato e é hipergeométrico, não simulado: sai das
+distribuições de `acaso.json` por diferença, e a suíte refaz a mesma média
+direto da definição, sem tocar no arquivo, para as duas baterem ao centavo. Um
+bilhete simples devolve **25,7%** do que custa nas faixas fixas — e é o mesmo
+para qualquer arranjo dos mesmos bilhetes, que é justamente o que faz dele a
+prova de que o fechamento compra certeza, e não lucro.
 
 ## A decisão que define o produto: o cliente não resolve nada
 
@@ -57,9 +131,9 @@ Daí tudo o mais decorre:
 
 Sem WebAssembly no cliente, sem *web workers*, sem banco de sessões, sem retomada
 de trabalho interrompido. Nada disso tem razão de existir quando não há nada a
-esperar. O cliente inteiro dá **1.494 linhas** somando JavaScript, HTML e CSS —
+esperar. O cliente inteiro dá **1.499 linhas** somando JavaScript, HTML e CSS —
 teto de 1.500 cobrado pela construção —, e o peso inicial (casca, índice, preços
-e distribuições) dá **24 KiB comprimidos**.
+e distribuições) dá **26 KiB comprimidos**.
 
 ## A matemática, em quatro linhas
 
@@ -80,6 +154,28 @@ e `t'` organiza as 330:
 | `t' = a` | 45 | sistema de Turán por construção fechada, depois o motor |
 | `0 < t' < a` | 130 | o motor, partindo do melhor que houver |
 <!-- fim de a tabela das famílias -->
+
+## A escada decide sozinha
+
+Para um número de dezenas, a **escada** é a lista de degraus que alguém
+compraria: por garantia, o mais barato; e fora quem custa o mesmo ou mais e
+garante menos. Ela é construída em ordem de preço, e só entra quem garante mais
+que todos os anteriores — então **preço e garantia sobem juntos, sempre**. Não é
+propriedade do catálogo: é da função, e vale para qualquer catálogo futuro.
+
+Daí sai o módulo inteiro sem mais nenhuma busca:
+
+| pergunta | resposta |
+|---|---|
+| o que este dinheiro compra | o último degrau que cabe |
+| e se eu tivesse mais | o degrau seguinte |
+| quanto custa garantir 14 | o primeiro degrau que alcança 14 |
+| é um fechamento ou um bilhete | o degrau escolhido tem um jogo, ou mais |
+
+Antes eram três caminhos separados chegando aos mesmos números — e um deles, o
+da garantia pedida, chegava a lugar nenhum. A régua marcava os degraus por um
+caminho e a frase abaixo dela falava do "próximo" por outro; nada garantia que
+fossem o mesmo degrau.
 
 ## Mínimo provado e menor conhecido nunca se confundem
 
@@ -128,6 +224,47 @@ concordar:
 E a varredura roda duas vezes em CI: uma sobre `catalogo/`, outra sobre
 `publicar/catalogo/` — os bytes que o navegador de alguém vai baixar.
 
+### E o conferidor reprova?
+
+Rodá-lo sobre o catálogo bom prova que ele aceita o que é bom, e não prova nada
+sobre o que ele faria com o que é ruim. Um laço de cobertura quebrado, uma
+comparação invertida, um `return Ok` fora do lugar: nenhum apareceria nunca,
+porque o catálogo publicado está certo e ele diria que sim. E é dele que a
+publicação inteira depende para dizer não.
+
+`ferramentas/provar-o-conferidor.py` estraga o catálogo de propósito, um defeito
+de cada vez, e cobra que ele reprove **pelo motivo daquele defeito**:
+
+| defeito | tem de reprovar dizendo |
+|---|---|
+| falta um bilhete, com contagem e soma refeitas | *não é coberto* |
+| um bilhete trocado por outro válido e distinto | *não é coberto* |
+| a soma do índice não é a do arquivo | *soma de verificação* |
+| o índice conta um bilhete a mais | *o índice diz* |
+| o tamanho anunciado fica abaixo do piso | *abaixo do piso* |
+| mínimo provado onde os limites não se encontram | *marca provado* |
+| uma das 330 sumiu do índice | *aparece 0 vezes* |
+| o mesmo bilhete duas vezes | *bilhete repetido* |
+
+Os dois primeiros são os que importam: tudo o que a forma pode conferir continua
+batendo, e só varrer sorteio a sorteio acha o defeito.
+
+Sete dos oito defeitos estão numa entrada só, e mandar o conferidor varrer as
+outras 311 a cada vez levava seis minutos para provar o que uma entrada já
+prova. Daí o segundo argumento de `conferir-tudo`: `conferir-tudo catalogo
+20-15-13` confere o conjunto das 330 inteiro — que é barato — e varre só aquela.
+Serve também a quem acabou de regerar um fechamento. O que ele imprime começa
+com **CONFERÊNCIA PARCIAL** e diz que não autoriza publicação, para ninguém
+confundir uma coisa com a outra; e o passo do CI que autoriza continua sendo o
+sem recorte. A suíte inteira caiu de 5m44s para 40 segundos.
+
+A primeira versão deste arquivo ficou verde sem testar nada. Ela regravava o
+índice com `json.dumps`, que põe um espaço depois dos dois-pontos; o conferidor
+não usa biblioteca de JSON — tem leitor próprio, de propósito, para não
+compartilhar nada com o gerador — e procura a sequência exata `"entradas":[`.
+Lia zero entradas e reprovava por isso, oito vezes, pelo mesmo engano. Foi por
+cobrar o **motivo**, e não só o código de saída, que isso apareceu.
+
 Uma conferência que reusa o gerador só sabe dizer que o gerador concorda consigo
 mesmo.
 
@@ -140,16 +277,158 @@ São três usos, todos opcionais, todos com caminho alternativo determinístico:
 
 - **intenção** — texto livre vira `{orcamento, dezenas[], garantiaMinima}` sob
   esquema estrito. Fora do esquema é silêncio, e um leitor por expressão regular
-  assume;
+  assume — o mesmo leitor de dois lados, e por isso com a mesma resposta dos dois
+  lados: *"quero 30 dezenas"* o servidor aparava para 25 e o cliente recusava, e
+  a mesma frase mudava de significado conforme houvesse ou não servidor no ar.
+  Agora os dois recusam, porque aparar é inventar: 30 dezenas não é um pedido de
+  25, é um pedido que este leitor não entende — e dizer isso é a resposta certa,
+  com a grade ali do lado;
 - **explicação** — uma frase sobre a troca entre dinheiro e garantia, recebendo
   **apenas** números que o catálogo já produziu. A frase é descartada se trouxer
   qualquer número que não estava no pedido, e essa regra é cobrada duas vezes:
-  no servidor e de novo no cliente, antes de tocar a tela;
+  no servidor e de novo no cliente, antes de tocar a tela.
+
+  A regra sabe como o Brasil escreve dinheiro. Sem isso ela rejeitava **toda**
+  frase com preço: "R$ 199,50" vira os números 199 e 50, nenhum dos dois
+  autorizado — e o modelo tinha sido chamado justamente para falar de dinheiro.
+  O caminho com IA nunca fora exercido de ponta a ponta, e o teste que deveria
+  pegá-lo montava à mão o conjunto de números autorizados, em vez de pedi-lo ao
+  servidor: testava o conjunto que ele mesmo tinha escrito. Agora ele usa o do
+  servidor, e a suíte da tela finge um servidor para cobrar as duas metades —
+  uma frase com preço entra, uma com número inventado é descartada sem apagar a
+  frase determinística.
+
+  Reais inteiros só entram quando o valor é inteiro: com R$ 199,50 no pedido,
+  "200 reais" passava, e arredondar é calcular;
 - **narração pós-sorteio** — mesma restrição.
 
 A chave nunca sai do servidor. Desligar a IA inteira mantém o aplicativo
 funcional — é assim que ele está hoje, sem servidor nenhum. Como pôr as três
 funções no ar está em [`servidor/LEIAME.md`](../servidor/LEIAME.md).
+
+## Recomeçar em vez de insistir, e por que não
+
+A busca é estocástica e a variância entre sementes é grande — o próprio
+`motor-busca` registra uma medição em que trocar a semente mudou o resultado em
+28 cartelas, mais do que o parâmetro que estava sendo medido. O gerador usa uma
+**semente fixa**, então uma trajetória azarada não melhora por durar mais: só
+fica mais longa. Daí a hipótese de dividir o orçamento em recomeços com
+sementes diferentes, cada um partindo do melhor já achado.
+
+Medido, com o mesmo tempo total, cada caso partindo do zero:
+
+| caso | 1 corrida | 2 recomeços | 4 recomeços |
+|---|---:|---:|---:|
+| 21-15-13 | 117 | 117 | 117 |
+| 22-15-13 | 296 | **294** | 299 |
+| 23-15-12 | **83** | — | 88 |
+
+Um empate, um ganho de 0,7% e duas perdas, de 1% e de 6%. Cada recomeço devolve
+ao motor uma fase de aquecimento que ele já tinha pago, e num orçamento de uma
+hora isso se repetiria doze vezes.
+
+A hipótese era razoável e está errada. O código dos recomeços saiu — um botão
+que ninguém deve girar é código para manter à toa —, e fica o número, que é o
+que o próximo a ter a mesma ideia precisa ver. As três medições que decidiram
+isto estão reproduzíveis: `CATALOGO_SAIDA` e um catálogo de saída vazio dão a
+corrida do zero.
+
+## A resposta estava fora da tela
+
+Medido, em vez de suposto: depois do toque em *"escolher por mim"*, o número da
+resposta nascia a **788 px** do topo. Num iPhone SE (390×667) isso é 121 px
+abaixo da dobra — a pessoa tocava no botão e continuava olhando para a grade de
+dezenas, sem nada que dissesse que havia uma resposta mais abaixo. Num iPhone 12
+o número aparecia pela metade e "acertos garantidos" ficava cortado.
+
+O aplicativo tem uma tela só, e a especificação pede que o número da resposta
+seja o maior elemento dela — e era, num lugar que ninguém via.
+
+Agora, quando a pessoa pede que o aplicativo escolha, a tela vai até a resposta:
+o número, o que ele significa, o preço e a ressalva cabem juntos na menor tela
+que ainda se vende. A rolagem é suave, e instantânea para quem pediu menos
+movimento ao sistema. Rolar não acontece quando a pessoa marca dezenas na mão —
+ali ela está trabalhando na grade, e puxar a tela debaixo do dedo seria pior do
+que não rolar.
+
+A suíte da tela mede isso num contexto de 390×667: o topo do número dentro da
+janela, e o fim de "acertos garantidos" também.
+
+## Uma lista que ninguém rola
+
+Os milhares de bilhetes que R$ 15.000 compram viravam **339 mil pixels** de
+página e 67 mil nós no DOM — eram 4.198 no dia da medição. Quatrocentas telas de rolagem entre a lista e tudo o que vem
+depois dela — a conferência sorteio a sorteio, o bolão, a carteira, a tabela de
+preços. Na prática, com um fechamento grande, metade do aplicativo deixava de
+existir; e num telefone barato aquilo é memória que não há.
+
+A lista passou a desenhar os primeiros cinquenta e a dizer quantos existem. O
+que o aplicativo **guarda** não mudou: a varredura exaustiva, a divisão em
+bolão, a conferência contra o sorteio e a impressão dos volantes continuam
+vendo o fechamento inteiro — e a suíte cobra as duas metades, que a lista foi
+cortada e que a varredura ainda cobre tudo.
+
+## O bolão dividido duas vezes
+
+Quem abre um link de parte vê os bilhetes dele. Se então mexesse em "dividir com
+outras pessoas", o aplicativo dividia **a parte** e gerava links que dizem
+"parte *i* de *n* do fechamento" — e quem abrisse aquele link receberia outra
+coisa, maior, do que a contagem que estava na tela de quem enviou.
+
+E o pior deles, que só aparece no aparelho de outra pessoa: o link carrega o
+fechamento em `f=v-k-t`, e o aplicativo **ignorava** isso. Os bilhetes vinham do
+fechamento que o orçamento guardado naquele aparelho escolheria. Medido: com
+R$ 20.000 guardados, quem recebia uma parte de cinco bilhetes abria outra coisa
+inteira. Cada participante jogava um bolão diferente, e a cobertura combinada —
+que é a razão de existir do bolão — não valia nada.
+
+Agora o link fixa o fechamento, pondo o orçamento no preço exato dele: a escada
+para naquele degrau, pelo caminho de sempre. E mexer no dinheiro desfaz o
+vínculo com o link, porque a pergunta deixou de ser a do bolão.
+
+E a carteira de quem é parte guardava o fechamento inteiro: um custo que essa
+pessoa não pagou, ao lado de um retorno que é só o dela. A conta não fechava
+para ninguém.
+
+Agora a divisão é sempre do fechamento inteiro, para todo mundo. É o que o link
+sabe expressar, e é o que faz sentido: quem organiza um bolão divide o
+fechamento; quem recebeu uma parte não tem o que redividir. A suíte cobra que a
+soma das partes vistas por um participante seja o fechamento inteiro, e não a
+parte dele.
+
+## Chegar à tela em 3G
+
+O alvo da especificação é **primeira renderização útil em menos de 1 s em 3G
+rápido**, e ele nunca tinha sido medido. Medido — servido como o GitHub Pages
+serve, HTTP/2 com compressão, sob a rede "3G rápido" do próprio Chrome
+(1,6 Mbps, 562 ms de ida e volta):
+
+| | antes | agora |
+|---|---:|---:|
+| primeira pintura | 1.200 ms | 1.260 ms |
+| grade tocável | 1.880 ms | 1.360 ms |
+| resposta na tela | 2.500 ms | 1.370 ms |
+| pedidos | 14 | 9 |
+
+A resposta chegava em duas ondas encadeadas desnecessárias. O navegador só
+descobre `catalogo.js`, `conferir.js`, `estrategia.js` e `volante.js` depois de
+baixar e ler `app.js`; e só pede os três arquivos do catálogo depois de executar
+os módulos. Com 562 ms de latência, cada onda custa mais de meio segundo.
+
+Sete `<link>` no cabeçalho resolvem: `modulepreload` para os quatro módulos e
+`preload` para os três JSON. Tudo passa a ser pedido junto, numa onda só.
+
+O `crossorigin` nos três `preload` não é enfeite: sem ele o navegador baixava o
+arquivo, não conseguia casá-lo com o `fetch` do aplicativo e **baixava de novo**
+— dobrando o tráfego e mantendo a segunda onda. A cascata mostrava os dois
+pedidos, um em cada onda.
+
+O que resta é o piso: duas idas e voltas — o HTML, e tudo o que ele referencia.
+Com os 562 ms do preset do Chrome isso são 1,13 s, e não há folga abaixo disso
+sem embutir o CSS e o JavaScript no HTML, o que custaria a etapa de compilação
+que este aplicativo não tem. Com uma latência de 3G real (150 a 300 ms) as
+mesmas duas idas e voltas dão 300 a 600 ms, dentro do alvo. Fica registrado
+assim, com a latência dita, em vez de escolhido o número que passa.
 
 ## Como mexer
 
@@ -174,7 +453,11 @@ node app/testar-catalogo.mjs             # soma de verificação, posições, bo
 node app/testar-conferir.mjs             # a varredura do cliente, contra o catálogo
 node servidor/testar-intencao.mjs        # o leitor que responde sem modelo
 node servidor/testar-explicar.mjs        # a regra que descarta número inventado
+node servidor/testar-resultado.mjs       # o sorteio oficial, sem sair para a rede
+python3 ferramentas/provar-o-conferidor.py    # e o conferidor reprovando de propósito
 node app/testar-tela.mjs                 # a tela, num navegador de verdade
+                                         # (exige ./construir-app.sh antes: elas
+                                         #  servem publicar/, não app/)
 node app/testar-tela.mjs /repo/fechamentos/   # e de novo, na subpasta em que vai ao ar
 node ferramentas/testar-convivencia.mjs       # os dois aplicativos no mesmo endereço
 

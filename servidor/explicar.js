@@ -33,24 +33,55 @@ export default {
 ///
 /// Devolve `null` quando o pedido não é um pedido — assim nenhuma chamada sai
 /// daqui com dado inventado.
-function numerosDe(d) {
+///
+/// Exportada para a suíte: um teste que monta o conjunto à mão testa o conjunto
+/// que ele mesmo montou. Foi assim que passou despercebido por dias que nenhuma
+/// frase com preço em reais chegava à tela.
+export function numerosDe(d) {
   if (!d || typeof d !== 'object') return null;
   // Dois assuntos, um contrato: só entram números, e a frase só pode usar os
   // que entraram. A escolha traz a combinação e o preço; o sorteio, o que saiu.
-  const campos = d.assunto === 'sorteio'
+  //
+  // Contagem e dinheiro entram por portas diferentes, e isso não é asseio: o
+  // que é dinheiro chega em centavos e vai ser escrito em reais, com vírgula.
+  const [contas, dinheiros] = d.assunto === 'sorteio'
+    ? [[d.melhor, d.jogos], [d.custo, d.voltou]]
+    : [[d.v, d.k, d.t, d.jogos, d.piso, d.degrauT], [d.custo, d.degrauFalta]];
+  const obrigatorios = d.assunto === 'sorteio'
     ? [d.melhor, d.jogos, d.custo, d.voltou]
-    : [d.v, d.k, d.t, d.jogos, d.custo, d.piso, d.degrauT, d.degrauFalta];
-  if (campos.slice(0, 4).some((n) => !Number.isFinite(n))) return null;
-  return new Set(
-    campos
-      .filter((n) => Number.isFinite(n))
-      .flatMap((n) => [String(n), String(Math.round(n)), String(Math.round(n / 100))]),
-  );
+    : [d.v, d.k, d.t, d.jogos];
+  if (obrigatorios.some((n) => !Number.isFinite(n))) return null;
+  return new Set([
+    ...contas.filter(Number.isFinite).map(String),
+    ...dinheiros.filter(Number.isFinite).flatMap(comoSeEscreve),
+  ]);
 }
+
+const CENTAVOS = { minimumFractionDigits: 2, maximumFractionDigits: 2 };
+
+/// Um valor em centavos, em toda forma exata de escrevê-lo — e só nas exatas.
+///
+/// "R$ 199,50" é como o Brasil escreve dinheiro, e é onde a regra falhava: a
+/// frase virava os números 199 e 50, nenhum dos dois autorizado, e era
+/// descartada justamente quando dizia o que o modelo foi chamado a explicar.
+///
+/// Reais inteiros só entram quando o valor **é** inteiro. Antes entrava o
+/// arredondamento, e arredondar é calcular: com R$ 199,50 no pedido, "200
+/// reais" passava — o mesmo tipo de conta que a suíte recusa em "cerca de 160".
+const comoSeEscreve = (centavos) => [
+  String(centavos),
+  (centavos / 100).toLocaleString('pt-BR', CENTAVOS),
+  ...(centavos % 100 === 0 ? [String(centavos / 100)] : []),
+];
+
+/// Como um número aparece num texto em português: com ponto separando milhar e
+/// vírgula separando centavos. O ponto só conta como separador quando vêm três
+/// dígitos atrás dele — senão o ponto final de "são 15." entraria no número.
+const NUMEROS = /\d+(?:\.\d{3})*(?:,\d+)?/g;
 
 /// A frase pode escrever palavras à vontade. Números, só os que recebeu.
 export function soUsaEstesNumeros(frase, permitidos) {
-  return (frase.match(/\d+/g) ?? []).every((n) => permitidos.has(n));
+  return (frase.match(NUMEROS) ?? []).every((n) => permitidos.has(n));
 }
 
 async function escrever(d, chave) {
