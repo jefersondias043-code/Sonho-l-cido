@@ -139,7 +139,7 @@ Daí tudo o mais decorre:
 
 Sem WebAssembly no cliente, sem *web workers*, sem banco de sessões, sem retomada
 de trabalho interrompido. Nada disso tem razão de existir quando não há nada a
-esperar. O cliente inteiro dá **1.648 linhas** somando JavaScript, HTML e CSS —
+esperar. O cliente inteiro dá **1.649 linhas** somando JavaScript, HTML e CSS —
 teto de 1.700 cobrado pela construção —, e o peso inicial (casca, índice, preços
 e distribuições) dá **29 KiB comprimidos**.
 

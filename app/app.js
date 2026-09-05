@@ -426,10 +426,11 @@ function desenharManual() {
   // Lista vazia sem explicação é a pessoa achando que o aplicativo quebrou. A
   // frase nomeia o que ela pediu, para ela saber o que afrouxar.
   const pedido = [k && `${k} dezenas por cartela`, t && `${t} acertos garantidos`,
-    teto !== Infinity && `no máximo ${teto} ${teto === 1 ? 'cartela' : 'cartelas'}`]
-    .filter(Boolean).join(', ');
+    teto !== Infinity && `no máximo ${teto} ${teto === 1 ? 'cartela' : 'cartelas'}`].filter(Boolean);
+  const frase = pedido.length < 2 ? pedido.join('')
+    : `${pedido.slice(0, -1).join(', ')} e ${pedido.at(-1)}`;
   $('manual').textContent = quais.length ? ''
-    : `Com ${pool} dezenas não há fechamento catalogado ${pedido ? `com ${pedido}` : ''}.`;
+    : `Com ${pool} dezenas não há fechamento catalogado ${frase ? `com ${frase}` : ''}.`.replace(' .', '.');
 }
 
 /// Aplica o que foi escolhido: ajusta a marcação ao pool pedido, fixa o

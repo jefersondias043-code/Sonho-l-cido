@@ -586,6 +586,15 @@ conferir('um teto impossível é explicado, e não silencioso',
 conferir('e a explicação nomeia o que foi pedido',
   semSaida.includes('no máximo 1 cartela'), semSaida);
 
+// Dois pedidos ao mesmo tempo viram uma frase, e não uma lista com vírgula
+// solta no fim: quem lê isso já está confuso, e a frase é a saída.
+await opcoesDe(25, '2', '', 15);
+const doisPedidos = await pagina.locator('#manual').innerText();
+conferir('e dois pedidos viram uma frase, com "e" no lugar da última vírgula',
+  doisPedidos.includes('15 acertos garantidos e no máximo 2 cartelas'), doisPedidos);
+conferir('e a frase termina em ponto, sem espaço sobrando',
+  /cartelas\.$/.test(doisPedidos.trim()), doisPedidos);
+
 // E o essencial: escolher na lista monta *aquele* fechamento. Não o mais
 // próximo, não o que o dinheiro compraria — aquele.
 await opcoesDe(22, '', '', '');
