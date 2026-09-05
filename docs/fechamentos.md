@@ -139,7 +139,7 @@ Daí tudo o mais decorre:
 
 Sem WebAssembly no cliente, sem *web workers*, sem banco de sessões, sem retomada
 de trabalho interrompido. Nada disso tem razão de existir quando não há nada a
-esperar. O cliente inteiro dá **1.649 linhas** somando JavaScript, HTML e CSS —
+esperar. O cliente inteiro dá **1.668 linhas** somando JavaScript, HTML e CSS —
 teto de 1.700 cobrado pela construção —, e o peso inicial (casca, índice, preços
 e distribuições) dá **29 KiB comprimidos**.
 
@@ -211,14 +211,20 @@ queria justamente aquele fica sem entender por que ele não está lá.
 
 Então **montar do meu jeito** mostra a lista inteira, não a escada: para o pool
 escolhido, todos os fechamentos catalogados em cartelas que a lotérica aceita —
-de 15 a 20 dezenas —, do mais barato ao mais caro, cada linha dizendo quantas
-cartelas, de que tamanho, que garantia e quanto custa.
+de 15 a 20 dezenas —, do mais barato ao mais caro, cada linha assim:
+
+```
+garante 12 acertos · R$ 287,00 · 82 cartelas de 15 dezenas
+```
+
+Garantia e preço primeiro porque num telefone a lista fechada mostra só o começo
+do texto, e o começo tem de ser o que faz escolher entre uma linha e outra.
 
 São quatro coisas que se pede, exatamente as quatro que definem um fechamento:
 
 | o que se pede | como | deixando em branco |
 |---|---|---|
-| quantas dezenas no pool | lista de 15 a 25 | usa as que já estão marcadas |
+| quantas dezenas no pool | lista de 15 a 25, espelhando a grade | fica como está |
 | quantas em cada cartela | lista, só os tamanhos que este pool tem | tanto faz |
 | que garantia de acertos | lista, só as garantias que este pool tem, e vale como mínimo | tanto faz |
 | no máximo quantas cartelas | número livre | todas |
@@ -234,12 +240,18 @@ resposta. E os dois modos, lado a lado:
 | o campo de dinheiro | é o que ela digitou | vira o preço do que ela montou |
 | o rodapé | o degrau seguinte | *"você montou este fechamento à mão"* |
 
-Cinco coisas mereceram cuidado, e as cinco são de tela e não de matemática:
+Sete coisas mereceram cuidado, e as sete são de tela e não de matemática:
 
 **Nenhum filtro oferece um beco.** As listas de tamanho de cartela e de garantia
 são feitas do próprio pool: se não existe fechamento de 18 dezenas por cartela
 com 19 no pool, "18" não aparece. Um filtro que oferece o que não existe
 transforma escolha em tentativa e erro.
+
+**A grade e o pool são a mesma coisa dita de dois jeitos.** O select do pool
+espelha o que está marcado, e escolher nele remarca a grade. Duas fontes
+discordando davam o pior dos resultados silenciosos: marcar vinte dezenas na
+grade, abrir o modo manual — que ainda dizia vinte e cinco — e ver a primeira
+escolha refazer a marcação sem avisar.
 
 **A garantia vale como mínimo, e não como igual.** Quem pede 13 acertos aceita
 14 — o que não se aceita é receber 12 tendo pedido 13.
@@ -252,8 +264,8 @@ descartado, porque escolher o tamanho é o que este modo oferece.
 
 **Lista vazia sem explicação é aplicativo quebrado.** Quando os quatro pedidos
 juntos não deixam nada, a tela repete o que foi pedido — *"com 25 dezenas não há
-fechamento catalogado com no máximo 1 cartela"* — para a pessoa saber o que
-afrouxar.
+fechamento catalogado com 15 acertos garantidos e no máximo 2 cartelas"* — para
+a pessoa saber o que afrouxar.
 
 **O dinheiro não pode contradizer a resposta.** Montar um fechamento de
 R$ 11.424,00 com R$ 300,00 no campo põe duas afirmações na mesma tela, uma delas
@@ -263,10 +275,19 @@ falsa. O campo passa a dizer o preço do que foi montado.
 13"* descreve um caminho que esta resposta não percorreu. Aqui ele diz de onde a
 resposta veio.
 
-E o caminho de volta é o que se esperaria: mexer no dinheiro, tocar na grade ou
-pedir *escolher por mim* solta o fechamento fixado e devolve o modo automático
-inteiro. Não há botão de "sair do modo manual" porque não há modo em que entrar —
-há um fechamento nomeado, ou não há.
+E o caminho de volta é o que se esperaria: mexer no dinheiro, tocar na grade,
+limpá-la ou pedir *escolher por mim* solta o fechamento fixado e devolve o modo
+automático inteiro. Não há botão de "sair do modo manual" porque não há modo em
+que entrar — há um fechamento nomeado, ou não há.
+
+Soltar é do mesmo lugar em que se solta o link de bolão: **toda troca de dezenas
+solta os dois**, porque os dois eram de outro conjunto. Duas travessias mostraram
+por quê. Quem chega por um link de bolão recebe uma parte — cinco bilhetes de
+quinze — e, montando outro fechamento à mão com o mesmo número de dezenas,
+recebia um terço do novo, chamado de parte de um bolão que já não estava na tela.
+E limpar a grade com um fechamento de 22 dezenas fixado deixava dezesseis
+bilhetes **vazios** sob uma manchete de garantia: não havia mais dezena nenhuma
+de onde tirar os números.
 
 ## Mínimo provado e menor conhecido nunca se confundem
 

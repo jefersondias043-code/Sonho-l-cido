@@ -524,10 +524,25 @@ const opcoesDe = async (pool, teto = '', k = '', t = '') => {
     .map((t) => t.replace(/\s+/g, ' ').trim());
 };
 
+// A grade e o select do pool dizem a mesma coisa, e têm de dizer o mesmo número:
+// marcar dezenas lá e encontrar outro valor aqui faz a primeira escolha refazer
+// em silêncio a marcação que a pessoa acabou de fazer.
+await pagina.click('#limpar');
+for (const d of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]) {
+  await pagina.click(`.grade [data-dezena="${d}"]`);
+}
+await pagina.waitForTimeout(1200);
+conferir('o pool do modo manual acompanha a grade',
+  (await pagina.inputValue('#m-pool')) === '18', await pagina.inputValue('#m-pool'));
+conferir('e a lista já é a desse pool',
+  (await pagina.locator('#m-fechamento option').allInnerTexts())
+    .every((l) => /de 1[5-8] dezenas/.test(l.replace(/\s+/g, ' '))),
+  (await pagina.locator('#m-fechamento option').allInnerTexts()).join(' | '));
+
 const de23 = await opcoesDe(23);
 conferir('o pool de 23 dezenas abre uma lista de fechamentos', de23.length > 5, `${de23.length}`);
-conferir('e cada linha diz cartelas, tamanho, garantia e preço',
-  de23.every((t) => /^\d+ cartelas? de \d+ dezenas · garante \d+ acertos · R\$ [\d.]+,\d\d$/.test(t)),
+conferir('e cada linha diz garantia, preço, cartelas e tamanho',
+  de23.every((t) => /^garante \d+ acertos · R\$ [\d.]+,\d\d · \d+ cartelas? de \d+ dezenas$/.test(t)),
   de23.slice(0, 3).join(' | '));
 // A lista existe para mostrar o que a escada esconde: sem isso o modo manual
 // seria o automático com outra roupa.
@@ -545,7 +560,7 @@ const de23ate20 = await opcoesDe(23, '20');
 conferir('o teto de cartelas encurta a lista', de23ate20.length < de23.length,
   `${de23ate20.length} de ${de23.length}`);
 conferir('e nada acima do teto sobra',
-  de23ate20.every((t) => Number(t.match(/^(\d+) cartelas?/)[1]) <= 20), de23ate20.join(' | '));
+  de23ate20.every((t) => Number(t.match(/· (\d+) cartelas?/)[1]) <= 20), de23ate20.join(' | '));
 
 // As outras duas características que a pessoa pode pedir direto: quantas
 // dezenas em cada cartela, e que garantia. Cada uma corta a lista, e só oferece
@@ -568,13 +583,13 @@ conferir('pedir 18 dezenas por cartela deixa só cartelas de 18',
 
 const garante13 = await opcoesDe(23, '', '', 13);
 conferir('pedir 13 acertos não devolve nada que garanta menos',
-  garante13.length > 0 && garante13.every((l) => Number(l.match(/garante (\d+)/)[1]) >= 13),
+  garante13.length > 0 && garante13.every((l) => Number(l.match(/^garante (\d+)/)[1]) >= 13),
   garante13.join(' | '));
 
 // Os dois juntos, que é onde um filtro mal-feito devolveria a lista inteira.
 const ambos = await opcoesDe(23, '', 16, 12);
 conferir('os dois filtros juntos valem os dois',
-  ambos.every((l) => /de 16 dezenas/.test(l) && Number(l.match(/garante (\d+)/)[1]) >= 12),
+  ambos.every((l) => /de 16 dezenas$/.test(l) && Number(l.match(/^garante (\d+)/)[1]) >= 12),
   ambos.join(' | '));
 
 // Um pedido impossível não pode deixar a pessoa no escuro: a tela diz o que ela
@@ -607,9 +622,9 @@ const valores = await pagina.locator('#m-fechamento option').evaluateAll(
   (os) => os.map((o) => o.value));
 await pagina.selectOption('#m-fechamento', valores[qual]);
 await pagina.waitForTimeout(1500);
-const jogosPedidos = Number(escolhido.match(/^(\d+) cartelas?/)[1]);
-const kPedido = Number(escolhido.match(/de (\d+) dezenas/)[1]);
-const tPedido = Number(escolhido.match(/garante (\d+) acertos/)[1]);
+const jogosPedidos = Number(escolhido.match(/· (\d+) cartelas?/)[1]);
+const kPedido = Number(escolhido.match(/de (\d+) dezenas$/)[1]);
+const tPedido = Number(escolhido.match(/^garante (\d+) acertos/)[1]);
 const respostaManual = (await pagina.locator('.resposta').innerText()).replace(/\s+/g, ' ');
 conferir('a resposta é o fechamento escolhido, e não outro',
   respostaManual.includes(`${jogosPedidos} jogos de ${kPedido} dezenas`)
@@ -641,6 +656,35 @@ conferir('e o rodapé diz que este fechamento foi montado à mão',
   (await pagina.locator('#degrau').innerText()).includes('montou este fechamento à mão'),
   await pagina.locator('#degrau').innerText());
 
+// Quem chegou por um link de bolão recebe uma parte. Montando outro fechamento à
+// mão, essa parte era de outro conjunto: entregar um terço do novo chamando de
+// "parte 1 de 3 deste bolão" seria descrever um bolão que não existe mais.
+const daParte = await contexto.newPage();
+await daParte.goto(linkDaParte, { waitUntil: 'networkidle' });
+await daParte.waitForSelector('.bilhetes li');
+const comoParte = await daParte.locator('.bilhetes li').count();
+conferir('quem abre o link ainda recebe a parte dele', comoParte > 0);
+conferir('e a tela diz que é uma parte',
+  (await daParte.locator('#secao-bilhetes').innerText()).includes('Você é a parte'),
+  await daParte.locator('#secao-bilhetes').innerText());
+await daParte.click('#det-manual summary');
+const poolDaParte = await daParte.locator('.grade [aria-pressed=true]').count();
+await daParte.selectOption('#m-pool', String(poolDaParte));
+await daParte.waitForTimeout(500);
+const opcoesDaParte = await daParte.locator('#m-fechamento option').evaluateAll(
+  (os) => os.map((o) => o.value));
+await daParte.selectOption('#m-fechamento', opcoesDaParte[0]);
+await daParte.waitForTimeout(1500);
+const jogosDoNovo = Number((await daParte.locator('.resposta').innerText())
+  .replace(/\s+/g, ' ').match(/(\d+) jogos de/)?.[1] ?? 1);
+conferir('montar à mão desfaz o vínculo com o bolão',
+  !(await daParte.locator('#secao-bilhetes').innerText()).includes('Você é a parte'),
+  (await daParte.locator('#secao-bilhetes').innerText()).replace(/\s+/g, ' ').slice(0, 120));
+conferir('e entrega o fechamento inteiro, não um pedaço dele',
+  (await daParte.locator('.bilhetes li').count()) === Math.min(jogosDoNovo, 50),
+  `${await daParte.locator('.bilhetes li').count()} de ${jogosDoNovo}`);
+await daParte.close();
+
 // ── e o modo automático continua inteiro ────────────────────────────────────
 //
 // A promessa ao usuário foi que o modo de sempre não mudaria. Mexer no dinheiro
@@ -661,6 +705,28 @@ const rodape = await pagina.locator('#degrau').innerText();
 conferir('e o rodapé volta a falar de dinheiro e garantia, como no automático',
   doAutomatico.some((r) => r.test(rodape)), rodape);
 conferir('e não sobrou nada dito à mão', !rodape.includes('montou este fechamento à mão'));
+
+// E o caminho de volta ao contrário: fixar de novo à mão e limpar a grade. O
+// fechamento era de 22 dezenas, e sem dezena nenhuma não há de onde tirar os
+// números — a tela mostrava bilhetes vazios sob uma manchete de garantia.
+await opcoesDe(22, '', '', '');
+const deNovo = await pagina.locator('#m-fechamento option').evaluateAll((os) => os.map((o) => o.value));
+await pagina.selectOption('#m-fechamento', deNovo[qual]);
+await pagina.waitForTimeout(1200);
+conferir('fixar de novo à mão volta a valer',
+  (await pagina.locator('#degrau').innerText()).includes('montou este fechamento à mão'));
+await pagina.click('#limpar');
+await pagina.waitForTimeout(1200);
+conferir('limpar a grade solta o fechamento montado à mão',
+  (await pagina.locator('.bilhetes li').count()) === 0,
+  `${await pagina.locator('.bilhetes li').count()} bilhetes com a grade vazia`);
+conferir('e a tela pede dezenas em vez de anunciar garantia',
+  (await pagina.locator('.resposta').innerText()).includes('Marque mais'),
+  (await pagina.locator('.resposta').innerText()).replace(/\s+/g, ' ').slice(0, 100));
+
+// E de volta a um estado utilizável, que é de onde as seções seguintes partem.
+await pagina.click('#escolher');
+await pagina.waitForSelector('.bilhetes li', { timeout: 20000 });
 
 // ── segunda visita, sem rede ────────────────────────────────────────────────
 
@@ -737,9 +803,27 @@ conferir('e não fala de uma garantia que acabou de negar',
   !manchete.includes('A garantia só vale'), manchete);
 conferir('e a tela entrega esse um bilhete',
   (await semMemoria.locator('.bilhetes li').count()) === 1);
+
 conferir('e o degrau ensina onde o fechamento começa, sem partir de garantia nenhuma',
   /bilhetes que se completam/.test(await semMemoria.locator('#degrau').innerText()),
   await semMemoria.locator('#degrau').innerText());
+
+// "1 bilhetes", "1 jogos", "1 cartelas": o erro que faz a pessoa desconfiar do
+// resto da tela. Com um bilhete só na mão, a página inteira — resposta,
+// carteira, bolão, a lista do modo manual — não pode escrever nenhum deles.
+await semMemoria.click('[data-acao=guardar]');
+await semMemoria.click('#det-bolao summary');
+await semMemoria.click('#det-manual summary');
+await semMemoria.selectOption('#m-pool', '15');
+await semMemoria.waitForTimeout(800);
+const aPaginaToda = await semMemoria.locator('body').innerText();
+const singularErrado = ['1 bilhetes', '1 jogos', '1 cartelas', '1 dezenas', '1 partes']
+  .filter((erro) => aPaginaToda.includes(erro));
+conferir('e nenhum plural sobra num contador de um só', singularErrado.length === 0,
+  singularErrado.join(', '));
+conferir('a carteira guarda "1 jogo", no singular',
+  /· 1 jogo de \d+ dezenas/.test(aPaginaToda.replace(/\s+/g, ' ')),
+  await semMemoria.locator('.registros li').innerText());
 
 // Marcar exatamente as quinze favoritas é o que muita gente faz de primeira, e
 // ali não há fechamento nenhum — nem um degrau acima para comprar. A tela tem de

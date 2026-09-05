@@ -28,6 +28,10 @@ const estado = {
 
 const reais = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 const dinheiro = (centavos) => reais.format((centavos ?? 0) / 100);
+/// "1 bilhete", "2 bilhetes". Um fechamento de uma cartela é raro no modo
+/// automático e comum no manual, e "1 bilhetes" é o tipo de erro que faz a
+/// pessoa desconfiar do resto da tela.
+const plural = (n, um, muitos) => `${n} ${n === 1 ? um : muitos}`;
 
 function emCentavos(texto) {
   const limpo = String(texto).replace(/[^\d,.]/g, '').replace(/\.(?=\d{3}\b)/g, '');
@@ -71,10 +75,6 @@ async function arrancar() {
   if (doLink) estado.dezenas = new Set(doLink.dezenas);
   if (dele) [estado.link, estado.orcamento] = [doLink, dele.jogos * estado.precos.aposta[doLink.k]];
 
-  $('m-pool').innerHTML = Array.from({ length: UNIVERSO - 14 }, (_, i) => i + 15)
-    .map((v) => `<option value="${v}"${v === estado.dezenas.size ? ' selected' : ''}>${v}</option>`)
-    .join('');
-  desenharManual();
   desenharPrecos();
   desenharCarteira();
   atualizarDinheiro();
@@ -122,6 +122,7 @@ function responder() {
   // muda, em vez de deixar a pessoa procurar às cegas.
   $('degraus').innerHTML = escada(estado.indice, estado.precos, estado.dezenas.size)
     .map((e) => `<option value="${paraARegua(e.custo)}" label="${e.t}"></option>`).join('');
+  desenharManual();
   $('degrau').textContent = frasedoDegrau(plano);
   $('resposta').innerHTML = desenharResposta(plano);
   $('varredura').textContent = '';
@@ -176,7 +177,7 @@ function desenharResposta(plano) {
   return `
     <p class="numero">${e.t}</p>
     <p class="unidade">acertos garantidos</p>
-    <p class="detalhe">${e.jogos} ${e.jogos === 1 ? 'jogo' : 'jogos'} de ${e.k} dezenas ·
+    <p class="detalhe">${plural(e.jogos, 'jogo', 'jogos')} de ${e.k} dezenas ·
       <b>${dinheiro(e.custo)}</b>${plano.sobra ? ` · sobram ${dinheiro(plano.sobra)}, que não
       compram garantia maior` : ''}</p>
     <p class="selos">${selo}</p>
@@ -292,7 +293,8 @@ function desenharBilhetes() {
   $('secao-bilhetes').innerHTML = `
     ${estado.link?.parte == null ? '' : `<p class="ajuda">Você é a parte
       ${estado.link.parte + 1} de ${estado.link.partes} deste bolão: a garantia acima é do bolão
-      inteiro, e estes ${estado.bilhetes.length} bilhetes são os que cabem a você.</p>`}
+      inteiro, e ${plural(estado.bilhetes.length, 'este bilhete é o que cabe',
+        'estes bilhetes são os que cabem')} a você.</p>`}
     ${estado.bilhetes.length <= MOSTRA ? '' : `<p class="ajuda">São
       ${estado.bilhetes.length.toLocaleString('pt-BR')} bilhetes, e a lista mostra os ${MOSTRA}
       primeiros — copie, baixe ou imprima para ter todos. O que se confere abaixo usa todos.</p>`}
@@ -341,7 +343,8 @@ function desenharBolao() {
   $('bolao').innerHTML = `<ol class="partes">${grupos
     .map((g, i) => {
       const link = volante.linkDaParte(base, { dezenas: estado.dezenas, v, k, t, parte: i, partes });
-      return `<li><b>Parte ${i + 1}</b> — ${g.length} bilhetes · ${dinheiro(g.length * estado.precos.aposta[k])}
+      return `<li><b>Parte ${i + 1}</b> — ${plural(g.length, 'bilhete', 'bilhetes')} ·
+        ${dinheiro(g.length * estado.precos.aposta[k])}
         <button type="button" class="discreto" data-link="${link}">Copiar link</button></li>`;
     })
     .join('')}</ol>`;
@@ -360,7 +363,8 @@ function desenharPrecos() {
 function desenharCarteira() {
   if (!estado.carteira.length) { $('carteira').innerHTML = '<p class="ajuda">Nada guardado.</p>'; return; }
   $('carteira').innerHTML = `<ol class="registros">${estado.carteira
-    .map((r, i) => `<li><b>${r.t} acertos garantidos</b> · ${r.jogos} jogos de ${r.k} dezenas ·
+    .map((r, i) => `<li><b>${r.t} acertos garantidos</b> ·
+        ${plural(r.jogos, 'jogo', 'jogos')} de ${r.k} dezenas ·
         ${dinheiro(r.custo)} · ${new Date(r.data).toLocaleDateString('pt-BR')}${
       r.retorno == null ? ''
         : ` · <b>voltou ${dinheiro(r.retorno)}</b>${r.concurso ? ` no concurso ${r.concurso}` : ''}`}
@@ -402,7 +406,12 @@ function trocarOpcoes(id, opcoes) {
 /// oferecem o que existe: não há como pedir uma configuração que o catálogo não
 /// tenha, nem chegar a uma tela vazia sem saber por quê.
 function desenharManual() {
-  const pool = Number($('m-pool').value) || estado.dezenas.size || UNIVERSO;
+  // O pool é o que está marcado na grade, e não o que o select guardou: são a
+  // mesma coisa dita de dois jeitos, e duas fontes discordando faziam a primeira
+  // escolha aqui refazer em silêncio a marcação que a pessoa tinha feito lá.
+  const pool = estado.dezenas.size >= 15 ? estado.dezenas.size : UNIVERSO;
+  trocarOpcoes('m-pool', Array.from({ length: UNIVERSO - 14 }, (_, i) => [i + 15, `${i + 15}`]));
+  $('m-pool').value = String(pool);
   const teto = Number($('m-teto').value) || Infinity;
   const todas = fechamentosDe(estado.indice, estado.precos, pool);
   // Os dois filtros listam só os valores que este pool tem. Oferecer "18 por
@@ -420,13 +429,15 @@ function desenharManual() {
   const quais = todas
     .filter((e) => e.jogos <= teto && (!k || e.k === k) && (!t || e.t >= t))
     .filter((e, _, ate) => !ate.some((o) => o.k === e.k && o.custo <= e.custo && o.t > e.t));
+  // Garantia e preço primeiro: num telefone a lista fechada mostra só o começo
+  // do texto, e o começo tem de ser o que faz escolher entre uma linha e outra.
   trocarOpcoes('m-fechamento', quais.map((e) => [`${e.k}-${e.t}`,
-    `${e.jogos} ${e.jogos === 1 ? 'cartela' : 'cartelas'} de ${e.k} dezenas ·
-     garante ${e.t} acertos · ${dinheiro(e.custo)}`]));
+    `garante ${e.t} acertos · ${dinheiro(e.custo)} ·
+     ${plural(e.jogos, 'cartela', 'cartelas')} de ${e.k} dezenas`]));
   // Lista vazia sem explicação é a pessoa achando que o aplicativo quebrou. A
   // frase nomeia o que ela pediu, para ela saber o que afrouxar.
   const pedido = [k && `${k} dezenas por cartela`, t && `${t} acertos garantidos`,
-    teto !== Infinity && `no máximo ${teto} ${teto === 1 ? 'cartela' : 'cartelas'}`].filter(Boolean);
+    teto !== Infinity && `no máximo ${plural(teto, 'cartela', 'cartelas')}`].filter(Boolean);
   const frase = pedido.length < 2 ? pedido.join('')
     : `${pedido.slice(0, -1).join(', ')} e ${pedido.at(-1)}`;
   $('manual').textContent = quais.length ? ''
@@ -440,6 +451,10 @@ function aplicarManual() {
   const [k, t] = ($('m-fechamento').value || '').split('-').map(Number);
   if (estado.dezenas.size !== pool) ajustarPara(pool);
   estado.fixo = k && t ? { v: pool, k, t } : null;
+  // Quem chegou por um link de bolão recebe uma parte, não o fechamento inteiro.
+  // Montando outro fechamento à mão, aquela parte era de outro conjunto — e sem
+  // isto a tela entregaria um terço do novo dizendo ser a parte do bolão antigo.
+  if (estado.fixo) estado.link = null;
   // O campo de dinheiro passa a dizer o preço do que foi escolhido. Sem isto ele
   // continuaria mostrando o orçamento antigo ao lado de uma resposta que custa
   // outra coisa — duas afirmações na mesma tela, uma delas falsa.
@@ -456,12 +471,11 @@ function ligarControles() {
     const d = Number(ev.target.dataset?.dezena);
     if (!d) return;
     estado.dezenas.has(d) ? estado.dezenas.delete(d) : estado.dezenas.add(d);
-    estado.fixo = null;  // mexer na grade muda o pool, e o fechamento nomeado era para outro
     trocarDezenas(estado.dezenas);
   });
 
   $('escolher').addEventListener('click', () => estado.indice
-    && ((estado.fixo = null), sortearDezenas(melhorPool(estado.indice, estado.precos, estado.orcamento))));
+    && sortearDezenas(melhorPool(estado.indice, estado.precos, estado.orcamento)));
   $('limpar').addEventListener('click', () => trocarDezenas(new Set()));
   // A régua e o campo dizem a mesma coisa de dois jeitos, e um valor que não dá
   // para ler — texto vazio, "abc" — deixa o orçamento como estava em vez de
@@ -507,8 +521,10 @@ function ligarControles() {
     responder();
   });
 
-  // O pool e o teto redesenham a lista; escolher um fechamento troca a resposta.
-  for (const id of ['m-pool', 'm-teto', 'm-k', 'm-t']) {
+  // Trocar o pool mexe na grade, e o redesenho vem de lá — redesenhar aqui
+  // devolveria o pool anterior antes de `aplicarManual` chegar a ler o novo.
+  $('m-pool').addEventListener('input', aplicarManual);
+  for (const id of ['m-teto', 'm-k', 'm-t']) {
     $(id).addEventListener('input', () => { desenharManual(); aplicarManual(); });
   }
   $('m-fechamento').addEventListener('change', aplicarManual);
@@ -549,11 +565,14 @@ function ajustarPara(quantas) {
   trocarDezenas(new Set([...estado.dezenas, ...fora].slice(0, quantas).sort((a, b) => a - b)));
 }
 
-/// Toda troca de dezenas passa por aqui: guarda, desfaz o vínculo com um link de
-/// bolão — as dezenas já não são as daquele bolão — e redesenha.
+/// Toda troca de dezenas passa por aqui: guarda, desfaz os dois vínculos que
+/// eram de outro conjunto de dezenas — o link de bolão e o fechamento montado à
+/// mão — e redesenha. Sem soltar o fechamento, limpar a grade deixava na tela
+/// quatro bilhetes vazios sob uma manchete de garantia: o fechamento era de 22
+/// dezenas, e não havia mais dezena nenhuma de onde tirar os números.
 function trocarDezenas(novas) {
   estado.dezenas = novas;
-  estado.link = null;
+  estado.link = estado.fixo = null;
   guardar('dezenas', [...novas]);
   responder();
 }
