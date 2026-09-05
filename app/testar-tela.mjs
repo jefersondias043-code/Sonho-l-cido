@@ -302,6 +302,17 @@ conferir('e a garantia pedida vira preço na tela, em vez de sumir',
   /Garantir 14 acertos com 20 dezenas custa R\$ [\d.,]+ — faltam R\$ [\d.,]+/.test(linhaDoPedido),
   linhaDoPedido);
 
+// Um pedido impossível também não vira estado. "30 dezenas" não é um pedido de
+// 25: aparar seria inventar, e o leitor do servidor faz igual — o mesmo texto
+// não pode mudar de significado conforme haja ou não um servidor no ar.
+await pagina.fill('#intencao', 'R$ 300 com 30 dezenas');
+await pagina.click('#enviar-intencao');
+await pagina.waitForFunction(
+  () => document.getElementById('aviso-intencao').innerText.includes('Não consegui'), null,
+  { timeout: 15000 });
+conferir('trinta dezenas não viram vinte e cinco',
+  (await pagina.locator('.grade [aria-pressed=true]').count()) === 20);
+
 // E um pedido que ninguém entende diz isso, em vez de mexer no estado.
 await pagina.fill('#intencao', 'bom dia');
 await pagina.click('#enviar-intencao');

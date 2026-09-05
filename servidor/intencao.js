@@ -128,10 +128,17 @@ export function ler(texto) {
   if (!orcamento) return null;
 
   const nomeada = QUANTAS.find(([palavra]) => t.includes(palavra));
-  return {
-    orcamento,
-    dezenas: [],
-    quantasDezenas: Math.min(25, Number(t.match(/(\d{2})\s*dezenas/)?.[1] ?? 0) || nomeada?.[1] || 0),
-    garantiaMinima: Math.min(15, Number(t.match(/garant\w*\s*(?:de\s*)?(\d{2})/)?.[1] ?? 0)),
-  };
+  const quantasDezenas = Number(t.match(/(\d{2})\s*dezenas/)?.[1] ?? 0) || nomeada?.[1] || 0;
+  const garantiaMinima = Number(t.match(/garant\w*\s*(?:de\s*)?(\d{2})/)?.[1] ?? 0);
+
+  // Aparar seria inventar. "Quero 30 dezenas" não é um pedido de 25, e
+  // "garantir 99" não é um pedido de 15 — são pedidos que este leitor não
+  // entende, e dizer isso é a resposta certa: a tela pede que a pessoa use o
+  // campo de dinheiro e a grade, que dão no mesmo.
+  //
+  // E é o que o leitor do cliente já fazia. Aqui se aparava, lá se recusava, e
+  // o mesmo texto mudava de significado conforme houvesse ou não um servidor no
+  // ar — que é o pior tipo de diferença, porque some quando alguém vai olhar.
+  if (!inteiroEntre(quantasDezenas, 0, 25) || !inteiroEntre(garantiaMinima, 0, 15)) return null;
+  return { orcamento, dezenas: [], quantasDezenas, garantiaMinima };
 }

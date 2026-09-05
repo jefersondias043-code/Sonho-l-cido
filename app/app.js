@@ -91,8 +91,7 @@ function atualizarDinheiro() {
 
 function desenharGrade() {
   for (const botao of $('grade').children) {
-    const marcada = estado.dezenas.has(Number(botao.dataset.dezena));
-    botao.setAttribute('aria-pressed', String(marcada));
+    botao.setAttribute('aria-pressed', String(estado.dezenas.has(Number(botao.dataset.dezena))));
   }
   const n = estado.dezenas.size;
   $('contagem').textContent = n === 0 ? '' : `${n} ${n === 1 ? 'dezena' : 'dezenas'}`;
@@ -594,8 +593,10 @@ async function enviarIntencao() {
 /// garantir 14" não há valor, e ler o 14 como catorze reais seria pior do que
 /// não entender.
 const EM_REAIS = { cem: 100, duzentos: 200, trezentos: 300, quinhentos: 500, mil: 1000 };
-const QUANTAS = ['quinze', 'dezesseis', 'dezessete', 'dezoito', 'dezenove', 'vinte e cinco',
-  'vinte e quatro', 'vinte e três', 'vinte e dois', 'vinte e um', 'vinte'];
+// Em pares, e os compostos antes dos simples: "vinte e cinco" contém "vinte".
+const QUANTAS = [['quinze', 15], ['dezesseis', 16], ['dezessete', 17], ['dezoito', 18],
+  ['dezenove', 19], ['vinte e cinco', 25], ['vinte e quatro', 24], ['vinte e três', 23],
+  ['vinte e dois', 22], ['vinte e um', 21], ['vinte', 20]];
 function ler(texto) {
   const t = texto.toLowerCase();
   const achado = t.match(/(?:r\$\s*)?(\d[\d.]*(?:,\d{1,2})?)\s*(?:reais|conto|pila)/)
@@ -604,12 +605,11 @@ function ler(texto) {
     ? Number(achado[1].replace(/\./g, '').replace(',', '.'))
     : (Object.entries(EM_REAIS).find(([palavra]) => t.includes(palavra))?.[1] ?? 0);
   if (!orcamento) return null;
-  const nomeada = QUANTAS.findIndex((palavra) => t.includes(palavra));
+  const nomeada = QUANTAS.find(([palavra]) => t.includes(palavra));
   return {
     orcamento,
     dezenas: [],
-    quantasDezenas: Number(t.match(/(\d{2})\s*dezenas/)?.[1] ?? 0)
-      || (nomeada < 0 ? 0 : [15, 16, 17, 18, 19, 25, 24, 23, 22, 21, 20][nomeada]),
+    quantasDezenas: Number(t.match(/(\d{2})\s*dezenas/)?.[1] ?? 0) || nomeada?.[1] || 0,
     garantiaMinima: Number(t.match(/garant\w*\s*(?:de\s*)?(\d{2})/)?.[1] ?? 0),
   };
 }

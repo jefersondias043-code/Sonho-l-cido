@@ -234,7 +234,12 @@ São três usos, todos opcionais, todos com caminho alternativo determinístico:
 
 - **intenção** — texto livre vira `{orcamento, dezenas[], garantiaMinima}` sob
   esquema estrito. Fora do esquema é silêncio, e um leitor por expressão regular
-  assume;
+  assume — o mesmo leitor de dois lados, e por isso com a mesma resposta dos dois
+  lados: *"quero 30 dezenas"* o servidor aparava para 25 e o cliente recusava, e
+  a mesma frase mudava de significado conforme houvesse ou não servidor no ar.
+  Agora os dois recusam, porque aparar é inventar: 30 dezenas não é um pedido de
+  25, é um pedido que este leitor não entende — e dizer isso é a resposta certa,
+  com a grade ali do lado;
 - **explicação** — uma frase sobre a troca entre dinheiro e garantia, recebendo
   **apenas** números que o catálogo já produziu. A frase é descartada se trouxer
   qualquer número que não estava no pedido, e essa regra é cobrada duas vezes:

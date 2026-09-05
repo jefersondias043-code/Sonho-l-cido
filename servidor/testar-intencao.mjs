@@ -48,7 +48,14 @@ conferir('por extenso', ler('R$ 300 com dezoito dezenas').quantasDezenas === 18)
 conferir('composto vem antes do simples',
   ler('R$ 300 em vinte e cinco dezenas').quantasDezenas === 25,
   String(ler('R$ 300 em vinte e cinco dezenas').quantasDezenas));
-conferir('nunca passa de 25', ler('R$ 300 com 99 dezenas').quantasDezenas === 25);
+// Aparar seria inventar: 99 dezenas não é um pedido de 25. O leitor não entende
+// e diz isso — e é o que o leitor do cliente faz com o mesmo texto, para que ter
+// ou não um servidor no ar não mude o que a frase quer dizer.
+conferir('99 dezenas não vira 25: não é pedido', ler('R$ 300 com 99 dezenas') === null);
+conferir('nem 30 dezenas', ler('R$ 300 com 30 dezenas') === null);
+conferir('e garantir 99 também não vira 15', ler('R$ 300, garantir 99') === null);
+conferir('mas 25 dezenas continua valendo', ler('R$ 300 com 25 dezenas').quantasDezenas === 25);
+conferir('e garantir 15 também', ler('R$ 300, garantir 15').garantiaMinima === 15);
 conferir('sem dizer quantas, fica zero', ler('R$ 300').quantasDezenas === 0);
 
 // ── garantia ────────────────────────────────────────────────────────────────
@@ -57,7 +64,7 @@ for (const jeito of ['garantir 13', 'garantindo 13', 'garanto 13', 'garantia de 
   conferir(`"${jeito}" é lido`, ler(`R$ 300, ${jeito}`).garantiaMinima === 13,
     String(ler(`R$ 300, ${jeito}`).garantiaMinima));
 }
-conferir('nunca passa de 15', ler('R$ 300 garantir 99').garantiaMinima === 15);
+conferir('e uma garantia impossível não é pedido', ler('R$ 300 garantir 99') === null);
 
 // ── nada inventado ──────────────────────────────────────────────────────────
 
