@@ -104,6 +104,13 @@ const indice = { universo: b.universo, entradas: b.entradas.map(
   ([v,k,t,piso,jogos,provado,metodo,soma]) =>
     ({v,k,t,piso,jogos,provado:provado===1,metodo:b.metodos[metodo],soma})) };
 const dinheiro = (c) => (c/100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+// O exemplo da garantia pedida, que o documento cita em prosa: com R$ 300 e 20
+// dezenas, quanto custa garantir 14 e quanto falta para lá.
+const pedido = m.escada(indice, precos, 20).find((e) => e.t >= 14);
+console.error(JSON.stringify({
+  pedidoCusto: dinheiro(pedido.custo), pedidoFalta: dinheiro(pedido.custo - 30000),
+}));
 for (const reais of [5, 25, 100, 400, 1500, 15000]) {
   const c = reais * 100;
   const v = m.melhorPool(indice, precos, c);
@@ -134,7 +141,10 @@ r = subprocess.run(['node', '--input-type=module', '-e', ESTRATEGIA],
                    capture_output=True, text=True)
 if r.returncode != 0:
     raise SystemExit(r.stderr.strip() or 'node falhou sem dizer por quê')
-quatrocentos = json.loads(r.stderr.strip())
+# O node escreve os números citados em prosa no `stderr`, uma linha JSON cada.
+citados = {}
+for linha in r.stderr.strip().splitlines():
+    citados.update(json.loads(linha))
 
 TABELAS = {
     'a tabela do dinheiro': '\n'.join([
@@ -190,8 +200,10 @@ NA_PROSA = {
         'peso inicial': f'**{peso} KiB comprimidos**',
         # A resposta de R$ 400 e o que ela devolve em média. São dois números do
         # catálogo citados em prosa, e a busca move os dois.
-        'o retorno médio da resposta de R$ 400': f'**{quatrocentos["media"]}** por concurso',
-        'o custo da resposta de R$ 400': f'Contra {quatrocentos["custo"]} gastos',
+        'o retorno médio da resposta de R$ 400': f'**{citados["media"]}** por concurso',
+        'o custo da resposta de R$ 400': f'Contra {citados["custo"]} gastos',
+        'o preço da garantia pedida': (f'Garantir 14 acertos com 20 dezenas custa '
+                                       f'{citados["pedidoCusto"]} — faltam {citados["pedidoFalta"]}'),
     },
     LEIAME: {
         'quantas respostas': f'as {len(E)} respostas',

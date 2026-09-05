@@ -28,14 +28,16 @@ que quase nunca se cobra.
 A primeira linha é a mais importante do produto: com cinco reais não há
 fechamento, e a tabela diz isso em vez de ficar calada. A dos quatrocentos é o
 produto inteiro num lugar só — as vinte e cinco dezenas inteiras, onze acertos
-garantidos, e troco. Ninguém compõe isso de cabeça. A última coluna diz o que se pode afirmar de cada linha: **mínimo
-provado** quando nenhum fechamento faz aquilo com menos bilhetes, e o piso
-conhecido quando não.
+garantidos, e troco. Ninguém compõe isso de cabeça.
+
+A última coluna diz o que se pode afirmar de cada linha: **mínimo provado**
+quando nenhum fechamento faz aquilo com menos bilhetes, e o piso conhecido
+quando não.
 
 Nenhum número acima está escrito à mão — nem no texto ao redor, de propósito: um
 preço citado em prosa é o que envelhece primeiro.
 
-O troco aparece dizendo o que é: *"sobram R$ 200,50, que não compram garantia
+O troco aparece dizendo o que é: *"sobram tanto, que não compram garantia
 maior"*. Não é figura de linguagem nem consolo — é o degrau seguinte custando
 mais do que se tem, e o aplicativo não empurra bilhete a mais para gastar o
 resto. Comprar mais bilhetes com o troco aumenta a chance de prêmio e **não**
