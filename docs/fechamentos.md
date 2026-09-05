@@ -35,6 +35,12 @@ conhecido quando não.
 Nenhum número acima está escrito à mão — nem no texto ao redor, de propósito: um
 preço citado em prosa é o que envelhece primeiro.
 
+O troco aparece dizendo o que é: *"sobram R$ 200,50, que não compram garantia
+maior"*. Não é figura de linguagem nem consolo — é o degrau seguinte custando
+mais do que se tem, e o aplicativo não empurra bilhete a mais para gastar o
+resto. Comprar mais bilhetes com o troco aumenta a chance de prêmio e **não**
+aumenta a garantia, que é a única coisa que este aplicativo sabe prometer.
+
 A tabela sai de `ferramentas/numeros-do-catalogo.py --gravar`, que a reescreve
 aqui a partir de `catalogo/indice.json`. Cada passada do motor pode mudá-la, e um
 preço velho num documento é uma promessa que o aplicativo não cumpre mais.

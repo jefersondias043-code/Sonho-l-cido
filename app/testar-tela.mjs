@@ -87,6 +87,14 @@ conferir('e diz o que o número é',
 
 const selo = await pagina.locator('.selo').first().innerText();
 conferir('o selo é um dos dois estados', ['mínimo provado', 'menor conhecido'].includes(selo), selo);
+
+// O troco não fica sozinho. Depois que a tela rola até a resposta, a linha que
+// explicava o troco — o próximo degrau, lá em cima, junto da régua — está fora
+// da tela, e "sobram R$ 29,00" sem mais nada convida a pensar que o aplicativo
+// não soube gastar o dinheiro.
+const detalhe = (await pagina.locator('.resposta .detalhe').innerText()).replace(/\s+/g, ' ');
+conferir('e o troco diz por que é troco',
+  !detalhe.includes('sobram') || detalhe.includes('não compram garantia maior'), detalhe);
 if (selo === 'menor conhecido') {
   conferir('e sem prova o piso aparece ao lado',
     (await pagina.locator('.piso').innerText()).includes('menos de'));

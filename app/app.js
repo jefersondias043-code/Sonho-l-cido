@@ -169,7 +169,8 @@ function desenharResposta(plano) {
     <p class="numero">${e.t}</p>
     <p class="unidade">acertos garantidos</p>
     <p class="detalhe">${e.jogos} ${e.jogos === 1 ? 'jogo' : 'jogos'} de ${e.k} dezenas ·
-      <b>${dinheiro(e.custo)}</b>${plano.sobra ? ` · sobram ${dinheiro(plano.sobra)}` : ''}</p>
+      <b>${dinheiro(e.custo)}</b>${plano.sobra ? ` · sobram ${dinheiro(plano.sobra)}, que não
+      compram garantia maior` : ''}</p>
     <p class="selos">${selo}</p>
     <p class="frase">Se as 15 dezenas sorteadas saírem todas entre as suas ${e.v},
       ao menos um destes bilhetes terá <b>${e.t} acertos ou mais</b>. Não é probabilidade:
@@ -330,8 +331,7 @@ function desenharBolao() {
   $('bolao').innerHTML = `<ol class="partes">${grupos
     .map((g, i) => {
       const link = volante.linkDaParte(base, { dezenas: estado.dezenas, v, k, t, parte: i, partes });
-      return `<li><b>Parte ${i + 1}</b> — ${g.length} bilhetes ·
-        ${dinheiro(g.length * estado.precos.aposta[k])}
+      return `<li><b>Parte ${i + 1}</b> — ${g.length} bilhetes · ${dinheiro(g.length * estado.precos.aposta[k])}
         <button type="button" class="discreto" data-link="${link}">Copiar link</button></li>`;
     })
     .join('')}</ol>`;
