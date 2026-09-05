@@ -65,10 +65,7 @@ async function arrancar() {
   estado.precos = { ...estado.precosPublicados, ...lembrar('precos', {}) };
 
   const doLink = volante.lerLink(location.hash, UNIVERSO);
-  if (doLink) {
-    estado.dezenas = new Set(doLink.dezenas);
-    estado.link = doLink;
-  }
+  if (doLink) { estado.dezenas = new Set(doLink.dezenas); estado.link = doLink; }
 
   desenharPrecos();
   desenharCarteira();
@@ -186,12 +183,20 @@ function desenharResposta(plano) {
 /// entre dinheiro e garantia, ou o que o sorteio rendeu. A frase determinística
 /// já está lá; esta troca por outra, ou não troca. E só troca se não trouxer
 /// **nenhum número** que não tenha saído daqui.
+///
+/// Dinheiro entra na forma em que o Brasil o escreve, e é aí que a regra
+/// falhava: "R$ 199,50" virava os números 199 e 50, nenhum autorizado, e a
+/// frase caía justamente quando dizia o que o modelo foi chamado a explicar.
+/// Reais inteiros, só quando o valor é inteiro — arredondar é calcular.
+const CENTAVOS = { minimumFractionDigits: 2, maximumFractionDigits: 2 };
+const EM_DINHEIRO = new Set(['custo', 'degrauFalta', 'voltou']);
+const NUMEROS = /\d+(?:\.\d{3})*(?:,\d+)?/g;
 let pedidoDaVez = 0;
 async function pedirAFrase(onde, dados) {
-  const permitidos = new Set(
-    Object.values(dados).filter(Number.isFinite)
-      .flatMap((n) => [String(n), String(Math.round(n / 100))]),
-  );
+  const permitidos = new Set(Object.entries(dados).flatMap(([campo, n]) => (!Number.isFinite(n) ? []
+    : EM_DINHEIRO.has(campo)
+      ? [`${n}`, (n / 100).toLocaleString('pt-BR', CENTAVOS), ...(n % 100 ? [] : [`${n / 100}`])]
+      : [`${n}`])));
   const meu = ++pedidoDaVez;  // uma resposta atrasada não sobrescreve a atual
   try {
     const r = await fetch('api/explicar', {
@@ -202,7 +207,7 @@ async function pedirAFrase(onde, dados) {
     });
     const { frase } = await r.json();
     const alvo = document.querySelector(onde);
-    if (alvo && meu === pedidoDaVez && (frase.match(/\d+/g) ?? []).every((n) => permitidos.has(n))) {
+    if (alvo && meu === pedidoDaVez && (frase.match(NUMEROS) ?? []).every((n) => permitidos.has(n))) {
       alvo.textContent = frase;
     }
   } catch { /* a frase determinística fica */ }
@@ -457,10 +462,8 @@ async function acaoDosBilhetes(acao) {
     $('painel').hidden = false;
     print();
   } else if (acao === 'guardar') {
-    estado.carteira.unshift({
-      data: Date.now(), v: e.v, k: e.k, t: e.t, jogos: e.jogos, custo: e.custo,
-      dezenas: [...estado.dezenas].sort((a, b) => a - b),
-    });
+    estado.carteira.unshift({ data: Date.now(), v: e.v, k: e.k, t: e.t, jogos: e.jogos,
+      custo: e.custo, dezenas: [...estado.dezenas].sort((a, b) => a - b) });
     guardar('carteira', estado.carteira);
     desenharCarteira();
     $('det-carteira').open = true;
@@ -502,13 +505,10 @@ async function buscarSorteio() {
     $('buscar-sorteio').textContent = `Concurso ${concurso}`;
   } catch {
     const guardado = lembrar('ultimo-sorteio', null);
-    if (guardado) {
-      $('sorteio').value = guardado.dezenas.join(' ');
-      conferirContraOSorteio();
-      $('buscar-sorteio').textContent = `Concurso ${guardado.concurso} (guardado)`;
-    } else {
-      $('buscar-sorteio').textContent = 'Sem resultado — digite as 15 dezenas';
-    }
+    if (!guardado) { $('buscar-sorteio').textContent = 'Sem resultado — digite as 15 dezenas'; return; }
+    $('sorteio').value = guardado.dezenas.join(' ');
+    conferirContraOSorteio();
+    $('buscar-sorteio').textContent = `Concurso ${guardado.concurso} (guardado)`;
   }
 }
 

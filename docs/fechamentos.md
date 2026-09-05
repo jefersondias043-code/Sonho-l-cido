@@ -59,7 +59,7 @@ Sem WebAssembly no cliente, sem *web workers*, sem banco de sessões, sem retoma
 de trabalho interrompido. Nada disso tem razão de existir quando não há nada a
 esperar. O cliente inteiro dá **1.499 linhas** somando JavaScript, HTML e CSS —
 teto de 1.500 cobrado pela construção —, e o peso inicial (casca, índice, preços
-e distribuições) dá **25 KiB comprimidos**.
+e distribuições) dá **26 KiB comprimidos**.
 
 ## A matemática, em quatro linhas
 
@@ -238,7 +238,20 @@ São três usos, todos opcionais, todos com caminho alternativo determinístico:
 - **explicação** — uma frase sobre a troca entre dinheiro e garantia, recebendo
   **apenas** números que o catálogo já produziu. A frase é descartada se trouxer
   qualquer número que não estava no pedido, e essa regra é cobrada duas vezes:
-  no servidor e de novo no cliente, antes de tocar a tela;
+  no servidor e de novo no cliente, antes de tocar a tela.
+
+  A regra sabe como o Brasil escreve dinheiro. Sem isso ela rejeitava **toda**
+  frase com preço: "R$ 199,50" vira os números 199 e 50, nenhum dos dois
+  autorizado — e o modelo tinha sido chamado justamente para falar de dinheiro.
+  O caminho com IA nunca fora exercido de ponta a ponta, e o teste que deveria
+  pegá-lo montava à mão o conjunto de números autorizados, em vez de pedi-lo ao
+  servidor: testava o conjunto que ele mesmo tinha escrito. Agora ele usa o do
+  servidor, e a suíte da tela finge um servidor para cobrar as duas metades —
+  uma frase com preço entra, uma com número inventado é descartada sem apagar a
+  frase determinística.
+
+  Reais inteiros só entram quando o valor é inteiro: com R$ 199,50 no pedido,
+  "200 reais" passava, e arredondar é calcular;
 - **narração pós-sorteio** — mesma restrição.
 
 A chave nunca sai do servidor. Desligar a IA inteira mantém o aplicativo

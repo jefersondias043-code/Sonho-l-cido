@@ -311,6 +311,53 @@ await pagina.waitForFunction(
 conferir('um pedido ilegível não vira estado',
   (await pagina.inputValue('#valor')).includes('300,00'));
 
+// ── a frase do modelo, e a regra que decide se ela entra ───────────────────
+//
+// Nos outros testes não há servidor e `api/explicar` responde 404 — o que prova
+// que o aplicativo funciona sem IA, e não prova nada sobre o caminho com ela.
+// Aqui um servidor é fingido, e o que se cobra é a regra: uma frase que só usa
+// os números do pedido entra, e uma que inventa qualquer outro é descartada
+// **sem apagar** a frase determinística que já estava na tela.
+//
+// Esta é a prova que faltava. A regra rejeitava toda frase com preço, porque
+// "R$ 199,50" vira os números 199 e 50 e nenhum dos dois estava autorizado —
+// e o modelo tinha sido chamado justamente para falar de dinheiro.
+const emReais = (c) =>
+  (c / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+let doModelo = null;
+await pagina.route('**/api/explicar', async (rota) => {
+  const d = JSON.parse(rota.request().postData());
+  await rota.fulfill({
+    contentType: 'application/json',
+    body: JSON.stringify({ frase: doModelo(d) }),
+  });
+});
+
+const trocarOrcamento = async (texto) => {
+  await pagina.fill('#valor', texto);
+  await pagina.dispatchEvent('#valor', 'change');
+  await pagina.waitForTimeout(600);
+  return (await pagina.locator('.resposta .frase').innerText()).replace(/\s+/g, ' ');
+};
+
+// Uma frase com o preço escrito como o Brasil escreve preço.
+doModelo = (d) => `São ${d.jogos} jogos de ${d.k} dezenas por R$ ${emReais(d.custo)}, `
+  + `com ${d.t} acertos garantidos entre as suas ${d.v}.`;
+const comPreco = await trocarOrcamento('R$ 250,00');
+conferir('uma frase do modelo com preço em reais chega à tela',
+  /por R\$ [\d.]+,\d\d/.test(comPreco), comPreco);
+
+// E a mesma frase com um número que ninguém mandou: descartada, e a frase
+// determinística fica onde estava.
+doModelo = (d) => `São ${d.jogos} jogos que cobrem 87% dos resultados possíveis.`;
+const comInvencao = await trocarOrcamento('R$ 260,00');
+conferir('uma frase com número inventado não chega à tela',
+  !comInvencao.includes('87%'), comInvencao);
+conferir('e a frase determinística continua no lugar',
+  comInvencao.includes('Não é probabilidade'), comInvencao);
+
+await pagina.unroute('**/api/explicar');
+
 // ── segunda visita, sem rede ────────────────────────────────────────────────
 
 // A promessa é a do avião: o que já foi aberto continua abrindo. O catálogo
