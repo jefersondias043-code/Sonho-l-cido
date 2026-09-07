@@ -149,10 +149,10 @@ teto de 2.500 cobrado pela construção —, e o peso inicial (casca, índice, p
 e distribuições) dá **41 KiB comprimidos**.
 
 O teto foi 1.500 enquanto havia uma porta de entrada só, 1.700 quando a segunda
-chegou, 2.400 com a área de análise, e 2.500 quando o que entra de fora —
-endereço, armazenamento do aparelho, resultado guardado — passou a ser conferido
-antes de virar tela. Nenhuma dessas subidas veio de o cliente passar a resolver
-mais. **Resolver** é procurar quais bilhetes usar, e isso segue inteiro
+chegou, 2.250 com a área de análise, 2.400 com a comparação contra o chute, e
+2.500 quando o que entra de fora — endereço, armazenamento do aparelho,
+resultado guardado — passou a ser conferido antes de virar tela. Nenhuma dessas
+subidas veio de o cliente passar a resolver mais. **Resolver** é procurar quais bilhetes usar, e isso segue inteiro
 no motor em Rust, fora do aparelho. **Simular** é contar acertos de bilhetes que
 já existem: um `and` e um popcount por cartela, mil sorteios contra 3.634
 bilhetes em 66 ms. São coisas de ordens diferentes, e só a primeira é a que o
