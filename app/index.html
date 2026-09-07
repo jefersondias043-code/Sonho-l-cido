@@ -21,7 +21,7 @@
 <script type="module" src="app.js"></script>
 </head>
 <body>
-<main>
+<main id="painel-principal">
 
 <h1>Sonho Lúcido</h1>
 
@@ -115,24 +115,25 @@
 <!-- A área de análise. Só existe depois que há fechamento, e ocupa a tela
      inteira quando aberta: gerar e analisar são dois assuntos, e misturá-los
      era o que enchia a primeira tela de cartelas que ninguém tinha pedido. -->
-<section class="analise" id="analise" hidden aria-label="Cartelas e análise">
+<section class="analise" id="analise" hidden role="dialog" aria-modal="true"
+  aria-label="Cartelas e análise">
   <div class="analise-topo">
     <button type="button" id="voltar" class="discreto">‹ Voltar</button>
     <strong id="analise-titulo"></strong>
   </div>
   <nav class="abas" id="abas" role="tablist" aria-label="O que ver">
-    <button type="button" role="tab" data-aba="cartelas" aria-selected="true">Cartelas</button>
-    <button type="button" role="tab" data-aba="conferir" aria-selected="false">Conferir</button>
-    <button type="button" role="tab" data-aba="simular" aria-selected="false">Simular</button>
-    <button type="button" role="tab" data-aba="valores" aria-selected="false">Valores</button>
-    <button type="button" role="tab" data-aba="resumo" aria-selected="false">Resumo</button>
+    <button type="button" role="tab" id="tab-cartelas" aria-controls="aba-cartelas" data-aba="cartelas" aria-selected="true">Cartelas</button>
+    <button type="button" role="tab" id="tab-conferir" aria-controls="aba-conferir" data-aba="conferir" aria-selected="false">Conferir</button>
+    <button type="button" role="tab" id="tab-simular" aria-controls="aba-simular" data-aba="simular" aria-selected="false">Simular</button>
+    <button type="button" role="tab" id="tab-valores" aria-controls="aba-valores" data-aba="valores" aria-selected="false">Valores</button>
+    <button type="button" role="tab" id="tab-resumo" aria-controls="aba-resumo" data-aba="resumo" aria-selected="false">Resumo</button>
   </nav>
 
-  <div class="aba" id="aba-cartelas" role="tabpanel">
+  <div class="aba" id="aba-cartelas" role="tabpanel" aria-labelledby="tab-cartelas" tabindex="0">
     <div id="lista-cartelas"></div>
   </div>
 
-  <div class="aba" id="aba-conferir" role="tabpanel" hidden>
+  <div class="aba" id="aba-conferir" role="tabpanel" aria-labelledby="tab-conferir" tabindex="0" hidden>
     <p class="ajuda">O resultado de um concurso de verdade, conferido contra todas as suas
       cartelas.</p>
     <label for="sorteio">As 15 dezenas sorteadas</label>
@@ -144,7 +145,7 @@
     <div id="conferencia"></div>
   </div>
 
-  <div class="aba" id="aba-simular" role="tabpanel" hidden>
+  <div class="aba" id="aba-simular" role="tabpanel" aria-labelledby="tab-simular" tabindex="0" hidden>
     <p class="ajuda">Resultados inventados aqui mesmo, para ver como o fechamento se comporta
       antes de gastar dinheiro com ele.</p>
     <label for="s-quantos">Quantos sorteios</label>
@@ -163,11 +164,11 @@
     <div id="simulacao" aria-live="polite"></div>
   </div>
 
-  <div class="aba" id="aba-valores" role="tabpanel" hidden>
+  <div class="aba" id="aba-valores" role="tabpanel" aria-labelledby="tab-valores" tabindex="0" hidden>
     <div id="valores"></div>
   </div>
 
-  <div class="aba" id="aba-resumo" role="tabpanel" hidden>
+  <div class="aba" id="aba-resumo" role="tabpanel" aria-labelledby="tab-resumo" tabindex="0" hidden>
     <div id="resumo"></div>
     <details id="det-conferir">
       <summary>Conferir a garantia, sorteio por sorteio</summary>
