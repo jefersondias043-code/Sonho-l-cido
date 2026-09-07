@@ -1161,13 +1161,13 @@ await trancado.close();
 
   // Pular de `h1` para `h3` deixa um degrau vazio: quem navega por título passa
   // do nome do aplicativo direto para a tabela de preços sem saber o que pulou.
-  const niveis = await pg.evaluate(() => [...document.querySelectorAll('h1,h2,h3,h4,h5,h6')]
+  const titulos = await pg.evaluate(() => [...document.querySelectorAll('h1,h2,h3,h4,h5,h6')]
     .filter((h) => h.getBoundingClientRect().width)
-    .map((h) => `${h.tagName}:${h.textContent.trim().slice(0, 24)}`));
-  const pulos = niveis.filter((t, i) => i > 0
-    && Number(t[1]) > Number(niveis[i - 1][1]) + 1);
+    .map((h) => ({ nivel: Number(h.tagName[1]), texto: h.textContent.trim().slice(0, 24) })));
+  const pulos = titulos.filter((t, i) => i > 0 && t.nivel > titulos[i - 1].nivel + 1);
   conferir('os títulos da tela não pulam de nível', pulos.length === 0,
-    `${niveis.join(' | ')} — pulou em ${pulos.join(', ')}`);
+    `${titulos.map((t) => `h${t.nivel}:${t.texto}`).join(' | ')} — pulou em ${
+      pulos.map((t) => `h${t.nivel}:${t.texto}`).join(', ')}`);
   await caixa.close();
 }
 
