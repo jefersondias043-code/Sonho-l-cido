@@ -149,8 +149,13 @@ footer {
 }
 
 /* ── painel deslizante ── */
+/* Acima da área de análise, e não atrás dela. É de lá que se pede para
+   imprimir, e a área é uma camada opaca de tela cheia: sem esta linha o painel
+   de volantes abria escondido atrás dela — com o ✕ dele junto —, e quem
+   fechasse a caixa de impressão do sistema ficava com um painel aberto que não
+   dava para ver nem fechar. */
 .painel {
-  position: fixed; inset: auto 0 0 0; max-height: 85vh; overflow: auto;
+  position: fixed; inset: auto 0 0 0; max-height: 85vh; overflow: auto; z-index: 30;
   background: var(--papel); border-top: 1px solid var(--linha);
   border-radius: var(--raio) var(--raio) 0 0; animation: subir 0.25s ease-out;
   box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.25);
@@ -247,6 +252,9 @@ footer {
   main, footer, .painel-topo, .analise { display: none; }
   .painel { position: static; max-height: none; box-shadow: none; border: 0; }
   .painel-corpo { display: flex; flex-wrap: wrap; gap: 0.8rem; padding: 0; }
+  /* A conta de folhas e o botão de imprimir são da tela, e gastariam a
+     primeira folha para dizer quantas folhas seriam. */
+  .so-na-tela { display: none; }
   .volante i { border-color: #999; }
   .volante i.marcada { background: #000; color: #fff; }
 }

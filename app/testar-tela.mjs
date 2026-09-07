@@ -1134,6 +1134,76 @@ conferir('com as quinze marcadas, a tela diz o que fazer em vez de dar em nada',
 
 await trancado.close();
 
+// ── a conta em papel, antes do papel ────────────────────────────────────────
+//
+// "Imprimir volantes" com 3.634 cartelas na mão punha a caixa de impressão do
+// sistema na frente da pessoa com **243 folhas** carregadas, e nada na tela
+// tinha dito isso. Quem imprimisse sem olhar gastava uma resma; quem olhasse
+// ainda teria de descobrir sozinho o que fazer. A funcionalidade não saiu de
+// lugar nenhum: o painel passou a dizer o tamanho e a impressão passou a
+// esperar um segundo toque.
+{
+  const caixa = await navegador.newContext({ viewport: { width: 390, height: 844 } });
+  // Nada de caixa de impressão de verdade no meio de uma suíte: o que interessa
+  // é **quando** ela seria pedida.
+  await caixa.addInitScript(() => {
+    window.__imprimiu = 0;
+    window.print = () => { window.__imprimiu++; };
+  });
+  const pg = await caixa.newPage();
+  await pg.goto(endereco, { waitUntil: 'networkidle' });
+  await pg.fill('#valor', 'R$ 400,00');
+  await pg.dispatchEvent('#valor', 'change');
+  await pg.click('#escolher');
+  await esperarFechamento(pg, 20000);
+  const cartelas = await quantasCartelas(pg);
+  await abrir(pg, 'cartelas');
+  await pg.locator('#lista-cartelas [data-acao=imprimir]').click();
+  await pg.waitForTimeout(200);
+
+  conferir('imprimir abre o painel de volantes', await pg.locator('#painel').isVisible());
+  conferir('e ainda não mandou imprimir nada',
+    (await pg.evaluate(() => window.__imprimiu)) === 0);
+
+  const aviso = (await pg.locator('#painel-corpo .ajuda').innerText()
+    .catch(() => '(o painel não diz nada)')).replace(/\s+/g, ' ');
+  // Quinze volantes por folha, medido no próprio desenho com a mídia de
+  // impressão emulada. Cinquenta e cinco cartelas são quatro folhas.
+  const folhas = Math.ceil(cartelas / 15);
+  conferir('e diz quantos volantes e quantas folhas serão',
+    aviso.includes(`${cartelas} volantes`) && aviso.includes(`${folhas} folhas`), aviso);
+  conferir('e o painel traz um volante para cada cartela',
+    (await pg.locator('#painel-corpo .volante').count()) === cartelas);
+
+  // O painel abre a partir da área de análise, que é uma camada opaca de tela
+  // cheia. Sem ficar por cima dela, ele abria escondido atrás — com o ✕ dele
+  // junto —, e quem fechasse a caixa de impressão do sistema ficava com um
+  // painel aberto que não dava para ver nem fechar.
+  conferir('e o painel fica na frente da área de análise', await pg.evaluate(() => {
+    const p = document.getElementById('painel');
+    const r = p.getBoundingClientRect();
+    const em = document.elementFromPoint(r.left + r.width / 2, r.top + 8);
+    return p.contains(em);
+  }));
+
+  const clicou = await pg.locator('#painel-corpo [data-acao=imprimir-agora]')
+    .click({ timeout: 5000 }).then(() => true, () => false);
+  await pg.waitForTimeout(200);
+  conferir('e só então a impressão é pedida',
+    clicou && (await pg.evaluate(() => window.__imprimiu)) === 1,
+    clicou ? 'o botão não fez efeito' : 'não deu para tocar no botão');
+
+  // A conta de folhas é da tela: gastar a primeira folha para dizer quantas
+  // folhas seriam é o tipo de piada que ninguém acha graça no papel.
+  await pg.emulateMedia({ media: 'print' });
+  await pg.waitForTimeout(150);
+  conferir('e nada disso vai junto para o papel',
+    !(await pg.locator('#painel-corpo .ajuda').isVisible())
+    && !(await pg.locator('#painel-corpo [data-acao=imprimir-agora]').isVisible()));
+  await pg.emulateMedia({ media: 'screen' });
+  await caixa.close();
+}
+
 // ── nada de mira fina ───────────────────────────────────────────────────────
 //
 // Quarenta e quatro pixels é o alvo de toque mínimo, e não é opinião: é a

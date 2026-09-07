@@ -13,6 +13,10 @@ import { escada, fechamentosDe, melhorEstrategia, melhorPool } from './estrategi
 
 const $ = (id) => document.getElementById(id);
 const UNIVERSO = 25;
+// Quantos volantes cabem numa folha A4, para dizer o preço em papel antes de
+// imprimir. Medido no próprio desenho, com a mídia de impressão emulada e a
+// folha a 96 dpi com 1 cm de margem (718×1047 px): três por linha, cinco linhas.
+const POR_FOLHA = 15;
 // Quantos a lista desenha: os milhares de R$ 15.000 davam 339 mil pixels de página.
 const MOSTRA = 50;
 const guardar = (c, v) => { try { localStorage.setItem(c, JSON.stringify(v)); } catch { /**/ } };
@@ -910,7 +914,7 @@ function ligarControles() {
   $('regua').addEventListener('input', () => trocarOrcamento(daRegua(Number($('regua').value))));
   $('valor').addEventListener('change', () => trocarOrcamento(emCentavos($('valor').value)));
 
-  for (const id of ['secao-bilhetes', 'lista-cartelas']) {
+  for (const id of ['secao-bilhetes', 'lista-cartelas', 'painel-corpo']) {
     $(id).addEventListener('click', (ev) => acaoDosBilhetes(ev.target.dataset?.acao));
   }
   $('voltar').addEventListener('click', () => fecharAnalise());
@@ -1046,9 +1050,21 @@ async function acaoDosBilhetes(acao) {
   } else if (acao === 'csv') {
     volante.baixar(`${nome}.csv`, volante.comoCsv(estado.bilhetes), 'text/csv');
   } else if (acao === 'imprimir') {
+    // Quem toca aqui com 3.634 cartelas na mão estava a um toque de **243
+    // folhas** de papel, e nada na tela dizia isso: o painel abria e a caixa de
+    // impressão do sistema aparecia junto. Agora o painel diz quantas folhas
+    // são, mostra os volantes, e a impressão só começa quando ela pedir de
+    // novo. Não é uma funcionalidade escondida — é a conta na frente da conta.
+    const folhas = Math.ceil(estado.bilhetes.length / POR_FOLHA);
     $('painel-titulo').textContent = 'Volantes';
-    $('painel-corpo').innerHTML = estado.bilhetes.map((b) => volante.comoVolante(b, UNIVERSO)).join('');
+    $('painel-corpo').innerHTML = `<p class="ajuda so-na-tela">${
+      plural(estado.bilhetes.length, 'volante', 'volantes')} · cerca de ${
+      plural(folhas, 'folha', 'folhas')} de papel.</p>
+      <div class="linha so-na-tela"><button type="button" data-acao="imprimir-agora"
+        >Imprimir ${plural(folhas, 'folha', 'folhas')}</button></div>
+      ${estado.bilhetes.map((b) => volante.comoVolante(b, UNIVERSO)).join('')}`;
     $('painel').hidden = false;
+  } else if (acao === 'imprimir-agora') {
     print();
   } else if (acao === 'guardar') {
     // O que **esta pessoa** jogou: num bolão, a parte dela. Guardar o fechamento

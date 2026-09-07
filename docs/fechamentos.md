@@ -144,9 +144,9 @@ Daí tudo o mais decorre:
 
 Sem WebAssembly no cliente, sem *web workers*, sem banco de sessões, sem retomada
 de trabalho interrompido. Nada disso tem razão de existir quando não há nada a
-esperar. O cliente inteiro dá **2.367 linhas** somando JavaScript, HTML e CSS —
+esperar. O cliente inteiro dá **2.391 linhas** somando JavaScript, HTML e CSS —
 teto de 2.400 cobrado pela construção —, e o peso inicial (casca, índice, preços
-e distribuições) dá **40 KiB comprimidos**.
+e distribuições) dá **41 KiB comprimidos**.
 
 O teto foi 1.500 enquanto havia uma porta de entrada só, 1.700 quando a segunda
 chegou, e 2.400 com a área de análise — e não porque o cliente passou a
@@ -736,6 +736,31 @@ qualquer direção — porque o próximo lugar a nascer pequeno não vai ser est
 descer a barra de volta para 40 px, as cinco abas aparecem no relatório com a
 medida delas ao lado.
 
+## Duzentas e quarenta e três folhas, sem avisar
+
+*"Imprimir volantes"* montava os volantes e chamava a impressão do sistema no
+mesmo toque. Com as 55 cartelas de R$ 400 isso são quatro folhas e ninguém se
+machuca. Com as **3.634** de R$ 15.000 são **243** — quinze volantes por folha
+A4, medido no próprio desenho com a mídia de impressão emulada — e nada na tela
+tinha dito isso antes de a caixa de impressão aparecer com a resma carregada.
+
+O painel passou a dizer o tamanho: *"3.634 volantes · cerca de 243 folhas de
+papel"*, os volantes abaixo para conferir, e um botão que diz quantas folhas
+vai imprimir. A funcionalidade não saiu de lugar nenhum — ganhou a conta na
+frente da conta. A linha do aviso e o botão são da tela e não vão para o papel:
+gastar a primeira folha para dizer quantas folhas seriam é o tipo de piada que
+ninguém acha graça impressa.
+
+Foi assim que apareceu o defeito de verdade, que já estava lá: o painel de
+volantes abria **atrás** da área de análise. A área é uma camada opaca de tela
+cheia, o painel não tinha ordem de empilhamento nenhuma, e é de dentro da área
+que se pede para imprimir. Quem fechasse a caixa de impressão do sistema ficava
+com um painel aberto que não dava para ver nem fechar — o ✕ dele estava
+escondido junto. Com a impressão saindo no mesmo toque, dava para nunca
+perceber; com um segundo toque a pedir, o painel invisível vira um beco. Uma
+linha de CSS resolve, e a conferência que a cobra não olha a linha: ela pergunta
+ao navegador quem está no topo daquele ponto da tela.
+
 ## Chegar à tela em 3G
 
 O alvo da especificação é **primeira renderização útil em menos de 1 s em 3G
@@ -758,13 +783,31 @@ primeira medição feita em HTTP/1.1 mostrou ganho zero para as dicas de
 | | antes das dicas | com as dicas | hoje |
 |---|---:|---:|---:|
 | primeira pintura | 1.200 ms | 1.260 ms | 1.308 ms |
-| grade tocável | 1.880 ms | 1.360 ms | 1.432 ms |
-| resposta na tela | 2.500 ms | 1.370 ms | 1.450 ms |
+| grade tocável | 1.880 ms | 1.360 ms | 1.442 ms |
+| resposta na tela | 2.500 ms | 1.370 ms | 1.464 ms |
 | pedidos no caminho crítico | 14 | 9 | 11 |
 
-A coluna de hoje carrega a área de análise e o módulo de simulação: 40 KiB
-comprimidos contra 26, dois pedidos a mais, e oitenta milissegundos. O caminho
+A coluna de hoje carrega a área de análise e o módulo de simulação: 41 KiB
+comprimidos contra 26, dois pedidos a mais, e noventa milissegundos. O caminho
 continua sendo **uma onda só**, que é o que as dicas compraram.
+
+Esse 11 quase virou 25. O medidor contava os pedidos no servidor, e o servidor
+vê também o que vem **depois** da resposta: o service worker instalando, que
+rebaixa a casca inteira para a segunda visita funcionar sem rede. Somados,
+davam vinte e tantos pedidos — um número que sobe sem que nada tenha piorado, e
+que já estava a caminho do documento. Quem sabe o que a resposta esperou é a
+própria página, e é dela que o número passa a sair: `performance
+.getEntriesByType('resource')`. Os dois aparecem lado a lado, porque dizem
+coisas diferentes: um é o que a pessoa espera, o outro é o que a rede dela paga.
+
+E uma linha do medidor dizia o contrário do que se mede. O comentário sobre o
+`cache-control` afirmava que `no-store` fazia o service worker rebaixar tudo —
+"vinte e seis pedidos no lugar de doze". Medido dos dois jeitos, `no-store` e
+`max-age=600` dão a **mesma** contagem: a segunda onda acontece de qualquer
+forma. O cabeçalho continua sendo o do GitHub Pages, por fidelidade, e o
+comentário passou a dizer o que a medição diz. Ela custa cerca de 41 KiB depois
+que a resposta já está na tela, e não atrasa ninguém — mas é tráfego que a
+pessoa paga, e agora está escrito.
 
 A resposta chegava em duas ondas encadeadas desnecessárias. O navegador só
 descobre `catalogo.js`, `conferir.js`, `estrategia.js` e `volante.js` depois de
