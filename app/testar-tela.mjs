@@ -1255,6 +1255,19 @@ await trancado.close();
   const caixa = await navegador.newContext({ viewport: { width: 390, height: 844 } });
   const pg = await caixa.newPage();
   await pg.goto(endereco, { waitUntil: 'networkidle' });
+  // A tabela de preços nasce recolhida, e é onde mora o campo mais largo do
+  // aplicativo. Fechada, ela não entra em varredura nenhuma.
+  await pg.click('#det-dinheiro summary');
+  await pg.waitForTimeout(200);
+
+  // Um valor de dinheiro cortado é um valor errado: "R$ 1.700.000," não é o
+  // prêmio de 15 acertos, é o prêmio de 15 acertos sem os centavos. O campo do
+  // prêmio maior não cabia na coluna, em largura de tela nenhuma.
+  const cortados = () => pg.evaluate(() => [...document.querySelectorAll('input')]
+    .filter((i) => i.type !== 'range' && i.getBoundingClientRect().width
+      && i.scrollWidth > i.clientWidth + 1)
+    .map((i) => `${i.id || i.dataset.chave || '?'}="${i.value}" (cabe ${i.clientWidth
+      }, precisa ${i.scrollWidth})`));
 
   const miudos = () => pg.evaluate(() => {
     const fora = [];
@@ -1276,6 +1289,9 @@ await trancado.close();
   let apertados = await miudos();
   conferir('nenhum alvo de toque menor que 44px na tela principal',
     apertados.length === 0, apertados.join(' · '));
+  const truncados = await cortados();
+  conferir('nenhum valor de dinheiro aparece cortado na tela principal',
+    truncados.length === 0, truncados.join(' · '));
 
   await pg.click('#escolher');
   await esperarFechamento(pg, 20000);
@@ -1286,6 +1302,9 @@ await trancado.close();
     const aqui = await miudos();
     conferir(`nenhum alvo de toque menor que 44px na aba ${aba}`,
       aqui.length === 0, aqui.join(' · '));
+    const cortadosAqui = await cortados();
+    conferir(`nenhum valor de dinheiro aparece cortado na aba ${aba}`,
+      cortadosAqui.length === 0, cortadosAqui.join(' · '));
     apertados = apertados.concat(aqui);
   }
   await caixa.close();

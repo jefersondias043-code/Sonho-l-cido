@@ -141,7 +141,11 @@ details select, details input[type="text"], details input[type="number"] {
 }
 
 .precos { margin-bottom: 1rem; }
-.precos label { display: grid; grid-template-columns: 1fr 8rem; align-items: center; gap: 0.5rem; margin-bottom: 0.4rem; }
+/* 10,5rem, e não 8: o prêmio de 15 acertos é "R$ 1.700.000,00" e não cabia em
+   8rem — aparecia como "R$ 1.700.000," em qualquer largura de tela, com os
+   centavos cortados fora. Um valor de dinheiro cortado é um valor errado. */
+.precos label { display: grid; grid-template-columns: minmax(0, 1fr) 10.5rem;
+  align-items: center; gap: 0.5rem; margin-bottom: 0.4rem; }
 .precos input { text-align: right; }
 .partes, .registros { padding-left: 1.2rem; }
 .partes li, .registros li { margin-bottom: 0.5rem; }

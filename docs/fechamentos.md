@@ -144,7 +144,7 @@ Daí tudo o mais decorre:
 
 Sem WebAssembly no cliente, sem *web workers*, sem banco de sessões, sem retomada
 de trabalho interrompido. Nada disso tem razão de existir quando não há nada a
-esperar. O cliente inteiro dá **2.396 linhas** somando JavaScript, HTML e CSS —
+esperar. O cliente inteiro dá **2.400 linhas** somando JavaScript, HTML e CSS —
 teto de 2.500 cobrado pela construção —, e o peso inicial (casca, índice, preços
 e distribuições) dá **41 KiB comprimidos**.
 
@@ -743,6 +743,23 @@ de cada uma das cinco abas, e reprova qualquer um com menos de 44 px em
 qualquer direção — porque o próximo lugar a nascer pequeno não vai ser este. Ao
 descer a barra de volta para 40 px, as cinco abas aparecem no relatório com a
 medida delas ao lado.
+
+## Um valor de dinheiro cortado é um valor errado
+
+O prêmio de 15 acertos aparecia na tabela de preços como **"R$ 1.700.000,"** —
+com os centavos cortados fora, em toda largura de tela. A coluna do campo tinha
+8 rem fixos; o valor precisa de 146 px e cabiam 126. Não era o campo mais
+importante da tela, e era o único número da tabela que a pessoa não conseguia
+ler inteiro.
+
+Passou a 10,5 rem. Em 360 px para cima nada mais mudou; em 320 px o rótulo ao
+lado quebra em duas linhas — *15 / acertos* —, que é o que se troca por ver o
+valor completo, e é a troca certa.
+
+A conferência que passa a cobrar isso não cita esse campo: varre todos os
+campos visíveis da tela principal e das cinco abas e reprova qualquer um cujo
+conteúdo seja mais largo do que a caixa — `scrollWidth > clientWidth`. Com a
+coluna de volta a 8 rem, ela aponta seis vezes, com a medida ao lado.
 
 ## Quatro botões com o mesmo nome
 
