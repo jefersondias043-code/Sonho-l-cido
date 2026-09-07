@@ -850,8 +850,8 @@ conferir('a simulação diz quantos sorteios percorreu',
   simulacao.includes('100 sorteios entre as 25 dezenas'), simulacao.slice(0, 90));
 conferir('e o melhor resultado', /Melhor resultado: \d+ acertos/.test(simulacao));
 conferir('e fecha a conta do dinheiro',
-  /Gasto R\$ [\d.]+,\d\d/.test(simulacao) && /Prêmios R\$/.test(simulacao)
-  && /Resultado −?R\$/.test(simulacao), simulacao.slice(-120));
+  /Gasto R\$ [\d.]+,\d\d/.test(simulacao) && /Prêmios de 11 a 13 R\$/.test(simulacao)
+  && /Resultado −?R\$/.test(simulacao), simulacao.slice(-160));
 // O número que separa uma simulação honesta de propaganda: num sorteio entre as
 // 25, a garantia quase nunca se aplica, e a tela tem de dizer isso.
 conferir('e diz em quantos sorteios a garantia chegou a valer',
@@ -885,14 +885,78 @@ const garantia = Number((await pagina.locator('.numero').innerText()).match(/\d+
 const melhoresPorSorteio = await pagina.evaluate(() => {
   const tabela = [...document.querySelectorAll('#simulacao .quadro')]
     .find((t) => t.innerText.includes('Melhor bilhete do sorteio'));
-  return [...(tabela?.querySelectorAll('tbody tr') ?? [])]
-    .map((tr) => Number(tr.cells[0].innerText.match(/\d+/)?.[0] ?? -1));
+  return [...(tabela?.querySelectorAll('tbody tr') ?? [])].map((tr) => ({
+    acertos: Number(tr.cells[0].innerText.match(/\d+/)?.[0] ?? -1),
+    doFechamento: Number(tr.cells[1].innerText.replace(/\D/g, '')),
+  }));
 });
-conferir('e nenhum sorteio fica abaixo da garantia',
-  melhoresPorSorteio.length > 0 && melhoresPorSorteio.every((a) => a >= garantia),
-  `garantia ${garantia}, melhores ${melhoresPorSorteio.join(',')}`);
+// A tabela mostra os dois lados, e linhas abaixo da garantia existem — mas são
+// do chute. A coluna do fechamento tem de estar zerada nelas.
+conferir('e nenhum sorteio do fechamento fica abaixo da garantia',
+  melhoresPorSorteio.length > 0
+  && melhoresPorSorteio.filter((l) => l.acertos < garantia).every((l) => l.doFechamento === 0),
+  `garantia ${garantia}, linhas ${JSON.stringify(melhoresPorSorteio)}`);
 conferir('e a tela avisa que estes concursos são raros na vida real',
   noPool.includes('Estes são os concursos em que a garantia vale'), noPool.slice(0, 160));
+
+// ── o chute, medido ao lado do fechamento ───────────────────────────────────
+//
+// A frase que o aplicativo repete desde o começo — "o fechamento compra
+// certeza, não lucro" — passa a ser um número na frente de quem duvida. É a
+// conferência mais importante desta área, porque é a única que pode mostrar o
+// aplicativo estando errado sobre si mesmo.
+
+await pagina.selectOption('#s-quantos', '1000');
+await pagina.selectOption('#s-onde', 'pool');
+await pagina.click('#simular');
+await pagina.waitForFunction(
+  () => document.getElementById('simulacao').innerText.includes('Alcançou'), null,
+  { timeout: 90000 });
+const duelo = (await pagina.locator('#simulacao').innerText()).replace(/\s+/g, ' ');
+conferir('a simulação compara o fechamento com o chute',
+  duelo.includes('Seu fechamento') && duelo.includes('No chute'), duelo.slice(0, 120));
+
+const alcance = await pagina.evaluate(() => {
+  const t = [...document.querySelectorAll('#simulacao .quadro')]
+    .find((x) => x.innerText.includes('Alcançou'));
+  const c = t?.querySelector('tbody tr')?.cells;
+  return c ? { garantia: Number(t.innerText.match(/Alcançou (\d+)/)[1]),
+    meu: parseFloat(c[1].innerText), chute: parseFloat(c[2].innerText) } : null;
+});
+conferir('e diz em que porcentagem cada lado alcançou a garantia',
+  alcance && Number.isFinite(alcance.meu) && Number.isFinite(alcance.chute),
+  JSON.stringify(alcance));
+// Dentro do pool a garantia é certeza — 100%, sem exceção. Se esta linha
+// mostrar menos, ou o fechamento está furado ou a conta está errada.
+conferir('e o fechamento alcança a garantia em 100% dos sorteios de dentro do pool',
+  alcance.meu === 100, `${alcance.meu}%`);
+conferir('e o chute não a alcança mais do que o fechamento',
+  alcance.chute <= alcance.meu, `chute ${alcance.chute}% × fechamento ${alcance.meu}%`);
+
+// A distribuição junta os dois lados, e é onde se vê a promessa: o fechamento
+// não tem sorteio nenhum abaixo da garantia; o chute tem.
+const abaixo = await pagina.evaluate(() => {
+  const t = [...document.querySelectorAll('#simulacao .quadro')]
+    .find((x) => x.innerText.includes('Melhor bilhete do sorteio'));
+  return [...t.querySelectorAll('tbody tr')].map((tr) => ({
+    acertos: Number(tr.cells[0].innerText.match(/\d+/)[0]),
+    meu: Number(tr.cells[1].innerText.replace(/\D/g, '')),
+    chute: Number(tr.cells[2].innerText.replace(/\D/g, '')),
+  }));
+});
+conferir('a distribuição mostra os dois lados', abaixo.length > 0 && abaixo.every(
+  (l) => Number.isFinite(l.meu) && Number.isFinite(l.chute)));
+conferir('e o fechamento não tem nenhum sorteio abaixo da garantia',
+  abaixo.filter((l) => l.acertos < alcance.garantia).every((l) => l.meu === 0),
+  JSON.stringify(abaixo.filter((l) => l.acertos < alcance.garantia)));
+
+// A conta do dinheiro separa o que se compara do que não se compara: 11 a 13
+// pagam valor fixo; 14 e 15 são rateadas, e um acerto só vira milhão.
+conferir('o dinheiro separa as faixas fixas das rateadas',
+  duelo.includes('Prêmios de 11 a 13') && duelo.includes('Prêmios de 14 e 15'),
+  duelo.slice(-200));
+conferir('e a tela diz por que só uma das duas se compara',
+  duelo.includes('não se compara'), duelo.slice(-200));
 
 // ── valores ─────────────────────────────────────────────────────────────────
 

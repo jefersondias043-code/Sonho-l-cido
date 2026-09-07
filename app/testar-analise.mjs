@@ -7,8 +7,8 @@
 //     node app/testar-analise.mjs
 
 import { readFileSync } from 'node:fs';
-import { contarBits, mascaraDoSorteio, premioDe, simular, sortearResultado, umSorteio }
-  from './analise.js';
+import { bilhetesAoAcaso, contarBits, mascaraDoSorteio, premioDe, simular, sortearResultado,
+  umSorteio } from './analise.js';
 
 let feitos = 0;
 const falhas = [];
@@ -200,6 +200,66 @@ function fechamento(v, k, t) {
     um.distribuicao.get(15) === 50, [...um.distribuicao].join(' '));
   conferir('e o prêmio é o da faixa de 15, vezes os sorteios',
     um.premio === 50 * premios[15]);
+}
+
+// ── o chute, medido contra o fechamento ─────────────────────────────────────
+
+{
+  const acaso = acasoFixo(31);
+  const soltos = bilhetesAoAcaso(22, 15, 40, acaso);
+  conferir('o chute dá a quantidade pedida', soltos.length === 40);
+  conferir('cada bilhete tem o tamanho pedido', soltos.every((m) => contarBits(m) === 15));
+  conferir('e nenhum sai do pool', soltos.every((m) => m >>> 22 === 0));
+  // Bilhetes ao acaso repetem pouco, mas repetir não é erro — é o que acontece
+  // quando alguém joga no chute. O que não pode é sair sempre o mesmo.
+  conferir('e não são todos iguais', new Set(soltos).size > 30, `${new Set(soltos).size} distintos`);
+}
+
+// A comparação é o produto inteiro numa medição: contra os **mesmos** sorteios,
+// o fechamento alcança a garantia sempre e o chute não — e mesmo assim os dois
+// pagam quase o mesmo. É a frase que o aplicativo repete, aqui virando número.
+{
+  const { entrada, mascaras } = fechamento(20, 15, 12);
+  const dezenas = Array.from({ length: 20 }, (_, i) => i + 1);
+  const soltos = bilhetesAoAcaso(20, 15, entrada.jogos, acasoFixo(53));
+  const r = simular({ mascaras, dezenas, quantos: 1500, dentroDoPool: true, premios,
+    custo: entrada.jogos * 350, garantia: entrada.t, contra: soltos, aleatorio: acasoFixo(59) });
+
+  conferir('a comparação devolve os dois lados', r.rival != null);
+  conferir('e os dois correram os mesmos sorteios',
+    [...r.distribuicao.values()].reduce((a, b) => a + b, 0)
+    === [...r.rival.distribuicao.values()].reduce((a, b) => a + b, 0));
+  conferir('o fechamento alcança a garantia em todos os sorteios de dentro do pool',
+    r.alcancaram === 1500, `${r.alcancaram} de 1500`);
+  conferir('e o chute não alcança em todos',
+    r.rival.alcancaram < 1500, `${r.rival.alcancaram} de 1500`);
+  conferir('e mesmo assim o chute alcança na maioria — o fechamento compra o resto',
+    r.rival.alcancaram > 1500 * 0.5, `${r.rival.alcancaram} de 1500`);
+
+  // O gasto é o mesmo: mesmo tamanho, mesma quantidade, mesmo preço.
+  conferir('os dois custam o mesmo', r.gasto === r.rival.gasto);
+  // E o prêmio fica perto. "Perto" é o que a matemática promete: mesma
+  // esperança, variância diferente.
+  //
+  // Só as faixas de prêmio fixo — 11, 12 e 13. Um único acerto de 15 vale
+  // R$ 1,7 milhão e, num total de R$ 2,7 mil, engole a comparação inteira: o
+  // teste passaria a medir se alguém teve sorte, e não se os dois pagam igual.
+  // É o mesmo recorte que a tela faz quando diz "em média os dois pagam o
+  // mesmo", e pela mesma razão.
+  const fixas = (placar) => [11, 12, 13]
+    .reduce((soma, f) => soma + (placar.faixas.get(f) ?? 0) * premios[f], 0);
+  const [meuFixo, doChute] = [fixas(r), fixas(r.rival)];
+  const distancia = Math.abs(meuFixo - doChute) / Math.max(meuFixo, doChute);
+  conferir('e os dois pagam quase o mesmo nas faixas fixas, que é o que a tela promete',
+    distancia < 0.1, `fechamento ${meuFixo}, chute ${doChute} — ${(distancia * 100).toFixed(1)}%`);
+}
+
+// Sem `contra`, não há rival: quem não pediu comparação não recebe uma.
+{
+  const { mascaras } = fechamento(20, 15, 12);
+  const r = simular({ mascaras, dezenas: Array.from({ length: 20 }, (_, i) => i + 1),
+    quantos: 10, premios, aleatorio: acasoFixo(3) });
+  conferir('sem pedir comparação, não vem rival', r.rival === null);
 }
 
 // A mesma semente dá o mesmo resultado: sem isto não há como cobrar nada.

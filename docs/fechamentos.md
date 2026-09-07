@@ -144,12 +144,12 @@ Daí tudo o mais decorre:
 
 Sem WebAssembly no cliente, sem *web workers*, sem banco de sessões, sem retomada
 de trabalho interrompido. Nada disso tem razão de existir quando não há nada a
-esperar. O cliente inteiro dá **2.180 linhas** somando JavaScript, HTML e CSS —
-teto de 2.250 cobrado pela construção —, e o peso inicial (casca, índice, preços
-e distribuições) dá **36 KiB comprimidos**.
+esperar. O cliente inteiro dá **2.304 linhas** somando JavaScript, HTML e CSS —
+teto de 2.400 cobrado pela construção —, e o peso inicial (casca, índice, preços
+e distribuições) dá **39 KiB comprimidos**.
 
-O teto foi 1.500 enquanto havia uma porta de entrada só, e 1.700 quando a segunda
-chegou. Subiu de novo com a área de análise — e não porque o cliente passou a
+O teto foi 1.500 enquanto havia uma porta de entrada só, 1.700 quando a segunda
+chegou, e 2.400 com a área de análise — e não porque o cliente passou a
 resolver mais. **Resolver** é procurar quais bilhetes usar, e isso segue inteiro
 no motor em Rust, fora do aparelho. **Simular** é contar acertos de bilhetes que
 já existem: um `and` e um popcount por cartela, mil sorteios contra 3.678
@@ -452,6 +452,38 @@ que o próximo a ter a mesma ideia precisa ver. As três medições que decidira
 isto estão reproduzíveis: `CATALOGO_SAIDA` e um catálogo de saída vazio dão a
 corrida do zero.
 
+## O catálogo parou de melhorar, e isso também é uma medição
+
+Cada bilhete a menos num fechamento é dinheiro que a pessoa não gasta, então
+vale perguntar de tempos em tempos se a busca ainda tem o que dar. Em setembro
+de 2026 a pergunta foi feita de novo, contra os degraus que a escada de fato
+serve — os fechamentos que as pessoas compram.
+
+Seis deles, 90 segundos de busca cada, partindo dos 316 fechamentos já
+publicados como semente:
+
+| caso | publicado | depois da busca |
+|---|---:|---:|
+| 21-15-12 | 18 | 18 |
+| 22-15-12 | 40 | 40 |
+| 20-15-13 | 42 | 42 |
+| 23-15-12 | 82 | 82 |
+| 21-15-13 | 111 | 111 |
+| 22-15-13 | 290 | 290 |
+
+Nenhum se moveu. As rodadas anteriores já tinham colhido o que havia nesta
+escala de busca, e insistir com o mesmo motor e o mesmo tempo é repetir uma
+pergunta já respondida. Fica registrado para que a próxima tentativa comece de
+onde esta parou: melhorar estes números agora exige **outra coisa** — mais
+tempo por caso em ordens de grandeza, outra técnica, ou uma construção
+algébrica que o motor não conhece —, e não mais uma passada igual.
+
+O contraponto útil: a folga que o índice mostra entre `jogos` e `piso` chega a
+600%, e não quer dizer que caiba um fechamento seis vezes menor. Quer dizer que
+o **piso** é fraco. Cotas de contagem e de Schönheim são notoriamente frouxas em
+covering designs, e usá-las para estimar quanto ainda dá para economizar leva a
+esperar um ganho que não existe.
+
 ## A resposta estava fora da tela
 
 Medido, em vez de suposto: depois do toque em *"escolher por mim"*, o número da
@@ -529,6 +561,67 @@ do pool ela avisa que aqueles concursos são raros, e que o saldo ali não é o 
 se espera por concurso. Uma simulação sem essas duas frases seria propaganda com
 cara de medição, e a suíte cobra as duas: quebrando o sorteio para cair sempre
 dentro do pool, o teste de módulo e o de tela apontam.
+
+### E o chute do lado, contra os mesmos sorteios
+
+Toda simulação corre duas vezes: o fechamento, e **os mesmos bilhetes no chute**
+— mesma quantidade, mesmo tamanho, mesmo pool, mesmo dinheiro. Contra os
+**mesmos** sorteios, que é o que faz a comparação medir a diferença entre os
+dois jeitos de escolher bilhete, e não a sorte de dois conjuntos de sorteios.
+
+Mil sorteios dentro de um pool de 20, fechamento de 4 cartelas garantindo 12:
+
+```
+Alcançou 12 acertos      Seu fechamento    No chute
+dos sorteios                     100,0%       80,8%
+
+Melhor bilhete do sorteio    Seu fech.    No chute
+15 acertos                           0           1
+14 acertos                          19          12
+13 acertos                         266         237
+12 acertos                         715         605
+11 acertos                           0         144
+10 acertos                           0           1
+
+                         Seu fechamento    No chute
+Gasto                      R$ 14.000,00   R$ 14.000,00
+Prêmios de 11 a 13         R$ 38.192,00   R$ 38.444,00
+Prêmios de 14 e 15         R$ 28.500,00   R$ 1.718.000,00
+```
+
+Está tudo ali. O fechamento **nunca** desce da garantia; o chute desceu em 145
+dos mil. E as faixas de prêmio fixo pagaram R$ 38.192 contra R$ 38.444 — sete
+décimos de por cento de diferença, que é ruído. É a frase que o aplicativo
+repete desde a primeira tela — *"o fechamento compra certeza, não lucro"* —
+deixando de ser afirmação e virando medição.
+
+Por isso a linha de 14 e 15 fica **separada**: são faixas rateadas, e um único
+acerto de 15 num dos lados vale R$ 1,7 milhão e vira a conta inteira. Somá-la
+com as fixas produziria uma tabela onde o chute "ganha" por um golpe de sorte —
+um número grande e verdadeiro dizendo uma coisa falsa.
+
+E há configurações em que a comparação desmente o próprio produto: com 25
+dezenas e 55 bilhetes garantindo 11, os dois lados alcançam 11 em 100% dos
+sorteios. A garantia ali não compra nada que o acaso já não desse, e a tela diz
+isso com todas as letras quando as duas colunas empatam.
+
+### A área é um diálogo, e se comporta como um
+
+Uma tela cheia por cima de outra levanta quatro perguntas que só aparecem no
+aparelho de verdade, e as quatro estavam respondidas errado:
+
+| o que a pessoa faz | o que acontecia | o que acontece |
+|---|---|---|
+| aperta "voltar" | saía do aplicativo | fecha a área |
+| dá Tab com a área aberta | vazava para os 56 controles atrás | fica presa na área |
+| fecha a área | o foco caía no nada | volta ao botão que a abriu |
+| ouve a tela com leitor | cinco botões e cinco regiões soltas | abas e painéis ligados |
+
+A entrada no histórico é o conserto do primeiro: abrir empilha uma, fechar pelo
+botão a consome, e `popstate` fecha a área em vez de deixar o navegador sair. O
+`inert` no `<main>` é o conserto do segundo — a tela de geração continua no
+documento, atrás, mas fora do caminho do teclado e do leitor de tela. E as setas
+andam entre as abas, como numa barra de abas de verdade.
 
 ### Os valores, prontos e editáveis
 

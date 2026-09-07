@@ -340,6 +340,18 @@ async function trazerBilhetes(escolha) {
   }
 }
 
+/// Uma tabela de números. São oito na área de análise, e escrever o mesmo
+/// `<table>` oito vezes é oito chances de escrevê-lo diferente. Cada linha é
+/// uma lista de células; a última pode pedir destaque, que é onde vai o total.
+const quadro = (cabecalho, linhas) => `<table class="quadro">${cabecalho
+  ? `<thead><tr>${cabecalho.map((c) => `<th>${c}</th>`).join('')}</tr></thead>` : ''}
+  <tbody>${linhas.map(({ celulas, destaque }) => `<tr${destaque ? ' class="destaque"' : ''}>${
+  celulas.map((c) => `<td>${c}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+
+/// Uma linha da tabela; `total` é a que fica em negrito no fim.
+const linha = (...celulas) => ({ celulas });
+const total = (...celulas) => ({ celulas, destaque: true });
+
 const botoes = (pares) => `<div class="linha">${pares
   .map(([a, r]) => `<button type="button" data-acao="${a}" class="discreto">${r}</button>`)
   .join('')}</div>`;
@@ -393,8 +405,12 @@ function desenharBilhetes() {
 
 const ABAS = ['cartelas', 'conferir', 'simular', 'valores', 'resumo'];
 
+/// De onde a área foi aberta, para o foco voltar exatamente para lá. Sem isto o
+/// foco cai no `body`, e quem navega por teclado perde o lugar onde estava.
+let voltarOFocoPara = null;
+
 function abrirAnalise(qual = 'cartelas') {
-  if (!estado.bilhetes.length) return;
+  if (!estado.bilhetes.length || !$('analise').hidden) return;
   const e = estado.plano.escolha;
   $('analise-titulo').textContent =
     `${plural(estado.bilhetes.length, 'cartela', 'cartelas')} de ${e.k} dezenas`;
@@ -402,21 +418,43 @@ function abrirAnalise(qual = 'cartelas') {
   desenharResumo();
   desenharValores();
   desenharAcaso();
+  voltarOFocoPara = document.activeElement;
   $('analise').hidden = false;
   // Sem isto o corpo rola por baixo da área, e o dedo arrasta a página errada.
   document.body.style.overflow = 'hidden';
+  // A tela de geração continua no documento, atrás. `inert` a tira do caminho
+  // do teclado e do leitor de tela: sem ele, um Tab vaza para os cinquenta e
+  // seis controles escondidos lá atrás, e quem não enxerga a área não descobre
+  // que saiu dela.
+  $('painel-principal').inert = true;
   trocarAba(qual);
   $('analise').scrollTop = 0;
+  $('voltar').focus();
+  // Uma entrada no histórico: no telefone, "voltar" é o gesto de fechar o que
+  // está por cima. Sem isto ele fechava o aplicativo inteiro.
+  history.pushState({ analise: true }, '');
 }
 
-function fecharAnalise() {
+function fecharAnalise({ voltandoNoHistorico = false } = {}) {
+  const estavaAberta = !$('analise').hidden;
   $('analise').hidden = true;
+  $('painel-principal').inert = false;
   document.body.style.overflow = '';
+  if (estavaAberta && voltarOFocoPara?.isConnected) voltarOFocoPara.focus();
+  voltarOFocoPara = null;
+  // Fechar pelo botão consome a entrada que abrir criou; chegando pelo próprio
+  // histórico ela já foi consumida, e chamar `back` de novo sairia do aplicativo.
+  if (estavaAberta && !voltandoNoHistorico && history.state?.analise) history.back();
 }
 
-function trocarAba(qual) {
+function trocarAba(qual, focar = false) {
   for (const botao of $('abas').children) {
-    botao.setAttribute('aria-selected', String(botao.dataset.aba === qual));
+    const escolhida = botao.dataset.aba === qual;
+    botao.setAttribute('aria-selected', String(escolhida));
+    // Só a aba escolhida entra na ordem do Tab; entre elas anda-se com as
+    // setas, que é como uma barra de abas se comporta em toda parte.
+    botao.tabIndex = escolhida ? 0 : -1;
+    if (escolhida && focar) botao.focus();
   }
   for (const id of ABAS) $(`aba-${id}`).hidden = id !== qual;
   $('analise').scrollTop = 0;
@@ -449,9 +487,8 @@ function desenharResumo() {
     ['Tamanho', e.provado ? 'mínimo provado — nenhum fechamento faz isso com menos'
       : `menor conhecido — nenhum faz com menos de ${e.piso}`],
   ];
-  $('resumo').innerHTML = `<table class="quadro"><tbody>${linhas
-    .map(([r, v]) => `<tr><td>${r}</td><td>${v}</td></tr>`).join('')}</tbody></table>
-    <p class="ressalva">${chanceDeCairDentro(e.v)}</p>`;
+  $('resumo').innerHTML = quadro(null, linhas.map(([r, v]) => linha(r, v)))
+    + `<p class="ressalva">${chanceDeCairDentro(e.v)}</p>`;
 }
 
 function desenharAcaso() {
@@ -495,27 +532,20 @@ function desenharValores() {
   const campo = (grupo, chave, valor) => `<input type="text" inputmode="decimal"
     data-grupo="${grupo}" data-chave="${chave}" value="${dinheiro(valor)}"
     aria-label="${grupo === 'aposta' ? 'Valor de cada cartela' : `Prêmio de ${chave} acertos`}">`;
-  $('valores').innerHTML = `
-    <table class="quadro"><tbody>
-      <tr><td>Valor de cada cartela</td><td>${campo('aposta', e.k, unitario)}</td></tr>
-      <tr><td>Cartelas</td><td>${n.toLocaleString('pt-BR')}</td></tr>
-      <tr class="destaque"><td>Custo total</td><td>${dinheiro(n * unitario)}</td></tr>
-    </tbody></table>
-    <details><summary>Quanto paga cada faixa</summary><div>
-      <table class="quadro"><tbody>${[11, 12, 13, 14, 15].map((f) =>
-    `<tr><td>${f} acertos</td><td>${campo('premio', f, estado.precos.premio[f])}</td></tr>`)
-    .join('')}</tbody></table>
+  $('valores').innerHTML = quadro(null, [
+    linha('Valor de cada cartela', campo('aposta', e.k, unitario)),
+    linha('Cartelas', n.toLocaleString('pt-BR')),
+    total('Custo total', dinheiro(n * unitario)),
+  ]) + `<details><summary>Quanto paga cada faixa</summary><div>${quadro(null,
+    [11, 12, 13, 14, 15].map((f) => linha(`${f} acertos`, campo('premio', f, estado.precos.premio[f]))))}
       <p class="ajuda">14 e 15 acertos são rateados e mudam a cada concurso; os valores aqui são
         referência. Nenhum destes números é auditado por este aplicativo.</p>
-    </div></details>
-    ${u ? `<table class="quadro">
-      <thead><tr><th>${u.titulo}</th><th></th></tr></thead><tbody>
-      <tr><td>Cartelas premiadas</td><td>${u.premiadas.toLocaleString('pt-BR')}</td></tr>
-      <tr><td>Gasto</td><td>${dinheiro(u.gasto)}</td></tr>
-      <tr><td>Prêmios</td><td>${dinheiro(u.premio)}</td></tr>
-      <tr class="destaque"><td>Resultado</td><td>${u.premio >= u.gasto ? '' : '−'}${
-      dinheiro(Math.abs(u.premio - u.gasto))}</td></tr></tbody></table>`
-    : '<p class="ajuda">Confira contra um sorteio ou simule para ver o resultado financeiro.</p>'}`;
+    </div></details>` + (u ? quadro([u.titulo, ''], [
+    linha('Cartelas premiadas', u.premiadas.toLocaleString('pt-BR')),
+    linha('Gasto', dinheiro(u.gasto)),
+    linha('Prêmios', dinheiro(u.premio)),
+    total('Resultado', saldo(u.premio - u.gasto)),
+  ]) : '<p class="ajuda">Confira contra um sorteio ou simule para ver o resultado financeiro.</p>');
 }
 
 /// As máscaras do que **esta pessoa** tem na mão. Num bolão é a parte dela:
@@ -531,10 +561,15 @@ async function rodarSimulacao() {
   $('simular').disabled = true;
   $('simulacao').innerHTML = '<p class="ajuda">Simulando…</p>';
   await new Promise((pronto) => setTimeout(pronto, 0));  // deixa o aviso aparecer
+  const meus = mascarasNaMao();
   const r = analise.simular({
-    mascaras: mascarasNaMao(), dezenas: estado.dezenas, universo: UNIVERSO, quantos,
-    dentroDoPool, premios: estado.precos.premio,
+    mascaras: meus, dezenas: estado.dezenas, universo: UNIVERSO, quantos,
+    dentroDoPool, premios: estado.precos.premio, garantia: e.jogos === 1 ? 0 : e.t,
     custo: estado.bilhetes.length * estado.precos.aposta[e.k],
+    // Os mesmos bilhetes no chute, contra os mesmos sorteios. É a pergunta que
+    // o aplicativo responde por escrito desde sempre — "o fechamento compra
+    // certeza, não lucro" — passando a ser medida na frente de quem duvida.
+    contra: analise.bilhetesAoAcaso(e.v, e.k, meus.length),
   });
   estado.ultimoResultado = { premiadas: r.premiadas, gasto: r.gasto, premio: r.premio,
     titulo: `${quantos.toLocaleString('pt-BR')} ${quantos === 1 ? 'sorteio simulado'
@@ -544,10 +579,24 @@ async function rodarSimulacao() {
   desenharValores();
 }
 
+// As faixas de prêmio fixo se comparam; as rateadas não. Separá-las é a
+// diferença entre uma tabela que informa e uma que engana com um número grande.
+const FIXAS = [11, 12, 13];
+const RATEADAS = [14, 15];
+const pagam = (placar, faixas) => (!placar ? 0 : faixas.reduce(
+  (soma, f) => soma + (placar.faixas.get(f) ?? 0) * estado.precos.premio[f], 0));
+
+const porcento = (parte, total) => (total ? `${((100 * parte) / total).toFixed(1)}%` : '—');
+const saldo = (c) => `${c >= 0 ? '' : '−'}${dinheiro(Math.abs(c))}`;
+
 function desenharSimulacao(r, e) {
   const premiadas = [15, 14, 13, 12, 11].filter((f) => r.faixas.has(f));
-  const melhores = [...r.distribuicao.entries()].sort((a, b) => b[0] - a[0]);
-  const maior = Math.max(...melhores.map(([, q]) => q));
+  // A união dos dois lados: o fechamento não desce da garantia, e o chute
+  // desce. Mostrar só as linhas do fechamento esconderia exatamente onde os
+  // dois diferem, que é o que a tabela existe para mostrar.
+  const melhores = [...new Set([...r.distribuicao.keys(),
+    ...(r.rival?.distribuicao.keys() ?? [])])].sort((a, b) => b - a);
+  const maior = Math.max(...melhores.map((m) => r.distribuicao.get(m) ?? 0));
   const numero = (n) => n.toLocaleString('pt-BR');
   return `
     <p><b>${numero(r.quantos)}</b> ${r.quantos === 1 ? 'sorteio' : 'sorteios'} ${r.dentroDoPool
@@ -559,25 +608,36 @@ function desenharSimulacao(r, e) {
       : `${numero(r.caiuNoPool)} ${r.caiuNoPool === 1 ? 'sorteio caiu' : 'sorteios caíram'}`}
       inteiro dentro do seu pool — e só nesses a garantia de ${e.t} acertos vale. É a diferença
       entre o tamanho da promessa e a chance de ela ser cobrada.</p>`}
-    <table class="quadro">
-      <thead><tr><th>Faixa</th><th>Cartelas</th><th>Sorteios</th></tr></thead>
-      <tbody>${premiadas.map((f) => `<tr><td>${f} acertos</td>
-        <td>${numero(r.faixas.get(f))}</td>
-        <td>${numero(r.sorteiosComFaixa.get(f))}</td></tr>`).join('')
-    || '<tr><td>Nenhuma cartela premiada.</td><td>0</td><td>0</td></tr>'}</tbody>
-    </table>
-    <table class="quadro">
-      <thead><tr><th>Melhor bilhete do sorteio</th><th>Sorteios</th><th></th></tr></thead>
-      <tbody>${melhores.map(([acertos, q]) => `<tr><td>${acertos} acertos</td><td>${numero(q)}</td>
-        <td><span class="barra" style="width:${Math.round((100 * q) / maior)}%"></span></td></tr>`)
-    .join('')}</tbody>
-    </table>
-    <table class="quadro"><tbody>
-      <tr><td>Gasto</td><td>${dinheiro(r.gasto)}</td></tr>
-      <tr><td>Prêmios</td><td>${dinheiro(r.premio)}</td></tr>
-      <tr class="destaque"><td>Resultado</td><td>${r.saldo >= 0 ? '' : '−'}${
-    dinheiro(Math.abs(r.saldo))}</td></tr>
-    </tbody></table>
+    ${r.garantia ? quadro([`Alcançou ${r.garantia} acertos`, 'Seu fechamento', 'No chute'],
+    [total('dos sorteios', porcento(r.alcancaram, r.quantos),
+      porcento(r.rival.alcancaram, r.quantos))])
+    + `<p class="ressalva">"No chute" são ${plural(estado.bilhetes.length, 'bilhete tirado',
+      'bilhetes tirados')} ao acaso do mesmo pool, do mesmo tamanho, contra os mesmos sorteios:
+      o que o mesmo dinheiro compraria sem fechamento nenhum. ${r.alcancaram === r.rival.alcancaram
+      ? 'Aqui os dois deram no mesmo — nesta configuração a garantia não compra nada que o acaso já não desse.'
+      : 'A diferença entre as duas colunas é o que o fechamento compra.'}</p>` : ''}
+    ${quadro(['Faixa', 'Cartelas', 'No chute', 'Sorteios'], premiadas.length
+    ? premiadas.map((f) => linha(`${f} acertos`, numero(r.faixas.get(f)),
+      numero(r.rival?.faixas.get(f) ?? 0), numero(r.sorteiosComFaixa.get(f))))
+    : [linha('Nenhuma cartela premiada.', 0, 0, 0)])}
+    ${quadro(['Melhor bilhete do sorteio', 'Seu fechamento', 'No chute', ''],
+    melhores.map((acertos) => {
+      const meu = r.distribuicao.get(acertos) ?? 0;
+      return linha(`${acertos} acertos`, numero(meu),
+        numero(r.rival?.distribuicao.get(acertos) ?? 0),
+        `<span class="barra" style="width:${Math.round((100 * meu) / maior)}%"></span>`);
+    }))}
+    ${quadro(['', 'Seu fechamento', 'No chute'], [
+    linha('Gasto', dinheiro(r.gasto), dinheiro(r.gasto)),
+    linha('Prêmios de 11 a 13', dinheiro(pagam(r, FIXAS)), dinheiro(pagam(r.rival, FIXAS))),
+    linha('Prêmios de 14 e 15', dinheiro(pagam(r, RATEADAS)), dinheiro(pagam(r.rival, RATEADAS))),
+    total('Resultado', saldo(r.saldo), saldo(r.rival?.saldo ?? -r.gasto)),
+  ])}
+    <p class="ressalva">As duas primeiras faixas se comparam: 11, 12 e 13 acertos pagam valor
+      fixo, os dois lados custam o mesmo e, na média, pagam o mesmo — é assim que a matemática
+      funciona. A linha de 14 e 15 não se compara: são rateadas, e <b>um único acerto de 15 num
+      dos lados vira milhão</b> e vira a conta inteira. O que o fechamento compra está na
+      primeira tabela, não nesta.</p>
     ${r.melhorSorteio ? `<p class="ajuda">O melhor deles foi
       ${r.melhorSorteio.map((d) => String(d).padStart(2, '0')).join(' ')}.</p>` : ''}`;
 }
@@ -597,7 +657,30 @@ function desenharBolao() {
         ${dinheiro(g.length * estado.precos.aposta[k])}
         <button type="button" class="discreto" data-link="${link}">Copiar link</button></li>`;
     })
-    .join('')}</ol>`;
+    .join('')}</ol>${fechamentoDaConta()}`;
+}
+
+/// A conta de tudo o que está guardado. Um jogo de cada vez não responde à
+/// pergunta que a pessoa realmente tem — "no fim das contas, quanto isto me
+/// custou?" —, e é uma pergunta que ela merece ver respondida sem calculadora.
+///
+/// Só entram no retorno os jogos já conferidos: somar zero pelos que ainda não
+/// foram conferidos faria a carteira dizer que se perdeu dinheiro que ainda
+/// pode voltar.
+function fechamentoDaConta() {
+  const gasto = estado.carteira.reduce((soma, r) => soma + r.custo, 0);
+  const conferidos = estado.carteira.filter((r) => r.retorno != null);
+  const voltou = conferidos.reduce((soma, r) => soma + r.retorno, 0);
+  const gastoConferido = conferidos.reduce((soma, r) => soma + r.custo, 0);
+  return quadro(null, [
+    linha(plural(estado.carteira.length, 'jogo guardado', 'jogos guardados'), dinheiro(gasto)),
+    ...(conferidos.length ? [
+      linha(`${plural(conferidos.length, 'já conferido', 'já conferidos')} · custaram`,
+        dinheiro(gastoConferido)),
+      linha('e voltaram', dinheiro(voltou)),
+      total('Saldo do que foi conferido', saldo(voltou - gastoConferido)),
+    ] : [linha('Nenhum conferido ainda', '—')]),
+  ]);
 }
 
 function desenharPrecos() {
@@ -776,10 +859,24 @@ function ligarControles() {
   for (const id of ['secao-bilhetes', 'lista-cartelas']) {
     $(id).addEventListener('click', (ev) => acaoDosBilhetes(ev.target.dataset?.acao));
   }
-  $('voltar').addEventListener('click', fecharAnalise);
+  $('voltar').addEventListener('click', () => fecharAnalise());
+  // "Voltar" do navegador, e o gesto de deslizar do telefone: fecham a área em
+  // vez de sair do aplicativo.
+  addEventListener('popstate', () => {
+    if (!$('analise').hidden) fecharAnalise({ voltandoNoHistorico: true });
+  });
   $('abas').addEventListener('click', (ev) => {
     const qual = ev.target.dataset?.aba;
     if (qual) trocarAba(qual);
+  });
+  // Setas andam entre as abas, como numa barra de abas de verdade.
+  $('abas').addEventListener('keydown', (ev) => {
+    const passo = { ArrowRight: 1, ArrowLeft: -1, Home: -ABAS.length, End: ABAS.length }[ev.key];
+    if (!passo) return;
+    ev.preventDefault();
+    const agora = ABAS.indexOf(ev.target.dataset?.aba);
+    const alvo = Math.min(ABAS.length - 1, Math.max(0, (agora < 0 ? 0 : agora) + passo));
+    trocarAba(ABAS[alvo], true);
   });
   $('simular').addEventListener('click', rodarSimulacao);
   // A área é uma tela por cima da outra, e "voltar" tem de fechá-la — no
