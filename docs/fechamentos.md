@@ -752,7 +752,7 @@ com os centavos cortados fora, em toda largura de tela. A coluna do campo tinha
 importante da tela, e era o único número da tabela que a pessoa não conseguia
 ler inteiro.
 
-Passou a 10,5 rem. Em 360 px para cima nada mais mudou; em 320 px o rótulo ao
+Passou a 10,5 rem. De 360 px para cima nada mais mudou; em 320 px o rótulo ao
 lado quebra em duas linhas — *15 / acertos* —, que é o que se troca por ver o
 valor completo, e é a troca certa.
 
