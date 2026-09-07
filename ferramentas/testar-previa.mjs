@@ -45,8 +45,9 @@ pagina.on('console', (m) => {
 await pagina.goto(`http://127.0.0.1:${servidor.address().port}/`, { waitUntil: 'networkidle' });
 
 await pagina.click('#escolher');
-await pagina.waitForSelector('.bilhetes li', { timeout: 20000 });
-const bilhetes = await pagina.locator('.bilhetes li').count();
+await pagina.waitForSelector('.gerado', { timeout: 20000 });
+const bilhetes = Number(
+  (await pagina.locator('.gerado .quantas').innerText()).replace(/\D/g, '')) || 0;
 conferir('a prévia chega aos bilhetes', bilhetes > 0);
 conferir('e traz a resposta inteira',
   /acertos garantidos/.test(await pagina.locator('.resposta').innerText()));
@@ -55,6 +56,10 @@ conferir('e o selo é um dos dois estados',
 conferir('e a ressalva do pool aparece',
   /a garantia vale sempre|1 concurso a cada/.test(await pagina.locator('.resposta .ressalva').innerText()));
 
+// A varredura mora na aba Resumo da área de análise, e o bolão na tela de
+// geração: a prévia costurada tem de chegar aos dois.
+await pagina.locator('[data-acao=abrir]').click();
+await pagina.click('#abas [data-aba=resumo]');
 await pagina.click('#det-conferir summary');
 await pagina.click('#varrer');
 await pagina.waitForFunction(
@@ -63,6 +68,7 @@ await pagina.waitForFunction(
 conferir('a varredura roda e confirma',
   (await pagina.locator('#varredura').innerText()).includes('está de pé'));
 
+await pagina.click('#voltar');
 await pagina.click('#det-bolao summary');
 await pagina.fill('#partes', '4');
 await pagina.dispatchEvent('#partes', 'input');

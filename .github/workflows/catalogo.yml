@@ -74,6 +74,14 @@ jobs:
       - name: O catálogo — soma de verificação, posições e bolão
         run: node app/testar-catalogo.mjs
 
+      - name: A análise — simular sorteios e contar acertos
+        # O gerador de acaso entra por parâmetro, então a simulação é
+        # determinística: sem isso não haveria como cobrá-la de estar certa.
+        # E o que se cobra vai além da aritmética — que a simulação "da vida
+        # real" mostre a garantia quase nunca se aplicando, que é a diferença
+        # entre medir um fechamento e fazer propaganda dele.
+        run: node app/testar-analise.mjs
+
       - name: O leitor de intenção, que responde quando o modelo não responde
         run: node servidor/testar-intencao.mjs
 

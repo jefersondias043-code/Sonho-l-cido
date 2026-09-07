@@ -14,6 +14,7 @@
 <link rel="modulepreload" href="catalogo.js">
 <link rel="modulepreload" href="conferir.js">
 <link rel="modulepreload" href="volante.js">
+<link rel="modulepreload" href="analise.js">
 <link rel="preload" href="catalogo/indice.json" as="fetch" crossorigin>
 <link rel="preload" href="catalogo/precos.json" as="fetch" crossorigin>
 <link rel="preload" href="catalogo/acaso.json" as="fetch" crossorigin>
@@ -49,11 +50,6 @@
 
 <hr>
 
-<details id="det-acaso">
-  <summary>E se eu jogasse no chute?</summary>
-  <div id="acaso"></div>
-</details>
-
 <details id="det-manual">
   <summary>Montar do meu jeito</summary>
   <div>
@@ -76,31 +72,12 @@
   </div>
 </details>
 
-<details id="det-conferir">
-  <summary>Conferir a garantia, sorteio por sorteio</summary>
-  <div>
-    <p class="ajuda">Percorre todos os resultados possíveis dentro das suas dezenas e mostra o pior caso. Nada é enviado para lugar nenhum: a conta é feita aqui.</p>
-    <button type="button" id="varrer">Conferir agora</button>
-    <p id="varredura" aria-live="polite"></p>
-  </div>
-</details>
-
 <details id="det-bolao">
   <summary>Dividir com outras pessoas</summary>
   <div>
     <label for="partes">Em quantas partes</label>
     <input id="partes" type="number" min="2" max="20" value="2">
     <div id="bolao"></div>
-  </div>
-</details>
-
-<details id="det-resultado">
-  <summary>Conferir contra o sorteio</summary>
-  <div>
-    <label for="sorteio">As 15 dezenas sorteadas</label>
-    <input id="sorteio" type="text" inputmode="numeric" autocomplete="off" placeholder="1 2 3 4 5 6 7 8 9 10 11 12 13 14 15">
-    <div class="linha"><button type="button" id="buscar-sorteio" class="discreto">Buscar o último concurso</button></div>
-    <div id="conferencia"></div>
   </div>
 </details>
 
@@ -134,6 +111,79 @@
 </footer>
 
 </main>
+
+<!-- A área de análise. Só existe depois que há fechamento, e ocupa a tela
+     inteira quando aberta: gerar e analisar são dois assuntos, e misturá-los
+     era o que enchia a primeira tela de cartelas que ninguém tinha pedido. -->
+<section class="analise" id="analise" hidden aria-label="Cartelas e análise">
+  <div class="analise-topo">
+    <button type="button" id="voltar" class="discreto">‹ Voltar</button>
+    <strong id="analise-titulo"></strong>
+  </div>
+  <nav class="abas" id="abas" role="tablist" aria-label="O que ver">
+    <button type="button" role="tab" data-aba="cartelas" aria-selected="true">Cartelas</button>
+    <button type="button" role="tab" data-aba="conferir" aria-selected="false">Conferir</button>
+    <button type="button" role="tab" data-aba="simular" aria-selected="false">Simular</button>
+    <button type="button" role="tab" data-aba="valores" aria-selected="false">Valores</button>
+    <button type="button" role="tab" data-aba="resumo" aria-selected="false">Resumo</button>
+  </nav>
+
+  <div class="aba" id="aba-cartelas" role="tabpanel">
+    <div id="lista-cartelas"></div>
+  </div>
+
+  <div class="aba" id="aba-conferir" role="tabpanel" hidden>
+    <p class="ajuda">O resultado de um concurso de verdade, conferido contra todas as suas
+      cartelas.</p>
+    <label for="sorteio">As 15 dezenas sorteadas</label>
+    <input id="sorteio" type="text" inputmode="numeric" autocomplete="off"
+      placeholder="1 2 3 4 5 6 7 8 9 10 11 12 13 14 15">
+    <div class="linha">
+      <button type="button" id="buscar-sorteio" class="discreto">Buscar o último concurso</button>
+    </div>
+    <div id="conferencia"></div>
+  </div>
+
+  <div class="aba" id="aba-simular" role="tabpanel" hidden>
+    <p class="ajuda">Resultados inventados aqui mesmo, para ver como o fechamento se comporta
+      antes de gastar dinheiro com ele.</p>
+    <label for="s-quantos">Quantos sorteios</label>
+    <select id="s-quantos">
+      <option value="1">1 sorteio</option>
+      <option value="10">10 sorteios</option>
+      <option value="100" selected>100 sorteios</option>
+      <option value="1000">1.000 sorteios</option>
+    </select>
+    <label for="s-onde">Que tipo de sorteio</label>
+    <select id="s-onde">
+      <option value="real" selected>Como na vida real, entre as 25 dezenas</option>
+      <option value="pool">Só os que caem dentro do seu pool</option>
+    </select>
+    <div class="linha"><button type="button" id="simular">Simular</button></div>
+    <div id="simulacao" aria-live="polite"></div>
+  </div>
+
+  <div class="aba" id="aba-valores" role="tabpanel" hidden>
+    <div id="valores"></div>
+  </div>
+
+  <div class="aba" id="aba-resumo" role="tabpanel" hidden>
+    <div id="resumo"></div>
+    <details id="det-conferir">
+      <summary>Conferir a garantia, sorteio por sorteio</summary>
+      <div>
+        <p class="ajuda">Percorre todos os resultados possíveis dentro das suas dezenas e mostra
+          o pior caso. Nada é enviado para lugar nenhum: a conta é feita aqui.</p>
+        <button type="button" id="varrer">Conferir agora</button>
+        <p id="varredura" aria-live="polite"></p>
+      </div>
+    </details>
+    <details id="det-acaso">
+      <summary>E se eu jogasse no chute?</summary>
+      <div id="acaso"></div>
+    </details>
+  </div>
+</section>
 
 <div class="painel" id="painel" hidden>
   <div class="painel-topo">

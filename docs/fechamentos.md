@@ -15,6 +15,11 @@ prontos e, numa frase, o que exatamente está garantido.
 As duas usam o mesmo catálogo, a mesma tela e o mesmo caminho de resposta — o que
 muda é só quem decide. Nada foi tirado da primeira para a segunda existir.
 
+E depois de gerar vem uma terceira coisa, que não é perguntar nem responder: é
+**olhar o que se comprou**. Cartelas, conferência contra o concurso, simulação
+de mil sorteios e a conta do dinheiro moram numa área própria, descrita em
+[Gerar e analisar são dois assuntos](#gerar-e-analisar-são-dois-assuntos).
+
 ## O que o dinheiro compra
 
 Não é figura de retórica: é o catálogo respondendo. A pessoa diz quanto tem, e o
@@ -139,15 +144,17 @@ Daí tudo o mais decorre:
 
 Sem WebAssembly no cliente, sem *web workers*, sem banco de sessões, sem retomada
 de trabalho interrompido. Nada disso tem razão de existir quando não há nada a
-esperar. O cliente inteiro dá **1.675 linhas** somando JavaScript, HTML e CSS —
-teto de 1.700 cobrado pela construção —, e o peso inicial (casca, índice, preços
-e distribuições) dá **30 KiB comprimidos**.
+esperar. O cliente inteiro dá **2.180 linhas** somando JavaScript, HTML e CSS —
+teto de 2.250 cobrado pela construção —, e o peso inicial (casca, índice, preços
+e distribuições) dá **36 KiB comprimidos**.
 
-O teto foi 1.500 enquanto havia uma porta de entrada só. Ele não subiu porque o
-cliente passou a resolver mais — resolve exatamente o mesmo, nada —, mas porque
-ganhou a segunda porta: a lista do catálogo, os quatro filtros, o plano fixo e o
-ajuste do pool, cerca de duzentas linhas em que não há uma conta de cobertura.
-Escolher é do usuário, e escolha não tem como ser pré-computada.
+O teto foi 1.500 enquanto havia uma porta de entrada só, e 1.700 quando a segunda
+chegou. Subiu de novo com a área de análise — e não porque o cliente passou a
+resolver mais. **Resolver** é procurar quais bilhetes usar, e isso segue inteiro
+no motor em Rust, fora do aparelho. **Simular** é contar acertos de bilhetes que
+já existem: um `and` e um popcount por cartela, mil sorteios contra 3.678
+bilhetes em 65 ms. São coisas de ordens diferentes, e só a primeira é a que o
+catálogo existe para evitar.
 
 E o que esse teto de fato protege — que o cliente não resolva nada — quem cobra
 não é ele: é `app/testar-conferir.mjs`, varrendo os fechamentos publicados
@@ -479,6 +486,57 @@ que o aplicativo **guarda** não mudou: a varredura exaustiva, a divisão em
 bolão, a conferência contra o sorteio e a impressão dos volantes continuam
 vendo o fechamento inteiro — e a suíte cobra as duas metades, que a lista foi
 cortada e que a varredura ainda cobre tudo.
+
+Cinquenta linhas de números ainda eram cinquenta linhas de números logo abaixo
+da resposta, e ninguém tinha pedido nenhuma delas ainda. Hoje a tela de geração
+não mostra cartela alguma — o que vem a seguir é a seção adiante.
+
+## Gerar e analisar são dois assuntos
+
+Depois de gerar, a primeira tela diz o que foi gerado e para por aí:
+
+```
+Fechamento gerado
+        40
+cartelas de 15 dezenas · R$ 140,00
+   [ Visualizar cartelas ]
+```
+
+As cartelas, a conferência, a simulação e a conta do dinheiro moram numa área
+própria, que ocupa a tela inteira quando aberta e some quando se volta. A
+navegação é uma barra de abas — **Cartelas · Conferir · Simular · Valores ·
+Resumo** —, e a regra é uma coisa de cada vez. Nada foi escondido; foi
+organizado, e cada coisa está a um toque de onde faz sentido procurá-la.
+
+### Simular é contar, não resolver
+
+A simulação sorteia resultados e conta acertos das cartelas que **já existem**:
+um `and` e um popcount por cartela sobre a máscara do sorteio. Mil sorteios
+contra 3.678 bilhetes levam 65 ms. Procurar **quais** bilhetes usar — isso sim
+é resolver, e segue inteiro no motor em Rust, fora do aparelho.
+
+Ela pergunta de dois jeitos, e os dois são legítimos e diferentes:
+
+| modo | o que sorteia | o que responde |
+|---|---|---|
+| como na vida real | 15 entre as 25 | como o fechamento se sai num concurso qualquer |
+| dentro do seu pool | 15 entre as suas `v` | como ele se sai quando a garantia vale |
+
+A diferença entre os dois **é** o produto, e por isso a tela nunca deixa um
+passar pelo outro. No modo real ela diz em quantos dos sorteios as 15 caíram
+todas dentro do pool — que é onde a garantia se aplica, e são poucos. No modo
+do pool ela avisa que aqueles concursos são raros, e que o saldo ali não é o que
+se espera por concurso. Uma simulação sem essas duas frases seria propaganda com
+cara de medição, e a suíte cobra as duas: quebrando o sorteio para cair sempre
+dentro do pool, o teste de módulo e o de tela apontam.
+
+### Os valores, prontos e editáveis
+
+A aba **Valores** já vem preenchida — valor da cartela, quantas, custo total, e
+o resultado financeiro da última conferência ou simulação. A tabela de prêmios
+fica recolhida. Tudo o que é preço se edita ali, e escreve na **mesma** tabela
+da tela principal: dois lugares do aplicativo com preços diferentes seria um
+deles mentindo.
 
 ## O bolão dividido duas vezes
 

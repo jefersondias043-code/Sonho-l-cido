@@ -25,6 +25,23 @@ exigirConstrucaoFresca();
 
 let feitos = 0;
 const falhas = [];
+
+// O fechamento existe quando o cartão de "Fechamento gerado" aparece — as
+// cartelas em si moraram para a área de análise, e chegar a elas é um toque.
+const esperarFechamento = (pg, ms = 30000) => pg.waitForSelector('.gerado', { timeout: ms });
+
+/// Quantas cartelas o fechamento tem, lido de onde a tela diz. Sem fechamento,
+/// zero — e não uma espera que estoura.
+const quantasCartelas = async (pg) => Number(
+  (await pg.locator('.gerado .quantas').innerText().catch(() => '0')).replace(/\D/g, '')) || 0;
+
+/// Abre a área de análise numa aba, e a fecha.
+const abrir = async (pg, aba = 'cartelas') => {
+  await pg.locator('[data-acao=abrir]').click();
+  await pg.click(`#abas [data-aba=${aba}]`);
+  await pg.waitForTimeout(150);
+};
+const fechar = (pg) => pg.click('#voltar');
 function conferir(nome, condicao, detalhe = '') {
   feitos++;
   if (!condicao) falhas.push(`${nome}${detalhe ? ` — ${detalhe}` : ''}`);
@@ -81,8 +98,8 @@ for (const proibido of ['semente', 'iterações', 'esforço', 'motor', 'universo
 // ── um toque até os bilhetes ────────────────────────────────────────────────
 
 await pagina.click('#escolher');
-await pagina.waitForSelector('.bilhetes li');
-const quantos = await pagina.locator('.bilhetes li').count();
+await esperarFechamento(pagina);
+const quantos = await quantasCartelas(pagina);
 conferir('um toque põe bilhetes na tela', quantos > 0);
 conferir('a resposta traz o número grande', /^\d+$/.test(await pagina.locator('.numero').innerText()));
 conferir('e diz o que o número é',
@@ -128,7 +145,7 @@ const naDobra = await (async () => {
   const tela = await pequeno.newPage();
   await tela.goto(endereco, { waitUntil: 'networkidle' });
   await tela.click('#escolher');
-  await tela.waitForSelector('.bilhetes li', { timeout: 20000 });
+  await esperarFechamento(tela, 20000);
   await tela.waitForTimeout(800);  // a rolagem é suave
   const medido = await tela.evaluate(() => {
     const r = (s) => document.querySelector(s).getBoundingClientRect();
@@ -240,6 +257,7 @@ conferir(`cada troca de orçamento responde em menos de 100 ms (${relogio.toFixe
 
 // ── a comparação com o acaso ────────────────────────────────────────────────
 
+await abrir(pagina, 'resumo');
 await pagina.click('#det-acaso summary');
 const acaso = await pagina.locator('#acaso').innerText();
 conferir('o acaso é comparado em porcentagem', acaso.includes('%'));
@@ -263,6 +281,7 @@ await pagina.waitForFunction(
 const varredura = await pagina.locator('#varredura').innerText();
 conferir('a varredura confirma a garantia', varredura.includes('está de pé'), varredura);
 conferir('e diz quantos resultados percorreu', /\d[\d.]* resultados possíveis/.test(varredura));
+await fechar(pagina);
 
 // ── uma lista que ninguém rola ──────────────────────────────────────────────
 //
@@ -274,30 +293,40 @@ conferir('e diz quantos resultados percorreu', /\d[\d.]* resultados possíveis/.
 await pagina.fill('#valor', 'R$ 20.000,00');
 await pagina.dispatchEvent('#valor', 'change');
 await pagina.click('#escolher');
-await pagina.waitForSelector('.bilhetes li', { timeout: 30000 });
+await esperarFechamento(pagina);
 await pagina.waitForTimeout(500);
+
+// A primeira tela não mostra cartela nenhuma: o cartão diz quantas são e o
+// resto fica a um toque. Era isto que enchia a página de números que ninguém
+// tinha pedido ainda.
+conferir('a primeira tela não desenha cartela nenhuma',
+  (await pagina.locator('main .bilhetes li').count()) === 0);
+conferir('e diz quantas foram geradas', (await quantasCartelas(pagina)) > 1000,
+  `${await quantasCartelas(pagina)}`);
+const alturaAntes = await pagina.evaluate(() => document.documentElement.scrollHeight);
+conferir('e a primeira tela cabe numa página', alturaAntes < 6000, `${alturaAntes} px`);
+
+await abrir(pagina, 'cartelas');
 const listaGrande = await pagina.evaluate(() => ({
-  desenhados: document.querySelectorAll('.bilhetes li').length,
-  altura: document.documentElement.scrollHeight,
+  desenhados: document.querySelectorAll('#lista-cartelas .bilhetes li').length,
   nos: document.querySelectorAll('*').length,
-  aviso: document.querySelector('#secao-bilhetes .ajuda')?.innerText ?? '',
+  aviso: document.querySelector('#lista-cartelas .ajuda')?.innerText ?? '',
 }));
 conferir('a lista não desenha milhares de bilhetes',
   listaGrande.desenhados > 0 && listaGrande.desenhados <= 50, `${listaGrande.desenhados}`);
-conferir('e a página não vira quatrocentas telas',
-  listaGrande.altura < 20000, `${listaGrande.altura} px`);
 conferir('e o DOM continua do tamanho de uma página',
   listaGrande.nos < 3000, `${listaGrande.nos} nós`);
 // Sem fixar o número: quantos bilhetes este fechamento tem é coisa que a busca
 // muda, e um teste que o congela quebra quando o catálogo melhora.
 const quantosDizQueTem = Number(
-  (listaGrande.aviso.match(/São ([\d.]+) bilhetes/)?.[1] ?? '0').replace(/\./g, ''));
+  (listaGrande.aviso.match(/São ([\d.]+) cartelas/)?.[1] ?? '0').replace(/\./g, ''));
 conferir('e a tela diz quantos existem de verdade',
   quantosDizQueTem > listaGrande.desenhados && quantosDizQueTem > 1000,
   listaGrande.aviso);
 
 // E a conferência exaustiva continua vendo o fechamento inteiro — o que a tela
 // desenha é a lista, não o que ela guarda.
+await pagina.click('#abas [data-aba=resumo]');
 await pagina.evaluate(() => { document.getElementById('det-conferir').open = true; });
 await pagina.click('#varrer');
 await pagina.waitForFunction(
@@ -306,6 +335,7 @@ await pagina.waitForFunction(
 conferir('e a varredura ainda cobre o fechamento inteiro',
   (await pagina.locator('#varredura').innerText()).includes('está de pé'),
   await pagina.locator('#varredura').innerText());
+await fechar(pagina);
 
 // De volta a um fechamento que cabe inteiro na lista, para o que vem abaixo
 // poder contar `<li>` e saber que está contando bilhetes, e não o limite do
@@ -313,18 +343,22 @@ conferir('e a varredura ainda cobre o fechamento inteiro',
 await pagina.fill('#valor', 'R$ 65,00');
 await pagina.dispatchEvent('#valor', 'change');
 await pagina.click('#escolher');
-await pagina.waitForSelector('.bilhetes li', { timeout: 20000 });
+await esperarFechamento(pagina, 20000);
 await pagina.waitForTimeout(500);
-const cabeInteiro = await pagina.locator('.bilhetes li').count();
+const cabeInteiro = await quantasCartelas(pagina);
 conferir('um fechamento pequeno é desenhado inteiro', cabeInteiro > 0 && cabeInteiro < 50,
   `${cabeInteiro}`);
+await abrir(pagina, 'cartelas');
+conferir('um fechamento pequeno é desenhado inteiro na lista',
+  (await pagina.locator('#lista-cartelas .bilhetes li').count()) === cabeInteiro);
 conferir('e sem aviso de lista cortada',
-  (await pagina.locator('#secao-bilhetes .ajuda').count()) === 0);
+  (await pagina.locator('#lista-cartelas .ajuda').count()) === 0);
+await fechar(pagina);
 
 // ── bolão ───────────────────────────────────────────────────────────────────
 
 await pagina.click('#det-bolao summary');
-const noFechamento = await pagina.locator('.bilhetes li').count();
+const noFechamento = await quantasCartelas(pagina);
 await pagina.fill('#partes', '3');
 await pagina.dispatchEvent('#partes', 'input');
 conferir('o bolão sai em três partes', (await pagina.locator('.partes li').count()) === 3);
@@ -334,8 +368,8 @@ conferir('e cada parte tem endereço próprio', /#d=[\d.]+&f=\d+-\d+-\d+&p=0\.3/
 
 const outra = await contexto.newPage();
 await outra.goto(linkDaParte, { waitUntil: 'networkidle' });
-await outra.waitForSelector('.bilhetes li');
-const naParte = await outra.locator('.bilhetes li').count();
+await esperarFechamento(outra);
+const naParte = await quantasCartelas(outra);
 conferir('quem abre o link recebe só a sua parte', naParte > 0 && naParte < noFechamento,
   `${naParte} de ${noFechamento}`);
 
@@ -373,9 +407,9 @@ const outroAparelho = await navegador.newContext({ viewport: { width: 390, heigh
 await outroAparelho.addInitScript(() => localStorage.setItem('orcamento', '2000000'));
 const deOutrem = await outroAparelho.newPage();
 await deOutrem.goto(linkDaParte, { waitUntil: 'networkidle' });
-await deOutrem.waitForSelector('.bilhetes li');
+await esperarFechamento(deOutrem);
 await deOutrem.waitForTimeout(500);
-const naOutraMao = await deOutrem.locator('.bilhetes li').count();
+const naOutraMao = await quantasCartelas(deOutrem);
 conferir('o link entrega a mesma parte em qualquer aparelho',
   naOutraMao === naParte, `${naOutraMao} aqui, ${naParte} no aparelho de quem dividiu`);
 await outroAparelho.close();
@@ -384,7 +418,7 @@ await outra.close();
 
 // ── conferir contra o sorteio ───────────────────────────────────────────────
 
-await pagina.click('#det-resultado summary');
+await abrir(pagina, 'conferir');
 await pagina.fill('#sorteio', '1 2 3 4 5 6 7 8 9 10 11 12 13 14 15');
 await pagina.dispatchEvent('#sorteio', 'change');
 const conferencia = await pagina.locator('#conferencia').innerText();
@@ -394,6 +428,9 @@ conferir('e fecha a conta do dinheiro', /Custou R\$/.test(conferencia));
 
 // ── carteira ────────────────────────────────────────────────────────────────
 
+// Guardar é ação do cartão, na tela de geração — a área de análise fica por
+// cima dela, e é preciso voltar.
+await fechar(pagina);
 await pagina.click('[data-acao=guardar]');
 conferir('guardar põe o jogo na carteira', (await pagina.locator('.registros li').count()) === 1);
 conferir('e o registro fecha a conta do sorteio que acabou de ser conferido',
@@ -401,7 +438,10 @@ conferir('e o registro fecha a conta do sorteio que acabou de ser conferido',
 
 // Conferir de novo, agora com o jogo já guardado: a carteira passa a dizer
 // quanto voltou. É o que separa "o que eu joguei" de "o que eu ganhei".
+await abrir(pagina, 'conferir');
 await pagina.dispatchEvent('#sorteio', 'change');
+await pagina.waitForTimeout(200);
+await fechar(pagina);
 conferir('a carteira registra o retorno',
   /voltou R\$/.test(await pagina.locator('.registros li').innerText()),
   await pagina.locator('.registros li').innerText());
@@ -642,8 +682,8 @@ conferir('a resposta é o fechamento escolhido, e não outro',
 conferir('e a garantia é a que foi pedida',
   jogosPedidos === 1 || respostaManual.includes(`${tPedido} acertos garantidos`), respostaManual);
 conferir('e a tela entrega esses bilhetes',
-  (await pagina.locator('.bilhetes li').count()) === Math.min(jogosPedidos, 50),
-  `${await pagina.locator('.bilhetes li').count()} para ${jogosPedidos}`);
+  (await quantasCartelas(pagina)) === Math.min(jogosPedidos, 50),
+  `${await quantasCartelas(pagina)} para ${jogosPedidos}`);
 
 // O pool pedido é o pool marcado. Escolher "22 dezenas" e receber bilhetes de um
 // pool de 20 seria responder outra pergunta.
@@ -670,8 +710,8 @@ conferir('e o rodapé diz que este fechamento foi montado à mão',
 // "parte 1 de 3 deste bolão" seria descrever um bolão que não existe mais.
 const daParte = await contexto.newPage();
 await daParte.goto(linkDaParte, { waitUntil: 'networkidle' });
-await daParte.waitForSelector('.bilhetes li');
-const comoParte = await daParte.locator('.bilhetes li').count();
+await esperarFechamento(daParte);
+const comoParte = await quantasCartelas(daParte);
 conferir('quem abre o link ainda recebe a parte dele', comoParte > 0);
 conferir('e a tela diz que é uma parte',
   (await daParte.locator('#secao-bilhetes').innerText()).includes('Você é a parte'),
@@ -690,8 +730,8 @@ conferir('montar à mão desfaz o vínculo com o bolão',
   !(await daParte.locator('#secao-bilhetes').innerText()).includes('Você é a parte'),
   (await daParte.locator('#secao-bilhetes').innerText()).replace(/\s+/g, ' ').slice(0, 120));
 conferir('e entrega o fechamento inteiro, não um pedaço dele',
-  (await daParte.locator('.bilhetes li').count()) === Math.min(jogosDoNovo, 50),
-  `${await daParte.locator('.bilhetes li').count()} de ${jogosDoNovo}`);
+  (await quantasCartelas(daParte)) === Math.min(jogosDoNovo, 50),
+  `${await quantasCartelas(daParte)} de ${jogosDoNovo}`);
 await daParte.close();
 
 // ── e o modo automático continua inteiro ────────────────────────────────────
@@ -727,15 +767,169 @@ conferir('fixar de novo à mão volta a valer',
 await pagina.click('#limpar');
 await pagina.waitForTimeout(1200);
 conferir('limpar a grade solta o fechamento montado à mão',
-  (await pagina.locator('.bilhetes li').count()) === 0,
-  `${await pagina.locator('.bilhetes li').count()} bilhetes com a grade vazia`);
+  (await quantasCartelas(pagina)) === 0,
+  `${await quantasCartelas(pagina)} bilhetes com a grade vazia`);
 conferir('e a tela pede dezenas em vez de anunciar garantia',
   (await pagina.locator('.resposta').innerText()).includes('Marque mais'),
   (await pagina.locator('.resposta').innerText()).replace(/\s+/g, ' ').slice(0, 100));
 
 // E de volta a um estado utilizável, que é de onde as seções seguintes partem.
 await pagina.click('#escolher');
-await pagina.waitForSelector('.bilhetes li', { timeout: 20000 });
+await esperarFechamento(pagina, 20000);
+
+// ── a área de análise ───────────────────────────────────────────────────────
+//
+// Gerar e analisar são dois assuntos. A primeira tela confirma o que foi gerado
+// e para por aí; cartelas, conferência, simulação e dinheiro ficam do outro
+// lado de um toque, organizados numa barra de abas.
+
+await pagina.fill('#valor', 'R$ 400,00');
+await pagina.dispatchEvent('#valor', 'change');
+await pagina.click('#escolher');
+await esperarFechamento(pagina, 20000);
+await pagina.waitForTimeout(400);
+
+const cartao = (await pagina.locator('#secao-bilhetes').innerText()).replace(/\s+/g, ' ');
+conferir('o cartão confirma que o fechamento foi gerado', cartao.includes('Fechamento gerado'),
+  cartao);
+conferir('e diz quantas cartelas são', /\d+ cartelas de \d+ dezenas/.test(cartao), cartao);
+conferir('e quanto custam', /R\$ [\d.]+,\d\d/.test(cartao), cartao);
+conferir('e oferece o caminho para as cartelas',
+  (await pagina.locator('[data-acao=abrir]').innerText()).includes('Visualizar cartelas'));
+conferir('e nenhuma cartela aparece antes de alguém pedir',
+  (await pagina.locator('main .bilhetes li').count()) === 0);
+conferir('e a área começa fechada', await pagina.locator('#analise').isHidden());
+
+// O toque engolido: digitar um valor e tocar no botão dispara o `change` do
+// campo ao perder o foco. Se o cartão se redesenhar aí, o botão que o dedo ia
+// acertar deixa de existir no meio do caminho, e a pessoa toca duas vezes.
+await pagina.fill('#valor', 'R$ 700,00');
+await pagina.locator('[data-acao=abrir]').click();
+await pagina.waitForTimeout(700);
+conferir('um toque só abre a área, mesmo vindo do campo de dinheiro',
+  !(await pagina.locator('#analise').isHidden()));
+
+conferir('a área diz o que está mostrando',
+  /\d+ cartelas? de \d+ dezenas/.test(await pagina.locator('#analise-titulo').innerText()),
+  await pagina.locator('#analise-titulo').innerText());
+conferir('e as cartelas estão lá',
+  (await pagina.locator('#lista-cartelas .bilhetes li').count()) > 0);
+
+// Uma coisa de cada vez: a barra de abas mostra uma, e só uma.
+for (const aba of ['cartelas', 'conferir', 'simular', 'valores', 'resumo']) {
+  await pagina.click(`#abas [data-aba=${aba}]`);
+  const abertas = [];
+  for (const outraAba of ['cartelas', 'conferir', 'simular', 'valores', 'resumo']) {
+    if (await pagina.locator(`#aba-${outraAba}`).isVisible()) abertas.push(outraAba);
+  }
+  conferir(`a aba ${aba} aparece sozinha`, abertas.join() === aba, abertas.join());
+  conferir(`e a barra marca ${aba}`,
+    (await pagina.locator('#abas [aria-selected=true]').count()) === 1);
+}
+
+// ── simular ─────────────────────────────────────────────────────────────────
+//
+// Com as 25 marcadas todo sorteio cai dentro do pool por definição, e a
+// diferença entre os dois modos desaparece. A simulação se cobra num pool
+// menor, que é onde ela tem algo a dizer.
+await fechar(pagina);
+await pagina.evaluate(() => { document.getElementById('det-manual').open = true; });
+await pagina.selectOption('#m-pool', '22');
+await esperarFechamento(pagina, 20000);
+await pagina.waitForTimeout(600);
+conferir('a simulação parte de um pool menor que o universo',
+  (await pagina.locator('.grade [aria-pressed=true]').count()) === 22);
+await abrir(pagina, 'simular');
+await pagina.selectOption('#s-quantos', '100');
+await pagina.selectOption('#s-onde', 'real');
+await pagina.click('#simular');
+await pagina.waitForFunction(() => document.getElementById('simulacao').innerText.includes('Gasto'),
+  null, { timeout: 60000 });
+const simulacao = (await pagina.locator('#simulacao').innerText()).replace(/\s+/g, ' ');
+conferir('a simulação diz quantos sorteios percorreu',
+  simulacao.includes('100 sorteios entre as 25 dezenas'), simulacao.slice(0, 90));
+conferir('e o melhor resultado', /Melhor resultado: \d+ acertos/.test(simulacao));
+conferir('e fecha a conta do dinheiro',
+  /Gasto R\$ [\d.]+,\d\d/.test(simulacao) && /Prêmios R\$/.test(simulacao)
+  && /Resultado −?R\$/.test(simulacao), simulacao.slice(-120));
+// O número que separa uma simulação honesta de propaganda: num sorteio entre as
+// 25, a garantia quase nunca se aplica, e a tela tem de dizer isso.
+conferir('e diz em quantos sorteios a garantia chegou a valer',
+  /(Nenhum sorteio caiu|\d+ sorteios? ca[íi]ram?) inteiro dentro do seu pool/.test(simulacao),
+  simulacao.slice(0, 200));
+// E esse número tem de ser pequeno. Um sorteio entre as 25 cai inteiro num pool
+// de 22 em cerca de 5% das vezes; se a simulação "da vida real" estivesse
+// sorteando dentro do pool, ela mostraria a garantia valendo sempre — que é
+// exatamente como uma simulação vira propaganda.
+const caiuDentro = Number(simulacao.match(/(\d+) sorteios? ca[íi]ram? inteiro/)?.[1] ?? 0);
+conferir('e na vida real isso acontece poucas vezes, não sempre',
+  caiuDentro <= 30, `${caiuDentro} de 100 sorteios caíram dentro do pool`);
+
+// Mil sorteios dentro do pool: são os concursos em que a garantia vale, e ali
+// ela tem de valer em todos — a mesma promessa que a varredura exaustiva cobra,
+// vista por outro caminho.
+await pagina.selectOption('#s-quantos', '1000');
+await pagina.selectOption('#s-onde', 'pool');
+await pagina.click('#simular');
+await pagina.waitForFunction(
+  () => document.getElementById('simulacao').innerText.includes('dentro das suas'), null,
+  { timeout: 90000 });
+const noPool = (await pagina.locator('#simulacao').innerText()).replace(/\s+/g, ' ');
+conferir('mil sorteios dentro do pool rodam e respondem',
+  noPool.includes('1.000 sorteios dentro das suas'), noPool.slice(0, 90));
+const garantia = Number((await pagina.locator('.numero').innerText()).match(/\d+/)?.[0] ?? 0);
+// A distribuição do **melhor bilhete de cada sorteio** — não as faixas. Num
+// sorteio em que a garantia de 12 se cumpre, outros bilhetes fazem 11 sem que a
+// promessa falhe; o que não pode existir é sorteio cujo melhor bilhete fique
+// abaixo dela.
+const melhoresPorSorteio = await pagina.evaluate(() => {
+  const tabela = [...document.querySelectorAll('#simulacao .quadro')]
+    .find((t) => t.innerText.includes('Melhor bilhete do sorteio'));
+  return [...(tabela?.querySelectorAll('tbody tr') ?? [])]
+    .map((tr) => Number(tr.cells[0].innerText.match(/\d+/)?.[0] ?? -1));
+});
+conferir('e nenhum sorteio fica abaixo da garantia',
+  melhoresPorSorteio.length > 0 && melhoresPorSorteio.every((a) => a >= garantia),
+  `garantia ${garantia}, melhores ${melhoresPorSorteio.join(',')}`);
+conferir('e a tela avisa que estes concursos são raros na vida real',
+  noPool.includes('Estes são os concursos em que a garantia vale'), noPool.slice(0, 160));
+
+// ── valores ─────────────────────────────────────────────────────────────────
+
+await pagina.click('#abas [data-aba=valores]');
+await pagina.waitForTimeout(200);
+const painel = (await pagina.locator('#valores').innerText()).replace(/\s+/g, ' ');
+conferir('o painel de valores traz a conta pronta',
+  painel.includes('Valor de cada cartela') && painel.includes('Custo total'), painel.slice(0, 90));
+conferir('e o resultado da última simulação',
+  painel.includes('sorteios simulados') && painel.includes('Resultado'), painel.slice(0, 160));
+// Recolhido por padrão: a tabela de prêmios está lá, e não ocupa a tela.
+conferir('a tabela de prêmios fica recolhida até alguém pedir',
+  (await pagina.locator('#aba-valores details[open]').count()) === 0);
+
+// E editável: quem discorda do preço corrige, e a conta segue.
+const custoAntes = painel.match(/Custo total R\$ ([\d.]+,\d\d)/)?.[1];
+// Qual cartela se edita depende do fechamento que está na mão.
+const kEditado = await pagina.getAttribute('#valores [data-grupo=aposta]', 'data-chave');
+await pagina.fill('#valores [data-grupo=aposta]', 'R$ 4,00');
+await pagina.dispatchEvent('#valores [data-grupo=aposta]', 'change');
+await pagina.waitForTimeout(600);
+const custoDepois = (await pagina.locator('#valores').innerText())
+  .replace(/\s+/g, ' ').match(/Custo total R\$ ([\d.]+,\d\d)/)?.[1];
+conferir('editar o valor da cartela refaz o custo total',
+  custoDepois && custoDepois !== custoAntes, `${custoAntes} → ${custoDepois}`);
+// E é o mesmo preço da tela principal: dois lugares com preços diferentes seria
+// um deles mentindo.
+await fechar(pagina);
+// `open = true` em vez de clicar no resumo: uma seção que já estava aberta se
+// fecharia com o clique, e o teste passaria a medir a seção errada.
+await pagina.evaluate(() => { document.getElementById('det-dinheiro').open = true; });
+conferir('e a tabela de preços da tela principal diz o mesmo',
+  (await pagina.inputValue(`#tabela-precos [data-grupo=aposta][data-chave="${kEditado}"]`))
+    .includes('4,00'),
+  await pagina.inputValue(`#tabela-precos [data-grupo=aposta][data-chave="${kEditado}"]`));
+await pagina.click('#restaurar-precos');
+await pagina.waitForTimeout(300);
 
 // ── segunda visita, sem rede ────────────────────────────────────────────────
 
@@ -749,15 +943,15 @@ await pagina.evaluate(() => navigator.serviceWorker.ready);
 // que passa antes de ele assumir não entra no cache — o que é a vida real, e não
 // o que este teste quer medir.
 await pagina.goto(endereco, { waitUntil: 'networkidle' });
-await pagina.waitForSelector('.bilhetes li');
+await esperarFechamento(pagina);
 conferir('o service worker assume a página',
   await pagina.evaluate(() => navigator.serviceWorker.controller !== null));
 
 await contexto.setOffline(true);
 await pagina.goto(endereco, { waitUntil: 'domcontentloaded' });
-await pagina.waitForSelector('.bilhetes li', { timeout: 20000 });
+await esperarFechamento(pagina, 20000);
 conferir('a segunda visita reabre sem rede o que já estava aberto',
-  (await pagina.locator('.bilhetes li').count()) > 0);
+  (await quantasCartelas(pagina)) > 0);
 
 // E um fechamento que nunca foi aberto: sem rede ele não chega, e a tela não
 // pode ser apagada por isso.
@@ -814,9 +1008,9 @@ const errosSemMemoria = [];
 semMemoria.on('pageerror', (e) => errosSemMemoria.push(String(e)));
 await semMemoria.goto(endereco, { waitUntil: 'networkidle' });
 await semMemoria.click('#escolher');
-await semMemoria.waitForSelector('.bilhetes li', { timeout: 20000 });
+await esperarFechamento(semMemoria, 20000);
 conferir('sem poder guardar nada, o aplicativo ainda responde',
-  (await semMemoria.locator('.bilhetes li').count()) > 0);
+  (await quantasCartelas(semMemoria)) > 0);
 conferir('e sem erro de JavaScript', errosSemMemoria.length === 0, errosSemMemoria.join(' | '));
 
 // ── um bilhete não se veste de garantia ─────────────────────────────────────
@@ -828,7 +1022,7 @@ conferir('e sem erro de JavaScript', errosSemMemoria.length === 0, errosSemMemor
 await semMemoria.fill('#valor', 'R$ 3,50');
 await semMemoria.dispatchEvent('#valor', 'change');
 await semMemoria.click('#escolher');
-await semMemoria.waitForSelector('.bilhetes li', { timeout: 20000 });
+await esperarFechamento(semMemoria, 20000);
 const manchete = await semMemoria.locator('.resposta').innerText();
 conferir('com um bilhete a manchete é o bilhete', /bilhete de \d+ dezenas/.test(manchete), manchete);
 conferir('e não promete acertos garantidos', !/acertos garantidos/.test(manchete), manchete);
@@ -839,7 +1033,7 @@ conferir('e diz que um bilhete não é fechamento', manchete.includes('não é f
 conferir('e não fala de uma garantia que acabou de negar',
   !manchete.includes('A garantia só vale'), manchete);
 conferir('e a tela entrega esse um bilhete',
-  (await semMemoria.locator('.bilhetes li').count()) === 1);
+  (await quantasCartelas(semMemoria)) === 1);
 
 conferir('e o degrau ensina onde o fechamento começa, sem partir de garantia nenhuma',
   /bilhetes que se completam/.test(await semMemoria.locator('#degrau').innerText()),
@@ -869,7 +1063,7 @@ await semMemoria.click('#limpar');
 for (const d of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]) {
   await semMemoria.click(`.grade [data-dezena="${d}"]`);
 }
-await semMemoria.waitForSelector('.bilhetes li', { timeout: 20000 });
+await esperarFechamento(semMemoria, 20000);
 conferir('com as quinze marcadas, a tela diz o que fazer em vez de dar em nada',
   (await semMemoria.locator('#degrau').innerText()).includes('marque mais dezenas'),
   await semMemoria.locator('#degrau').innerText());

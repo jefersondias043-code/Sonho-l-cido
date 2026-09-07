@@ -6,6 +6,7 @@
 // linguagem.
 
 import * as catalogo from './catalogo.js';
+import * as analise from './analise.js';
 import * as conferir from './conferir.js';
 import * as volante from './volante.js';
 import { escada, fechamentosDe, melhorEstrategia, melhorPool } from './estrategia.js';
@@ -21,8 +22,16 @@ const estado = {
   orcamento: lembrar('orcamento', 5000), dezenas: new Set(lembrar('dezenas', [])),
   carteira: lembrar('carteira', []), garantiaMinima: 0,
   indice: null, precos: null, precosPublicados: null, acaso: null,
-  plano: null, fixo: null, bilhetes: [], todos: [], mascaras: [],
+  // `fixo` é o fechamento **nomeado** — montado à mão ou recebido num link de
+  // bolão. Ele é um pedido, e pedido não se esquece ao fechar a aba: sem guardá-lo,
+  // recarregar devolvia o que o orçamento compraria, que é outro fechamento.
+  plano: null, fixo: lembrar('fixo', null), link: null,
+  bilhetes: [], todos: [], mascaras: [], ultimoResultado: null,
 };
+
+/// Trocar o fechamento nomeado passa por aqui, sempre: é o que mantém o que está
+/// na tela e o que está guardado dizendo a mesma coisa.
+const fixar = (f) => { estado.fixo = f; guardar('fixo', f); };
 
 // ── dinheiro ────────────────────────────────────────────────────────────────
 
@@ -66,19 +75,36 @@ async function arrancar() {
   }
   estado.precos = { ...estado.precosPublicados, ...lembrar('precos', {}) };
 
-  // Um link de bolão **fixa** o fechamento: sem isto quem o abre recebe o que o
-  // orçamento guardado no aparelho dele escolheria, e cada um joga um bolão
-  // diferente — sem a cobertura combinada, que é a razão de existir do bolão.
+  // O que voltou guardado é um pedido de outra sessão, e o catálogo ou a tabela
+  // de preços podem ter mudado desde então. Passa pela porta como qualquer outro.
+  fixar(fixoValido(estado.fixo));
+
+  // Um link de bolão **fixa** o fechamento, e fixar é isto: nomear o fechamento,
+  // não só copiar o preço dele. Copiando o preço, quem abria o link recebia o que
+  // aquele dinheiro compraria — e um fechamento montado à mão quase nunca é o que
+  // o dinheiro compraria. Cada participante jogava um bolão diferente, com a tela
+  // ainda prometendo a cobertura combinada, que é a razão de o bolão existir.
   const doLink = volante.lerLink(location.hash, UNIVERSO);
-  const dele = doLink && estado.indice.entradas.find(
-    (e) => e.v === doLink.v && e.k === doLink.k && e.t === doLink.t && e.jogos);
+  const dele = doLink && fixoValido(doLink);
   if (doLink) estado.dezenas = new Set(doLink.dezenas);
-  if (dele) [estado.link, estado.orcamento] = [doLink, dele.jogos * estado.precos.aposta[doLink.k]];
+  if (dele) {
+    estado.link = doLink;
+    fixar(dele);
+  }
 
   desenharPrecos();
   desenharCarteira();
   atualizarDinheiro();
   responder();
+
+  // Uma vez, no arranque: os selects nascem vazios, e quem manda é o fechamento
+  // em uso — guardado de outra sessão ou recebido num link. Daqui em diante quem
+  // manda é a pessoa, e `trocarOpcoes` preserva o que ela escolher.
+  if (estado.fixo) {
+    $('m-k').value = String(estado.fixo.k);
+    desenharManual();
+    $('m-fechamento').value = `${estado.fixo.k}-${estado.fixo.t}`;
+  }
 }
 
 function registrarServico() {
@@ -118,6 +144,15 @@ function responder() {
     garantiaMinima: estado.garantiaMinima,
   });
   estado.plano = plano;
+  // Com um fechamento nomeado o campo de dinheiro é o preço **dele**, e não um
+  // orçamento. Qualquer coisa que mexa nesse preço — editar a tabela de preços,
+  // voltar noutra sessão — tem de mover o campo junto, ou a tela passa a afirmar
+  // duas coisas ao mesmo tempo, uma delas falsa.
+  if (estado.fixo && plano.escolha && plano.escolha.custo !== estado.orcamento) {
+    estado.orcamento = plano.escolha.custo;
+    guardar('orcamento', estado.orcamento);
+    atualizarDinheiro();
+  }
   // Os degraus viram marcas na régua: arrastar passa a mostrar onde a resposta
   // muda, em vez de deixar a pessoa procurar às cegas.
   $('degraus').innerHTML = escada(estado.indice, estado.precos, estado.dezenas.size)
@@ -136,6 +171,11 @@ function responder() {
   } else {
     estado.bilhetes = estado.todos = [];
     estado.mascaras = [];
+    estado.ultimoResultado = null;
+    cartaoDesenhado = '';
+    // Sem fechamento não há o que analisar, e uma área aberta sobre nada é uma
+    // tela que mente sobre o que a pessoa tem na mão.
+    fecharAnalise();
     for (const id of ['secao-bilhetes', 'acaso', 'bolao']) $(id).innerHTML = '';
   }
 }
@@ -245,8 +285,9 @@ function chanceDeCairDentro(v) {
 /// seguinte, que sempre falta dinheiro: se coubesse, já teria sido escolhido.
 function frasedoDegrau(plano) {
   if (!plano.escolha) return '';
-  // Montado à mão, não há "próximo degrau": a escada é de quem pergunta o que o
+  // Nomeado, não há "próximo degrau": a escada é de quem pergunta o que o
   // dinheiro compra, e aqui a pergunta foi outra.
+  if (estado.link) return 'Este é o fechamento do bolão que compartilharam com você.';
   if (estado.fixo) return 'Você montou este fechamento à mão, em "montar do meu jeito".';
   const p = plano.pedido;
   if (p) {
@@ -284,32 +325,138 @@ async function trazerBilhetes(escolha) {
   estado.todos = catalogo.emDezenas(estado.mascaras, estado.dezenas);
   estado.bilhetes = estado.link?.parte == null ? estado.todos
     : volante.dividir(estado.todos, estado.link.partes)[estado.link.parte];
+  estado.ultimoResultado = null;
   desenharBilhetes();
   desenharAcaso();
   desenharBolao();
+  // Trocar de fechamento com a área aberta: ela passa a falar do novo, e não
+  // continua mostrando as cartelas do anterior.
+  if (!$('analise').hidden) {
+    const aberta = ABAS.find((a) => !$(`aba-${a}`).hidden) ?? 'cartelas';
+    $('conferencia').innerHTML = '';
+    $('simulacao').innerHTML = '';
+    $('varredura').textContent = '';
+    abrirAnalise(aberta);
+  }
 }
 
+const botoes = (pares) => `<div class="linha">${pares
+  .map(([a, r]) => `<button type="button" data-acao="${a}" class="discreto">${r}</button>`)
+  .join('')}</div>`;
+
+/// O que aparece assim que o fechamento existe: a confirmação, quantas cartelas
+/// e o caminho para o resto.
+///
+/// As cartelas **não** entram aqui. Cinquenta linhas de números logo abaixo da
+/// resposta enchiam a tela de uma coisa que ninguém tinha pedido ainda, e
+/// empurravam para baixo de tudo o que se faz com elas — conferir, simular,
+/// fechar a conta. Elas continuam a um toque, na área de análise.
+/// O que foi desenhado por último. Redesenhar joga fora os botões — e com eles
+/// o toque que já estava a caminho de um: no telefone, digitar um valor e tocar
+/// em "Visualizar cartelas" dispara o `change` do campo ao perder o foco, o
+/// cartão se refaz, e o primeiro toque morre junto com o botão que ia acertar.
+/// A pessoa toca duas vezes e acha que o aplicativo travou.
+let cartaoDesenhado = '';
+
 function desenharBilhetes() {
+  const n = estado.bilhetes.length;
+  const e = estado.plano?.escolha;
+  if (!e || !n) return;
+  const assinatura = [e.v, e.k, e.t, n, estado.precos.aposta[e.k], estado.link?.parte].join('-');
+  if (assinatura === cartaoDesenhado) return;
+  cartaoDesenhado = assinatura;
   $('secao-bilhetes').innerHTML = `
-    ${estado.link?.parte == null ? '' : `<p class="ajuda">Você é a parte
-      ${estado.link.parte + 1} de ${estado.link.partes} deste bolão: a garantia acima é do bolão
-      inteiro, e ${plural(estado.bilhetes.length, 'este bilhete é o que cabe',
-        'estes bilhetes são os que cabem')} a você.</p>`}
-    ${estado.bilhetes.length <= MOSTRA ? '' : `<p class="ajuda">São
-      ${estado.bilhetes.length.toLocaleString('pt-BR')} bilhetes, e a lista mostra os ${MOSTRA}
-      primeiros — copie, baixe ou imprima para ter todos. O que se confere abaixo usa todos.</p>`}
+    <div class="gerado">
+      <p class="oque">Fechamento gerado</p>
+      <p class="quantas">${n.toLocaleString('pt-BR')}</p>
+      <p class="oque">${n === 1 ? 'cartela' : 'cartelas'} de ${e.k} dezenas ·
+        ${dinheiro(n * estado.precos.aposta[e.k])}</p>
+      ${estado.link?.parte == null ? '' : `<p class="ajuda">Você é a parte
+        ${estado.link.parte + 1} de ${estado.link.partes} deste bolão: a garantia acima é do
+        bolão inteiro.</p>`}
+      <div class="linha abrir">
+        <button type="button" data-acao="abrir">Visualizar cartelas</button>
+      </div>
+    </div>
+    ${botoes([['copiar', 'Copiar'], ['texto', 'Baixar texto'], ['csv', 'Baixar CSV'],
+      ['guardar', 'Guardar na carteira']])}`;
+}
+
+// ── a área de análise ───────────────────────────────────────────────────────
+//
+// Gerar e analisar são dois assuntos. O primeiro cabe numa tela curta; o
+// segundo tem cartelas, conferência, simulação e dinheiro, e nenhum deles
+// precisa estar visível enquanto a pessoa ainda decide o que comprar.
+//
+// A barra de abas é a navegação: uma coisa de cada vez, todas a um toque. Nada
+// foi escondido — foi organizado.
+
+const ABAS = ['cartelas', 'conferir', 'simular', 'valores', 'resumo'];
+
+function abrirAnalise(qual = 'cartelas') {
+  if (!estado.bilhetes.length) return;
+  const e = estado.plano.escolha;
+  $('analise-titulo').textContent =
+    `${plural(estado.bilhetes.length, 'cartela', 'cartelas')} de ${e.k} dezenas`;
+  desenharListaCartelas();
+  desenharResumo();
+  desenharValores();
+  desenharAcaso();
+  $('analise').hidden = false;
+  // Sem isto o corpo rola por baixo da área, e o dedo arrasta a página errada.
+  document.body.style.overflow = 'hidden';
+  trocarAba(qual);
+  $('analise').scrollTop = 0;
+}
+
+function fecharAnalise() {
+  $('analise').hidden = true;
+  document.body.style.overflow = '';
+}
+
+function trocarAba(qual) {
+  for (const botao of $('abas').children) {
+    botao.setAttribute('aria-selected', String(botao.dataset.aba === qual));
+  }
+  for (const id of ABAS) $(`aba-${id}`).hidden = id !== qual;
+  $('analise').scrollTop = 0;
+}
+
+function desenharListaCartelas() {
+  if (!estado.bilhetes.length) return;
+  const n = estado.bilhetes.length;
+  $('lista-cartelas').innerHTML = `
+    ${n <= MOSTRA ? '' : `<p class="ajuda">São ${n.toLocaleString('pt-BR')} cartelas, e a lista
+      mostra as ${MOSTRA} primeiras — copie, baixe ou imprima para ter todas. O que se confere
+      e simula aqui usa todas.</p>`}
     <ol class="bilhetes">${estado.bilhetes.slice(0, MOSTRA).map((b) =>
       `<li>${b.map((d) => `<span>${String(d).padStart(2, '0')}</span>`).join('')}</li>`).join('')}</ol>
-    <div class="linha">
-      <button type="button" data-acao="copiar">Copiar</button>${[['texto', 'Baixar texto'],
-        ['csv', 'Baixar CSV'], ['imprimir', 'Imprimir volantes'], ['guardar', 'Guardar na carteira']]
-        .map(([a, r]) => `<button type="button" data-acao="${a}" class="discreto">${r}</button>`)
-        .join('')}
-    </div>`;
+    ${botoes([['copiar', 'Copiar'], ['texto', 'Baixar texto'], ['csv', 'Baixar CSV'],
+      ['imprimir', 'Imprimir volantes']])}`;
+}
+
+function desenharResumo() {
+  const e = estado.plano?.escolha;
+  if (!e || !estado.bilhetes.length) return;
+  const n = estado.bilhetes.length;
+  const linhas = [
+    ['Dezenas no seu pool', `${e.v}`],
+    ['Dezenas em cada cartela', `${e.k}`],
+    ['Acertos garantidos', e.jogos === 1 ? '— (um bilhete não é fechamento)' : `${e.t}`],
+    ['Cartelas no fechamento', e.jogos.toLocaleString('pt-BR')],
+    ...(n === e.jogos ? [] : [['Cartelas que cabem a você', n.toLocaleString('pt-BR')]]),
+    ['Custo', dinheiro(n * estado.precos.aposta[e.k])],
+    ['Tamanho', e.provado ? 'mínimo provado — nenhum fechamento faz isso com menos'
+      : `menor conhecido — nenhum faz com menos de ${e.piso}`],
+  ];
+  $('resumo').innerHTML = `<table class="quadro"><tbody>${linhas
+    .map(([r, v]) => `<tr><td>${r}</td><td>${v}</td></tr>`).join('')}</tbody></table>
+    <p class="ressalva">${chanceDeCairDentro(e.v)}</p>`;
 }
 
 function desenharAcaso() {
-  const e = estado.plano.escolha;
+  const e = estado.plano?.escolha;
+  if (!e) return;
   const p = estado.acaso.chegam?.[`${e.v}-${e.k}`]?.[e.t];
   if (p == null) return;
   const noChute = 1 - (1 - p) ** e.jogos;
@@ -330,6 +477,109 @@ function desenharAcaso() {
       <b>${dinheiro(Math.round(media))}</b> por concurso nas faixas de 11, 12 e 13 acertos — mais
       o que sair de 14 e 15, que é rateado e ninguém sabe de antemão` : ''}. O que o fechamento
       compra não é lucro — é certeza no lugar de sorte.</p>`;
+}
+
+/// O dinheiro do fechamento, preenchido pelo aplicativo e editável por quem
+/// discordar. Os campos escrevem na mesma tabela de preços da tela principal:
+/// dois lugares da tela dizendo preços diferentes seria pior do que não ter os
+/// dois. O resultado financeiro é o da última conferência ou simulação — sem
+/// uma delas, não há prêmio nenhum a somar, e a tela diz isso em vez de zerar.
+function desenharValores() {
+  // Sem fechamento não há conta a fazer: um preço editado pode ter acabado com
+  // ele, e a tela principal já está explicando por quê.
+  const e = estado.plano?.escolha;
+  if (!e || !estado.bilhetes.length) return;
+  const n = estado.bilhetes.length;
+  const unitario = estado.precos.aposta[e.k];
+  const u = estado.ultimoResultado;
+  const campo = (grupo, chave, valor) => `<input type="text" inputmode="decimal"
+    data-grupo="${grupo}" data-chave="${chave}" value="${dinheiro(valor)}"
+    aria-label="${grupo === 'aposta' ? 'Valor de cada cartela' : `Prêmio de ${chave} acertos`}">`;
+  $('valores').innerHTML = `
+    <table class="quadro"><tbody>
+      <tr><td>Valor de cada cartela</td><td>${campo('aposta', e.k, unitario)}</td></tr>
+      <tr><td>Cartelas</td><td>${n.toLocaleString('pt-BR')}</td></tr>
+      <tr class="destaque"><td>Custo total</td><td>${dinheiro(n * unitario)}</td></tr>
+    </tbody></table>
+    <details><summary>Quanto paga cada faixa</summary><div>
+      <table class="quadro"><tbody>${[11, 12, 13, 14, 15].map((f) =>
+    `<tr><td>${f} acertos</td><td>${campo('premio', f, estado.precos.premio[f])}</td></tr>`)
+    .join('')}</tbody></table>
+      <p class="ajuda">14 e 15 acertos são rateados e mudam a cada concurso; os valores aqui são
+        referência. Nenhum destes números é auditado por este aplicativo.</p>
+    </div></details>
+    ${u ? `<table class="quadro">
+      <thead><tr><th>${u.titulo}</th><th></th></tr></thead><tbody>
+      <tr><td>Cartelas premiadas</td><td>${u.premiadas.toLocaleString('pt-BR')}</td></tr>
+      <tr><td>Gasto</td><td>${dinheiro(u.gasto)}</td></tr>
+      <tr><td>Prêmios</td><td>${dinheiro(u.premio)}</td></tr>
+      <tr class="destaque"><td>Resultado</td><td>${u.premio >= u.gasto ? '' : '−'}${
+      dinheiro(Math.abs(u.premio - u.gasto))}</td></tr></tbody></table>`
+    : '<p class="ajuda">Confira contra um sorteio ou simule para ver o resultado financeiro.</p>'}`;
+}
+
+/// As máscaras do que **esta pessoa** tem na mão. Num bolão é a parte dela:
+/// simular o fechamento inteiro diria a ela como foi o jogo de outra gente.
+const mascarasNaMao = () => (estado.link?.parte == null ? estado.mascaras
+  : volante.dividir(estado.mascaras, estado.link.partes)[estado.link.parte]);
+
+async function rodarSimulacao() {
+  if (!estado.mascaras.length) return;
+  const quantos = Number($('s-quantos').value);
+  const dentroDoPool = $('s-onde').value === 'pool';
+  const e = estado.plano.escolha;
+  $('simular').disabled = true;
+  $('simulacao').innerHTML = '<p class="ajuda">Simulando…</p>';
+  await new Promise((pronto) => setTimeout(pronto, 0));  // deixa o aviso aparecer
+  const r = analise.simular({
+    mascaras: mascarasNaMao(), dezenas: estado.dezenas, universo: UNIVERSO, quantos,
+    dentroDoPool, premios: estado.precos.premio,
+    custo: estado.bilhetes.length * estado.precos.aposta[e.k],
+  });
+  estado.ultimoResultado = { premiadas: r.premiadas, gasto: r.gasto, premio: r.premio,
+    titulo: `${quantos.toLocaleString('pt-BR')} ${quantos === 1 ? 'sorteio simulado'
+      : 'sorteios simulados'}` };
+  $('simulacao').innerHTML = desenharSimulacao(r, e);
+  $('simular').disabled = false;
+  desenharValores();
+}
+
+function desenharSimulacao(r, e) {
+  const premiadas = [15, 14, 13, 12, 11].filter((f) => r.faixas.has(f));
+  const melhores = [...r.distribuicao.entries()].sort((a, b) => b[0] - a[0]);
+  const maior = Math.max(...melhores.map(([, q]) => q));
+  const numero = (n) => n.toLocaleString('pt-BR');
+  return `
+    <p><b>${numero(r.quantos)}</b> ${r.quantos === 1 ? 'sorteio' : 'sorteios'} ${r.dentroDoPool
+      ? `dentro das suas ${e.v} dezenas` : 'entre as 25 dezenas, como na vida real'}.
+      Melhor resultado: <b>${r.melhor} acertos</b>.</p>
+    ${r.dentroDoPool ? `<p class="ressalva">Estes são os concursos em que a garantia vale — e
+      só eles. ${chanceDeCairDentro(e.v)} O resultado abaixo não é o que se espera por concurso:
+      é o que acontece nesse punhado.</p>` : `<p class="ressalva">${r.caiuNoPool === 0 ? 'Nenhum sorteio caiu'
+      : `${numero(r.caiuNoPool)} ${r.caiuNoPool === 1 ? 'sorteio caiu' : 'sorteios caíram'}`}
+      inteiro dentro do seu pool — e só nesses a garantia de ${e.t} acertos vale. É a diferença
+      entre o tamanho da promessa e a chance de ela ser cobrada.</p>`}
+    <table class="quadro">
+      <thead><tr><th>Faixa</th><th>Cartelas</th><th>Sorteios</th></tr></thead>
+      <tbody>${premiadas.map((f) => `<tr><td>${f} acertos</td>
+        <td>${numero(r.faixas.get(f))}</td>
+        <td>${numero(r.sorteiosComFaixa.get(f))}</td></tr>`).join('')
+    || '<tr><td>Nenhuma cartela premiada.</td><td>0</td><td>0</td></tr>'}</tbody>
+    </table>
+    <table class="quadro">
+      <thead><tr><th>Melhor bilhete do sorteio</th><th>Sorteios</th><th></th></tr></thead>
+      <tbody>${melhores.map(([acertos, q]) => `<tr><td>${acertos} acertos</td><td>${numero(q)}</td>
+        <td><span class="barra" style="width:${Math.round((100 * q) / maior)}%"></span></td></tr>`)
+    .join('')}</tbody>
+    </table>
+    <table class="quadro"><tbody>
+      <tr><td>Gasto</td><td>${dinheiro(r.gasto)}</td></tr>
+      <tr><td>Prêmios</td><td>${dinheiro(r.premio)}</td></tr>
+      <tr class="destaque"><td>Resultado</td><td>${r.saldo >= 0 ? '' : '−'}${
+    dinheiro(Math.abs(r.saldo))}</td></tr>
+    </tbody></table>
+    ${r.melhorSorteio ? `<p class="ajuda">O melhor deles foi
+      ${r.melhorSorteio.map((d) => String(d).padStart(2, '0')).join(' ')}.</p>` : ''}`;
 }
 
 function desenharBolao() {
@@ -382,6 +632,21 @@ function desenharCarteira() {
 // Fica abaixo da dobra porque é parâmetro técnico, e a tela principal não tem
 // nenhum. Quem quer isto sabe o que quer; quem não quer nunca precisa abrir.
 
+/// A porta por onde todo fechamento nomeado entra: o que a pessoa escolhe na
+/// lista, o que volta guardado de outra sessão e o que chega num link de bolão.
+///
+/// A régua é a mesma que a lista usa para oferecer — `fechamentosDe` —, e por
+/// isso o modo manual não pode mais aceitar o que o automático recusa. Sem esta
+/// porta, um link antigo montava cartelas de 22 dezenas, que lotérica nenhuma
+/// aceita, e um preço zerado à mão dava um fechamento de graça.
+function fixoValido(pedido) {
+  const { v, k, t } = pedido ?? {};
+  if (!estado.indice || !(v && k && t)) return null;
+  const existe = fechamentosDe(estado.indice, estado.precos, v)
+    .some((e) => e.k === k && e.t === t);
+  return existe ? { v, k, t } : null;
+}
+
 /// O fechamento que a pessoa nomeou, como plano — o mesmo formato que a
 /// estratégia devolve, para a tela desenhar por um caminho só.
 function planoFixo({ v, k, t }) {
@@ -432,9 +697,17 @@ function desenharManual() {
   // menos, é ruído: ninguém escolheria a menor. A escada some com as dominadas
   // entre tamanhos diferentes; aqui só somem as dominadas dentro do mesmo
   // tamanho, porque escolher o tamanho é justamente o que este modo oferece.
+  // O descarte não esconde o fechamento em uso. Ele veio de uma escolha desta
+  // pessoa — ou de um link de bolão — e some-lo do select deixaria a lista
+  // dizendo uma coisa e a resposta acima dela, outra. Os **filtros** continuam
+  // valendo sobre ele: filtrar é a pessoa pedindo outra coisa, e o pedido novo
+  // manda no antigo.
+  const emUso = (e) => estado.fixo && e.v === estado.fixo.v && e.k === estado.fixo.k
+    && e.t === estado.fixo.t;
   const quais = todas
     .filter((e) => e.jogos <= teto && (!k || e.k === k) && (!t || e.t >= t))
-    .filter((e, _, ate) => !ate.some((o) => o.k === e.k && o.custo <= e.custo && o.t > e.t));
+    .filter((e, _, ate) => emUso(e)
+      || !ate.some((o) => o.k === e.k && o.custo <= e.custo && o.t > e.t));
   // Garantia e preço primeiro: num telefone a lista fechada mostra só o começo
   // do texto, e o começo tem de ser o que faz escolher entre uma linha e outra.
   trocarOpcoes('m-fechamento', quais.map((e) => [`${e.k}-${e.t}`,
@@ -455,18 +728,18 @@ function desenharManual() {
 function aplicarManual() {
   if (!estado.indice) return;
   const pool = Number($('m-pool').value);
-  const [k, t] = ($('m-fechamento').value || '').split('-').map(Number);
+  // A ordem é o conserto: ajustar a grade, redesenhar a lista **para o pool
+  // novo**, e só então ler o que sobrou. Lendo antes, o fechamento vinha da
+  // lista do pool anterior — uma combinação que o catálogo não tem — e a tela
+  // morria dizendo "não há fechamento catalogado" para um pool cheio deles.
   if (estado.dezenas.size !== pool) ajustarPara(pool);
-  estado.fixo = k && t ? { v: pool, k, t } : null;
+  desenharManual();
+  const [k, t] = ($('m-fechamento').value || '').split('-').map(Number);
+  fixar(fixoValido({ v: pool, k, t }));
   // Quem chegou por um link de bolão recebe uma parte, não o fechamento inteiro.
   // Montando outro fechamento à mão, aquela parte era de outro conjunto — e sem
   // isto a tela entregaria um terço do novo dizendo ser a parte do bolão antigo.
   if (estado.fixo) estado.link = null;
-  // O campo de dinheiro passa a dizer o preço do que foi escolhido. Sem isto ele
-  // continuaria mostrando o orçamento antigo ao lado de uma resposta que custa
-  // outra coisa — duas afirmações na mesma tela, uma delas falsa.
-  const custo = estado.fixo && planoFixo(estado.fixo).escolha?.custo;
-  if (custo) { estado.orcamento = custo; guardar('orcamento', custo); atualizarDinheiro(); }
   responder();
   mostrarAResposta();
 }
@@ -491,7 +764,8 @@ function ligarControles() {
     if (centavos != null && centavos > 0) estado.orcamento = centavos;
     // Mexer no dinheiro é voltar a perguntar "o que isto compra": sai o bolão
     // de outra pessoa, e sai o fechamento nomeado à mão.
-    estado.link = estado.fixo = null;
+    estado.link = null;
+    fixar(null);
     guardar('orcamento', estado.orcamento);
     atualizarDinheiro();
     responder();
@@ -499,7 +773,24 @@ function ligarControles() {
   $('regua').addEventListener('input', () => trocarOrcamento(daRegua(Number($('regua').value))));
   $('valor').addEventListener('change', () => trocarOrcamento(emCentavos($('valor').value)));
 
-  $('secao-bilhetes').addEventListener('click', (ev) => acaoDosBilhetes(ev.target.dataset?.acao));
+  for (const id of ['secao-bilhetes', 'lista-cartelas']) {
+    $(id).addEventListener('click', (ev) => acaoDosBilhetes(ev.target.dataset?.acao));
+  }
+  $('voltar').addEventListener('click', fecharAnalise);
+  $('abas').addEventListener('click', (ev) => {
+    const qual = ev.target.dataset?.aba;
+    if (qual) trocarAba(qual);
+  });
+  $('simular').addEventListener('click', rodarSimulacao);
+  // A área é uma tela por cima da outra, e "voltar" tem de fechá-la — no
+  // telefone o gesto é esse, e no teclado é a tecla de escape.
+  addEventListener('keydown', (ev) => {
+    if (ev.key === 'Escape' && !$('analise').hidden) fecharAnalise();
+  });
+  // Os valores editáveis escrevem na mesma tabela de preços da tela principal.
+  $('valores').addEventListener('change', (ev) => {
+    if (trocarPreco(ev.target)) { desenharPrecos(); responder(); desenharValores(); }
+  });
   $('partes').addEventListener('input', () => estado.todos.length && desenharBolao());
   $('bolao').addEventListener('click', async (ev) => {
     const link = ev.target.dataset?.link;
@@ -513,13 +804,7 @@ function ligarControles() {
     desenharCarteira();
   });
   $('tabela-precos').addEventListener('change', (ev) => {
-    const { grupo, chave } = ev.target.dataset ?? {};
-    if (!grupo) return;
-    const c = emCentavos(ev.target.value);
-    if (c != null && c >= 0) estado.precos[grupo][chave] = c;
-    guardar('precos', { aposta: estado.precos.aposta, premio: estado.precos.premio });
-    desenharPrecos();
-    responder();
+    if (trocarPreco(ev.target)) { desenharPrecos(); responder(); }
   });
   $('restaurar-precos').addEventListener('click', () => {
     estado.precos = structuredClone(estado.precosPublicados);
@@ -541,6 +826,18 @@ function ligarControles() {
   $('sorteio').addEventListener('change', conferirContraOSorteio);
   $('enviar-intencao').addEventListener('click', enviarIntencao);
   $('fechar-painel').addEventListener('click', () => ($('painel').hidden = true));
+}
+
+/// Um valor editado pela pessoa, vindo de qualquer das duas tabelas de preço —
+/// a da tela principal e a do painel de valores. As duas escrevem no mesmo
+/// lugar: dois preços diferentes na mesma sessão seria um deles mentindo.
+function trocarPreco(campo) {
+  const { grupo, chave } = campo?.dataset ?? {};
+  if (!grupo) return false;
+  const c = emCentavos(campo.value);
+  if (c != null && c >= 0) estado.precos[grupo][chave] = c;
+  guardar('precos', { aposta: estado.precos.aposta, premio: estado.precos.premio });
+  return true;
 }
 
 /// Marca `quantas` dezenas ao acaso: nenhuma é mais provável que outra.
@@ -579,7 +876,8 @@ function ajustarPara(quantas) {
 /// dezenas, e não havia mais dezena nenhuma de onde tirar os números.
 function trocarDezenas(novas) {
   estado.dezenas = novas;
-  estado.link = estado.fixo = null;
+  estado.link = null;
+  fixar(null);
   guardar('dezenas', [...novas]);
   responder();
 }
@@ -587,6 +885,7 @@ function trocarDezenas(novas) {
 async function acaoDosBilhetes(acao) {
   if (!acao || estado.bilhetes.length === 0) return;
   const e = estado.plano.escolha;
+  if (acao === 'abrir') return abrirAnalise();
   const nome = `fechamento-${e.v}-${e.k}-${e.t}`;
   if (acao === 'copiar') {
     const deu = await volante.copiar(volante.comoTexto(estado.bilhetes));
@@ -660,11 +959,15 @@ function conferirContraOSorteio() {
       : '<p class="ajuda">Escreva as 15 dezenas sorteadas, separadas por espaço.</p>';
     return;
   }
-  const { faixas, melhor } = conferir.contraOSorteio(estado.bilhetes, sorteadas);
-  const voltou = conferir.retorno(faixas, estado.precos.premio);
+  const { faixas, melhor } = analise.umSorteio(mascarasNaMao(),
+    analise.mascaraDoSorteio(sorteadas, [...estado.dezenas].sort((a, b) => a - b)));
+  const voltou = analise.premioDe(faixas, estado.precos.premio);
   const custo = estado.bilhetes.length * estado.precos.aposta[estado.plano.escolha.k];
   const linhas = [...faixas.entries()].sort((a, b) => b[0] - a[0]);
   anotarNaCarteira(sorteadas, voltou);
+  estado.ultimoResultado = { titulo: 'Conferência contra o sorteio',
+    premiadas: [...faixas.values()].reduce((a, b) => a + b, 0), gasto: custo, premio: voltou };
+  if (!$('analise').hidden) desenharValores();
   $('conferencia').innerHTML = `
     <p>Melhor bilhete: <b>${melhor} acertos</b>.</p>
     ${linhas.length ? `<ul>${linhas.map(([a, q]) => `<li>${q} × ${a} acertos</li>`).join('')}</ul>`

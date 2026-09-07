@@ -17,6 +17,8 @@
 // Sem web worker: o laço cede o processador a cada fatia, então a tela continua
 // respondendo enquanto ele roda.
 
+import { contarBits } from './analise.js';
+
 const FATIA = 2000000;
 
 /// Percorre todos os sorteios possíveis e devolve o pior resultado: quantos
@@ -40,7 +42,7 @@ export async function varrer(mascaras, v, garantia, sorteio = 15) {
   // A promessa não se sustentou. Aí sim vale medir o sorteio que a derrubou,
   // um só, do jeito caro — para dizer exatamente quanto ele rende.
   if (descoberto !== null) {
-    pior = Math.max(0, ...mascaras.map((b) => contar(b & descoberto)));
+    pior = Math.max(0, ...mascaras.map((b) => contarBits(b & descoberto)));
   }
   return { sorteios, pior, comQuinze, descoberto };
 }
@@ -116,30 +118,8 @@ function quantosBits(bits) {
   return total;
 }
 
-const contar = (n) => { let c = 0; for (let m = n; m; m &= m - 1) c++; return c; };
-
 function binomial(n, k) {
   let r = 1;
   for (let i = 0; i < Math.min(k, n - k); i++) r = (r * (n - i)) / (i + 1);
   return k > n ? 0 : Math.round(r);
-}
-
-/// Quantos acertos cada bilhete fez num sorteio de verdade. `bilhetes` são
-/// listas de dezenas; `sorteadas`, as 15 que saíram.
-export function contraOSorteio(bilhetes, sorteadas) {
-  const saiu = new Set(sorteadas);
-  const faixas = new Map();
-  const porBilhete = bilhetes.map((b) => {
-    const acertos = b.reduce((soma, d) => soma + (saiu.has(d) ? 1 : 0), 0);
-    if (acertos >= 11) faixas.set(acertos, (faixas.get(acertos) ?? 0) + 1);
-    return acertos;
-  });
-  return { porBilhete, faixas, melhor: porBilhete.length ? Math.max(...porBilhete) : 0 };
-}
-
-/// Quanto voltou: soma dos prêmios das faixas premiadas.
-export function retorno(faixas, premios) {
-  let total = 0;
-  for (const [acertos, quantos] of faixas) total += quantos * (premios[acertos] ?? 0);
-  return total;
 }
