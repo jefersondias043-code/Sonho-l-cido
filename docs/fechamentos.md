@@ -144,7 +144,7 @@ Daí tudo o mais decorre:
 
 Sem WebAssembly no cliente, sem *web workers*, sem banco de sessões, sem retomada
 de trabalho interrompido. Nada disso tem razão de existir quando não há nada a
-esperar. O cliente inteiro dá **2.321 linhas** somando JavaScript, HTML e CSS —
+esperar. O cliente inteiro dá **2.358 linhas** somando JavaScript, HTML e CSS —
 teto de 2.400 cobrado pela construção —, e o peso inicial (casca, índice, preços
 e distribuições) dá **40 KiB comprimidos**.
 
@@ -658,6 +658,57 @@ sabe expressar, e é o que faz sentido: quem organiza um bolão divide o
 fechamento; quem recebeu uma parte não tem o que redividir. A suíte cobra que a
 soma das partes vistas por um participante seja o fechamento inteiro, e não a
 parte dele.
+
+## O que estava guardado também vem de fora
+
+O aplicativo já tratava o endereço como texto de estranho: `lerLink` lê o que
+veio depois do `#`, confere a forma e o catálogo, e devolve `null` para tudo o
+que não for um fechamento que existe. Um link velho, ou adulterado, não
+consegue fazer a tela prometer nada.
+
+O `localStorage` não tinha esse cuidado, e é a mesma categoria de entrada. O que
+está lá foi escrito por **outra** execução do aplicativo: uma versão anterior,
+com outro formato; uma gravação interrompida no meio; outra aba mexendo ao
+mesmo tempo. Ler aquilo como se fosse estado próprio era confiar num
+desconhecido por ele já estar dentro de casa.
+
+O preço disso foi medido caso a caso, contra os bytes publicados. Quatro chaves
+estragadas não davam defeito: davam **tela em branco**.
+
+| o que estava guardado | o que acontecia |
+|---|---|
+| `dezenas` sem ser uma lista | `TypeError: object is not iterable` |
+| `carteira` com um `null` no meio | `TypeError: Cannot read properties of null` |
+| `carteira` sem ser uma lista | `TypeError: estado.carteira.map is not a function` |
+| `precos` com `"premio": null` | `TypeError: Cannot convert undefined or null to object` |
+
+Nenhuma dessas telas tinha conserto do lado de quem usa. O aplicativo abria
+vazio, não dizia nada, e o único remédio — limpar os dados do site — é coisa que
+ninguém adivinha.
+
+Outros dois casos abriam, e eram piores de outro jeito, porque pareciam
+funcionar: `["a", null, 99, -3, 1, 2]` fazia a tela contar **seis dezenas** com
+duas marcadas na grade, e pedir mais nove quando faltavam treze — um pool
+imaginário escolhendo um fechamento que não era o da pessoa. E um orçamento
+guardado como `"muito"` chegava ao campo do dinheiro como **"R$ NaN"**.
+
+A correção é uma só, e está na leitura: `lembrar` passou a receber, junto do
+padrão, o que aquela chave precisa ser. O que não passa é dispensado, e o
+aplicativo abre com o padrão — perder o que estava guardado é aceitável; não
+abrir, não é. Cada item da carteira precisa ser um objeto com custo em centavos;
+cada dezena, um inteiro de 1 a 25; cada preço editado, dinheiro. `fixo` é a
+exceção que confirma a regra: ele não ganha conferência de forma na leitura
+porque já tem uma melhor adiante — `fixoValido`, a mesma porta por onde passa o
+fechamento montado à mão, que reprova qualquer coisa que o catálogo não tenha.
+
+Os nove casos que cobram isso rodam num navegador de verdade, com a memória do
+aparelho preenchida antes de a página carregar. São catorze conferências: a
+mesma pergunta de base em todos os casos — *abre e responde?* — mais o que
+aquele caso tem de particular. Oito delas foram vistas **falhar** com a leitura
+antiga, cada uma com o defeito dela escrito no relatório; as outras seis são a
+pergunta de base onde ela já passava. Um teste que passa dos dois jeitos não
+prova nada, e por isso todo caso aqui tem pelo menos uma conferência que se viu
+reprovar.
 
 ## Chegar à tela em 3G
 

@@ -1134,6 +1134,86 @@ conferir('com as quinze marcadas, a tela diz o que fazer em vez de dar em nada',
 
 await trancado.close();
 
+// ── com o que foi guardado estragado ────────────────────────────────────────
+//
+// O que volta do `localStorage` é de fora tanto quanto um endereço numa barra:
+// pode ter sido escrito por outra versão do aplicativo, por uma gravação
+// interrompida, ou por outra aba mexendo ao mesmo tempo. Cada caso abaixo já
+// fez o aplicativo **não abrir** — tela em branco e um `TypeError` — por uma
+// chave que ele mesmo sabia dispensar, e a pessoa não tem como adivinhar que o
+// conserto é limpar os dados do site.
+//
+// O que se cobra não é sobreviver: é **responder**. Pintar a casca e não chegar
+// a uma resposta seria a mesma tela morta com outro nome.
+const comMemoria = async (nome, guardado, olhar = null) => {
+  const caixa = await navegador.newContext({ viewport: { width: 360, height: 740 } });
+  await caixa.addInitScript((d) => {
+    for (const [chave, valor] of Object.entries(d)) localStorage.setItem(chave, valor);
+  }, guardado);
+  const pg = await caixa.newPage();
+  const ruins = [];
+  pg.on('pageerror', (e) => ruins.push(String(e)));
+  await pg.goto(endereco, { waitUntil: 'networkidle' });
+  const respondeu = await pg.waitForSelector('.resposta .numero, .resposta .aviso',
+    { timeout: 15000 }).then(() => true, () => false);
+  const texto = (await pg.locator('#resposta').innerText()).replace(/\s+/g, ' ').trim();
+  conferir(`com ${nome}, o aplicativo abre e responde`, respondeu && ruins.length === 0,
+    ruins.join(' | ') || `resposta: "${texto.slice(0, 70)}"`);
+  if (olhar) await olhar(pg, texto);
+  await caixa.close();
+};
+
+await comMemoria('as dezenas guardadas sem ser uma lista', { dezenas: '{"x":1}' });
+await comMemoria('lixo no meio das dezenas guardadas',
+  { dezenas: '["a",null,99,-3,1,2]' },
+  async (pg) => {
+    // Aqui nada estoura, e o defeito é pior por isso: `"a"`, `null`, `99` e
+    // `−3` entram na conta do pool e não aparecem na grade. A tela dizia "6
+    // dezenas" com duas marcadas, e pedia mais nove quando faltavam treze —
+    // um pool imaginário, do tamanho errado, escolhendo o fechamento errado.
+    const marcadas = await pg.locator('.grade [aria-pressed=true]').count();
+    const contado = Number((await pg.locator('#contagem').innerText()).replace(/\D/g, '')) || 0;
+    conferir('e a conta do pool é a das dezenas que a grade mostra',
+      marcadas === 2 && contado === 2, `${contado} contadas, ${marcadas} marcadas`);
+  });
+await comMemoria('a carteira guardada com buracos',
+  { carteira: '[{"jogos":"x","custo":null},null,3]' });
+await comMemoria('a carteira guardada sem ser uma lista', { carteira: '"x"' });
+await comMemoria('a tabela de preços guardada pela metade',
+  { precos: '{"aposta":{"15":"grátis"},"premio":null}' },
+  async (pg) => {
+    // Um preço que não é dinheiro não pode virar `NaN` na tela: quando o
+    // editado não presta, quem vale é o publicado.
+    await pg.click('#det-dinheiro summary');
+    const painel = (await pg.locator('#det-dinheiro').innerText()).replace(/\s+/g, ' ');
+    conferir('e nenhum preço estragado chega à tela como NaN',
+      !painel.includes('NaN'), painel.slice(0, 90));
+  });
+// Dinheiro que não é dinheiro chegava ao campo do jeito que estava guardado:
+// "R$ NaN" e "−R$ 50,00" são as duas caras disso, e nenhuma das duas é um
+// orçamento de onde se possa escolher fechamento.
+for (const [nome, guardado] of [['sem ser um número', '"muito"'], ['negativo', '-5000']]) {
+  await comMemoria(`o orçamento guardado ${nome}`, { orcamento: guardado }, async (pg) => {
+    const campo = await pg.locator('#valor').inputValue();
+    conferir(`e o campo de dinheiro mostra dinheiro, com o orçamento ${nome}`,
+      /\d/.test(campo) && !campo.includes('NaN') && !/[-\u2212]/.test(campo), campo);
+  });
+}
+// Um fechamento nomeado que o catálogo não tem — guardado por uma versão
+// anterior, ou vindo de um link velho. Aqui não há erro nenhum a evitar: o
+// defeito é a tela parar num beco. Sem `fixoValido` na porta, quem abre o
+// aplicativo recebe "não há fechamento catalogado" por causa de um pedido que
+// nem lembra de ter feito, em vez do fechamento que o dinheiro dele compra.
+await comMemoria('um fechamento fixo que não existe mais',
+  { fixo: '{"v":18,"k":15,"t":99}', dezenas: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18]' },
+  async (pg) => {
+    conferir('e a tela volta a responder pelo dinheiro, em vez de parar no beco',
+      (await pg.locator('.resposta .numero').count()) === 1,
+      (await pg.locator('#resposta').innerText()).replace(/\s+/g, ' ').slice(0, 70));
+  });
+await comMemoria('tudo guardado como JSON inválido',
+  { dezenas: '{{{', orcamento: 'nan', carteira: '][' });
+
 await navegador.close();
 servidor.close();
 
