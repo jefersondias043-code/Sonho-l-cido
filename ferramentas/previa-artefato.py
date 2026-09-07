@@ -28,9 +28,10 @@ RAIZ = pathlib.Path(__file__).resolve().parent.parent
 APP = RAIZ / "app"
 CATALOGO = RAIZ / "catalogo"
 
-# Ordem de dependência: quem é usado vem antes de quem usa.
-MODULOS = ["catalogo.js", "conferir.js", "volante.js", "estrategia.js", "app.js"]
-ESPACOS = ("catalogo", "conferir", "volante")
+# Ordem de dependência: quem é usado vem antes de quem usa. `analise.js` abre a
+# lista porque `catalogo.js` e `conferir.js` tomam dela o contador de bits.
+MODULOS = ["analise.js", "catalogo.js", "conferir.js", "volante.js", "estrategia.js", "app.js"]
+ESPACOS = ("analise", "catalogo", "conferir", "volante")
 
 
 def costurar() -> str:
@@ -52,6 +53,9 @@ def costurar() -> str:
                 "  }",
             )
         if nome == "catalogo.js":
+            # Costurado num arquivo só, `export { contarBits } from ...` vira
+            # uma segunda declaração do que `analise.js` já declarou acima.
+            fonte = fonte.replace("export { contarBits } from './analise.js';", "")
             # `baixar` existe nos dois módulos, com sentidos diferentes: aqui é
             # trazer do catálogo, em volante.js é oferecer um arquivo para
             # salvar. Juntos, um sobrescreveria o outro em silêncio.

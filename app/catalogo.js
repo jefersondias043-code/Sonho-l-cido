@@ -4,6 +4,8 @@
 // existirem, um arquivo por fechamento. Este módulo só sabe baixar, conferir a
 // soma e traduzir posições em dezenas. Nada aqui calcula fechamento nenhum.
 
+import { contarBits } from './analise.js';
+
 const guardados = new Map();
 
 async function baixar(caminho) {
@@ -82,11 +84,7 @@ export async function carregarFechamento(entrada) {
   return mascaras;
 }
 
-export function contarBits(n) {
-  let c = 0;
-  for (let m = n; m; m &= m - 1) c++;
-  return c;
-}
+export { contarBits } from './analise.js';
 
 /// Traduz máscaras de posição para as dezenas que a pessoa marcou.
 ///

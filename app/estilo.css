@@ -178,9 +178,71 @@ footer {
 
 .volante i.marcada { background: var(--tinta); color: var(--papel); font-weight: 700; }
 
+/* ── a área de análise ────────────────────────────────────────────────────
+   Ocupa a tela inteira: gerar e analisar são dois assuntos, e o segundo tem
+   ferramentas demais para caber embaixo do primeiro. A barra de abas é a
+   navegação — uma coisa de cada vez, e todas a um toque. */
+.analise {
+  position: fixed; inset: 0; z-index: 20; overflow-y: auto; overscroll-behavior: contain;
+  background: var(--fundo); padding: 0 1rem env(safe-area-inset-bottom, 1rem);
+}
+
+.analise-topo {
+  position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 0.6rem;
+  padding: 0.7rem 0 0.5rem; background: var(--fundo);
+}
+
+.analise-topo strong { font-size: 0.95rem; font-weight: 600; }
+
+/* Rola na horizontal quando não couber, e nunca empurra a página junto. */
+.abas {
+  position: sticky; top: 3rem; z-index: 2; display: flex; gap: 0.3rem; overflow-x: auto;
+  padding: 0.2rem 0 0.6rem; background: var(--fundo); scrollbar-width: none;
+  border-bottom: 1px solid var(--linha); margin-bottom: 0.9rem;
+}
+
+.abas::-webkit-scrollbar { display: none; }
+
+.abas button {
+  flex: 0 0 auto; min-height: 40px; padding: 0 0.85rem; border-radius: 999px; font: inherit;
+  font-size: 0.9rem; border: 1px solid var(--linha); background: var(--papel);
+  color: var(--tinta-fraca); cursor: pointer;
+}
+
+.abas button[aria-selected="true"] {
+  background: var(--realce); border-color: var(--realce); color: var(--realce-tinta);
+  font-weight: 600;
+}
+
+.aba { padding-bottom: 2rem; max-width: var(--coluna); margin: 0 auto; }
+
+/* O resumo que substituiu o despejo de cartelas: o que foi gerado, em número
+   grande, e o caminho para o resto. */
+.gerado { text-align: center; padding: 0.4rem 0 0.2rem; }
+.gerado .quantas { font-size: 2.4rem; font-weight: 800; line-height: 1.1; letter-spacing: -0.02em; }
+.gerado .oque { color: var(--tinta-fraca); }
+.gerado .abrir { margin-top: 0.8rem; }
+
+/* Tabelas de números: faixas, distribuição, dinheiro. */
+.quadro { width: 100%; border-collapse: collapse; margin: 0.6rem 0; font-variant-numeric: tabular-nums; }
+.quadro th, .quadro td { padding: 0.45rem 0.3rem; border-bottom: 1px solid var(--linha); text-align: right; }
+.quadro th:first-child, .quadro td:first-child { text-align: left; font-weight: 400; }
+.quadro th { font-size: 0.8rem; color: var(--tinta-fraca); font-weight: 600; }
+.quadro tr:last-child td { border-bottom: 0; }
+.quadro .destaque td { font-weight: 700; }
+
+/* A barra de proporção da distribuição: a leitura de relance, antes do número. */
+.barra { display: block; height: 6px; border-radius: 3px; background: var(--realce); min-width: 2px; }
+
+.aba label { display: block; margin-top: 0.7rem; font-size: 0.9rem; color: var(--tinta-fraca); }
+.aba select, .aba input[type="text"], .aba input[type="number"] {
+  width: 100%; min-height: 44px; padding: 0 0.6rem; border-radius: 10px; font: inherit;
+  border: 1px solid var(--linha); background: var(--papel); color: var(--tinta);
+}
+
 @media print {
   body { background: #fff; color: #000; }
-  main, footer, .painel-topo { display: none; }
+  main, footer, .painel-topo, .analise { display: none; }
   .painel { position: static; max-height: none; box-shadow: none; border: 0; }
   .painel-corpo { display: flex; flex-wrap: wrap; gap: 0.8rem; padding: 0; }
   .volante i { border-color: #999; }

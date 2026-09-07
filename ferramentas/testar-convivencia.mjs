@@ -105,8 +105,9 @@ conferir('o service worker do motor assume a raiz', (await quemManda())?.endsWit
 
 await pagina.goto(subpasta, { waitUntil: 'networkidle' });
 await pagina.click('#escolher');
-await pagina.waitForSelector('.bilhetes li', { timeout: 20000 });
-const bilhetes = await pagina.locator('.bilhetes li').count();
+await pagina.waitForSelector('.gerado', { timeout: 20000 });
+const bilhetes = Number(
+  (await pagina.locator('.gerado .quantas').innerText()).replace(/\D/g, '')) || 0;
 conferir('e mesmo assim ela chega aos bilhetes', bilhetes > 0);
 
 // ── 3. o escopo mais específico ganha, e ganha já na primeira visita ────────
@@ -121,14 +122,14 @@ await pagina.evaluate(() => navigator.serviceWorker.ready);
 await pagina.goto(subpasta, { waitUntil: 'networkidle' });
 conferir('e continua no comando na visita seguinte',
   (await quemManda())?.endsWith(`${BASE}fechamentos/sw.js`), String(await quemManda()));
-await pagina.waitForSelector('.bilhetes li', { timeout: 20000 });
+await pagina.waitForSelector('.gerado', { timeout: 20000 });
 
 // ── 4. e a subpasta funciona sem rede ───────────────────────────────────────
 
 await contexto.setOffline(true);
 await pagina.goto(subpasta, { waitUntil: 'domcontentloaded' });
-await pagina.waitForSelector('.bilhetes li', { timeout: 20000 });
-conferir('a subpasta funciona sem rede', (await pagina.locator('.bilhetes li').count()) > 0);
+await pagina.waitForSelector('.gerado', { timeout: 20000 });
+conferir('a subpasta funciona sem rede', (await pagina.locator('.gerado').count()) > 0);
 await contexto.setOffline(false);
 
 // ── 5. sem que a raiz perca o dela ──────────────────────────────────────────

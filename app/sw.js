@@ -9,8 +9,8 @@ const CARIMBO = 'dev';
 // A casca do aplicativo mais o índice, que é o que decide qualquer resposta.
 // Os arquivos de fechamento não entram aqui: são mais de trezentos, e cada
 // pessoa usa um punhado. Ficam em cache conforme forem pedidos.
-const CASCA = ['./', 'index.html', 'app.js', 'catalogo.js', 'conferir.js', 'estrategia.js',
-  'volante.js', 'estilo.css', 'manifest.webmanifest', 'icone.svg',
+const CASCA = ['./', 'index.html', 'app.js', 'analise.js', 'catalogo.js', 'conferir.js',
+  'estrategia.js', 'volante.js', 'estilo.css', 'manifest.webmanifest', 'icone.svg',
   'catalogo/indice.json', 'catalogo/precos.json', 'catalogo/acaso.json'];
 
 self.addEventListener('install', (evento) => {
