@@ -63,7 +63,10 @@ async function arrancar() {
     .map((d) => `<button type="button" data-dezena="${d}" aria-pressed="false">${d}</button>`)
     .join('');
   ligarControles();
-  registrarServico();
+  // O indicador de rede é barato e a pessoa precisa dele já; o resto de
+  // `registrarServico` espera a resposta aparecer — veja lá embaixo por quê.
+  const rede = () => ($('rede').textContent = navigator.onLine ? '' : 'sem internet');
+  addEventListener('online', rede); addEventListener('offline', rede); rede();
 
   try {
     [estado.indice, estado.precosPublicados, estado.acaso] = await Promise.all(
@@ -96,6 +99,7 @@ async function arrancar() {
   desenharCarteira();
   atualizarDinheiro();
   responder();
+  registrarServico();
 
   // Uma vez, no arranque: os selects nascem vazios, e quem manda é o fechamento
   // em uso — guardado de outra sessão ou recebido num link. Daqui em diante quem
@@ -107,10 +111,23 @@ async function arrancar() {
   }
 }
 
+/// Registrar o service worker depois da resposta, e não antes.
+///
+/// Instalar custa a casca inteira — quatorze arquivos — mais uma leitura do
+/// próprio `sw.js` para o carimbo do rodapé, e tudo isso partia antes dos três
+/// arquivos do catálogo, que são o que a resposta espera.
+///
+/// **Medido, não muda nada**: 1.450 ms para a resposta antes, 1.458 depois, em
+/// 3G rápido (`ferramentas/medir-3g.mjs`). O caminho crítico é dominado pelas
+/// duas idas e voltas, e o service worker não disputava a janela que sobra.
+///
+/// Fica assim mesmo assim, porque a ordem é a certa e não custa nada: a
+/// promessa do service worker é sobre a **segunda** visita, e nada do que ele
+/// faz precisa acontecer antes de a primeira responder. Quem vier medir de
+/// novo — noutra rede, com o catálogo maior — parte de uma ordem que já está
+/// certa, em vez de descobrir esta como se fosse novidade.
 function registrarServico() {
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
-  const rede = () => ($('rede').textContent = navigator.onLine ? '' : 'sem internet');
-  addEventListener('online', rede); addEventListener('offline', rede); rede();
   fetch('sw.js', { cache: 'no-store' }).then((r) => r.text()).then((t) => {
     $('carimbo').textContent = `versão ${t.match(/CARIMBO = '([^']+)'/)?.[1] ?? '—'}`;
   }).catch(() => {});

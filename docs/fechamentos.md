@@ -144,9 +144,9 @@ Daí tudo o mais decorre:
 
 Sem WebAssembly no cliente, sem *web workers*, sem banco de sessões, sem retomada
 de trabalho interrompido. Nada disso tem razão de existir quando não há nada a
-esperar. O cliente inteiro dá **2.304 linhas** somando JavaScript, HTML e CSS —
+esperar. O cliente inteiro dá **2.321 linhas** somando JavaScript, HTML e CSS —
 teto de 2.400 cobrado pela construção —, e o peso inicial (casca, índice, preços
-e distribuições) dá **39 KiB comprimidos**.
+e distribuições) dá **40 KiB comprimidos**.
 
 O teto foi 1.500 enquanto havia uma porta de entrada só, 1.700 quando a segunda
 chegou, e 2.400 com a área de análise — e não porque o cliente passou a
@@ -662,16 +662,32 @@ parte dele.
 ## Chegar à tela em 3G
 
 O alvo da especificação é **primeira renderização útil em menos de 1 s em 3G
-rápido**, e ele nunca tinha sido medido. Medido — servido como o GitHub Pages
-serve, HTTP/2 com compressão, sob a rede "3G rápido" do próprio Chrome
-(1,6 Mbps, 562 ms de ida e volta):
+rápido**. Ele é medido por `ferramentas/medir-3g.mjs`, que sobe um servidor
+HTTP/2 com compressão e certificado próprio — como o GitHub Pages serve — e
+estrangula a rede pelo mesmo preset do Chrome (1,6 Mbps, 562,5 ms de ida e
+volta):
 
-| | antes | agora |
-|---|---:|---:|
-| primeira pintura | 1.200 ms | 1.260 ms |
-| grade tocável | 1.880 ms | 1.360 ms |
-| resposta na tela | 2.500 ms | 1.370 ms |
-| pedidos | 14 | 9 |
+```bash
+./construir-app.sh && node ferramentas/medir-3g.mjs
+```
+
+Isso importa mais do que parece. Este era o **único** número do projeto que
+vivia como frase num documento: todos os outros — preço, quantidade de
+bilhetes, garantia — são recalculados do catálogo e cobrados em CI. Um número
+que ninguém consegue refazer é um número em que ninguém deveria acreditar, e a
+primeira medição feita em HTTP/1.1 mostrou ganho zero para as dicas de
+`modulepreload`, quase enterrando uma otimização que funciona.
+
+| | antes das dicas | com as dicas | hoje |
+|---|---:|---:|---:|
+| primeira pintura | 1.200 ms | 1.260 ms | 1.308 ms |
+| grade tocável | 1.880 ms | 1.360 ms | 1.432 ms |
+| resposta na tela | 2.500 ms | 1.370 ms | 1.450 ms |
+| pedidos no caminho crítico | 14 | 9 | 11 |
+
+A coluna de hoje carrega a área de análise e o módulo de simulação: 40 KiB
+comprimidos contra 26, dois pedidos a mais, e oitenta milissegundos. O caminho
+continua sendo **uma onda só**, que é o que as dicas compraram.
 
 A resposta chegava em duas ondas encadeadas desnecessárias. O navegador só
 descobre `catalogo.js`, `conferir.js`, `estrategia.js` e `volante.js` depois de
@@ -685,6 +701,14 @@ O `crossorigin` nos três `preload` não é enfeite: sem ele o navegador baixava
 arquivo, não conseguia casá-lo com o `fetch` do aplicativo e **baixava de novo**
 — dobrando o tráfego e mantendo a segunda onda. A cascata mostrava os dois
 pedidos, um em cada onda.
+
+Uma coisa que a medição mostrou e a intuição errou: o service worker instala
+baixando a casca inteira, e isso partia **antes** dos três arquivos do catálogo,
+que são o que a resposta espera. Parecia disputa de banda no pior lugar. Movido
+para depois da resposta, o número não mudou — 1.450 ms contra 1.458 ms, ruído.
+O caminho crítico é dominado pelas idas e voltas, não pela banda. A ordem nova
+ficou, porque é a certa e não custa nada; o ganho que se esperava dela não
+existe, e fica registrado para ninguém procurá-lo de novo.
 
 O que resta é o piso: duas idas e voltas — o HTML, e tudo o que ele referencia.
 Com os 562 ms do preset do Chrome isso são 1,13 s, e não há folga abaixo disso
@@ -723,6 +747,9 @@ node app/testar-tela.mjs                 # a tela, num navegador de verdade
                                          #  servem publicar/, não app/)
 node app/testar-tela.mjs /repo/fechamentos/   # e de novo, na subpasta em que vai ao ar
 node ferramentas/testar-convivencia.mjs       # os dois aplicativos no mesmo endereço
+
+# Quanto a tela leva para responder em 3G rápido.
+node ferramentas/medir-3g.mjs
 
 # E a prévia de arquivo único, para abrir o aplicativo sem servidor de arquivos.
 python3 ferramentas/previa-artefato.py previa.html
