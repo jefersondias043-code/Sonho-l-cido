@@ -1134,6 +1134,297 @@ conferir('com as quinze marcadas, a tela diz o que fazer em vez de dar em nada',
 
 await trancado.close();
 
+// ── o que um leitor de tela encontra ────────────────────────────────────────
+//
+// Duas coisas que só aparecem quando se olha a tela pelo nome dos elementos, e
+// não pelo desenho. Quem navega por título e quem lê a lista de botões fora do
+// contexto visual depende das duas.
+{
+  const caixa = await navegador.newContext({ viewport: { width: 390, height: 844 } });
+  const pg = await caixa.newPage();
+  await pg.goto(endereco, { waitUntil: 'networkidle' });
+  await pg.click('#escolher');
+  await esperarFechamento(pg, 20000);
+  await pg.click('#det-bolao summary');
+  await pg.fill('#partes', '4');
+  await pg.dispatchEvent('#partes', 'input');
+  await pg.click('#det-dinheiro summary');
+  await pg.waitForTimeout(400);
+
+  // Quatro botões escritos "Copiar link" copiam quatro links diferentes. Na
+  // tela, a linha ao lado diz qual é qual; na lista de botões de um leitor de
+  // tela, são quatro vezes a mesma frase e nenhuma maneira de escolher.
+  const partes = await pg.evaluate(() => [...document.querySelectorAll('#bolao button')]
+    .map((b) => b.getAttribute('aria-label') || b.textContent.trim()));
+  conferir('cada parte do bolão tem seu próprio nome',
+    partes.length === 4 && new Set(partes).size === 4, partes.join(' · '));
+
+  // Pular de `h1` para `h3` deixa um degrau vazio: quem navega por título passa
+  // do nome do aplicativo direto para a tabela de preços sem saber o que pulou.
+  const titulos = await pg.evaluate(() => [...document.querySelectorAll('h1,h2,h3,h4,h5,h6')]
+    .filter((h) => h.getBoundingClientRect().width)
+    .map((h) => ({ nivel: Number(h.tagName[1]), texto: h.textContent.trim().slice(0, 24) })));
+  const pulos = titulos.filter((t, i) => i > 0 && t.nivel > titulos[i - 1].nivel + 1);
+  conferir('os títulos da tela não pulam de nível', pulos.length === 0,
+    `${titulos.map((t) => `h${t.nivel}:${t.texto}`).join(' | ')} — pulou em ${
+      pulos.map((t) => `h${t.nivel}:${t.texto}`).join(', ')}`);
+  await caixa.close();
+}
+
+// ── a conta em papel, antes do papel ────────────────────────────────────────
+//
+// "Imprimir volantes" com 3.634 cartelas na mão punha a caixa de impressão do
+// sistema na frente da pessoa com **243 folhas** carregadas, e nada na tela
+// tinha dito isso. Quem imprimisse sem olhar gastava uma resma; quem olhasse
+// ainda teria de descobrir sozinho o que fazer. A funcionalidade não saiu de
+// lugar nenhum: o painel passou a dizer o tamanho e a impressão passou a
+// esperar um segundo toque.
+{
+  const caixa = await navegador.newContext({ viewport: { width: 390, height: 844 } });
+  // Nada de caixa de impressão de verdade no meio de uma suíte: o que interessa
+  // é **quando** ela seria pedida.
+  await caixa.addInitScript(() => {
+    window.__imprimiu = 0;
+    window.print = () => { window.__imprimiu++; };
+  });
+  const pg = await caixa.newPage();
+  await pg.goto(endereco, { waitUntil: 'networkidle' });
+  await pg.fill('#valor', 'R$ 400,00');
+  await pg.dispatchEvent('#valor', 'change');
+  await pg.click('#escolher');
+  await esperarFechamento(pg, 20000);
+  const cartelas = await quantasCartelas(pg);
+  await abrir(pg, 'cartelas');
+  await pg.locator('#lista-cartelas [data-acao=imprimir]').click();
+  await pg.waitForTimeout(200);
+
+  conferir('imprimir abre o painel de volantes', await pg.locator('#painel').isVisible());
+  conferir('e ainda não mandou imprimir nada',
+    (await pg.evaluate(() => window.__imprimiu)) === 0);
+
+  const aviso = (await pg.locator('#painel-corpo .ajuda').innerText()
+    .catch(() => '(o painel não diz nada)')).replace(/\s+/g, ' ');
+  // Quinze volantes por folha, medido no próprio desenho com a mídia de
+  // impressão emulada. Cinquenta e cinco cartelas são quatro folhas.
+  const folhas = Math.ceil(cartelas / 15);
+  conferir('e diz quantos volantes e quantas folhas serão',
+    aviso.includes(`${cartelas} volantes`) && aviso.includes(`${folhas} folhas`), aviso);
+  conferir('e o painel traz um volante para cada cartela',
+    (await pg.locator('#painel-corpo .volante').count()) === cartelas);
+
+  // O painel abre a partir da área de análise, que é uma camada opaca de tela
+  // cheia. Sem ficar por cima dela, ele abria escondido atrás — com o ✕ dele
+  // junto —, e quem fechasse a caixa de impressão do sistema ficava com um
+  // painel aberto que não dava para ver nem fechar.
+  conferir('e o painel fica na frente da área de análise', await pg.evaluate(() => {
+    const p = document.getElementById('painel');
+    const r = p.getBoundingClientRect();
+    const em = document.elementFromPoint(r.left + r.width / 2, r.top + 8);
+    return p.contains(em);
+  }));
+
+  const clicou = await pg.locator('#painel-corpo [data-acao=imprimir-agora]')
+    .click({ timeout: 5000 }).then(() => true, () => false);
+  await pg.waitForTimeout(200);
+  conferir('e só então a impressão é pedida',
+    clicou && (await pg.evaluate(() => window.__imprimiu)) === 1,
+    clicou ? 'o botão não fez efeito' : 'não deu para tocar no botão');
+
+  // A conta de folhas é da tela: gastar a primeira folha para dizer quantas
+  // folhas seriam é o tipo de piada que ninguém acha graça no papel.
+  await pg.emulateMedia({ media: 'print' });
+  await pg.waitForTimeout(150);
+  conferir('e nada disso vai junto para o papel',
+    !(await pg.locator('#painel-corpo .ajuda').isVisible())
+    && !(await pg.locator('#painel-corpo [data-acao=imprimir-agora]').isVisible()));
+  await pg.emulateMedia({ media: 'screen' });
+  await caixa.close();
+}
+
+// ── nada de mira fina ───────────────────────────────────────────────────────
+//
+// Quarenta e quatro pixels é o alvo de toque mínimo, e não é opinião: é a
+// largura aproximada de uma ponta de dedo. Abaixo disso, errar o botão vizinho
+// deixa de ser descuido e passa a ser o normal.
+//
+// O resto do aplicativo já respeitava esse número; a barra de abas da área de
+// análise nasceu com 40, e ela é a navegação inteira daquela área — errar o
+// alvo ali troca de assunto. Esta varredura passa por toda a página, em vez de
+// citar um seletor, porque o próximo lugar a nascer pequeno não é este.
+{
+  const caixa = await navegador.newContext({ viewport: { width: 390, height: 844 } });
+  const pg = await caixa.newPage();
+  await pg.goto(endereco, { waitUntil: 'networkidle' });
+  // A tabela de preços nasce recolhida, e é onde mora o campo mais largo do
+  // aplicativo. Fechada, ela não entra em varredura nenhuma.
+  await pg.click('#det-dinheiro summary');
+  await pg.waitForTimeout(200);
+
+  // Um valor de dinheiro cortado é um valor errado: "R$ 1.700.000," não é o
+  // prêmio de 15 acertos, é o prêmio de 15 acertos sem os centavos. O campo do
+  // prêmio maior não cabia na coluna, em largura de tela nenhuma.
+  const cortados = () => pg.evaluate(() => [...document.querySelectorAll('input')]
+    .filter((i) => i.type !== 'range' && i.getBoundingClientRect().width
+      && i.scrollWidth > i.clientWidth + 1)
+    .map((i) => `${i.id || i.dataset.chave || '?'}="${i.value}" (cabe ${i.clientWidth
+      }, precisa ${i.scrollWidth})`));
+
+  const miudos = () => pg.evaluate(() => {
+    const fora = [];
+    for (const el of document.querySelectorAll('button, summary, a[href], input, select')) {
+      const r = el.getBoundingClientRect();
+      const s = getComputedStyle(el);
+      if (!r.width || !r.height || s.visibility === 'hidden') continue;
+      // O deslizador é agarrado pelo corpo inteiro, e a caixa dele não é o alvo.
+      if (el.type === 'range' || el.type === 'checkbox') continue;
+      if (r.width < 44 || r.height < 44) {
+        fora.push(`${el.tagName.toLowerCase()}#${el.id || el.className || '?'} `
+          + `"${(el.textContent || el.value || '').trim().slice(0, 18)}" `
+          + `${Math.round(r.width)}×${Math.round(r.height)}`);
+      }
+    }
+    return fora;
+  });
+
+  let apertados = await miudos();
+  conferir('nenhum alvo de toque menor que 44px na tela principal',
+    apertados.length === 0, apertados.join(' · '));
+  const truncados = await cortados();
+  conferir('nenhum valor de dinheiro aparece cortado na tela principal',
+    truncados.length === 0, truncados.join(' · '));
+
+  await pg.click('#escolher');
+  await esperarFechamento(pg, 20000);
+  await pg.locator('[data-acao=abrir]').click();
+  for (const aba of ['cartelas', 'conferir', 'simular', 'valores', 'resumo']) {
+    await pg.click(`#abas [data-aba=${aba}]`);
+    await pg.waitForTimeout(200);
+    const aqui = await miudos();
+    conferir(`nenhum alvo de toque menor que 44px na aba ${aba}`,
+      aqui.length === 0, aqui.join(' · '));
+    const cortadosAqui = await cortados();
+    conferir(`nenhum valor de dinheiro aparece cortado na aba ${aba}`,
+      cortadosAqui.length === 0, cortadosAqui.join(' · '));
+    apertados = apertados.concat(aqui);
+  }
+  await caixa.close();
+}
+
+// ── com o que foi guardado estragado ────────────────────────────────────────
+//
+// O que volta do `localStorage` é de fora tanto quanto um endereço numa barra:
+// pode ter sido escrito por outra versão do aplicativo, por uma gravação
+// interrompida, ou por outra aba mexendo ao mesmo tempo. Cada caso abaixo já
+// fez o aplicativo **não abrir** — tela em branco e um `TypeError` — por uma
+// chave que ele mesmo sabia dispensar, e a pessoa não tem como adivinhar que o
+// conserto é limpar os dados do site.
+//
+// O que se cobra não é sobreviver: é **responder**. Pintar a casca e não chegar
+// a uma resposta seria a mesma tela morta com outro nome.
+const comMemoria = async (nome, guardado, olhar = null) => {
+  const caixa = await navegador.newContext({ viewport: { width: 360, height: 740 } });
+  await caixa.addInitScript((d) => {
+    for (const [chave, valor] of Object.entries(d)) localStorage.setItem(chave, valor);
+  }, guardado);
+  const pg = await caixa.newPage();
+  const ruins = [];
+  pg.on('pageerror', (e) => ruins.push(String(e)));
+  await pg.goto(endereco, { waitUntil: 'networkidle' });
+  const respondeu = await pg.waitForSelector('.resposta .numero, .resposta .aviso',
+    { timeout: 15000 }).then(() => true, () => false);
+  const texto = (await pg.locator('#resposta').innerText()).replace(/\s+/g, ' ').trim();
+  conferir(`com ${nome}, o aplicativo abre e responde`, respondeu && ruins.length === 0,
+    ruins.join(' | ') || `resposta: "${texto.slice(0, 70)}"`);
+  if (olhar) await olhar(pg, texto);
+  await caixa.close();
+};
+
+await comMemoria('as dezenas guardadas sem ser uma lista', { dezenas: '{"x":1}' });
+await comMemoria('lixo no meio das dezenas guardadas',
+  { dezenas: '["a",null,99,-3,1,2]' },
+  async (pg) => {
+    // Aqui nada estoura, e o defeito é pior por isso: `"a"`, `null`, `99` e
+    // `−3` entram na conta do pool e não aparecem na grade. A tela dizia "6
+    // dezenas" com duas marcadas, e pedia mais nove quando faltavam treze —
+    // um pool imaginário, do tamanho errado, escolhendo o fechamento errado.
+    const marcadas = await pg.locator('.grade [aria-pressed=true]').count();
+    const contado = Number((await pg.locator('#contagem').innerText()).replace(/\D/g, '')) || 0;
+    conferir('e a conta do pool é a das dezenas que a grade mostra',
+      marcadas === 2 && contado === 2, `${contado} contadas, ${marcadas} marcadas`);
+  });
+await comMemoria('a carteira guardada com buracos',
+  { carteira: '[{"jogos":"x","custo":null},null,3]' });
+await comMemoria('a carteira guardada sem ser uma lista', { carteira: '"x"' });
+await comMemoria('a tabela de preços guardada pela metade',
+  { precos: '{"aposta":{"15":"grátis"},"premio":null}' },
+  async (pg) => {
+    // Um preço que não é dinheiro não pode virar `NaN` na tela: quando o
+    // editado não presta, quem vale é o publicado.
+    await pg.click('#det-dinheiro summary');
+    const painel = (await pg.locator('#det-dinheiro').innerText()).replace(/\s+/g, ' ');
+    conferir('e nenhum preço estragado chega à tela como NaN',
+      !painel.includes('NaN'), painel.slice(0, 90));
+  });
+// Dinheiro que não é dinheiro chegava ao campo do jeito que estava guardado:
+// "R$ NaN" e "−R$ 50,00" são as duas caras disso, e nenhuma das duas é um
+// orçamento de onde se possa escolher fechamento.
+for (const [nome, guardado] of [['sem ser um número', '"muito"'], ['negativo', '-5000']]) {
+  await comMemoria(`o orçamento guardado ${nome}`, { orcamento: guardado }, async (pg) => {
+    const campo = await pg.locator('#valor').inputValue();
+    conferir(`e o campo de dinheiro mostra dinheiro, com o orçamento ${nome}`,
+      /\d/.test(campo) && !campo.includes('NaN') && !/[-\u2212]/.test(campo), campo);
+  });
+}
+// Um fechamento nomeado que o catálogo não tem — guardado por uma versão
+// anterior, ou vindo de um link velho. Aqui não há erro nenhum a evitar: o
+// defeito é a tela parar num beco. Sem `fixoValido` na porta, quem abre o
+// aplicativo recebe "não há fechamento catalogado" por causa de um pedido que
+// nem lembra de ter feito, em vez do fechamento que o dinheiro dele compra.
+await comMemoria('um fechamento fixo que não existe mais',
+  { fixo: '{"v":18,"k":15,"t":99}', dezenas: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18]' },
+  async (pg) => {
+    conferir('e a tela volta a responder pelo dinheiro, em vez de parar no beco',
+      (await pg.locator('.resposta .numero').count()) === 1,
+      (await pg.locator('#resposta').innerText()).replace(/\s+/g, ' ').slice(0, 70));
+  });
+await comMemoria('tudo guardado como JSON inválido',
+  { dezenas: '{{{', orcamento: 'nan', carteira: '][' });
+
+// ── e o último resultado guardado, que também vem de fora ───────────────────
+//
+// "Buscar o último concurso" tem uma rede pela frente e um `catch` atrás: sem
+// resposta, ele usa o resultado da última vez. Só que esse resultado saiu do
+// mesmo armazenamento, e um estragado fazia o `catch` — que existe justamente
+// para nada estourar — estourar. O botão ficava em "Buscando…" para sempre, sem
+// erro na tela e sem caminho de volta, no exato momento em que a pessoa está
+// sem rede. Aqui não há servidor, então o caminho de rede sempre falha: é o
+// caso que interessa.
+for (const [nome, guardado, esperado] of [
+  ['sem as dezenas', '{"concurso":3000}', 'Sem resultado'],
+  ['com as dezenas sem ser lista', '{"dezenas":"x"}', 'Sem resultado'],
+  ['sem ser um objeto', '"nada"', 'Sem resultado'],
+  // Duas dezenas não são um sorteio, e dizer "Concurso 1" ao lado de um campo
+  // pela metade é pior do que dizer que não há resultado.
+  ['com um sorteio pela metade', '{"dezenas":[1,2],"concurso":1}', 'Sem resultado'],
+]) {
+  const caixa = await navegador.newContext({ viewport: { width: 360, height: 740 } });
+  await caixa.addInitScript((v) => localStorage.setItem('ultimo-sorteio', v), guardado);
+  const pg = await caixa.newPage();
+  const ruins = [];
+  pg.on('pageerror', (e) => ruins.push(String(e)));
+  await pg.goto(endereco, { waitUntil: 'networkidle' });
+  await pg.click('#escolher');
+  await esperarFechamento(pg, 20000);
+  await abrir(pg, 'conferir');
+  await pg.click('#buscar-sorteio');
+  await pg.waitForTimeout(5000);
+  const rotulo = (await pg.locator('#buscar-sorteio').innerText()).trim();
+  conferir(`com o resultado guardado ${nome}, o botão diz o que houve`,
+    ruins.length === 0 && rotulo.startsWith(esperado),
+    `${ruins.join(' | ')} · o botão diz "${rotulo}"`);
+  await caixa.close();
+}
+
 await navegador.close();
 servidor.close();
 

@@ -73,11 +73,11 @@ servidor.on('stream', async (fluxo, cabecalhos) => {
       ':status': 200,
       'content-type': TIPOS[tipo] ?? 'application/octet-stream',
       ...(comprimir ? { 'content-encoding': 'gzip' } : {}),
-      // O GitHub Pages manda `max-age=600`. Com `no-store`, o service worker
-      // não acha nada no cache do navegador e **rebaixa a casca inteira** ao
-      // instalar — vinte e seis pedidos no lugar de doze, e uma segunda onda
-      // que na vida real não existe. Um medidor que mente sobre o cache mede
-      // um aplicativo que ninguém usa.
+      // O que o GitHub Pages manda. Fica por fidelidade, e não pelo efeito:
+      // medido dos dois jeitos, `no-store` e `max-age=600` dão a mesma
+      // contagem de pedidos — o service worker rebaixa a casca inteira ao
+      // instalar de qualquer forma. Esta linha já teve um comentário dizendo
+      // o contrário; a medição desmentiu, e é a medição que vale.
       'cache-control': 'max-age=600',
     });
     fluxo.end(comprimir ? gzipSync(corpo) : corpo);
@@ -120,13 +120,22 @@ await pagina.waitForSelector('.grade button', { timeout: 60000 });
 const grade = Date.now() - comeco;
 await pagina.waitForSelector('.resposta .aviso, .resposta .numero', { timeout: 60000 });
 const resposta = Date.now() - comeco;
+// O caminho crítico é o que **a página** pediu para chegar até aqui, e quem
+// sabe isso é a própria página. Contar no servidor mistura nela a instalação do
+// service worker, que rebaixa a casca inteira logo depois da resposta e não
+// atrasa ninguém: o número dobra sem que nada tenha piorado. Os dois vão para a
+// tela, separados, porque os dois dizem coisas diferentes — um é o que a pessoa
+// espera, o outro é o que a rede dela paga.
+const noCaminho = await pagina.evaluate(
+  () => performance.getEntriesByType('resource').length + 1);
 
 const linha = (nome, ms) => `  ${nome.padEnd(22)} ${String(ms).padStart(5)} ms`;
 console.log(`3G rápido (1,6 Mbps, ${TRES_G.latency} ms de ida e volta) · ${RAIZ.split('/').pop()}/`);
 console.log(linha('primeira pintura', pintura));
 console.log(linha('grade tocável', grade));
 console.log(linha('resposta na tela', resposta));
-console.log(`  ${'pedidos'.padEnd(22)} ${String(pedidos).padStart(5)}`);
+console.log(`  ${'pedidos até a resposta'.padEnd(22)} ${String(noCaminho).padStart(5)}`);
+console.log(`  ${'pedidos no total'.padEnd(22)} ${String(pedidos).padStart(5)}`);
 // O piso: duas idas e voltas encadeadas — o HTML, e tudo o que ele referencia.
 console.log(`  ${'piso de duas voltas'.padEnd(22)} ${String(Math.round(2 * TRES_G.latency)).padStart(5)} ms`);
 

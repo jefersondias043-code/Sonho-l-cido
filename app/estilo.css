@@ -36,8 +36,11 @@ h1 {
   color: var(--tinta-fraca); margin: 0.5rem 0 1rem;
 }
 
-h3 { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.06em;
-  color: var(--tinta-fraca); margin: 0 0 0.5rem; }
+/* Os títulos das tabelas de preço. São `h2` porque o único título acima deles
+   é o `h1` do aplicativo, e pular de 1 para 3 quebra a navegação por título de
+   quem usa leitor de tela — o desenho é o mesmo, o nível é que estava errado. */
+.precos h2 { font-size: 0.85rem; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.06em; color: var(--tinta-fraca); margin: 0 0 0.5rem; }
 
 label { display: block; font-size: 0.95rem; color: var(--tinta-fraca); margin-bottom: 0.35rem; }
 
@@ -138,7 +141,11 @@ details select, details input[type="text"], details input[type="number"] {
 }
 
 .precos { margin-bottom: 1rem; }
-.precos label { display: grid; grid-template-columns: 1fr 8rem; align-items: center; gap: 0.5rem; margin-bottom: 0.4rem; }
+/* 10,5rem, e não 8: o prêmio de 15 acertos é "R$ 1.700.000,00" e não cabia em
+   8rem — aparecia como "R$ 1.700.000," em qualquer largura de tela, com os
+   centavos cortados fora. Um valor de dinheiro cortado é um valor errado. */
+.precos label { display: grid; grid-template-columns: minmax(0, 1fr) 10.5rem;
+  align-items: center; gap: 0.5rem; margin-bottom: 0.4rem; }
 .precos input { text-align: right; }
 .partes, .registros { padding-left: 1.2rem; }
 .partes li, .registros li { margin-bottom: 0.5rem; }
@@ -149,8 +156,13 @@ footer {
 }
 
 /* ── painel deslizante ── */
+/* Acima da área de análise, e não atrás dela. É de lá que se pede para
+   imprimir, e a área é uma camada opaca de tela cheia: sem esta linha o painel
+   de volantes abria escondido atrás dela — com o ✕ dele junto —, e quem
+   fechasse a caixa de impressão do sistema ficava com um painel aberto que não
+   dava para ver nem fechar. */
 .painel {
-  position: fixed; inset: auto 0 0 0; max-height: 85vh; overflow: auto;
+  position: fixed; inset: auto 0 0 0; max-height: 85vh; overflow: auto; z-index: 30;
   background: var(--papel); border-top: 1px solid var(--linha);
   border-radius: var(--raio) var(--raio) 0 0; animation: subir 0.25s ease-out;
   box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.25);
@@ -203,8 +215,10 @@ footer {
 
 .abas::-webkit-scrollbar { display: none; }
 
+/* 44px, e não 40: é o alvo de toque mínimo, e a barra de abas é a navegação
+   inteira desta área — errar o alvo aqui troca de assunto. */
 .abas button {
-  flex: 0 0 auto; min-height: 40px; padding: 0 0.85rem; border-radius: 999px; font: inherit;
+  flex: 0 0 auto; min-height: 44px; padding: 0 0.85rem; border-radius: 999px; font: inherit;
   font-size: 0.9rem; border: 1px solid var(--linha); background: var(--papel);
   color: var(--tinta-fraca); cursor: pointer;
 }
@@ -245,6 +259,9 @@ footer {
   main, footer, .painel-topo, .analise { display: none; }
   .painel { position: static; max-height: none; box-shadow: none; border: 0; }
   .painel-corpo { display: flex; flex-wrap: wrap; gap: 0.8rem; padding: 0; }
+  /* A conta de folhas e o botão de imprimir são da tela, e gastariam a
+     primeira folha para dizer quantas folhas seriam. */
+  .so-na-tela { display: none; }
   .volante i { border-color: #999; }
   .volante i.marcada { background: #000; color: #fff; }
 }

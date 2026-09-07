@@ -13,18 +13,52 @@ import { escada, fechamentosDe, melhorEstrategia, melhorPool } from './estrategi
 
 const $ = (id) => document.getElementById(id);
 const UNIVERSO = 25;
+// Quantos volantes cabem numa folha A4, para dizer o preço em papel antes de
+// imprimir. Medido no próprio desenho, com a mídia de impressão emulada e a
+// folha a 96 dpi com 1 cm de margem (718×1047 px): três por linha, cinco linhas.
+const POR_FOLHA = 15;
 // Quantos a lista desenha: os milhares de R$ 15.000 davam 339 mil pixels de página.
 const MOSTRA = 50;
 const guardar = (c, v) => { try { localStorage.setItem(c, JSON.stringify(v)); } catch { /**/ } };
-const lembrar = (c, p) => { try { return JSON.parse(localStorage.getItem(c)) ?? p; } catch { return p; } };
+
+/// O que volta do armazenamento é de fora, como um endereço: pode vir de outra
+/// versão do aplicativo, de uma escrita interrompida, de outra aba mexendo ao
+/// mesmo tempo. Ler sem conferir a forma fazia o aplicativo **não abrir** —
+/// tela em branco e um `TypeError` — por causa de uma chave estragada que ele
+/// mesmo sabia dispensar. `lerLink` já tratava endereço estranho assim; isto é
+/// a mesma regra para o outro lugar de onde entra estado de fora.
+const lembrar = (chave, padrao, valido = () => true) => {
+  try {
+    const guardado = JSON.parse(localStorage.getItem(chave));
+    return guardado != null && valido(guardado) ? guardado : padrao;
+  } catch { return padrao; }
+};
+
+const eLista = (a) => Array.isArray(a);
+const eObjeto = (o) => o != null && typeof o === 'object' && !Array.isArray(o);
+const centavos = (n) => Number.isFinite(n) && n >= 0;
+
+/// Só os pares chave-valor que são dinheiro. Um preço estragado não pode virar
+/// `NaN` na tela nem derrubar o desenho da tabela.
+const soPrecos = (tabela) => Object.fromEntries(
+  Object.entries(eObjeto(tabela) ? tabela : {}).filter(([, v]) => centavos(v)));
 
 const estado = {
-  orcamento: lembrar('orcamento', 5000), dezenas: new Set(lembrar('dezenas', [])),
-  carteira: lembrar('carteira', []), garantiaMinima: 0,
+  orcamento: lembrar('orcamento', 5000, (n) => Number.isFinite(n) && n > 0),
+  dezenas: new Set(lembrar('dezenas', [], eLista)
+    .filter((d) => Number.isInteger(d) && d >= 1 && d <= UNIVERSO)),
+  // Um registro sem custo não fecha conta nenhuma, e um `null` no meio da lista
+  // derrubava a carteira inteira ao desenhar.
+  carteira: lembrar('carteira', [], eLista)
+    .filter((r) => eObjeto(r) && centavos(r.custo) && Number.isFinite(r.jogos)),
+  garantiaMinima: 0,
   indice: null, precos: null, precosPublicados: null, acaso: null,
   // `fixo` é o fechamento **nomeado** — montado à mão ou recebido num link de
   // bolão. Ele é um pedido, e pedido não se esquece ao fechar a aba: sem guardá-lo,
   // recarregar devolvia o que o orçamento compraria, que é outro fechamento.
+  // `fixo` não leva conferência de forma aqui porque tem uma melhor logo
+  // adiante: `fixoValido` é a única porta por onde fechamento nomeado entra, e
+  // ela reprova qualquer coisa que não seja um fechamento que o catálogo tem.
   plano: null, fixo: lembrar('fixo', null), link: null,
   bilhetes: [], todos: [], mascaras: [], ultimoResultado: null,
 };
@@ -76,7 +110,14 @@ async function arrancar() {
       + 'quando houver rede — depois disso o aplicativo funciona sem ela.</p>';
     return;
   }
-  estado.precos = { ...estado.precosPublicados, ...lembrar('precos', {}) };
+  // Os preços que a pessoa editou entram por cima dos publicados, mas só o que
+  // ainda for dinheiro: `{"premio": null}` guardado derrubava a tela de preços.
+  const editados = lembrar('precos', {}, eObjeto);
+  estado.precos = {
+    ...estado.precosPublicados,
+    aposta: { ...estado.precosPublicados.aposta, ...soPrecos(editados.aposta) },
+    premio: { ...estado.precosPublicados.premio, ...soPrecos(editados.premio) },
+  };
 
   // O que voltou guardado é um pedido de outra sessão, e o catálogo ou a tabela
   // de preços podem ter mudado desde então. Passa pela porta como qualquer outro.
@@ -672,7 +713,8 @@ function desenharBolao() {
       const link = volante.linkDaParte(base, { dezenas: estado.dezenas, v, k, t, parte: i, partes });
       return `<li><b>Parte ${i + 1}</b> — ${plural(g.length, 'bilhete', 'bilhetes')} ·
         ${dinheiro(g.length * estado.precos.aposta[k])}
-        <button type="button" class="discreto" data-link="${link}">Copiar link</button></li>`;
+        <button type="button" class="discreto" data-link="${link}"
+          aria-label="Copiar o link da parte ${i + 1}">Copiar link</button></li>`;
     })
     .join('')}</ol>${fechamentoDaConta()}`;
 }
@@ -703,7 +745,7 @@ function fechamentoDaConta() {
 function desenharPrecos() {
   const grupos = [['aposta', 'Quanto custa a aposta', 'dezenas'], ['premio', 'Quanto paga cada faixa', 'acertos']];
   $('tabela-precos').innerHTML = `${grupos.map(([grupo, titulo, unidade]) =>
-    `<div class="precos"><h3>${titulo}</h3>${Object.keys(estado.precos[grupo]).map((k) =>
+    `<div class="precos"><h2>${titulo}</h2>${Object.keys(estado.precos[grupo]).map((k) =>
       `<label>${k} ${unidade}<input type="text" inputmode="decimal" data-grupo="${grupo}"
         data-chave="${k}" value="${dinheiro(estado.precos[grupo][k])}"></label>`).join('')}</div>`)
     .join('')}
@@ -873,7 +915,7 @@ function ligarControles() {
   $('regua').addEventListener('input', () => trocarOrcamento(daRegua(Number($('regua').value))));
   $('valor').addEventListener('change', () => trocarOrcamento(emCentavos($('valor').value)));
 
-  for (const id of ['secao-bilhetes', 'lista-cartelas']) {
+  for (const id of ['secao-bilhetes', 'lista-cartelas', 'painel-corpo']) {
     $(id).addEventListener('click', (ev) => acaoDosBilhetes(ev.target.dataset?.acao));
   }
   $('voltar').addEventListener('click', () => fecharAnalise());
@@ -1009,9 +1051,21 @@ async function acaoDosBilhetes(acao) {
   } else if (acao === 'csv') {
     volante.baixar(`${nome}.csv`, volante.comoCsv(estado.bilhetes), 'text/csv');
   } else if (acao === 'imprimir') {
+    // Quem toca aqui com 3.634 cartelas na mão estava a um toque de **243
+    // folhas** de papel, e nada na tela dizia isso: o painel abria e a caixa de
+    // impressão do sistema aparecia junto. Agora o painel diz quantas folhas
+    // são, mostra os volantes, e a impressão só começa quando ela pedir de
+    // novo. Não é uma funcionalidade escondida — é a conta na frente da conta.
+    const folhas = Math.ceil(estado.bilhetes.length / POR_FOLHA);
     $('painel-titulo').textContent = 'Volantes';
-    $('painel-corpo').innerHTML = estado.bilhetes.map((b) => volante.comoVolante(b, UNIVERSO)).join('');
+    $('painel-corpo').innerHTML = `<p class="ajuda so-na-tela">${
+      plural(estado.bilhetes.length, 'volante', 'volantes')} · cerca de ${
+      plural(folhas, 'folha', 'folhas')} de papel.</p>
+      <div class="linha so-na-tela"><button type="button" data-acao="imprimir-agora"
+        >Imprimir ${plural(folhas, 'folha', 'folhas')}</button></div>
+      ${estado.bilhetes.map((b) => volante.comoVolante(b, UNIVERSO)).join('')}`;
     $('painel').hidden = false;
+  } else if (acao === 'imprimir-agora') {
     print();
   } else if (acao === 'guardar') {
     // O que **esta pessoa** jogou: num bolão, a parte dela. Guardar o fechamento
@@ -1058,11 +1112,18 @@ async function buscarSorteio() {
     conferirContraOSorteio();
     $('buscar-sorteio').textContent = `Concurso ${concurso}`;
   } catch {
+    // O último resultado guardado passa pela mesma porta por onde passa o que a
+    // pessoa digita: `dezenasDoTexto`. Sem isso, um `ultimo-sorteio` estragado
+    // fazia o botão estourar dentro do `catch` que existia para não deixar nada
+    // estourar — e quem tocasse nele em modo avião ficava com "Buscando…" para
+    // sempre, sem erro na tela e sem jeito de continuar.
     const guardado = lembrar('ultimo-sorteio', null);
-    if (!guardado) { $('buscar-sorteio').textContent = 'Sem resultado — digite as 15 dezenas'; return; }
-    $('sorteio').value = guardado.dezenas.join(' ');
+    const dezenas = guardado && dezenasDoTexto(String(guardado.dezenas ?? ''));
+    if (!dezenas) { $('buscar-sorteio').textContent = 'Sem resultado — digite as 15 dezenas'; return; }
+    $('sorteio').value = dezenas.join(' ');
     conferirContraOSorteio();
-    $('buscar-sorteio').textContent = `Concurso ${guardado.concurso} (guardado)`;
+    $('buscar-sorteio').textContent = Number.isFinite(guardado.concurso)
+      ? `Concurso ${guardado.concurso} (guardado)` : 'Último resultado guardado';
   }
 }
 

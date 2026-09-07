@@ -144,16 +144,18 @@ Daí tudo o mais decorre:
 
 Sem WebAssembly no cliente, sem *web workers*, sem banco de sessões, sem retomada
 de trabalho interrompido. Nada disso tem razão de existir quando não há nada a
-esperar. O cliente inteiro dá **2.321 linhas** somando JavaScript, HTML e CSS —
-teto de 2.400 cobrado pela construção —, e o peso inicial (casca, índice, preços
-e distribuições) dá **40 KiB comprimidos**.
+esperar. O cliente inteiro dá **2.400 linhas** somando JavaScript, HTML e CSS —
+teto de 2.500 cobrado pela construção —, e o peso inicial (casca, índice, preços
+e distribuições) dá **41 KiB comprimidos**.
 
 O teto foi 1.500 enquanto havia uma porta de entrada só, 1.700 quando a segunda
-chegou, e 2.400 com a área de análise — e não porque o cliente passou a
-resolver mais. **Resolver** é procurar quais bilhetes usar, e isso segue inteiro
+chegou, 2.250 com a área de análise, 2.400 com a comparação contra o chute, e
+2.500 quando o que entra de fora — endereço, armazenamento do aparelho,
+resultado guardado — passou a ser conferido antes de virar tela. Nenhuma dessas
+subidas veio de o cliente passar a resolver mais. **Resolver** é procurar quais bilhetes usar, e isso segue inteiro
 no motor em Rust, fora do aparelho. **Simular** é contar acertos de bilhetes que
-já existem: um `and` e um popcount por cartela, mil sorteios contra 3.678
-bilhetes em 65 ms. São coisas de ordens diferentes, e só a primeira é a que o
+já existem: um `and` e um popcount por cartela, mil sorteios contra 3.634
+bilhetes em 66 ms. São coisas de ordens diferentes, e só a primeira é a que o
 catálogo existe para evitar.
 
 E o que esse teto de fato protege — que o cliente não resolva nada — quem cobra
@@ -544,8 +546,14 @@ organizado, e cada coisa está a um toque de onde faz sentido procurá-la.
 
 A simulação sorteia resultados e conta acertos das cartelas que **já existem**:
 um `and` e um popcount por cartela sobre a máscara do sorteio. Mil sorteios
-contra 3.678 bilhetes levam 65 ms. Procurar **quais** bilhetes usar — isso sim
-é resolver, e segue inteiro no motor em Rust, fora do aparelho.
+contra o maior fechamento do catálogo — **3.634** bilhetes — levam **66 ms**, e
+**127 ms** com o chute do lado, que é o dobro do trabalho contra os mesmos
+sorteios. Procurar **quais** bilhetes usar — isso sim é resolver, e segue
+inteiro no motor em Rust, fora do aparelho.
+
+O número velho aqui dizia 3.678 bilhetes, de uma passada do motor que já não é
+a publicada. Um número que ninguém refaz envelhece calado; este foi refeito
+chamando `simular` direto sobre `catalogo/f/25-15-13.json`.
 
 Ela pergunta de dois jeitos, e os dois são legítimos e diferentes:
 
@@ -659,6 +667,147 @@ fechamento; quem recebeu uma parte não tem o que redividir. A suíte cobra que 
 soma das partes vistas por um participante seja o fechamento inteiro, e não a
 parte dele.
 
+## O que estava guardado também vem de fora
+
+O aplicativo já tratava o endereço como texto de estranho: `lerLink` lê o que
+veio depois do `#`, confere a forma e o catálogo, e devolve `null` para tudo o
+que não for um fechamento que existe. Um link velho, ou adulterado, não
+consegue fazer a tela prometer nada.
+
+O `localStorage` não tinha esse cuidado, e é a mesma categoria de entrada. O que
+está lá foi escrito por **outra** execução do aplicativo: uma versão anterior,
+com outro formato; uma gravação interrompida no meio; outra aba mexendo ao
+mesmo tempo. Ler aquilo como se fosse estado próprio era confiar num
+desconhecido por ele já estar dentro de casa.
+
+O preço disso foi medido caso a caso, contra os bytes publicados. Quatro chaves
+estragadas não davam defeito: davam **tela em branco**.
+
+| o que estava guardado | o que acontecia |
+|---|---|
+| `dezenas` sem ser uma lista | `TypeError: object is not iterable` |
+| `carteira` com um `null` no meio | `TypeError: Cannot read properties of null` |
+| `carteira` sem ser uma lista | `TypeError: estado.carteira.map is not a function` |
+| `precos` com `"premio": null` | `TypeError: Cannot convert undefined or null to object` |
+
+Nenhuma dessas telas tinha conserto do lado de quem usa. O aplicativo abria
+vazio, não dizia nada, e o único remédio — limpar os dados do site — é coisa que
+ninguém adivinha.
+
+Outros dois casos abriam, e eram piores de outro jeito, porque pareciam
+funcionar: `["a", null, 99, -3, 1, 2]` fazia a tela contar **seis dezenas** com
+duas marcadas na grade, e pedir mais nove quando faltavam treze — um pool
+imaginário escolhendo um fechamento que não era o da pessoa. E um orçamento
+guardado como `"muito"` chegava ao campo do dinheiro como **"R$ NaN"**.
+
+A correção é uma só, e está na leitura: `lembrar` passou a receber, junto do
+padrão, o que aquela chave precisa ser. O que não passa é dispensado, e o
+aplicativo abre com o padrão — perder o que estava guardado é aceitável; não
+abrir, não é. Cada item da carteira precisa ser um objeto com custo em centavos;
+cada dezena, um inteiro de 1 a 25; cada preço editado, dinheiro. `fixo` é a
+exceção que confirma a regra: ele não ganha conferência de forma na leitura
+porque já tem uma melhor adiante — `fixoValido`, a mesma porta por onde passa o
+fechamento montado à mão, que reprova qualquer coisa que o catálogo não tenha.
+
+A mesma regra alcançou um lugar onde ela é mais irônica. *"Buscar o último
+concurso"* tem uma rede pela frente e um `catch` atrás: sem resposta, ele usa o
+resultado guardado da última vez. Só que esse resultado sai do mesmo
+armazenamento — e um estragado fazia o `catch`, que existe justamente para nada
+estourar, estourar. O botão ficava em **"Buscando…"** para sempre, sem erro na
+tela e sem caminho de volta, exatamente no momento em que a pessoa está sem
+rede. Agora o que estava guardado passa pela mesma porta por onde passa o que
+ela digita, `dezenasDoTexto`, e duas dezenas guardadas não viram mais "Concurso
+1" ao lado de um campo pela metade.
+
+Os treze casos que cobram tudo isso rodam num navegador de verdade, com a
+memória do aparelho preenchida antes de a página carregar. São dezoito
+conferências: a mesma pergunta de base em cada caso — *abre e responde?* — mais
+o que aquele caso tem de particular. Doze delas foram vistas **falhar** com o
+código antigo, cada uma com o defeito dela escrito no relatório; as outras seis
+são a pergunta de base onde ela já passava. Um teste que passa dos dois jeitos
+não prova nada, e por isso todo caso aqui tem pelo menos uma conferência que se
+viu reprovar.
+
+## Quarenta e quatro pixels
+
+O alvo de toque mínimo não é opinião: é a largura aproximada de uma ponta de
+dedo, e abaixo dela errar o botão vizinho deixa de ser descuido e passa a ser o
+normal. O aplicativo inteiro já respeitava o número — os botões, os campos, os
+`summary` que abrem as seções. A barra de abas da área de análise nasceu com
+**40**, e ela é a navegação inteira daquela área: errar o alvo ali não é um
+toque perdido, é trocar de assunto.
+
+A conferência que cobra isso não cita seletor nenhum. Ela varre todos os
+`button`, `summary`, `a[href]`, `input` e `select` visíveis da tela principal e
+de cada uma das cinco abas, e reprova qualquer um com menos de 44 px em
+qualquer direção — porque o próximo lugar a nascer pequeno não vai ser este. Ao
+descer a barra de volta para 40 px, as cinco abas aparecem no relatório com a
+medida delas ao lado.
+
+## Um valor de dinheiro cortado é um valor errado
+
+O prêmio de 15 acertos aparecia na tabela de preços como **"R$ 1.700.000,"** —
+com os centavos cortados fora, em toda largura de tela. A coluna do campo tinha
+8 rem fixos; o valor precisa de 146 px e cabiam 126. Não era o campo mais
+importante da tela, e era o único número da tabela que a pessoa não conseguia
+ler inteiro.
+
+Passou a 10,5 rem. De 360 px para cima nada mais mudou; em 320 px o rótulo ao
+lado quebra em duas linhas — *15 / acertos* —, que é o que se troca por ver o
+valor completo, e é a troca certa.
+
+A conferência que passa a cobrar isso não cita esse campo: varre todos os
+campos visíveis da tela principal e das cinco abas e reprova qualquer um cujo
+conteúdo seja mais largo do que a caixa — `scrollWidth > clientWidth`. Com a
+coluna de volta a 8 rem, ela aponta seis vezes, com a medida ao lado.
+
+## Quatro botões com o mesmo nome
+
+Olhar a tela pelo nome dos elementos, e não pelo desenho, mostra o que o desenho
+esconde. Num bolão de quatro partes, os quatro botões se chamam *"Copiar link"*.
+Na tela isso basta: a linha ao lado diz *Parte 2 — 83 bilhetes*, e o dedo sabe
+onde está. Na lista de botões de um leitor de tela são quatro vezes a mesma
+frase e nenhuma maneira de escolher — e escolher errado ali é jogar a parte de
+outra pessoa. O texto visível continua *"Copiar link"*, porque na tela ele está
+certo; o nome acessível passa a ser *"Copiar o link da parte 2"*.
+
+E os títulos pulavam de nível: `h1` no nome do aplicativo, `h3` nas tabelas de
+preço, e nada entre os dois. Quem navega por título passa do nome do aplicativo
+direto para a tabela sem saber o que pulou. Viraram `h2`, com o desenho
+inalterado — 13,6 px, peso 600, maiúsculas, a mesma cor. Era o nível que estava
+errado, não a aparência.
+
+Ao lado, o que a mesma varredura mediu e não teve o que corrigir: nenhum
+controle sem nome acessível em nenhuma das seis telas, `lang` declarado,
+imagens com `alt`, marcos (`main`, `footer`, `dialog`, `tablist`) no lugar, e o
+foco voltando para o botão *"Visualizar cartelas"* quando a área de análise
+fecha.
+
+## Duzentas e quarenta e três folhas, sem avisar
+
+*"Imprimir volantes"* montava os volantes e chamava a impressão do sistema no
+mesmo toque. Com as 55 cartelas de R$ 400 isso são quatro folhas e ninguém se
+machuca. Com as **3.634** de R$ 15.000 são **243** — quinze volantes por folha
+A4, medido no próprio desenho com a mídia de impressão emulada — e nada na tela
+tinha dito isso antes de a caixa de impressão aparecer com a resma carregada.
+
+O painel passou a dizer o tamanho: *"3.634 volantes · cerca de 243 folhas de
+papel"*, os volantes abaixo para conferir, e um botão que diz quantas folhas
+vai imprimir. A funcionalidade não saiu de lugar nenhum — ganhou a conta na
+frente da conta. A linha do aviso e o botão são da tela e não vão para o papel:
+gastar a primeira folha para dizer quantas folhas seriam é o tipo de piada que
+ninguém acha graça impressa.
+
+Foi assim que apareceu o defeito de verdade, que já estava lá: o painel de
+volantes abria **atrás** da área de análise. A área é uma camada opaca de tela
+cheia, o painel não tinha ordem de empilhamento nenhuma, e é de dentro da área
+que se pede para imprimir. Quem fechasse a caixa de impressão do sistema ficava
+com um painel aberto que não dava para ver nem fechar — o ✕ dele estava
+escondido junto. Com a impressão saindo no mesmo toque, dava para nunca
+perceber; com um segundo toque a pedir, o painel invisível vira um beco. Uma
+linha de CSS resolve, e a conferência que a cobra não olha a linha: ela pergunta
+ao navegador quem está no topo daquele ponto da tela.
+
 ## Chegar à tela em 3G
 
 O alvo da especificação é **primeira renderização útil em menos de 1 s em 3G
@@ -681,13 +830,31 @@ primeira medição feita em HTTP/1.1 mostrou ganho zero para as dicas de
 | | antes das dicas | com as dicas | hoje |
 |---|---:|---:|---:|
 | primeira pintura | 1.200 ms | 1.260 ms | 1.308 ms |
-| grade tocável | 1.880 ms | 1.360 ms | 1.432 ms |
-| resposta na tela | 2.500 ms | 1.370 ms | 1.450 ms |
+| grade tocável | 1.880 ms | 1.360 ms | 1.442 ms |
+| resposta na tela | 2.500 ms | 1.370 ms | 1.464 ms |
 | pedidos no caminho crítico | 14 | 9 | 11 |
 
-A coluna de hoje carrega a área de análise e o módulo de simulação: 40 KiB
-comprimidos contra 26, dois pedidos a mais, e oitenta milissegundos. O caminho
+A coluna de hoje carrega a área de análise e o módulo de simulação: 41 KiB
+comprimidos contra 26, dois pedidos a mais, e noventa milissegundos. O caminho
 continua sendo **uma onda só**, que é o que as dicas compraram.
+
+Esse 11 quase virou 25. O medidor contava os pedidos no servidor, e o servidor
+vê também o que vem **depois** da resposta: o service worker instalando, que
+rebaixa a casca inteira para a segunda visita funcionar sem rede. Somados,
+davam vinte e tantos pedidos — um número que sobe sem que nada tenha piorado, e
+que já estava a caminho do documento. Quem sabe o que a resposta esperou é a
+própria página, e é dela que o número passa a sair: `performance
+.getEntriesByType('resource')`. Os dois aparecem lado a lado, porque dizem
+coisas diferentes: um é o que a pessoa espera, o outro é o que a rede dela paga.
+
+E uma linha do medidor dizia o contrário do que se mede. O comentário sobre o
+`cache-control` afirmava que `no-store` fazia o service worker rebaixar tudo —
+"vinte e seis pedidos no lugar de doze". Medido dos dois jeitos, `no-store` e
+`max-age=600` dão a **mesma** contagem: a segunda onda acontece de qualquer
+forma. O cabeçalho continua sendo o do GitHub Pages, por fidelidade, e o
+comentário passou a dizer o que a medição diz. Ela custa cerca de 41 KiB depois
+que a resposta já está na tela, e não atrasa ninguém — mas é tráfego que a
+pessoa paga, e agora está escrito.
 
 A resposta chegava em duas ondas encadeadas desnecessárias. O navegador só
 descobre `catalogo.js`, `conferir.js`, `estrategia.js` e `volante.js` depois de
