@@ -713,7 +713,8 @@ function desenharBolao() {
       const link = volante.linkDaParte(base, { dezenas: estado.dezenas, v, k, t, parte: i, partes });
       return `<li><b>Parte ${i + 1}</b> — ${plural(g.length, 'bilhete', 'bilhetes')} ·
         ${dinheiro(g.length * estado.precos.aposta[k])}
-        <button type="button" class="discreto" data-link="${link}">Copiar link</button></li>`;
+        <button type="button" class="discreto" data-link="${link}"
+          aria-label="Copiar o link da parte ${i + 1}">Copiar link</button></li>`;
     })
     .join('')}</ol>${fechamentoDaConta()}`;
 }
@@ -744,7 +745,7 @@ function fechamentoDaConta() {
 function desenharPrecos() {
   const grupos = [['aposta', 'Quanto custa a aposta', 'dezenas'], ['premio', 'Quanto paga cada faixa', 'acertos']];
   $('tabela-precos').innerHTML = `${grupos.map(([grupo, titulo, unidade]) =>
-    `<div class="precos"><h3>${titulo}</h3>${Object.keys(estado.precos[grupo]).map((k) =>
+    `<div class="precos"><h2>${titulo}</h2>${Object.keys(estado.precos[grupo]).map((k) =>
       `<label>${k} ${unidade}<input type="text" inputmode="decimal" data-grupo="${grupo}"
         data-chave="${k}" value="${dinheiro(estado.precos[grupo][k])}"></label>`).join('')}</div>`)
     .join('')}

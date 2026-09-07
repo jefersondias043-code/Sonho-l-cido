@@ -144,7 +144,7 @@ Daí tudo o mais decorre:
 
 Sem WebAssembly no cliente, sem *web workers*, sem banco de sessões, sem retomada
 de trabalho interrompido. Nada disso tem razão de existir quando não há nada a
-esperar. O cliente inteiro dá **2.391 linhas** somando JavaScript, HTML e CSS —
+esperar. O cliente inteiro dá **2.395 linhas** somando JavaScript, HTML e CSS —
 teto de 2.400 cobrado pela construção —, e o peso inicial (casca, índice, preços
 e distribuições) dá **41 KiB comprimidos**.
 
@@ -735,6 +735,28 @@ de cada uma das cinco abas, e reprova qualquer um com menos de 44 px em
 qualquer direção — porque o próximo lugar a nascer pequeno não vai ser este. Ao
 descer a barra de volta para 40 px, as cinco abas aparecem no relatório com a
 medida delas ao lado.
+
+## Quatro botões com o mesmo nome
+
+Olhar a tela pelo nome dos elementos, e não pelo desenho, mostra o que o desenho
+esconde. Num bolão de quatro partes, os quatro botões se chamam *"Copiar link"*.
+Na tela isso basta: a linha ao lado diz *Parte 2 — 83 bilhetes*, e o dedo sabe
+onde está. Na lista de botões de um leitor de tela são quatro vezes a mesma
+frase e nenhuma maneira de escolher — e escolher errado ali é jogar a parte de
+outra pessoa. O texto visível continua *"Copiar link"*, porque na tela ele está
+certo; o nome acessível passa a ser *"Copiar o link da parte 2"*.
+
+E os títulos pulavam de nível: `h1` no nome do aplicativo, `h3` nas tabelas de
+preço, e nada entre os dois. Quem navega por título passa do nome do aplicativo
+direto para a tabela sem saber o que pulou. Viraram `h2`, com o desenho
+inalterado — 13,6 px, peso 600, maiúsculas, a mesma cor. Era o nível que estava
+errado, não a aparência.
+
+Ao lado, o que a mesma varredura mediu e não teve o que corrigir: nenhum
+controle sem nome acessível em nenhuma das seis telas, `lang` declarado,
+imagens com `alt`, marcos (`main`, `footer`, `dialog`, `tablist`) no lugar, e o
+foco voltando para o botão *"Visualizar cartelas"* quando a área de análise
+fecha.
 
 ## Duzentas e quarenta e três folhas, sem avisar
 

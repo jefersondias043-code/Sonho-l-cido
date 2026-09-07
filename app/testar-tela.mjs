@@ -1134,6 +1134,43 @@ conferir('com as quinze marcadas, a tela diz o que fazer em vez de dar em nada',
 
 await trancado.close();
 
+// ── o que um leitor de tela encontra ────────────────────────────────────────
+//
+// Duas coisas que só aparecem quando se olha a tela pelo nome dos elementos, e
+// não pelo desenho. Quem navega por título e quem lê a lista de botões fora do
+// contexto visual depende das duas.
+{
+  const caixa = await navegador.newContext({ viewport: { width: 390, height: 844 } });
+  const pg = await caixa.newPage();
+  await pg.goto(endereco, { waitUntil: 'networkidle' });
+  await pg.click('#escolher');
+  await esperarFechamento(pg, 20000);
+  await pg.click('#det-bolao summary');
+  await pg.fill('#partes', '4');
+  await pg.dispatchEvent('#partes', 'input');
+  await pg.click('#det-dinheiro summary');
+  await pg.waitForTimeout(400);
+
+  // Quatro botões escritos "Copiar link" copiam quatro links diferentes. Na
+  // tela, a linha ao lado diz qual é qual; na lista de botões de um leitor de
+  // tela, são quatro vezes a mesma frase e nenhuma maneira de escolher.
+  const partes = await pg.evaluate(() => [...document.querySelectorAll('#bolao button')]
+    .map((b) => b.getAttribute('aria-label') || b.textContent.trim()));
+  conferir('cada parte do bolão tem seu próprio nome',
+    partes.length === 4 && new Set(partes).size === 4, partes.join(' · '));
+
+  // Pular de `h1` para `h3` deixa um degrau vazio: quem navega por título passa
+  // do nome do aplicativo direto para a tabela de preços sem saber o que pulou.
+  const niveis = await pg.evaluate(() => [...document.querySelectorAll('h1,h2,h3,h4,h5,h6')]
+    .filter((h) => h.getBoundingClientRect().width)
+    .map((h) => `${h.tagName}:${h.textContent.trim().slice(0, 24)}`));
+  const pulos = niveis.filter((t, i) => i > 0
+    && Number(t[1]) > Number(niveis[i - 1][1]) + 1);
+  conferir('os títulos da tela não pulam de nível', pulos.length === 0,
+    `${niveis.join(' | ')} — pulou em ${pulos.join(', ')}`);
+  await caixa.close();
+}
+
 // ── a conta em papel, antes do papel ────────────────────────────────────────
 //
 // "Imprimir volantes" com 3.634 cartelas na mão punha a caixa de impressão do

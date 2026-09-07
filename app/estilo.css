@@ -36,8 +36,11 @@ h1 {
   color: var(--tinta-fraca); margin: 0.5rem 0 1rem;
 }
 
-h3 { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.06em;
-  color: var(--tinta-fraca); margin: 0 0 0.5rem; }
+/* Os títulos das tabelas de preço. São `h2` porque o único título acima deles
+   é o `h1` do aplicativo, e pular de 1 para 3 quebra a navegação por título de
+   quem usa leitor de tela — o desenho é o mesmo, o nível é que estava errado. */
+.precos h2 { font-size: 0.85rem; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.06em; color: var(--tinta-fraca); margin: 0 0 0.5rem; }
 
 label { display: block; font-size: 0.95rem; color: var(--tinta-fraca); margin-bottom: 0.35rem; }
 
