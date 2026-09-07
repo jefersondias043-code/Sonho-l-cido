@@ -144,16 +144,18 @@ Daí tudo o mais decorre:
 
 Sem WebAssembly no cliente, sem *web workers*, sem banco de sessões, sem retomada
 de trabalho interrompido. Nada disso tem razão de existir quando não há nada a
-esperar. O cliente inteiro dá **2.395 linhas** somando JavaScript, HTML e CSS —
-teto de 2.400 cobrado pela construção —, e o peso inicial (casca, índice, preços
+esperar. O cliente inteiro dá **2.396 linhas** somando JavaScript, HTML e CSS —
+teto de 2.500 cobrado pela construção —, e o peso inicial (casca, índice, preços
 e distribuições) dá **41 KiB comprimidos**.
 
 O teto foi 1.500 enquanto havia uma porta de entrada só, 1.700 quando a segunda
-chegou, e 2.400 com a área de análise — e não porque o cliente passou a
-resolver mais. **Resolver** é procurar quais bilhetes usar, e isso segue inteiro
+chegou, 2.400 com a área de análise, e 2.500 quando o que entra de fora —
+endereço, armazenamento do aparelho, resultado guardado — passou a ser conferido
+antes de virar tela. Nenhuma dessas subidas veio de o cliente passar a resolver
+mais. **Resolver** é procurar quais bilhetes usar, e isso segue inteiro
 no motor em Rust, fora do aparelho. **Simular** é contar acertos de bilhetes que
-já existem: um `and` e um popcount por cartela, mil sorteios contra 3.678
-bilhetes em 65 ms. São coisas de ordens diferentes, e só a primeira é a que o
+já existem: um `and` e um popcount por cartela, mil sorteios contra 3.634
+bilhetes em 66 ms. São coisas de ordens diferentes, e só a primeira é a que o
 catálogo existe para evitar.
 
 E o que esse teto de fato protege — que o cliente não resolva nada — quem cobra
@@ -544,8 +546,14 @@ organizado, e cada coisa está a um toque de onde faz sentido procurá-la.
 
 A simulação sorteia resultados e conta acertos das cartelas que **já existem**:
 um `and` e um popcount por cartela sobre a máscara do sorteio. Mil sorteios
-contra 3.678 bilhetes levam 65 ms. Procurar **quais** bilhetes usar — isso sim
-é resolver, e segue inteiro no motor em Rust, fora do aparelho.
+contra o maior fechamento do catálogo — **3.634** bilhetes — levam **66 ms**, e
+**127 ms** com o chute do lado, que é o dobro do trabalho contra os mesmos
+sorteios. Procurar **quais** bilhetes usar — isso sim é resolver, e segue
+inteiro no motor em Rust, fora do aparelho.
+
+O número velho aqui dizia 3.678 bilhetes, de uma passada do motor que já não é
+a publicada. Um número que ninguém refaz envelhece calado; este foi refeito
+chamando `simular` direto sobre `catalogo/f/25-15-13.json`.
 
 Ela pergunta de dois jeitos, e os dois são legítimos e diferentes:
 

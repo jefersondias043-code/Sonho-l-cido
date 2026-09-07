@@ -8,8 +8,9 @@
 //
 // A conta é sobre máscaras de bit, e não sobre listas de dezenas. Um sorteio
 // vira uma máscara sobre as posições do pool, e cada bilhete custa um `and` e um
-// popcount: mil sorteios contra 3.678 bilhetes são 3,7 milhões de operações de
-// uma instrução, em vez de 55 milhões de comparações de número.
+// popcount: mil sorteios contra os 3.634 bilhetes do maior fechamento são 3,6
+// milhões de operações de uma instrução, em vez de 54 milhões de comparações de
+// número — 66 ms, ou 127 ms com o chute do lado.
 
 /// Quantos bits ligados — quantos acertos, depois do `and`.
 export function contarBits(n) {
