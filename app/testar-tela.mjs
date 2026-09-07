@@ -1134,6 +1134,56 @@ conferir('com as quinze marcadas, a tela diz o que fazer em vez de dar em nada',
 
 await trancado.close();
 
+// ── nada de mira fina ───────────────────────────────────────────────────────
+//
+// Quarenta e quatro pixels é o alvo de toque mínimo, e não é opinião: é a
+// largura aproximada de uma ponta de dedo. Abaixo disso, errar o botão vizinho
+// deixa de ser descuido e passa a ser o normal.
+//
+// O resto do aplicativo já respeitava esse número; a barra de abas da área de
+// análise nasceu com 40, e ela é a navegação inteira daquela área — errar o
+// alvo ali troca de assunto. Esta varredura passa por toda a página, em vez de
+// citar um seletor, porque o próximo lugar a nascer pequeno não é este.
+{
+  const caixa = await navegador.newContext({ viewport: { width: 390, height: 844 } });
+  const pg = await caixa.newPage();
+  await pg.goto(endereco, { waitUntil: 'networkidle' });
+
+  const miudos = () => pg.evaluate(() => {
+    const fora = [];
+    for (const el of document.querySelectorAll('button, summary, a[href], input, select')) {
+      const r = el.getBoundingClientRect();
+      const s = getComputedStyle(el);
+      if (!r.width || !r.height || s.visibility === 'hidden') continue;
+      // O deslizador é agarrado pelo corpo inteiro, e a caixa dele não é o alvo.
+      if (el.type === 'range' || el.type === 'checkbox') continue;
+      if (r.width < 44 || r.height < 44) {
+        fora.push(`${el.tagName.toLowerCase()}#${el.id || el.className || '?'} `
+          + `"${(el.textContent || el.value || '').trim().slice(0, 18)}" `
+          + `${Math.round(r.width)}×${Math.round(r.height)}`);
+      }
+    }
+    return fora;
+  });
+
+  let apertados = await miudos();
+  conferir('nenhum alvo de toque menor que 44px na tela principal',
+    apertados.length === 0, apertados.join(' · '));
+
+  await pg.click('#escolher');
+  await esperarFechamento(pg, 20000);
+  await pg.locator('[data-acao=abrir]').click();
+  for (const aba of ['cartelas', 'conferir', 'simular', 'valores', 'resumo']) {
+    await pg.click(`#abas [data-aba=${aba}]`);
+    await pg.waitForTimeout(200);
+    const aqui = await miudos();
+    conferir(`nenhum alvo de toque menor que 44px na aba ${aba}`,
+      aqui.length === 0, aqui.join(' · '));
+    apertados = apertados.concat(aqui);
+  }
+  await caixa.close();
+}
+
 // ── com o que foi guardado estragado ────────────────────────────────────────
 //
 // O que volta do `localStorage` é de fora tanto quanto um endereço numa barra:
@@ -1213,6 +1263,41 @@ await comMemoria('um fechamento fixo que não existe mais',
   });
 await comMemoria('tudo guardado como JSON inválido',
   { dezenas: '{{{', orcamento: 'nan', carteira: '][' });
+
+// ── e o último resultado guardado, que também vem de fora ───────────────────
+//
+// "Buscar o último concurso" tem uma rede pela frente e um `catch` atrás: sem
+// resposta, ele usa o resultado da última vez. Só que esse resultado saiu do
+// mesmo armazenamento, e um estragado fazia o `catch` — que existe justamente
+// para nada estourar — estourar. O botão ficava em "Buscando…" para sempre, sem
+// erro na tela e sem caminho de volta, no exato momento em que a pessoa está
+// sem rede. Aqui não há servidor, então o caminho de rede sempre falha: é o
+// caso que interessa.
+for (const [nome, guardado, esperado] of [
+  ['sem as dezenas', '{"concurso":3000}', 'Sem resultado'],
+  ['com as dezenas sem ser lista', '{"dezenas":"x"}', 'Sem resultado'],
+  ['sem ser um objeto', '"nada"', 'Sem resultado'],
+  // Duas dezenas não são um sorteio, e dizer "Concurso 1" ao lado de um campo
+  // pela metade é pior do que dizer que não há resultado.
+  ['com um sorteio pela metade', '{"dezenas":[1,2],"concurso":1}', 'Sem resultado'],
+]) {
+  const caixa = await navegador.newContext({ viewport: { width: 360, height: 740 } });
+  await caixa.addInitScript((v) => localStorage.setItem('ultimo-sorteio', v), guardado);
+  const pg = await caixa.newPage();
+  const ruins = [];
+  pg.on('pageerror', (e) => ruins.push(String(e)));
+  await pg.goto(endereco, { waitUntil: 'networkidle' });
+  await pg.click('#escolher');
+  await esperarFechamento(pg, 20000);
+  await abrir(pg, 'conferir');
+  await pg.click('#buscar-sorteio');
+  await pg.waitForTimeout(5000);
+  const rotulo = (await pg.locator('#buscar-sorteio').innerText()).trim();
+  conferir(`com o resultado guardado ${nome}, o botão diz o que houve`,
+    ruins.length === 0 && rotulo.startsWith(esperado),
+    `${ruins.join(' | ')} · o botão diz "${rotulo}"`);
+  await caixa.close();
+}
 
 await navegador.close();
 servidor.close();

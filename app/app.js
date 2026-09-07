@@ -1095,11 +1095,18 @@ async function buscarSorteio() {
     conferirContraOSorteio();
     $('buscar-sorteio').textContent = `Concurso ${concurso}`;
   } catch {
+    // O último resultado guardado passa pela mesma porta por onde passa o que a
+    // pessoa digita: `dezenasDoTexto`. Sem isso, um `ultimo-sorteio` estragado
+    // fazia o botão estourar dentro do `catch` que existia para não deixar nada
+    // estourar — e quem tocasse nele em modo avião ficava com "Buscando…" para
+    // sempre, sem erro na tela e sem jeito de continuar.
     const guardado = lembrar('ultimo-sorteio', null);
-    if (!guardado) { $('buscar-sorteio').textContent = 'Sem resultado — digite as 15 dezenas'; return; }
-    $('sorteio').value = guardado.dezenas.join(' ');
+    const dezenas = guardado && dezenasDoTexto(String(guardado.dezenas ?? ''));
+    if (!dezenas) { $('buscar-sorteio').textContent = 'Sem resultado — digite as 15 dezenas'; return; }
+    $('sorteio').value = dezenas.join(' ');
     conferirContraOSorteio();
-    $('buscar-sorteio').textContent = `Concurso ${guardado.concurso} (guardado)`;
+    $('buscar-sorteio').textContent = Number.isFinite(guardado.concurso)
+      ? `Concurso ${guardado.concurso} (guardado)` : 'Último resultado guardado';
   }
 }
 

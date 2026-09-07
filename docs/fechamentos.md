@@ -144,7 +144,7 @@ Daí tudo o mais decorre:
 
 Sem WebAssembly no cliente, sem *web workers*, sem banco de sessões, sem retomada
 de trabalho interrompido. Nada disso tem razão de existir quando não há nada a
-esperar. O cliente inteiro dá **2.358 linhas** somando JavaScript, HTML e CSS —
+esperar. O cliente inteiro dá **2.367 linhas** somando JavaScript, HTML e CSS —
 teto de 2.400 cobrado pela construção —, e o peso inicial (casca, índice, preços
 e distribuições) dá **40 KiB comprimidos**.
 
@@ -701,14 +701,40 @@ exceção que confirma a regra: ele não ganha conferência de forma na leitura
 porque já tem uma melhor adiante — `fixoValido`, a mesma porta por onde passa o
 fechamento montado à mão, que reprova qualquer coisa que o catálogo não tenha.
 
-Os nove casos que cobram isso rodam num navegador de verdade, com a memória do
-aparelho preenchida antes de a página carregar. São catorze conferências: a
-mesma pergunta de base em todos os casos — *abre e responde?* — mais o que
-aquele caso tem de particular. Oito delas foram vistas **falhar** com a leitura
-antiga, cada uma com o defeito dela escrito no relatório; as outras seis são a
-pergunta de base onde ela já passava. Um teste que passa dos dois jeitos não
-prova nada, e por isso todo caso aqui tem pelo menos uma conferência que se viu
-reprovar.
+A mesma regra alcançou um lugar onde ela é mais irônica. *"Buscar o último
+concurso"* tem uma rede pela frente e um `catch` atrás: sem resposta, ele usa o
+resultado guardado da última vez. Só que esse resultado sai do mesmo
+armazenamento — e um estragado fazia o `catch`, que existe justamente para nada
+estourar, estourar. O botão ficava em **"Buscando…"** para sempre, sem erro na
+tela e sem caminho de volta, exatamente no momento em que a pessoa está sem
+rede. Agora o que estava guardado passa pela mesma porta por onde passa o que
+ela digita, `dezenasDoTexto`, e duas dezenas guardadas não viram mais "Concurso
+1" ao lado de um campo pela metade.
+
+Os treze casos que cobram tudo isso rodam num navegador de verdade, com a
+memória do aparelho preenchida antes de a página carregar. São dezoito
+conferências: a mesma pergunta de base em cada caso — *abre e responde?* — mais
+o que aquele caso tem de particular. Doze delas foram vistas **falhar** com o
+código antigo, cada uma com o defeito dela escrito no relatório; as outras seis
+são a pergunta de base onde ela já passava. Um teste que passa dos dois jeitos
+não prova nada, e por isso todo caso aqui tem pelo menos uma conferência que se
+viu reprovar.
+
+## Quarenta e quatro pixels
+
+O alvo de toque mínimo não é opinião: é a largura aproximada de uma ponta de
+dedo, e abaixo dela errar o botão vizinho deixa de ser descuido e passa a ser o
+normal. O aplicativo inteiro já respeitava o número — os botões, os campos, os
+`summary` que abrem as seções. A barra de abas da área de análise nasceu com
+**40**, e ela é a navegação inteira daquela área: errar o alvo ali não é um
+toque perdido, é trocar de assunto.
+
+A conferência que cobra isso não cita seletor nenhum. Ela varre todos os
+`button`, `summary`, `a[href]`, `input` e `select` visíveis da tela principal e
+de cada uma das cinco abas, e reprova qualquer um com menos de 44 px em
+qualquer direção — porque o próximo lugar a nascer pequeno não vai ser este. Ao
+descer a barra de volta para 40 px, as cinco abas aparecem no relatório com a
+medida delas ao lado.
 
 ## Chegar à tela em 3G
 

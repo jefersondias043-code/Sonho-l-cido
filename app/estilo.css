@@ -203,8 +203,10 @@ footer {
 
 .abas::-webkit-scrollbar { display: none; }
 
+/* 44px, e não 40: é o alvo de toque mínimo, e a barra de abas é a navegação
+   inteira desta área — errar o alvo aqui troca de assunto. */
 .abas button {
-  flex: 0 0 auto; min-height: 40px; padding: 0 0.85rem; border-radius: 999px; font: inherit;
+  flex: 0 0 auto; min-height: 44px; padding: 0 0.85rem; border-radius: 999px; font: inherit;
   font-size: 0.9rem; border: 1px solid var(--linha); background: var(--papel);
   color: var(--tinta-fraca); cursor: pointer;
 }
