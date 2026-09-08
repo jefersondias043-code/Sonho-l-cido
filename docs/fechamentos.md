@@ -105,7 +105,7 @@ validado e descartado em silêncio.
 
 Agora ele responde à pergunta que foi feita:
 
-> *Garantir 14 acertos com 20 dezenas custa R$ 1.582,00 — faltam R$ 1.282,00.*
+> *Garantir 14 acertos com 20 dezenas custa R$ 1.540,00 — faltam R$ 1.240,00.*
 
 É a outra metade do produto. O aplicativo já dizia o que o dinheiro compra;
 passou a dizer também quanto custa o que a pessoa quer.
@@ -480,7 +480,8 @@ queixa: a pessoa dizia uma coisa e a tela mostrava outra.
 **A garantia era "no mínimo".** O filtro era `e.t >= t`, e a lista guardava a
 escolha anterior sempre que ela continuasse passando. Com `15-14` escolhido,
 baixar a garantia de 14 para 11 não mudava nada — 14 é no mínimo 11 —, e a
-resposta seguia sendo **452 cartelas por R$ 1.582,00** onde o pedido novo custava
+resposta seguia sendo **452 cartelas por R$ 1.582,00** — o preço daquele
+fechamento antes de o motor o encolher para 440 — onde o pedido novo custava
 **R$ 14,00**. Mudar o pedido não mudava a resposta; era o mesmo defeito visto
 pelos dois lados da queixa.
 
@@ -620,7 +621,7 @@ encontram. Na tela isso vira dois selos que não se parecem:
 - **menor conhecido** — este é o menor que se achou, e ao lado aparece o piso:
   *"nenhum fechamento faz isso com menos de 46"*.
 
-Hoje o catálogo tem **206 das 330 no mínimo provado** e 312 com bilhetes
+Hoje o catálogo tem **207 das 330 no mínimo provado** e 312 com bilhetes
 publicados. E vale dizer em que cada prova se apoia, porque não são todas iguais:
 
 <!-- a tabela das provas: gerada por ferramentas/numeros-do-catalogo.py -->
@@ -628,12 +629,12 @@ publicados. E vale dizer em que cada prova se apoia, porque não são todas igua
 |---|---:|---|
 | aritmética fechada — um bilhete de `k` num pool de `v` cruza `k + 15 − v` com qualquer sorteio, e quando isso já alcança `t` o mínimo é 1 | 145 | `conferir-tudo` refaz o argumento |
 | fórmula — `k = 15` com `t = 15` exige que o bilhete **seja** o sorteio, logo todos os `C(v,15)` | 10 | `conferir-tudo` refaz o argumento |
-| cota de Turán no avesso | 34 | a cota vem de `motor-core`, validada lá contra números publicados |
+| cota de Turán no avesso | 35 | a cota vem de `motor-core`, validada lá contra números publicados |
 | cota de Schönheim | 17 | a cota vem de `motor-core`, validada lá contra números publicados |
 <!-- fim de a tabela das provas -->
 
 Nos 155 primeiros o conferidor independente não acredita em ninguém: recalcula. Nos
-51 restantes a prova se apoia numa cota que o `motor-core` implementa e testa
+52 restantes a prova se apoia numa cota que o `motor-core` implementa e testa
 contra a literatura — e o conferidor só cobra que a cota anunciada não seja menor
 que a cota de contagem que ele mesmo recalcula. É menos do que uma prova
 independente, e é isto que se pode afirmar sem exagero.
@@ -918,6 +919,80 @@ Onde a simetria não cabe: a tabela de ligações cresce com `C(v,a)/v` vezes
 quantos alvos cada conjunto alcança, e nas garantias parciais de pool grande isso
 passa de bilhões. Dos 112 casos acima do piso, **75 cabem** no teto de 150
 milhões de ligações; `25/18/13` pediria 2,5 bilhões e fica de fora.
+
+### A colheita
+
+As duas capacidades foram postas a trabalhar sobre os 75 casos em que a
+instância cíclica cabe em 150 milhões de ligações, 450 segundos cada, em três
+turnos paralelos. Somando com as nove que a construção fechada entrega sem
+busca, **46 dos 312 fechamentos publicados encolheram** — e o índice ganhou uma
+entrada no mínimo provado, de 206 para 207.
+
+Nos casos buscados a taxa foi de **55%**: 41 dos 75 melhoraram. Não é uma
+rodada igual às anteriores, que colhiam uma ou duas.
+
+| caso | antes | depois | piso | fora da conta |
+|---|---:|---:|---:|---:|
+| 25/19/12 | 9 | **4** | 3 | R$ 67.830,00 |
+| 24/18/12 | 8 | **4** | 3 | R$ 11.424,00 |
+| 24/20/14 | 46 | **24** | 14 | R$ 1.193.808,00 |
+| 25/17/11 | 11 | **7** | 3 | R$ 1.904,00 |
+| 22/16/12 | 16 | **11** | 4 | R$ 280,00 |
+| 24/16/14 | 6.719 | **4.766** | 1.496 | R$ 109.368,00 |
+| 24/17/14 | 1.592 | **1.152** | 300 | R$ 209.440,00 |
+| 25/22/14 | 11 | **8** | 8 | — |
+| 21/17/15 | 1.094 | **819** | 554 | R$ 130.900,00 |
+| 23/16/14 | 2.600 | **1.976** | 573 | R$ 34.944,00 |
+| 24/19/13 | 21 | **16** | 6 | R$ 67.830,00 |
+| 20/16/14 | 90 | **69** | 40 | R$ 1.176,00 |
+| 24/18/14 | 413 | **320** | 72 | R$ 265.608,00 |
+| 23/17/14 | 621 | **483** | 140 | R$ 65.688,00 |
+| 22/17/14 | 222 | **176** | 53 | R$ 21.896,00 |
+| 22/16/14 | 932 | **742** | 257 | R$ 10.640,00 |
+| 25/21/14 | 40 | **32** | 13 | — |
+| 24/19/14 | 136 | **109** | 30 | R$ 366.282,00 |
+| 23/18/14 | 171 | **138** | 44 | R$ 94.248,00 |
+| 22/17/13 | 27 | **22** | 8 | R$ 2.380,00 |
+| 22/16/13 | 79 | **66** | 19 | R$ 728,00 |
+| 25/20/13 | 19 | **16** | 5 | R$ 162.792,00 |
+| 25/18/12 | 22 | **19** | 4 | R$ 8.568,00 |
+| 22/18/14 | 61 | **53** | 20 | R$ 22.848,00 |
+| 21/16/13 | 33 | **29** | 12 | R$ 224,00 |
+| 21/17/14 | 71 | **63** | 30 | R$ 3.808,00 |
+| 23/16/13 | 180 | **161** | 40 | R$ 1.064,00 |
+| 23/17/12 | 11 | **10** | 4 | R$ 476,00 |
+| 23/20/14 | 11 | **10** | 9 | R$ 54.264,00 |
+| 22/15/13 | 290 | **264** | 74 | R$ 91,00 |
+| 23/17/13 | 67 | **61** | 15 | R$ 2.856,00 |
+| 22/19/14 | 13 | **12** | 10 | R$ 13.566,00 |
+| 21/16/14 | 272 | **252** | 111 | R$ 1.120,00 |
+| 23/15/13 | 694 | **644** | 161 | R$ 175,00 |
+| 20/15/13 | 42 | **39** | 16 | R$ 10,50 |
+| 22/15/14 | 4.184 | **3.900** | 1.609 | R$ 994,00 |
+| 23/19/14 | 49 | **46** | 18 | R$ 40.698,00 |
+| 21/15/13 | 111 | **105** | 37 | R$ 21,00 |
+| 23/18/13 | 24 | **23** | 8 | R$ 2.856,00 |
+| 21/15/14 | 1.431 | **1.372** | 679 | R$ 206,50 |
+| 20/15/14 | 452 | **440** | 208 | R$ 42,00 |
+| 24/20/15 | 334 | **327** | 150 | R$ 379.848,00 |
+| 20/16/15 | 1.367 | **1.340** | 1.037 | R$ 1.512,00 |
+| 19/15/14 | 127 | **125** | 81 | R$ 7,00 |
+| 23/18/15 | 2.138 | **2.132** | 835 | R$ 17.136,00 |
+| 25/19/15 | 3.856 | **3.855** | 1.261 | R$ 13.566,00 |
+
+Somando os 44 que a tela oferece — dois têm cartela acima de 20 dezenas, que
+lotérica nenhuma aceita —, são **R$ 3.385.123,00** que deixam de ser cobrados de
+quem compra. A maior parte está em cartelas grandes, que quase ninguém joga; nas
+cartelas de 15 dezenas, que são as que as pessoas compram de fato, a economia é
+de R$ 1.547,00 espalhados por onze fechamentos.
+
+E o mais visível de todos, porque aparece no rodapé de quem pede uma garantia
+que ainda não cabe no bolso: *"garantir 14 acertos com 20 dezenas"* passou de
+R$ 1.582,00 para **R$ 1.540,00**.
+
+Tudo isso passou pelo , que não compartilha uma linha com o
+gerador nem com a busca: 330 entradas, 249.307.987 sorteios varridos, e cada
+sorteio possível encontrando alguma cartela com a garantia prometida.
 
 ### E o piso continua sendo fraco
 
