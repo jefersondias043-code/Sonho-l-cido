@@ -197,7 +197,7 @@ Daí tudo o mais decorre:
 
 Sem WebAssembly no cliente, sem *web workers*, sem banco de sessões, sem retomada
 de trabalho interrompido. Nada disso tem razão de existir quando não há nada a
-esperar. O cliente inteiro dá **2.475 linhas** somando JavaScript, HTML e CSS —
+esperar. O cliente inteiro dá **2.481 linhas** somando JavaScript, HTML e CSS —
 teto de 2.500 cobrado pela construção —, e o peso inicial (casca, índice, preços
 e distribuições) dá **43 KiB comprimidos**.
 
@@ -205,10 +205,10 @@ O teto foi 1.500 enquanto havia uma porta de entrada só, 1.700 quando a segunda
 chegou, 2.250 com a área de análise, 2.400 com a comparação contra o chute, e
 2.500 quando o que entra de fora — endereço, armazenamento do aparelho,
 resultado guardado — passou a ser conferido antes de virar tela. Nenhuma dessas
-subidas veio de o cliente passar a resolver mais. **Resolver** é procurar quais bilhetes usar, e isso segue inteiro
-no motor em Rust, fora do aparelho. **Simular** é contar acertos de bilhetes que
-já existem: um `and` e um popcount por cartela, mil sorteios contra 3.634
-bilhetes em 66 ms. São coisas de ordens diferentes, e só a primeira é a que o
+subidas veio de o cliente passar a resolver mais. **Resolver** é procurar quais
+cartelas usar, e isso segue inteiro no motor em Rust, fora do aparelho.
+**Simular** é contar acertos de cartelas que já existem: um `and` e um popcount
+por cartela, mil sorteios contra 3.634 cartelas em 85 ms. São coisas de ordens diferentes, e só a primeira é a que o
 catálogo existe para evitar.
 
 E o que esse teto de fato protege — que o cliente não resolva nada — quem cobra
@@ -599,10 +599,12 @@ organizado, e cada coisa está a um toque de onde faz sentido procurá-la.
 
 A simulação sorteia resultados e conta acertos das cartelas que **já existem**:
 um `and` e um popcount por cartela sobre a máscara do sorteio. Mil sorteios
-contra o maior fechamento do catálogo — **3.634** bilhetes — levam **66 ms**, e
-**127 ms** com o chute do lado, que é o dobro do trabalho contra os mesmos
-sorteios. Procurar **quais** bilhetes usar — isso sim é resolver, e segue
-inteiro no motor em Rust, fora do aparelho.
+contra o maior fechamento do catálogo — **3.634** cartelas — levam **85 ms**, e
+**158 ms** com o chute do lado, que é o dobro do trabalho contra os mesmos
+sorteios. Eram 66 e 127 antes de o prêmio passar a decompor cada cartela nas
+apostas simples que ela é: trinta milissegundos por mil sorteios é o preço de
+mostrar o dinheiro certo. Procurar **quais** cartelas usar — isso sim é
+resolver, e segue inteiro no motor em Rust, fora do aparelho.
 
 O número velho aqui dizia 3.678 bilhetes, de uma passada do motor que já não é
 a publicada. Um número que ninguém refaz envelhece calado; este foi refeito

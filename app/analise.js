@@ -8,9 +8,15 @@
 //
 // A conta é sobre máscaras de bit, e não sobre listas de dezenas. Um sorteio
 // vira uma máscara sobre as posições do pool, e cada bilhete custa um `and` e um
-// popcount: mil sorteios contra os 3.634 bilhetes do maior fechamento são 3,6
+// popcount: mil sorteios contra as 3.634 cartelas do maior fechamento são 3,6
 // milhões de operações de uma instrução, em vez de 54 milhões de comparações de
-// número — 66 ms, ou 127 ms com o chute do lado.
+// número — 85 ms, ou 158 ms com o chute do lado.
+
+// Uma palavra para cada coisa, aqui e na tela: **cartela** é o papel com `k`
+// dezenas — é o que este módulo chama de bilhete no nome das variáveis, por
+// história —, **aposta** é uma das `C(k,15)` apostas simples de 15 dezenas que
+// cabem dentro de uma cartela, e **fechamento** é o conjunto delas. A distinção
+// só aparece em `premioDoBilhete`, e é lá que ela paga.
 
 /// Quantos bits ligados — quantos acertos, depois do `and`.
 export function contarBits(n) {
