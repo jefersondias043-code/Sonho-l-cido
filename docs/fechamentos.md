@@ -141,7 +141,35 @@ catálogo novo. Um fechamento menor que não cobre tudo não é recorde, é defe
 Vale registrar o que a mesma quantidade de motor **não** achou. Os quatro casos
 cujo piso cabe abaixo do teto de publicação — 25-16-14, 23-17-15, 23-15-14 e
 25-18-15 — receberam vinte e cinco minutos cada e nenhum desceu das oito mil
-cartelas. O teto não é o que os impede: o motor não chega lá.
+cartelas.
+
+E aqui o gerador estava escondendo o número que decide se vale insistir. A linha
+dizia só *"acima do teto"*, sem dizer **quanto** acima: faltou pouco ou muito?
+Agora ela mostra o que o motor alcançou, entre parênteses, e a resposta muda o
+plano:
+
+| caso | piso | onde o motor chega | teto |
+|---|---:|---:|---:|
+| 23-17-15 | 3.996 | **10.051** | 8.000 |
+| 25-18-15 | 5.121 | **14.875** | 8.000 |
+| 25-16-14 | 3.014 | **15.495** | 8.000 |
+
+O de 23 dezenas está a 26% do teto — perto o bastante para valer horas. Os
+outros dois, não. Sem o número, os três pareciam iguais.
+
+### O teto conta cartelas, e não dinheiro
+
+Perseguir 23-17-15 tem um porém que a mesma medição revela. O teto de 8.000
+nasceu como fronteira econômica: oito mil cartelas de 15 dezenas custam mais de
+vinte mil reais. Mas ele conta **cartelas**, e oito mil cartelas de 17 dezenas
+custam **R$ 3,8 milhões**; de 20 dezenas, R$ 434 milhões. No catálogo publicado
+há vinte fechamentos acima de R$ 1 milhão, e o mais caro custa
+**R$ 59.907.456,00** — todos dentro do teto.
+
+Fica assim de propósito: o modo manual mostra o preço ao lado, e ver "R$ 59
+milhões" ensina por que ninguém fecha com cartela de 20. Trocar o teto por um em
+reais é decisão de produto, não conserto. O que não podia continuar é o
+comentário da constante dizendo o que ela não faz — e esse foi reescrito.
 
 ## Quanto isso devolve, em média
 

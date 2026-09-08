@@ -61,11 +61,21 @@ const GARANTIA_MIN: usize = 11;
 
 /// Acima disto o fechamento não vai para o catálogo.
 ///
-/// Não é economia de disco: é a fronteira do que alguém compra. Oito mil
-/// bilhetes de 15 dezenas custam mais de vinte mil reais, e o catálogo existe
-/// para responder "como gasto melhor este dinheiro", não para arquivar
-/// curiosidades. Acima do teto a entrada guarda só o piso provado, e o
-/// aplicativo diz que ali não há fechamento catalogado.
+/// Nasceu como fronteira econômica — oito mil cartelas de 15 dezenas custam
+/// mais de vinte mil reais, e o catálogo existe para responder "como gasto
+/// melhor este dinheiro", não para arquivar curiosidades. Acima do teto a
+/// entrada guarda só o piso provado, e o aplicativo diz que ali não há
+/// fechamento catalogado.
+///
+/// **Mas ele conta cartelas, e não dinheiro, e por isso não é a fronteira que
+/// o parágrafo acima descreve.** Oito mil cartelas de 15 dezenas são
+/// R$ 28.000; oito mil de 17 são R$ 3,8 milhões; oito mil de 20 são
+/// R$ 434 milhões. Medido no catálogo publicado, vinte fechamentos passam de
+/// R$ 1 milhão e o mais caro custa R$ 59.907.456,00 — todos abaixo do teto.
+/// Fica assim de propósito: o modo manual mostra o preço junto, e ver "R$ 59
+/// milhões" ensina por que ninguém fecha com cartela de 20. Trocar o teto por
+/// um em reais é decisão de produto, não conserto; o que não pode é o
+/// comentário dizer o que a constante não faz.
 ///
 /// O teto vale para o resultado **final**, depois de o motor ter feito o que
 /// podia — vários casos nascem com dezenas de milhares e terminam com poucas
@@ -127,7 +137,10 @@ fn main() {
                 println!(
                     "{v:>4} {k:>4} {t:>4} {:>9} {:>9} {:>12} {:>10}",
                     entrada.piso,
-                    entrada.jogos.map_or("—".to_string(), |n| n.to_string()),
+                    entrada.jogos.map_or_else(
+                        || entrada.alcancado.map_or("—".to_string(), |n| format!("({n})")),
+                        |n| n.to_string(),
+                    ),
                     entrada.origem,
                     if entrada.bilhetes.is_empty() { "não publica" } else { "sim" },
                 );
@@ -167,6 +180,14 @@ struct Entrada {
     /// Vazio quando a entrada não publica bilhetes.
     bilhetes: Vec<Cartela>,
     origem: &'static str,
+    /// Quantos bilhetes o motor alcançou quando o resultado ficou **acima** do
+    /// teto e por isso não vira catálogo.
+    ///
+    /// Sem isto a linha diz só "acima do teto", e quem mantém o projeto não
+    /// sabe se faltou pouco ou muito — se dar mais máquina àquele caso tem
+    /// chance de trazê-lo para dentro, ou se é tempo jogado fora. O número não
+    /// vai para o índice: é para quem lê a saída decidir onde gastar horas.
+    alcancado: Option<usize>,
 }
 
 /// Resolve um caso `(v, k, t)`.
@@ -198,6 +219,7 @@ fn resolver(
             provado: true,
             bilhetes: vec![Cartela::dos_indices(&(0..k).collect::<Vec<_>>())],
             origem: "aritmética",
+            alcancado: None,
         };
     }
 
@@ -235,6 +257,7 @@ fn resolver(
             provado: total as u64 == piso,
             bilhetes,
             origem: "fórmula",
+            alcancado: None,
         };
     }
 
@@ -251,6 +274,7 @@ fn resolver(
             provado: false,
             bilhetes: Vec::new(),
             origem: "acima do teto",
+            alcancado: None,
         };
     }
 
@@ -299,6 +323,7 @@ fn resolver(
             provado: false,
             bilhetes: Vec::new(),
             origem: if melhor.is_empty() { "sem partida" } else { "acima do teto" },
+            alcancado: (!melhor.is_empty()).then(|| melhor.len()),
         };
     }
 
@@ -327,6 +352,7 @@ fn resolver(
         provado: jogos as u64 == piso,
         bilhetes: melhor,
         origem,
+        alcancado: None,
     }
 }
 
