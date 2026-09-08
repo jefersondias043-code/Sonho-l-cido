@@ -19,6 +19,43 @@ export function contarBits(n) {
   return c;
 }
 
+/// `C(n, k)`. Multiplicação e divisão alternadas para o valor intermediário não
+/// estourar: os que interessam aqui vão até `C(25,15)`, que cabe folgado.
+export function binomial(n, k) {
+  if (k < 0 || k > n) return 0;
+  let r = 1;
+  for (let i = 0; i < Math.min(k, n - k); i++) r = (r * (n - i)) / (i + 1);
+  return Math.round(r);
+}
+
+/// Quantas apostas simples de 15 dezenas, dentro de um bilhete de `k`, fazem
+/// exatamente `i` acertos quando o bilhete cruza `j` dezenas com o sorteio.
+///
+/// Um bilhete de mais de 15 dezenas **é** o conjunto de todas as `C(k,15)`
+/// apostas simples que cabem dentro dele. É assim que a lotérica cobra — um
+/// bilhete de 16 custa R$ 56,00, que são 16 × R$ 3,50 — e, porque é assim que
+/// cobra, é assim que paga: um bilhete de 16 com 14 acertos não paga uma
+/// catorze, paga **duas catorzes e catorze trezes**.
+///
+/// Escolher `i` das `j` certas e as `15 − i` restantes das `k − j` erradas.
+export function apostasComAcertos(k, j, i, sorteio = 15) {
+  return binomial(j, i) * binomial(k - j, sorteio - i);
+}
+
+/// O que um bilhete de `k` dezenas com `j` acertos paga, pela tabela dada.
+///
+/// Para `k = 15` isto é exatamente `premios[j]` — a soma tem um termo só, e o
+/// caso comum não muda. Para `k > 15` é a diferença entre o que o aplicativo
+/// dizia e o que a lotérica deposita.
+export function premioDoBilhete(k, j, premios, sorteio = 15) {
+  let total = 0;
+  for (const faixa of Object.keys(premios)) {
+    const i = Number(faixa);
+    total += apostasComAcertos(k, j, i, sorteio) * premios[faixa];
+  }
+  return total;
+}
+
 /// Um sorteio ao acaso: `quantas` dezenas distintas tiradas de `de`.
 ///
 /// Nenhuma dezena é mais provável que outra, e a simulação não pode fingir que
@@ -59,10 +96,10 @@ export function umSorteio(mascaras, sorteio) {
   return { faixas, melhor };
 }
 
-/// Quanto uma rodada de faixas paga.
-export function premioDe(faixas, premios) {
+/// Quanto uma rodada de faixas paga, para bilhetes de `k` dezenas.
+export function premioDe(faixas, premios, k = 15) {
   let total = 0;
-  for (const [acertos, quantas] of faixas) total += quantas * (premios[acertos] ?? 0);
+  for (const [acertos, quantas] of faixas) total += quantas * premioDoBilhete(k, acertos, premios);
   return total;
 }
 
@@ -85,14 +122,14 @@ const novoPlacar = () => ({ faixas: new Map(), sorteiosComFaixa: new Map(),
   distribuicao: new Map(), melhor: 0, melhorSorteio: null, premio: 0, premiadas: 0,
   alcancaram: 0 });
 
-function anotar(placar, mascaras, sorteio, sorteadas, premios, garantia) {
+function anotar(placar, mascaras, sorteio, sorteadas, premios, garantia, k) {
   const r = umSorteio(mascaras, sorteio);
   for (const [acertos, quantas] of r.faixas) {
     placar.faixas.set(acertos, (placar.faixas.get(acertos) ?? 0) + quantas);
     placar.sorteiosComFaixa.set(acertos, (placar.sorteiosComFaixa.get(acertos) ?? 0) + 1);
     placar.premiadas += quantas;
   }
-  placar.premio += premioDe(r.faixas, premios);
+  placar.premio += premioDe(r.faixas, premios, k);
   placar.distribuicao.set(r.melhor, (placar.distribuicao.get(r.melhor) ?? 0) + 1);
   if (garantia && r.melhor >= garantia) placar.alcancaram++;
   if (r.melhor > placar.melhor) [placar.melhor, placar.melhorSorteio] = [r.melhor, sorteadas];
@@ -110,7 +147,7 @@ function anotar(placar, mascaras, sorteio, sorteadas, premios, garantia) {
 ///     garantia vale, e servem para ver a promessa se cumprir.
 export function simular({ mascaras, dezenas, universo = 25, sorteio = 15, quantos,
   dentroDoPool = false, premios = {}, custo = 0, garantia = 0, contra = null,
-  aleatorio = Math.random }) {
+  k = sorteio, aleatorio = Math.random }) {
   const ordenadas = [...dezenas].sort((a, b) => a - b);
   const urna = dentroDoPool
     ? ordenadas
@@ -128,12 +165,12 @@ export function simular({ mascaras, dezenas, universo = 25, sorteio = 15, quanto
     const sorteadas = sortearResultado(urna, sorteio, aleatorio);
     const m = mascaraDoSorteio(sorteadas, ordenadas);
     if (contarBits(m) === sorteio) caiuNoPool++;
-    anotar(meu, mascaras, m, sorteadas, premios, garantia);
-    if (rival) anotar(rival, contra, m, sorteadas, premios, garantia);
+    anotar(meu, mascaras, m, sorteadas, premios, garantia, k);
+    if (rival) anotar(rival, contra, m, sorteadas, premios, garantia, k);
   }
 
   const gasto = custo * quantos;
   const fechar = (p) => ({ ...p, gasto, saldo: p.premio - gasto });
-  return { ...fechar(meu), quantos, caiuNoPool, dentroDoPool, garantia,
+  return { ...fechar(meu), quantos, caiuNoPool, dentroDoPool, garantia, k,
     rival: rival && fechar(rival) };
 }

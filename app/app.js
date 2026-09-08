@@ -13,6 +13,9 @@ import { escada, fechamentosDe, melhorEstrategia, melhorPool } from './estrategi
 
 const $ = (id) => document.getElementById(id);
 const UNIVERSO = 25;
+// Quantas a Lotofácil sorteia — e, por isso, o tamanho da aposta simples em que
+// todo bilhete maior se decompõe.
+const SORTEIO = 15;
 // Quantos volantes cabem numa folha A4, para dizer o preço em papel antes de
 // imprimir. Medido no próprio desenho, com a mídia de impressão emulada e a
 // folha a 96 dpi com 1 cm de margem (718×1047 px): três por linha, cinco linhas.
@@ -282,7 +285,7 @@ function desenharResposta(plano) {
     <p class="frase">Se as 15 dezenas sorteadas saírem todas entre as suas ${e.v},
       ao menos um destes bilhetes terá <b>${e.t} acertos ou mais</b>. Não é probabilidade:
       é certeza, conferida sorteio por sorteio.</p>
-    <p class="ressalva">${chanceDeCairDentro(e.v)} ${quantoPagaAGarantia(e.t)}</p>`;
+    <p class="ressalva">${chanceDeCairDentro(e.v)} ${quantoPagaAGarantia(e.t, e.k)}</p>`;
 }
 
 /// Pede ao servidor uma frase sobre os números que já estão na tela — a troca
@@ -319,9 +322,14 @@ async function pedirAFrase(onde, dados) {
 
 /// Quanto a garantia vale em dinheiro. Sem este número "garantido" se lê como
 /// lucro garantido, e nas faixas fixas o prêmio fica abaixo do que se gastou.
-function quantoPagaAGarantia(t) {
+///
+/// O tamanho do bilhete entra na conta: uma cartela de 16 dezenas com 11
+/// acertos não paga uma onze, paga cinco — são cinco das dezesseis apostas
+/// dentro dela que ficam com as onze certas.
+function quantoPagaAGarantia(t, k) {
   if (t > 13) return `O prêmio de ${t} acertos é rateado e muda a cada concurso.`;
-  return `Esses ${t} acertos pagam ${dinheiro(estado.precos.premio[t])} por cartela premiada —
+  const porCartela = analise.premioDoBilhete(k, t, { [t]: estado.precos.premio[t] });
+  return `Esses ${t} acertos pagam ${dinheiro(porCartela)} por cartela premiada —
     o fechamento compra certeza, não lucro.`;
 }
 
@@ -557,11 +565,18 @@ function desenharAcaso() {
   const noChute = 1 - (1 - p) ** e.jogos;
   // E quanto isso devolve por concurso, em média. Só as faixas de prêmio fixo:
   // 14 e 15 são rateadas, e somá-las trocaria um número exato por um palpite.
-  // Hipergeométrico, não simulado, e igual para qualquer arranjo dos mesmos
-  // bilhetes — que é justamente o que faz dele a prova de "certeza, não lucro".
-  const solto = estado.acaso.chegam?.[`${UNIVERSO}-${e.k}`] ?? {};
-  const media = e.jogos * [11, 12, 13].reduce(
-    (soma, f) => soma + ((solto[f] ?? 0) - (solto[f + 1] ?? 0)) * estado.precos.premio[f], 0);
+  //
+  // A conta é por aposta simples, e não por bilhete, porque é assim que a
+  // lotérica cobra e paga: um bilhete de `k` dezenas **são** as `C(k,15)`
+  // apostas de 15 que cabem dentro dele. Por linearidade, a expectativa de um
+  // bilhete de `k` é `C(k,15)` vezes a de uma aposta simples — e como o preço
+  // é `C(k,15)` vezes o de uma aposta simples, a taxa de retorno é **a mesma
+  // para todo tamanho de bilhete**. Isso não é um detalhe: é o que transforma
+  // "o fechamento compra certeza, não lucro" de frase em teorema.
+  const simples = estado.acaso.chegam?.[`${UNIVERSO}-${SORTEIO}`] ?? {};
+  const porAposta = [11, 12, 13].reduce(
+    (soma, f) => soma + ((simples[f] ?? 0) - (simples[f + 1] ?? 0)) * estado.precos.premio[f], 0);
+  const media = e.jogos * analise.binomial(e.k, SORTEIO) * porAposta;
   $('acaso').innerHTML = `
     <p>Com ${dinheiro(e.custo)} você compra ${e.jogos} ${e.jogos === 1 ? 'bilhete' : 'bilhetes'}
       de ${e.k} dezenas. Se eles fossem escolhidos no chute, chegariam a ${e.t} acertos em
@@ -622,7 +637,7 @@ async function rodarSimulacao() {
   const meus = mascarasNaMao();
   const r = analise.simular({
     mascaras: meus, dezenas: estado.dezenas, universo: UNIVERSO, quantos,
-    dentroDoPool, premios: estado.precos.premio, garantia: e.jogos === 1 ? 0 : e.t,
+    dentroDoPool, premios: estado.precos.premio, garantia: e.jogos === 1 ? 0 : e.t, k: e.k,
     custo: estado.bilhetes.length * estado.precos.aposta[e.k],
     // Os mesmos bilhetes no chute, contra os mesmos sorteios. É a pergunta que
     // o aplicativo responde por escrito desde sempre — "o fechamento compra
@@ -641,8 +656,31 @@ async function rodarSimulacao() {
 // diferença entre uma tabela que informa e uma que engana com um número grande.
 const FIXAS = [11, 12, 13];
 const RATEADAS = [14, 15];
-const pagam = (placar, faixas) => (!placar ? 0 : faixas.reduce(
-  (soma, f) => soma + (placar.faixas.get(f) ?? 0) * estado.precos.premio[f], 0));
+/// Só as faixas pedidas, para o mesmo cálculo de prêmio valer nas duas colunas.
+const soAsFaixas = (faixas) => Object.fromEntries(
+  faixas.map((f) => [f, estado.precos.premio[f] ?? 0]));
+const pagam = (placar, faixas, k) => (!placar ? 0
+  : analise.premioDe(placar.faixas, soAsFaixas(faixas), k));
+
+/// Por que o dinheiro de um bilhete grande não bate com a conta de cabeça.
+///
+/// Quem vê "1 × 14 acertos" e um preço de catorze na tabela espera o valor de
+/// uma catorze. Com bilhete de mais de 15 dezenas ele recebe mais, e sem esta
+/// frase o número parece errado — ou, pior, parece propaganda. O exemplo é
+/// calculado, não escrito: é a decomposição de verdade daquele tamanho.
+function comoPaga(k) {
+  if (k <= SORTEIO) return '';
+  const partes = [];
+  for (let i = SORTEIO; i >= 11; i--) {
+    const quantas = analise.apostasComAcertos(k, 14, i);
+    if (quantas) partes.push(`${quantas} de ${i}`);
+  }
+  return `<p class="ressalva">Cada bilhete de ${k} dezenas vale
+    ${analise.binomial(k, SORTEIO)} apostas de 15 — é por isso que ele custa
+    ${dinheiro(estado.precos.aposta[k])} e não ${dinheiro(estado.precos.aposta[SORTEIO])}. O
+    prêmio segue a mesma conta: um bilhete de ${k} que cruza 14 dezenas com o sorteio paga
+    ${partes.join(', ')} acertos — e não uma catorze só.</p>`;
+}
 
 const porcento = (parte, total) => (total ? `${((100 * parte) / total).toFixed(1)}%` : '—');
 const saldo = (c) => `${c >= 0 ? '' : '−'}${dinheiro(Math.abs(c))}`;
@@ -687,10 +725,13 @@ function desenharSimulacao(r, e) {
     }))}
     ${quadro(['', 'Seu fechamento', 'No chute'], [
     linha('Gasto', dinheiro(r.gasto), dinheiro(r.gasto)),
-    linha('Prêmios de 11 a 13', dinheiro(pagam(r, FIXAS)), dinheiro(pagam(r.rival, FIXAS))),
-    linha('Prêmios de 14 e 15', dinheiro(pagam(r, RATEADAS)), dinheiro(pagam(r.rival, RATEADAS))),
+    linha('Prêmios de 11 a 13',
+      dinheiro(pagam(r, FIXAS, e.k)), dinheiro(pagam(r.rival, FIXAS, e.k))),
+    linha('Prêmios de 14 e 15',
+      dinheiro(pagam(r, RATEADAS, e.k)), dinheiro(pagam(r.rival, RATEADAS, e.k))),
     total('Resultado', saldo(r.saldo), saldo(r.rival?.saldo ?? -r.gasto)),
   ])}
+    ${comoPaga(e.k)}
     <p class="ressalva">As duas primeiras faixas se comparam: 11, 12 e 13 acertos pagam valor
       fixo, os dois lados custam o mesmo e, na média, pagam o mesmo — é assim que a matemática
       funciona. A linha de 14 e 15 não se compara: são rateadas, e <b>um único acerto de 15 num
@@ -1134,10 +1175,11 @@ function conferirContraOSorteio() {
       : '<p class="ajuda">Escreva as 15 dezenas sorteadas, separadas por espaço.</p>';
     return;
   }
+  const e = estado.plano.escolha;
   const { faixas, melhor } = analise.umSorteio(mascarasNaMao(),
     analise.mascaraDoSorteio(sorteadas, [...estado.dezenas].sort((a, b) => a - b)));
-  const voltou = analise.premioDe(faixas, estado.precos.premio);
-  const custo = estado.bilhetes.length * estado.precos.aposta[estado.plano.escolha.k];
+  const voltou = analise.premioDe(faixas, estado.precos.premio, e.k);
+  const custo = estado.bilhetes.length * estado.precos.aposta[e.k];
   const linhas = [...faixas.entries()].sort((a, b) => b[0] - a[0]);
   anotarNaCarteira(sorteadas, voltou);
   estado.ultimoResultado = { titulo: 'Conferência contra o sorteio',
@@ -1149,6 +1191,7 @@ function conferirContraOSorteio() {
       : '<p>Nenhum bilhete premiado.</p>'}
     <p>Custou ${dinheiro(custo)}, voltou ${dinheiro(voltou)} — <b>${voltou >= custo ? 'saldo de'
       : 'faltaram'} ${dinheiro(Math.abs(voltou - custo))}</b>.</p>
+    ${comoPaga(e.k)}
     <p class="frase narracao">Prêmios de 14 e 15 acertos variam a cada concurso; os valores
       aqui são os da sua tabela.</p>`;
   pedirAFrase('#conferencia .narracao',

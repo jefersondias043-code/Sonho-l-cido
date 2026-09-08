@@ -94,9 +94,9 @@ done
 # crescimento — serve para que crescer seja uma decisão, e não um descuido.
 # Subi-lo é legítimo quando o aplicativo passa a oferecer algo que não oferecia;
 # não é legítimo quando uma decisão que devia ter ficado no catálogo vazou para
-# cá. Da última vez, o que entrou foi a leitura conferida do que estava guardado
-# no aparelho — quatro chaves estragadas davam tela em branco — e o painel de
-# volantes dizendo quantas folhas de papel serão antes de a impressão começar.
+# cá. Da última vez, o que entrou foi a conta que decompõe um bilhete de mais de
+# 15 dezenas nas apostas simples que ele **é** — a lotérica cobra por todas e
+# paga por todas, e o aplicativo pagava por uma.
 linhas=$(cat "$PARCIAL"/*.js "$PARCIAL"/*.css "$PARCIAL"/*.html | wc -l)
 if [ "$linhas" -ge 2500 ]; then
   echo "o cliente passou de 2.500 linhas: $linhas" >&2

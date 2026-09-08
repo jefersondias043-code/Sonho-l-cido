@@ -125,6 +125,59 @@ bilhete simples devolve **25,7%** do que custa nas faixas fixas — e é o mesmo
 para qualquer arranjo dos mesmos bilhetes, que é justamente o que faz dele a
 prova de que o fechamento compra certeza, e não lucro.
 
+### Um bilhete de mais de 15 dezenas são várias apostas
+
+Esse número estava certo para bilhete de 15 dezenas e **errado para todos os
+outros** — e errado para menos, que é o pior lado para errar.
+
+A lotérica cobra R$ 56,00 por um bilhete de 16 dezenas, e R$ 3,50 pelo de 15.
+Dezesseis vezes mais, e não por acaso: um bilhete de 16 **é** as `C(16,15) = 16`
+apostas de 15 dezenas que cabem dentro dele. A tabela de preços do aplicativo já
+dizia isso em voz alta — 17 dezenas custam `C(17,15) = 136` apostas, 20 dezenas
+custam `C(20,15) = 15.504` — e o aplicativo cobrava por todas elas e **pagava
+por uma**.
+
+Um bilhete de 16 com 14 acertos não leva uma catorze. Das dezesseis apostas
+dentro dele, duas descartam uma das dezenas erradas e ficam com os 14 acertos;
+as outras catorze descartam uma certa e ficam com 13. São **duas catorzes e
+catorze trezes**. Em geral, com `j` dezenas do sorteio dentro de um bilhete de
+`k`, o número de apostas com exatamente `i` acertos é `C(j,i) · C(k−j, 15−i)` —
+escolher `i` das certas e o resto das erradas.
+
+O tamanho do erro, medido: o aplicativo mostrava, da expectativa verdadeira,
+
+| tamanho do bilhete | o que mostrava |
+|---|---:|
+| 16 dezenas | 14,3% |
+| 17 dezenas | 3,3% |
+| 18 dezenas | 0,97% |
+| 19 dezenas | 0,32% |
+| 20 dezenas | 0,11% |
+
+Na tela: um fechamento de 28 cartelas de 16 dezenas, conferido contra um
+sorteio, dizia que voltaram **R$ 42,00** onde voltam **R$ 280,00**. E a frase
+mais visível do aplicativo — *"esses 11 acertos pagam X por cartela premiada"* —
+dizia R$ 7,00 onde a cartela de 16 dezenas paga **R$ 35,00**: cinco das
+dezesseis apostas ficam com as onze certas, `C(11,11) · C(5,4) = 5`.
+
+O conserto está num lugar só, `premioDoBilhete`, e para `k = 15` a soma tem um
+termo e devolve exatamente o que devolvia — o caso comum não se mexeu. Dele
+saem a conferência contra o sorteio, a simulação, a carteira, as duas colunas da
+comparação com o chute e a expectativa.
+
+E o conserto **melhora a frase que o aplicativo existe para dizer**. Por
+linearidade, a expectativa de um bilhete de `k` dezenas é `C(k,15)` vezes a de
+uma aposta simples; o preço também é `C(k,15)` vezes. A taxa de retorno é a
+mesma **em todo tamanho de bilhete e em todo fechamento**: 25,7% nas faixas
+fixas, sempre. "O fechamento compra certeza, não lucro" deixa de ser uma
+observação sobre arranjos dos mesmos bilhetes e passa a valer para qualquer
+escolha que se faça na tela. A suíte cobra isso como identidade, para os cinco
+tamanhos, com tolerância de 10⁻⁹.
+
+Nada disso muda uma recomendação: preço é preço e garantia é garantia, e a
+escada continua escolhendo o mesmo. O que muda é o dinheiro que o aplicativo
+mostra — que agora é o que a lotérica deposita.
+
 ## A decisão que define o produto: o cliente não resolve nada
 
 O espaço de respostas é **finito e pequeno**. Pool de 15 a 25 dezenas, bilhete
@@ -144,9 +197,9 @@ Daí tudo o mais decorre:
 
 Sem WebAssembly no cliente, sem *web workers*, sem banco de sessões, sem retomada
 de trabalho interrompido. Nada disso tem razão de existir quando não há nada a
-esperar. O cliente inteiro dá **2.400 linhas** somando JavaScript, HTML e CSS —
+esperar. O cliente inteiro dá **2.474 linhas** somando JavaScript, HTML e CSS —
 teto de 2.500 cobrado pela construção —, e o peso inicial (casca, índice, preços
-e distribuições) dá **41 KiB comprimidos**.
+e distribuições) dá **43 KiB comprimidos**.
 
 O teto foi 1.500 enquanto havia uma porta de entrada só, 1.700 quando a segunda
 chegou, 2.250 com a área de análise, 2.400 com a comparação contra o chute, e
@@ -829,14 +882,15 @@ primeira medição feita em HTTP/1.1 mostrou ganho zero para as dicas de
 
 | | antes das dicas | com as dicas | hoje |
 |---|---:|---:|---:|
-| primeira pintura | 1.200 ms | 1.260 ms | 1.308 ms |
-| grade tocável | 1.880 ms | 1.360 ms | 1.442 ms |
-| resposta na tela | 2.500 ms | 1.370 ms | 1.464 ms |
+| primeira pintura | 1.200 ms | 1.260 ms | 1.328 ms |
+| grade tocável | 1.880 ms | 1.360 ms | 1.470 ms |
+| resposta na tela | 2.500 ms | 1.370 ms | 1.512 ms |
 | pedidos no caminho crítico | 14 | 9 | 11 |
 
-A coluna de hoje carrega a área de análise e o módulo de simulação: 41 KiB
-comprimidos contra 26, dois pedidos a mais, e noventa milissegundos. O caminho
-continua sendo **uma onda só**, que é o que as dicas compraram.
+A coluna de hoje carrega a área de análise, o módulo de simulação e a conta que
+decompõe um bilhete grande em apostas simples: 43 KiB comprimidos contra 26,
+dois pedidos a mais, e cento e quarenta milissegundos. O caminho continua sendo
+**uma onda só**, que é o que as dicas compraram.
 
 Esse 11 quase virou 25. O medidor contava os pedidos no servidor, e o servidor
 vê também o que vem **depois** da resposta: o service worker instalando, que
@@ -852,7 +906,7 @@ E uma linha do medidor dizia o contrário do que se mede. O comentário sobre o
 "vinte e seis pedidos no lugar de doze". Medido dos dois jeitos, `no-store` e
 `max-age=600` dão a **mesma** contagem: a segunda onda acontece de qualquer
 forma. O cabeçalho continua sendo o do GitHub Pages, por fidelidade, e o
-comentário passou a dizer o que a medição diz. Ela custa cerca de 41 KiB depois
+comentário passou a dizer o que a medição diz. Ela custa cerca de 43 KiB depois
 que a resposta já está na tela, e não atrasa ninguém — mas é tráfego que a
 pessoa paga, e agora está escrito.
 

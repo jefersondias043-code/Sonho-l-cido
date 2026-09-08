@@ -1134,6 +1134,83 @@ conferir('com as quinze marcadas, a tela diz o que fazer em vez de dar em nada',
 
 await trancado.close();
 
+
+// ── um bilhete grande são várias apostas, e paga como várias ────────────────
+//
+// A lotérica cobra R$ 56,00 por um bilhete de 16 dezenas porque ele **é** as 16
+// apostas de 15 que cabem dentro dele. Porque cobra assim, paga assim: um
+// bilhete de 16 com 14 acertos leva duas catorzes e catorze trezes, não uma
+// catorze. O aplicativo pagava um prêmio só por bilhete, e o dinheiro que
+// mostrava — na conferência, na simulação, na carteira e na expectativa — ficava
+// abaixo do que a lotérica deposita: 14% do certo num bilhete de 16 dezenas, e
+// um milésimo num de 20.
+{
+  const caixa = await navegador.newContext({ viewport: { width: 390, height: 844 } });
+  const pg = await caixa.newPage();
+  await pg.goto(endereco, { waitUntil: 'networkidle' });
+  // 25 dezenas, cartelas de 16, garantindo 11: 28 bilhetes, o menor fechamento
+  // do catálogo com bilhete maior que a aposta simples.
+  await pg.click('#det-manual summary');
+  await pg.selectOption('#m-pool', '25');
+  await pg.selectOption('#m-k', '16');
+  await pg.waitForTimeout(400);
+  await pg.selectOption('#m-fechamento', '16-11');
+  await esperarFechamento(pg, 20000);
+
+  // A frase mais visível do aplicativo — "esses 11 acertos pagam X por cartela
+  // premiada" — também estava abaixo do que a lotérica deposita. Numa cartela
+  // de 16 dezenas, cinco das dezesseis apostas ficam com as onze certas:
+  // C(11,11) × C(5,4) = 5, e o prêmio é cinco onzes.
+  const precos = JSON.parse(await readFile(new URL('../catalogo/precos.json', import.meta.url)));
+  const emReais = (c) => (c / 100).toLocaleString('pt-BR',
+    { style: 'currency', currency: 'BRL' }).replace(/\s/g, ' ');
+  const naTela = (await pg.locator('.resposta').innerText()).replace(/\s/g, ' ');
+  conferir('a garantia de 11 numa cartela de 16 vale cinco onzes',
+    naTela.includes(`pagam ${emReais(5 * precos.premio[11])} por cartela`),
+    naTela.slice(0, 200));
+
+  await abrir(pg, 'conferir');
+  await pg.fill('#sorteio', '1 2 3 4 5 6 7 8 9 10 11 12 13 14 15');
+  await pg.dispatchEvent('#sorteio', 'change');
+  await pg.waitForTimeout(400);
+
+  const conferencia = (await pg.locator('#conferencia').innerText()).replace(/\s+/g, ' ');
+  conferir('a conferência explica que o bilhete de 16 vale 16 apostas',
+    conferencia.includes('vale 16 apostas de 15'), conferencia.slice(0, 120));
+
+  // O dinheiro tem de passar da conta ingênua — "uma cartela premiada, um
+  // prêmio" —, que é exatamente o que o aplicativo fazia antes.
+  const dados = await pg.evaluate(() => {
+    const texto = document.getElementById('conferencia').innerText;
+    const linhas = [...texto.matchAll(/(\d+) × (\d+) acertos/g)]
+      .map((m) => [Number(m[1]), Number(m[2])]);
+    const voltou = texto.match(/voltou R\$\s*([\d.]+,\d\d)/);
+    return { linhas, voltou: voltou && voltou[1] };
+  });
+  const centavos = (t) => Math.round(Number(t.replace(/\./g, '').replace(',', '.')) * 100);
+  const ingenua = dados.linhas.reduce((soma, [q, a]) => soma + q * (precos.premio[a] ?? 0), 0);
+  conferir('e o sorteio premiou alguma cartela', dados.linhas.length > 0 && ingenua > 0,
+    JSON.stringify(dados));
+  conferir('e o que voltou passa da conta de um prêmio por cartela',
+    dados.voltou && centavos(dados.voltou) > ingenua,
+    `voltou ${dados.voltou} · uma-por-cartela daria ${(ingenua / 100).toFixed(2)}`);
+
+  // Com aposta simples não há decomposição nenhuma, e a frase não aparece.
+  await fechar(pg);
+  await pg.selectOption('#m-k', '15');
+  await pg.waitForTimeout(400);
+  await pg.selectOption('#m-fechamento', '15-11');
+  await esperarFechamento(pg, 20000);
+  await abrir(pg, 'conferir');
+  await pg.fill('#sorteio', '1 2 3 4 5 6 7 8 9 10 11 12 13 14 15');
+  await pg.dispatchEvent('#sorteio', 'change');
+  await pg.waitForTimeout(400);
+  const simples = (await pg.locator('#conferencia').innerText()).replace(/\s+/g, ' ');
+  conferir('e com bilhete de 15 dezenas não há o que explicar',
+    !simples.includes('apostas de 15'), simples.slice(0, 120));
+  await caixa.close();
+}
+
 // ── o que um leitor de tela encontra ────────────────────────────────────────
 //
 // Duas coisas que só aparecem quando se olha a tela pelo nome dos elementos, e
