@@ -8,7 +8,7 @@
 //
 // A conta é sobre máscaras de bit, e não sobre listas de dezenas. Um sorteio
 // vira uma máscara sobre as posições do pool, e cada bilhete custa um `and` e um
-// popcount: mil sorteios contra as 3.634 cartelas do maior fechamento são 3,6
+// popcount: mil sorteios contra as 3.608 cartelas do maior fechamento são 3,6
 // milhões de operações de uma instrução, em vez de 54 milhões de comparações de
 // número — 85 ms, ou 158 ms com o chute do lado.
 

@@ -34,8 +34,8 @@ que quase nunca se cobra.
 | R$ 25,00 | 22 | **11 acertos** | 6 jogos de 15 dezenas | R$ 21,00 | piso 3 |
 | R$ 100,00 | 23 | **11 acertos** | 15 jogos de 15 dezenas | R$ 52,50 | piso 4 |
 | R$ 400,00 | 25 | **11 acertos** | 55 jogos de 15 dezenas | R$ 192,50 | piso 10 |
-| R$ 1.500,00 | 25 | **12 acertos** | 331 jogos de 15 dezenas | R$ 1.158,50 | piso 55 |
-| R$ 15.000,00 | 25 | **13 acertos** | 3634 jogos de 15 dezenas | R$ 12.719,00 | piso 671 |
+| R$ 1.500,00 | 25 | **12 acertos** | 330 jogos de 15 dezenas | R$ 1.155,00 | piso 55 |
+| R$ 15.000,00 | 25 | **13 acertos** | 3608 jogos de 15 dezenas | R$ 12.628,00 | piso 671 |
 <!-- fim de a tabela do dinheiro -->
 
 A primeira linha é a mais importante do produto: com cinco reais não há
@@ -110,6 +110,31 @@ Agora ele responde à pergunta que foi feita:
 É a outra metade do produto. O aplicativo já dizia o que o dinheiro compra;
 passou a dizer também quanto custa o que a pessoa quer.
 
+## O catálogo encolheu, e isso é dinheiro de volta
+
+Quatro casos receberam quarenta minutos de motor cada um, partindo do que já
+estava publicado, e os quatro melhoraram:
+
+| caso | antes | agora | quanto sai da conta de quem compra |
+|---|---:|---:|---:|
+| 24 dezenas, cartela de 15, garantindo 13 | 1.902 | **1.657** | −R$ 857,50 (12,9%) |
+| 25 dezenas, cartela de 16, garantindo 13 | 1.070 | **957** | −R$ 6.328,00 (10,6%) |
+| 25 dezenas, cartela de 15, garantindo 13 | 3.634 | **3.608** | −R$ 91,00 (0,7%) |
+| 25 dezenas, cartela de 15, garantindo 12 | 331 | **330** | −R$ 3,50 (0,3%) |
+
+O de R$ 15.000 é o que a escada oferece a quem tem esse dinheiro, e agora custa
+**R$ 12.628,00** em vez de R$ 12.719,00. O de R$ 1.500 caiu de R$ 1.158,50 para
+**R$ 1.155,00**.
+
+Nada disso entra sem a varredura: `conferir-tudo`, que não compartilha uma linha
+com o gerador, refez os **249.307.987** sorteios das 330 entradas contra o
+catálogo novo. Um fechamento menor que não cobre tudo não é recorde, é defeito.
+
+Vale registrar o que a mesma quantidade de motor **não** achou. Os quatro casos
+cujo piso cabe abaixo do teto de publicação — 25-16-14, 23-17-15, 23-15-14 e
+25-18-15 — receberam vinte e cinco minutos cada e nenhum desceu das oito mil
+cartelas. O teto não é o que os impede: o motor não chega lá.
+
 ## Quanto isso devolve, em média
 
 Ao lado de *"em média os dois pagam o mesmo"* — que era uma frase que se lê como
@@ -178,6 +203,17 @@ Nada disso muda uma recomendação: preço é preço e garantia é garantia, e a
 escada continua escolhendo o mesmo. O que muda é o dinheiro que o aplicativo
 mostra — que agora é o que a lotérica deposita.
 
+E o tamanho do estrago, medido no catálogo: dos **237** fechamentos que a tela
+pode oferecer, **191 usam cartela maior que 15 dezenas** — 81%. Quarenta e um
+deles custam menos de mil reais. Não era um canto exótico do aplicativo: era
+quatro em cada cinco fechamentos que o modo manual alcança.
+
+No modo automático o alcance era outro, e vale dizer por quê: em nenhum par
+(pool, garantia) uma cartela maior sai **mais barata** que uma de 15 — quando
+ela vence, é porque não existe fechamento de 15 dezenas publicado ali. A escada
+só chega a uma cartela grande com orçamento acima de R$ 145.600. Quem foi
+enganado pelo número foi quem montou à mão.
+
 ## A decisão que define o produto: o cliente não resolve nada
 
 O espaço de respostas é **finito e pequeno**. Pool de 15 a 25 dezenas, bilhete
@@ -208,7 +244,7 @@ resultado guardado — passou a ser conferido antes de virar tela. Nenhuma dessa
 subidas veio de o cliente passar a resolver mais. **Resolver** é procurar quais
 cartelas usar, e isso segue inteiro no motor em Rust, fora do aparelho.
 **Simular** é contar acertos de cartelas que já existem: um `and` e um popcount
-por cartela, mil sorteios contra 3.634 cartelas em 85 ms. São coisas de ordens diferentes, e só a primeira é a que o
+por cartela, mil sorteios contra 3.608 cartelas em 85 ms. São coisas de ordens diferentes, e só a primeira é a que o
 catálogo existe para evitar.
 
 E o que esse teto de fato protege — que o cliente não resolva nada — quem cobra
@@ -599,7 +635,7 @@ organizado, e cada coisa está a um toque de onde faz sentido procurá-la.
 
 A simulação sorteia resultados e conta acertos das cartelas que **já existem**:
 um `and` e um popcount por cartela sobre a máscara do sorteio. Mil sorteios
-contra o maior fechamento do catálogo — **3.634** cartelas — levam **85 ms**, e
+contra o maior fechamento do catálogo — **3.608** cartelas — levam **85 ms**, e
 **158 ms** com o chute do lado, que é o dobro do trabalho contra os mesmos
 sorteios. Eram 66 e 127 antes de o prêmio passar a decompor cada cartela nas
 apostas simples que ela é: trinta milissegundos por mil sorteios é o preço de
@@ -875,11 +911,11 @@ fecha.
 
 *"Imprimir volantes"* montava os volantes e chamava a impressão do sistema no
 mesmo toque. Com as 55 cartelas de R$ 400 isso são quatro folhas e ninguém se
-machuca. Com as **3.634** de R$ 15.000 são **243** — quinze volantes por folha
+machuca. Com as **3.608** de R$ 15.000 são **241** — quinze volantes por folha
 A4, medido no próprio desenho com a mídia de impressão emulada — e nada na tela
 tinha dito isso antes de a caixa de impressão aparecer com a resma carregada.
 
-O painel passou a dizer o tamanho: *"3.634 volantes · cerca de 243 folhas de
+O painel passou a dizer o tamanho: *"3.608 volantes · cerca de 241 folhas de
 papel"*, os volantes abaixo para conferir, e um botão que diz quantas folhas
 vai imprimir. A funcionalidade não saiu de lugar nenhum — ganhou a conta na
 frente da conta. A linha do aviso e o botão são da tela e não vão para o papel:

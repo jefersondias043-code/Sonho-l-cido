@@ -1093,7 +1093,7 @@ async function acaoDosBilhetes(acao) {
   } else if (acao === 'csv') {
     volante.baixar(`${nome}.csv`, volante.comoCsv(estado.bilhetes), 'text/csv');
   } else if (acao === 'imprimir') {
-    // Quem toca aqui com 3.634 cartelas na mão estava a um toque de **243
+    // Quem toca aqui com 3.608 cartelas na mão estava a um toque de **241
     // folhas** de papel, e nada na tela dizia isso: o painel abria e a caixa de
     // impressão do sistema aparecia junto. Agora o painel diz quantas folhas
     // são, mostra os volantes, e a impressão só começa quando ela pedir de

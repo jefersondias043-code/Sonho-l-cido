@@ -86,7 +86,7 @@ done
 # fechamento nenhum**. Procurar quais bilhetes usar é trabalho do motor em Rust,
 # fora do aparelho. O que o cliente faz é escolher uma linha de um catálogo
 # pronto e contar acertos de bilhetes que já existem — `and` e popcount, mil
-# sorteios contra as 3.634 cartelas do maior fechamento em 85 ms.
+# sorteios contra as 3.608 cartelas do maior fechamento em 85 ms.
 #
 # Mas quem **cobra** essa regra não é este número, e nunca foi: é
 # `app/testar-conferir.mjs`, varrendo os fechamentos publicados sorteio a

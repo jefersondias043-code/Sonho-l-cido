@@ -1304,8 +1304,8 @@ await trancado.close();
 
 // ── a conta em papel, antes do papel ────────────────────────────────────────
 //
-// "Imprimir volantes" com 3.634 cartelas na mão punha a caixa de impressão do
-// sistema na frente da pessoa com **243 folhas** carregadas, e nada na tela
+// "Imprimir volantes" com 3.608 cartelas na mão punha a caixa de impressão do
+// sistema na frente da pessoa com **241 folhas** carregadas, e nada na tela
 // tinha dito isso. Quem imprimisse sem olhar gastava uma resma; quem olhasse
 // ainda teria de descobrir sozinho o que fazer. A funcionalidade não saiu de
 // lugar nenhum: o painel passou a dizer o tamanho e a impressão passou a
