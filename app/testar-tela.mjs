@@ -1222,6 +1222,10 @@ await trancado.close();
   conferir('a garantia de 11 numa cartela de 16 vale cinco onzes',
     naTela.includes(`pagam ${emReais(5 * precos.premio[11])} por cartela`),
     naTela.slice(0, 200));
+  // E o número é explicado onde ele contradiz a tabela de preços: ali a faixa
+  // de 11 vale R$ 7,00, e a resposta diz R$ 35,00.
+  conferir('e a tela diz de onde vêm os cinco',
+    naTela.includes('são 5 apostas de 15 dentro dela'), naTela.slice(0, 200));
 
   await abrir(pg, 'conferir');
   await pg.fill('#sorteio', '1 2 3 4 5 6 7 8 9 10 11 12 13 14 15');

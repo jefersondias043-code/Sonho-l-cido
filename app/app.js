@@ -330,7 +330,11 @@ async function pedirAFrase(onde, dados) {
 function quantoPagaAGarantia(t, k) {
   if (t > 13) return `O prêmio de ${t} acertos é rateado e muda a cada concurso.`;
   const porCartela = analise.premioDoBilhete(k, t, { [t]: estado.precos.premio[t] });
-  return `Esses ${t} acertos pagam ${dinheiro(porCartela)} por cartela premiada —
+  // Sem a explicação ao lado, o número contradiz a tabela de preços logo abaixo,
+  // onde a faixa de 11 vale R$ 7,00 e a cartela de 16 paga R$ 35,00.
+  const dentro = k > SORTEIO
+    ? ` (são ${analise.apostasComAcertos(k, t, t)} apostas de ${SORTEIO} dentro dela)` : '';
+  return `Esses ${t} acertos pagam ${dinheiro(porCartela)} por cartela premiada${dentro} —
     o fechamento compra certeza, não lucro.`;
 }
 
@@ -785,7 +789,8 @@ function fechamentoDaConta() {
 }
 
 function desenharPrecos() {
-  const grupos = [['aposta', 'Quanto custa a aposta', 'dezenas'], ['premio', 'Quanto paga cada faixa', 'acertos']];
+  const grupos = [['aposta', 'Quanto custa a cartela', 'dezenas'],
+    ['premio', 'Quanto paga cada faixa, por aposta de 15', 'acertos']];
   $('tabela-precos').innerHTML = `${grupos.map(([grupo, titulo, unidade]) =>
     `<div class="precos"><h2>${titulo}</h2>${Object.keys(estado.precos[grupo]).map((k) =>
       `<label>${k} ${unidade}<input type="text" inputmode="decimal" data-grupo="${grupo}"

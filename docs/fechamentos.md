@@ -193,6 +193,12 @@ mais visível do aplicativo — *"esses 11 acertos pagam X por cartela premiada"
 dizia R$ 7,00 onde a cartela de 16 dezenas paga **R$ 35,00**: cinco das
 dezesseis apostas ficam com as onze certas, `C(11,11) · C(5,4) = 5`.
 
+Onde o número contradiz a tabela, a tela explica: a faixa de 11 acertos vale
+R$ 7,00 na tabela de preços, e a resposta diz que a cartela de 16 paga R$ 35,00
+— então a resposta diz também *"(são 5 apostas de 15 dentro dela)"*. E o título
+da tabela deixou de ser "quanto paga cada faixa" para ser **"quanto paga cada
+faixa, por aposta de 15"**, que é o que aqueles valores sempre foram.
+
 O conserto está num lugar só, `premioDoBilhete`, e para `k = 15` a soma tem um
 termo e devolve exatamente o que devolvia — o caso comum não se mexeu. Dele
 saem a conferência contra o sorteio, a simulação, a carteira, as duas colunas da
@@ -241,7 +247,7 @@ Daí tudo o mais decorre:
 
 Sem WebAssembly no cliente, sem *web workers*, sem banco de sessões, sem retomada
 de trabalho interrompido. Nada disso tem razão de existir quando não há nada a
-esperar. O cliente inteiro dá **2.481 linhas** somando JavaScript, HTML e CSS —
+esperar. O cliente inteiro dá **2.486 linhas** somando JavaScript, HTML e CSS —
 teto de 2.500 cobrado pela construção —, e o peso inicial (casca, índice, preços
 e distribuições) dá **43 KiB comprimidos**.
 
