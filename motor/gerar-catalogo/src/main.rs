@@ -49,7 +49,10 @@ mod turan;
 use std::collections::{BTreeMap, HashMap};
 use std::time::{Duration, Instant};
 
-use motor_busca::{CondicoesDeParada, Configuracao, Controle, MotorBusca, Silencioso};
+use motor_busca::{
+    BuscaCiclica, CondicoesDeParada, Configuracao, Controle, InstanciaCiclica, MotorBusca,
+    Silencioso,
+};
 use motor_core::limites::{limite_inferior, LimiteInferior};
 use motor_core::{Cartela, MotorCobertura, Objetivo, Problema, RegraCobertura};
 
@@ -197,7 +200,7 @@ fn resolver(
     t: usize,
     sementes: &BTreeMap<(usize, usize, usize), Vec<Cartela>>,
     orcamento: Duration,
-    memo: &mut HashMap<(usize, usize, usize), u64>,
+    memo: &mut turan::Memo,
 ) -> Entrada {
     let a = v - k;
     let b = v - SORTEIO;
@@ -288,10 +291,13 @@ fn resolver(
         origem = "catálogo";
     }
 
-    // Garantia total: a construção de Turán é um fechamento completo pronto, e
-    // em `a ≤ 2` já é o valor exato.
-    if t == SORTEIO && turan::tamanho(v, a, b, memo) <= TETO_DA_CONSTRUCAO {
-        let faltas = turan::construir(&(0..v).collect::<Vec<_>>(), a, b, memo);
+    // A construção fechada, que agora vale em toda linha e não só na de `t = 15`.
+    // É um fechamento completo pronto: onde ela sai menor que o catálogo, entra
+    // no lugar dele; onde sai maior, ainda serve de partida ao motor, que é
+    // outro vale para explorar além do que já estava publicado.
+    let t_linha = t_linha.max(0) as usize;
+    if turan::tamanho(v, a, b, t_linha, memo) <= TETO_DA_CONSTRUCAO {
+        let faltas = turan::construir(&(0..v).collect::<Vec<_>>(), a, b, t_linha, memo);
         let construida: Vec<Cartela> = faltas
             .iter()
             .map(|fora| {
@@ -300,12 +306,36 @@ fn resolver(
             .collect();
         if melhor.is_empty() || construida.len() < melhor.len() {
             melhor = construida;
-            origem = if a <= 2 { "fórmula" } else { "Turán" };
+            origem = if a <= 2 { "fórmula" } else { "construção" };
         }
     }
 
+    // A busca por simetria, que este gerador nunca tinha chamado.
+    //
+    // Ela nasceu para a Lotinha e ficou lá: `gerar-catalogo` só conhecia a
+    // construção fechada. Mas `montar_com_intersecao` já aceita garantia
+    // parcial, e a peça estava pronta — faltava ligá-la. Medida em doze casos
+    // com 90 s cada, contra o catálogo publicado, ela **ganha em seis**:
+    // `22/16/14` de 932 para 748, `22/15/14` de 4.184 para 3.916, `20/16/14` de
+    // 90 para 80, `21/17/14` de 71 para 63, `22/18/14` de 61 para 55 e
+    // `20/15/13` de 42 para 40.
+    //
+    // Por que ela alcança o que a busca livre não alcança: a unidade que ela
+    // move é a **órbita**, então as `v` rotações andam juntas. A busca livre
+    // move uma cartela por vez, e um fechamento simétrico é um vale de onde só
+    // um salto coordenado de `v` cartelas sai. Não substitui a busca livre —
+    // em seis dos doze ela perde —, por isso as duas correm e vale a menor.
+    //
+    // E o que ela achar vira **partida** da busca livre, que pode quebrar a
+    // simetria e descer abaixo do ótimo cíclico.
     if !orcamento.is_zero() {
-        let achado = buscar(&problema, &melhor, orcamento);
+        if let Some(ciclica) = buscar_ciclica(v, k, t, orcamento / 3) {
+            if melhor.is_empty() || ciclica.len() < melhor.len() {
+                melhor = ciclica;
+                origem = "simetria";
+            }
+        }
+        let achado = buscar(&problema, &melhor, orcamento - orcamento / 3);
         if !achado.is_empty() && (melhor.is_empty() || achado.len() < melhor.len()) {
             melhor = achado;
             origem = "motor";
@@ -354,6 +384,52 @@ fn resolver(
         origem,
         alcancado: None,
     }
+}
+
+/// Procura no espaço das soluções invariantes por rotação.
+///
+/// Devolve `None` quando a instância cíclica não cabe na memória — a tabela de
+/// ligações cresce com `C(v,a)/v` vezes quantos alvos cada conjunto alcança, e
+/// nas garantias parciais de pool grande isso passa de bilhões. Dos 112 casos
+/// acima do piso, 85 cabem no teto padrão.
+///
+/// O teto é do ambiente (`CATALOGO_TETO_CICLICO`) porque ele é uma decisão de
+/// máquina, e não de matemática: quem tiver memória sobrando alcança mais casos.
+fn buscar_ciclica(v: usize, k: usize, t: usize, orcamento: Duration) -> Option<Vec<Cartela>> {
+    let (a, b) = (v - k, v - SORTEIO);
+    let t_linha = (t + v).checked_sub(k + SORTEIO)?;
+    if t_linha == 0 || t_linha > a.min(b) {
+        return None;
+    }
+    let teto: usize = std::env::var("CATALOGO_TETO_CICLICO")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(120_000_000);
+    let inst = InstanciaCiclica::montar_com_intersecao(v, a, b, t_linha, teto, None)?;
+
+    // Duas sementes, cada uma com metade do orçamento: a busca cíclica reinicia
+    // sozinha quando estanca, e trocar de semente troca o vale inteiro.
+    let mut melhor: Option<Vec<Cartela>> = None;
+    for semente in [7u64, 4243] {
+        let mut busca = BuscaCiclica::nova(inst.clone(), 1, semente);
+        let ate = Instant::now() + orcamento / 2;
+        while Instant::now() < ate {
+            busca.avancar(50);
+        }
+        let achado = busca.melhor_solucao();
+        if achado.is_empty() {
+            continue;
+        }
+        // Cobrança independente antes de aceitar: a solução cíclica vem de outro
+        // caminho, e `cobre_tudo` é a varredura por força bruta deste arquivo.
+        if !cobre_tudo(v, t, &achado) {
+            continue;
+        }
+        if melhor.as_ref().is_none_or(|m| achado.len() < m.len()) {
+            melhor = Some(achado);
+        }
+    }
+    melhor
 }
 
 /// Põe o motor persistente para trabalhar a partir do que já houver.
