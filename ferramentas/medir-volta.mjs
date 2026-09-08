@@ -20,6 +20,21 @@
 // dia seguinte, que é quem o service worker existe para atender. O cache do
 // service worker é outro armazenamento e não é tocado por essa limpeza: sobra
 // exatamente o estado de quem volta depois.
+//
+// ## O número que vale aqui é a contagem de pedidos, e não o relógio
+//
+// A estrangulação do protocolo de depuração vale para a **página**, e não para o
+// service worker: os `fetch` que ele faz por conta própria saem por outro alvo e
+// não passam pelo mesmo funil. Medido: quando ele está no comando a resposta sai
+// em ~100 ms, e quando não está sai em ~1.450 ms — a mesma casca, a mesma rede
+// declarada, dois números que diferem em catorze vezes por causa de quem
+// buscou, não de quanto custou. O relógio, aqui, mede o arranjo da medição.
+//
+// A **contagem de pedidos que chegam ao servidor** não tem esse problema: ela é
+// contada no servidor, e é a mesma sempre. É ela que responde à pergunta que
+// esta ferramenta existe para fazer — na volta, o aplicativo busca a casca de
+// novo, ou usa a que guardou? Os dois números vão para a tela, e o relógio vem
+// com a ressalva ao lado.
 
 import { spawnSync } from 'node:child_process';
 import { createSecureServer } from 'node:http2';
@@ -56,11 +71,14 @@ const servidor = createSecureServer({
   cert: await readFile(join(pasta, 'c.pem')),
 });
 
+// Cada pedido é anotado com o instante em que chegou, porque o que interessa é
+// **quando**: o que chega antes da resposta é o que a pessoa espera; o que chega
+// depois é o service worker se atualizando por baixo, e não atrasa ninguém.
 let pedidos = [];
 servidor.on('stream', async (fluxo, cabecalhos) => {
   let relativo = decodeURIComponent(cabecalhos[':path']).split('?')[0].slice(1) || 'index.html';
   if (relativo.endsWith('/')) relativo += 'index.html';
-  pedidos.push(relativo);
+  pedidos.push({ nome: relativo, em: Date.now() });
   const tipo = extname(relativo);
   try {
     const corpo = await readFile(join(RAIZ, normalize(`/${relativo}`)));
@@ -123,18 +141,26 @@ await pagina.waitForSelector('.grade button', { timeout: 60000 });
 const grade = Date.now() - comeco;
 await pagina.waitForSelector('.resposta .aviso, .resposta .numero', { timeout: 60000 });
 const resposta = Date.now() - comeco;
-// Quantos pedidos chegaram ao servidor **antes** de a resposta aparecer. É a
-// conta que separa uma casca servida do cache de uma casca rebaixada de novo.
-const ateAResposta = pedidos.length;
+const fimDaEspera = Date.now();
+// Quem estava no comando. Sem service worker no controle a medição é de outra
+// coisa — de uma primeira visita com o cache HTTP quente — e não vale.
+const noComando = await pagina.evaluate(() => !!navigator.serviceWorker.controller);
+// A conta que separa uma casca servida do cache de uma casca rebaixada de novo:
+// pedidos que chegaram **antes** de a resposta aparecer.
+const antes = pedidos.filter((p) => p.em <= fimDaEspera);
 
 const linha = (nome, ms) => `  ${nome.padEnd(24)} ${String(ms).padStart(5)} ms`;
 console.log(`segunda visita, 3G rápido (${TRES_G.latency} ms de ida e volta) · ${
   RAIZ.split('/').pop()}/`);
+console.log(`  ${'pedidos antes da resposta'.padEnd(24)} ${String(antes.length).padStart(5)}   ← o número que vale`);
+console.log(`  ${'pedidos no total'.padEnd(24)} ${String(pedidos.length).padStart(5)}`);
+console.log(`  ${'service worker no comando'.padEnd(24)} ${(noComando ? 'sim' : 'NÃO').padStart(5)}`);
+console.log('  — o relógio abaixo não vale como medida de rede: a estrangulação');
+console.log('    não alcança os pedidos do próprio service worker.');
 console.log(linha('primeira pintura', pintura));
 console.log(linha('grade tocável', grade));
 console.log(linha('resposta na tela', resposta));
-console.log(`  ${'pedidos à rede'.padEnd(24)} ${String(ateAResposta).padStart(5)}`);
-if (ateAResposta) console.log(`  ${''.padEnd(24)} ${pedidos.slice(0, 16).join(' ')}`);
+if (antes.length) console.log(`  ${''.padEnd(24)} ${antes.map((p) => p.nome).slice(0, 16).join(' ')}`);
 
 await navegador.close();
 servidor.close();

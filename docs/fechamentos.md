@@ -1250,15 +1250,18 @@ primeira medição feita em HTTP/1.1 mostrou ganho zero para as dicas de
 
 | | antes das dicas | com as dicas | hoje |
 |---|---:|---:|---:|
-| primeira pintura | 1.200 ms | 1.260 ms | 1.328 ms |
-| grade tocável | 1.880 ms | 1.360 ms | 1.470 ms |
-| resposta na tela | 2.500 ms | 1.370 ms | 1.512 ms |
+| primeira pintura | 1.200 ms | 1.260 ms | 1.340 ms |
+| grade tocável | 1.880 ms | 1.360 ms | 1.474 ms |
+| resposta na tela | 2.500 ms | 1.370 ms | 1.501 ms |
 | pedidos no caminho crítico | 14 | 9 | 11 |
 
-A coluna de hoje carrega a área de análise, o módulo de simulação e a conta que
-decompõe um bilhete grande em apostas simples: 43 KiB comprimidos contra 26,
-dois pedidos a mais, e cento e quarenta milissegundos. O caminho continua sendo
-**uma onda só**, que é o que as dicas compraram.
+A coluna de hoje carrega a área de análise, o módulo de simulação, a conta que
+decompõe um bilhete grande em apostas simples e o que a carteira passou a
+devolver: 45 KiB comprimidos contra 26, dois pedidos a mais, e cento e trinta
+milissegundos. O caminho continua sendo **uma onda só**, que é o que as dicas
+compraram. As últimas quatro passadas de trabalho não custaram nada mensurável
+aqui — os números são a mediana de três corridas, e a diferença para a medição
+anterior cabe no ruído entre elas.
 
 Esse 11 quase virou 25. O medidor contava os pedidos no servidor, e o servidor
 vê também o que vem **depois** da resposta: o service worker instalando, que
@@ -1305,6 +1308,54 @@ sem embutir o CSS e o JavaScript no HTML, o que custaria a etapa de compilação
 que este aplicativo não tem. Com uma latência de 3G real (150 a 300 ms) as
 mesmas duas idas e voltas dão 300 a 600 ms, dentro do alvo. Fica registrado
 assim, com a latência dita, em vez de escolhido o número que passa.
+
+### E a segunda visita, que nunca tinha sido medida
+
+`medir-3g.mjs` mede quem chega pela primeira vez — é o número da especificação.
+Metade da promessa do aplicativo, porém, é sobre a **volta**: *"depois disso o
+aplicativo funciona sem ela"*, diz a tela quando a primeira visita falha por
+falta de rede. Essa metade nunca teve número.
+
+`ferramentas/medir-volta.mjs` faz a visita de instalação, espera o service
+worker assumir e a casca inteira entrar no cache dele, **apaga o cache HTTP do
+navegador** e só então mede. A limpeza é o ponto: sem ela a segunda visita
+acontece segundos depois da primeira, tudo ainda cabe no `max-age=600` que o
+GitHub Pages manda, e o que sai é o número de quem recarregou a página — não o
+de quem voltou no dia seguinte, que é quem o service worker existe para atender.
+
+O resultado, igual em todas as corridas:
+
+> **13 pedidos** chegam ao servidor antes de a resposta aparecer — `index.html`,
+> os seis módulos, o estilo, os três arquivos do catálogo, o ícone e o próprio
+> `sw.js`. A casca inteira, de novo.
+
+É o que a estratégia manda, e ela é deliberada: para a casca vale **rede
+primeiro, cache atrás**, para que uma correção publicada chegue no mesmo
+instante. O cache do service worker é a rede de segurança — entra quando a rede
+falha —, e não um atalho. O que faltava era o preço disso escrito em algum
+lugar, e agora está: a promessa de funcionar sem internet **não** é a promessa
+de carregar rápido na volta.
+
+Trocar por *cache primeiro* pareceria óbvio e não é. O rodapé mostra o carimbo
+da versão, e ele é lido de `sw.js` a cada visita justamente para a pessoa
+conferir se o que está na mão dela é o que acabou de ser publicado. Servindo a
+casca do cache, a página seria a antiga e o carimbo poderia ser o novo — o
+rodapé passaria a mentir sobre a única coisa que ele existe para dizer. Fica
+como está, agora com o custo medido ao lado.
+
+### O relógio, aqui, mede o arranjo da medição
+
+A ferramenta imprime também os milissegundos, com uma ressalva grande: **eles não
+valem como medida de rede.** A estrangulação do protocolo de depuração vale para
+a página, e não para o service worker — os `fetch` que ele faz por conta própria
+saem por outro alvo e não passam pelo mesmo funil. Medido: quando ele está no
+comando a resposta sai em ~100 ms; quando não está, em ~1.450 ms. A mesma casca,
+a mesma rede declarada, catorze vezes de diferença — decidida por *quem buscou*,
+e não por quanto custou.
+
+Fica registrado em vez de apagado, porque a contagem de pedidos, essa sim, é
+contada no servidor e não muda: é ela que responde à pergunta. Uma ferramenta
+que imprimisse só o relógio pareceria mais convincente e diria menos.
 
 ## Como mexer
 
