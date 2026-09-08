@@ -279,16 +279,21 @@ impl InstanciaCiclica {
     /// órbita de alvo descoberta ganha uma candidata construída em cima dela —
     /// `t'` dezenas do próprio alvo mais o que faltar. A instância continua
     /// sempre resolúvel.
+    /// `teto` é o mesmo teto de ligações de [`InstanciaCiclica::montar_ate`], e
+    /// aqui ele deixa de ser uma recusa para virar a **medida da amostra**:
+    /// cabem `teto / ligações por candidata` órbitas, e é esse o corte. Um caso
+    /// cuja tabela cheia passa pouco do teto perde poucas candidatas; um que
+    /// passa por dez vezes fica com um décimo delas. Nenhum fica de fora.
     pub fn montar_amostrado(
         v: usize,
         a: usize,
         b: usize,
         t_linha: usize,
-        max_candidatos: usize,
+        teto: usize,
         semente: u64,
         parar: Option<&Controle>,
     ) -> Option<Self> {
-        Self::montar_geral(v, a, b, t_linha, usize::MAX, Some((max_candidatos, semente)), parar)
+        Self::montar_geral(v, a, b, t_linha, usize::MAX, Some((teto, semente)), parar)
     }
 
     fn montar_geral(
@@ -316,10 +321,25 @@ impl InstanciaCiclica {
         if orb_a.is_empty() || orb_b.is_empty() {
             return None;
         }
-        // A amostra, quando pedida: embaralha e corta. `Pcg64Mcg` com semente
-        // fixa para que a mesma instância se remonte igual — uma busca que não
-        // se reproduz não se depura.
-        if let Some((max, semente)) = amostra {
+        // A amostra, quando pedida: embaralha e corta no que couber no teto.
+        // `Pcg64Mcg` com semente fixa para que a mesma instância se remonte
+        // igual — uma busca que não se reproduz não se depura.
+        if let Some((teto_da_amostra, semente)) = amostra {
+            // Quantas ligações cada candidata guarda, no pior caso. É a mesma
+            // conta que o teto de `montar_ate` cobra, agora usada para dizer
+            // quantas cabem em vez de para recusar todas.
+            let por_candidata = {
+                let v = v as u32;
+                let (a, b, t_linha) = (a as u32, b as u32, t_linha as u32);
+                let soma: usize = (t_linha..=a.min(b))
+                    .map(|i| {
+                        combinacoes_pequenas(a, i, usize::MAX / 2)
+                            .saturating_mul(combinacoes_pequenas(v - a, b - i, usize::MAX / 2))
+                    })
+                    .fold(0usize, |acc, x| acc.saturating_add(x));
+                soma.min(orb_b.len()).max(1)
+            };
+            let max = (teto_da_amostra / por_candidata).max(64);
             if orb_a.len() > max {
                 let mut rng = Pcg64Mcg::new(u128::from(semente) | 1);
                 for i in (1..orb_a.len()).rev() {
@@ -714,7 +734,7 @@ mod testes {
     #[test]
     fn a_amostra_nunca_deixa_alvo_sem_candidata() {
         for (v, a, b, t_linha, max) in
-            [(15usize, 4usize, 5usize, 3usize, 20usize), (17, 5, 6, 3, 30), (19, 4, 6, 2, 15)]
+            [(15usize, 4usize, 5usize, 3usize, 20_000usize), (17, 5, 6, 3, 30_000), (19, 4, 6, 2, 15_000)]
         {
             let inst = InstanciaCiclica::montar_amostrado(v, a, b, t_linha, max, 7, None)
                 .expect("a instância amostrada tem de montar");
@@ -750,7 +770,7 @@ mod testes {
     fn a_solucao_amostrada_cobre_de_verdade() {
         let (v, a, b, t_linha) = (17u32, 5u32, 6u32, 3u32);
         let inst = InstanciaCiclica::montar_amostrado(
-            v as usize, a as usize, b as usize, t_linha as usize, 30, 4243, None,
+            v as usize, a as usize, b as usize, t_linha as usize, 30_000, 4243, None,
         )
         .unwrap();
         let mascaras: Vec<u32> = inst

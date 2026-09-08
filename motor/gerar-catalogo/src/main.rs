@@ -412,12 +412,8 @@ fn buscar_ciclica(v: usize, k: usize, t: usize, orcamento: Duration) -> Option<V
     // ali uma órbita de cartelas sozinha já cobre quase 80% das órbitas de
     // alvo, e a solução tem cinco, então escolher cinco entre oitocentas
     // continua sendo um problema com muitas soluções.
-    let amostra: usize = std::env::var("CATALOGO_ORBITAS_AMOSTRADAS")
-        .ok()
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(800);
     let inst = InstanciaCiclica::montar_com_intersecao(v, a, b, t_linha, teto, None)
-        .or_else(|| InstanciaCiclica::montar_amostrado(v, a, b, t_linha, amostra, 20260908, None))?;
+        .or_else(|| InstanciaCiclica::montar_amostrado(v, a, b, t_linha, teto, 20260908, None))?;
 
     // Duas sementes, cada uma com metade do orçamento: a busca cíclica reinicia
     // sozinha quando estanca, e trocar de semente troca o vale inteiro.
