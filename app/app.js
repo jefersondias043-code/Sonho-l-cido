@@ -585,7 +585,7 @@ function desenharAcaso() {
   $('acaso').innerHTML = `
     <p>Com ${dinheiro(e.custo)} você compra ${e.jogos} ${e.jogos === 1 ? 'cartela' : 'cartelas'}
       de ${e.k} dezenas. Se elas fossem escolhidas no chute, chegariam a ${e.t} acertos em
-      <b>${(noChute * 100).toFixed(noChute > 0.995 ? 2 : 1)}%</b> dos sorteios que caem dentro das
+      <b>${porcentagem(noChute * 100, noChute > 0.995 ? 2 : 1)}</b> dos sorteios que caem dentro das
       suas ${e.v} dezenas. Com o fechamento, em <b>100%</b>.</p>
     <p class="ressalva">Em média os dois pagam o mesmo: a mesma quantidade de cartelas do mesmo
       tamanho tem a mesma expectativa de prêmio, com fechamento ou sem${media ? `, que aqui é
@@ -687,7 +687,13 @@ function comoPaga(k) {
     ${partes.join(', ')} acertos — e não uma catorze só.</p>`;
 }
 
-const porcento = (parte, total) => (total ? `${((100 * parte) / total).toFixed(1)}%` : '—');
+/// Porcentagem como o Brasil a escreve: vírgula, não ponto. `toFixed` não sabe
+/// disso, e punha "44.0%" numa tela onde todo o resto — R$ 21,00, 1.631 — já
+/// vinha em pt-BR. Um número escrito de dois jeitos na mesma tela é o tipo de
+/// coisa que faz a pessoa desconfiar do que ela não tem como conferir.
+const porcentagem = (x, casas = 1) => `${x.toLocaleString('pt-BR',
+  { minimumFractionDigits: casas, maximumFractionDigits: casas })}%`;
+const porcento = (parte, total) => (total ? porcentagem((100 * parte) / total) : '—');
 const saldo = (c) => `${c >= 0 ? '' : '−'}${dinheiro(Math.abs(c))}`;
 
 function desenharSimulacao(r, e) {
@@ -726,7 +732,8 @@ function desenharSimulacao(r, e) {
       const meu = r.distribuicao.get(acertos) ?? 0;
       return linha(`${acertos} acertos`, numero(meu),
         numero(r.rival?.distribuicao.get(acertos) ?? 0),
-        `<span class="barra" style="width:${Math.round((100 * meu) / maior)}%"></span>`);
+        `<span class="barra-trilho"><span class="barra"
+          style="width:${Math.round((100 * meu) / maior)}%"></span></span>`);
     }))}
     ${quadro(['', 'Seu fechamento', 'No chute'], [
     linha('Gasto', dinheiro(r.gasto), dinheiro(r.gasto)),

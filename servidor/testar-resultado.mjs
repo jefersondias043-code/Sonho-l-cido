@@ -53,9 +53,19 @@ conferir('em ordem crescente',
 conferir('e a data da apuração', bom.corpo.data === '04/09/2026');
 conferir('e nada além disso', Object.keys(bom.corpo).sort().join(',') === 'concurso,data,dezenas',
   Object.keys(bom.corpo).join(','));
-conferir('e pode ficar em cache por um dia',
-  (bom.cabecalhos.get('cache-control') ?? '').includes('86400'),
+// O "último concurso" muda de segunda a sábado, e guardá-lo por um dia faz o
+// aplicativo conferir os bilhetes de hoje contra o sorteio de ontem — com o
+// rótulo certo para as dezenas erradas, que é o pior jeito de errar.
+conferir('o último concurso fica pouco tempo em cache',
+  (bom.cabecalhos.get('cache-control') ?? '').includes('max-age=600'),
   bom.cabecalhos.get('cache-control'));
+
+// Um concurso nomeado, ao contrário, nunca mais muda: as dezenas dele foram
+// sorteadas e acabou.
+const nomeado = await perguntar(OFICIAL, { url: 'https://x/api/resultado?concurso=3210' });
+conferir('um concurso nomeado pode ficar um dia',
+  nomeado.status === 200 && (nomeado.cabecalhos.get('cache-control') ?? '').includes('max-age=86400'),
+  nomeado.cabecalhos.get('cache-control'));
 
 // A origem também já respondeu com o outro nome de campo, em ordem de sorteio.
 const emOrdemDeSorteio = await perguntar({

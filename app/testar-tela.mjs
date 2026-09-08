@@ -864,14 +864,34 @@ conferir('e fecha a conta do dinheiro',
   && /Resultado −?R\$/.test(simulacao), simulacao.slice(-160));
 // O número que separa uma simulação honesta de propaganda: num sorteio entre as
 // 25, a garantia quase nunca se aplica, e a tela tem de dizer isso.
+//
+// A frase tem três formas — nenhum, um, vários —, e qual delas aparece depende
+// do sorteio. O molde antigo, `ca[íi]ram?`, casava "caíram" e "caíra", e não
+// casava "caiu": a forma do singular. Ela sai quando exatamente um dos cem
+// sorteios cai no pool, o que acontece em cerca de uma corrida em vinte — e nas
+// outras dezenove a conferência passava. Um teste que reprova por sorteio, com
+// a tela certa, não prova nada e ainda gasta o crédito das suítes; e o mesmo
+// molde alimentava a contagem logo abaixo, que no singular lia zero e aprovava
+// sem olhar. As três formas se conferem aqui, de uma vez e sem sorteio nenhum,
+// e só então a frase de verdade passa pelo mesmo molde.
+const CAIU_NO_POOL =
+  /(Nenhum sorteio caiu|[\d.]+ sorteios? ca(?:iu|íram)) inteiro dentro do seu pool/;
+for (const [forma, frase] of [
+  ['nenhum', 'Nenhum sorteio caiu inteiro dentro do seu pool'],
+  ['um', '1 sorteio caiu inteiro dentro do seu pool'],
+  ['vários', '37 sorteios caíram inteiro dentro do seu pool'],
+  ['milhares', '1.000 sorteios caíram inteiro dentro do seu pool'],
+]) {
+  conferir(`a frase do pool é reconhecida na forma "${forma}"`, CAIU_NO_POOL.test(frase), frase);
+}
 conferir('e diz em quantos sorteios a garantia chegou a valer',
-  /(Nenhum sorteio caiu|\d+ sorteios? ca[íi]ram?) inteiro dentro do seu pool/.test(simulacao),
-  simulacao.slice(0, 200));
+  CAIU_NO_POOL.test(simulacao), simulacao.slice(0, 200));
 // E esse número tem de ser pequeno. Um sorteio entre as 25 cai inteiro num pool
 // de 22 em cerca de 5% das vezes; se a simulação "da vida real" estivesse
 // sorteando dentro do pool, ela mostraria a garantia valendo sempre — que é
 // exatamente como uma simulação vira propaganda.
-const caiuDentro = Number(simulacao.match(/(\d+) sorteios? ca[íi]ram? inteiro/)?.[1] ?? 0);
+const caiuDentro = Number(
+  (simulacao.match(/([\d.]+) sorteios? ca(?:iu|íram) inteiro/)?.[1] ?? '0').replace(/\./g, ''));
 conferir('e na vida real isso acontece poucas vezes, não sempre',
   caiuDentro <= 30, `${caiuDentro} de 100 sorteios caíram dentro do pool`);
 
@@ -926,13 +946,18 @@ const duelo = (await pagina.locator('#simulacao').innerText()).replace(/\s+/g, '
 conferir('a simulação compara o fechamento com o chute',
   duelo.includes('Seu fechamento') && duelo.includes('No chute'), duelo.slice(0, 120));
 
+// A porcentagem chega escrita como o Brasil escreve — "44,5%" —, e `parseFloat`
+// pararia na vírgula: 44,5 viraria 44. Truncar sempre para baixo é o pior jeito
+// de errar aqui, porque a comparação de baixo é "o chute não passa do
+// fechamento": com 44,9% contra 44,1%, os dois viram 44 e a violação passa.
+const numeroBr = (texto) => Number.parseFloat(String(texto).replace(/\./g, '').replace(',', '.'));
 const alcance = await pagina.evaluate(() => {
   const t = [...document.querySelectorAll('#simulacao .quadro')]
     .find((x) => x.innerText.includes('Alcançou'));
   const c = t?.querySelector('tbody tr')?.cells;
   return c ? { garantia: Number(t.innerText.match(/Alcançou (\d+)/)[1]),
-    meu: parseFloat(c[1].innerText), chute: parseFloat(c[2].innerText) } : null;
-});
+    meu: c[1].innerText, chute: c[2].innerText } : null;
+}).then((a) => (a ? { ...a, meu: numeroBr(a.meu), chute: numeroBr(a.chute) } : null));
 conferir('e diz em que porcentagem cada lado alcançou a garantia',
   alcance && Number.isFinite(alcance.meu) && Number.isFinite(alcance.chute),
   JSON.stringify(alcance));
@@ -1452,6 +1477,155 @@ await trancado.close();
       cortadosAqui.length === 0, cortadosAqui.join(' · '));
     apertados = apertados.concat(aqui);
   }
+  await caixa.close();
+}
+
+// ── a navegação inteira, à vista ────────────────────────────────────────────
+//
+// As cinco abas somam 455 px de conteúdo. A barra rolava na horizontal com a
+// barra de rolagem escondida — em telefone nenhum, de 320 a 414 de largura, a
+// quinta cabia —, e nada dizia que havia mais: nem barra, nem sombra, nem meia
+// aba assomando na borda. A escondida era a do **resumo**, onde mora a
+// varredura exaustiva que prova a garantia anunciada na primeira tela.
+//
+// "Uma coisa de cada vez, todas a um toque" só é verdade se todas estiverem à
+// vista. A conferência é de posição, e não de estilo: qualquer jeito de fazer
+// as cinco caberem passa aqui.
+for (const largura of [320, 360, 390, 414]) {
+  const caixa = await navegador.newContext({ viewport: { width: largura, height: 800 } });
+  const pg = await caixa.newPage();
+  await pg.goto(endereco, { waitUntil: 'networkidle' });
+  await pg.click('#escolher');
+  await esperarFechamento(pg, 20000);
+  await abrir(pg);
+  const fora = await pg.evaluate((w) => [...document.querySelectorAll('#abas button')]
+    .filter((b) => {
+      const r = b.getBoundingClientRect();
+      return r.left < -0.5 || r.right > w + 0.5;
+    })
+    .map((b) => `${b.textContent.trim()} termina em ${Math.round(b.getBoundingClientRect().right)}`),
+  largura);
+  // Sem esta contagem a conferência acima passa quando não há aba nenhuma —
+  // área que não abriu, seletor que mudou de nome —, que é o jeito de um teste
+  // de posição ficar verde sem ter olhado para nada.
+  const quantas = await pg.locator('#abas button').count();
+  conferir(`as cinco abas cabem na tela de ${largura} px`,
+    quantas === 5 && fora.length === 0, `${quantas} abas · ${fora.join(' · ')}`);
+  await caixa.close();
+}
+
+// E numa tela larga elas ficam na coluna do conteúdo, e não na largura da
+// janela. As abas repartem entre si a linha em que estão; sem um limite, a
+// linha é a janela inteira — numa tela de 1.200 px, cinco pílulas de 230 px
+// sobre uma coluna de conteúdo de 704, centrada, alinhadas com nada.
+{
+  const caixa = await navegador.newContext({ viewport: { width: 1200, height: 900 } });
+  const pg = await caixa.newPage();
+  await pg.goto(endereco, { waitUntil: 'networkidle' });
+  await pg.click('#escolher');
+  await esperarFechamento(pg, 20000);
+  await abrir(pg);
+  const colunas = await pg.evaluate(() => {
+    const a = document.getElementById('abas').getBoundingClientRect();
+    const c = document.getElementById('aba-cartelas').getBoundingClientRect();
+    return { abas: [Math.round(a.left), Math.round(a.right)],
+      conteudo: [Math.round(c.left), Math.round(c.right)] };
+  });
+  conferir('em tela larga, as abas ficam na coluna do conteúdo',
+    Math.abs(colunas.abas[0] - colunas.conteudo[0]) <= 1
+    && Math.abs(colunas.abas[1] - colunas.conteudo[1]) <= 1,
+    JSON.stringify(colunas));
+  await caixa.close();
+}
+
+// ── a barra que media coisa nenhuma, e o ponto no lugar da vírgula ──────────
+//
+// Duas coisas na mesma tabela de simulação, e as duas invisíveis de tão à
+// vista:
+//
+// A coluna de barras da distribuição desenhava **sempre o mesmo traço**. A
+// largura ia em porcentagem numa célula de tabela sem largura própria, a
+// porcentagem resolvia contra quase nada, e as seis barras — pedidas a 0%, 2%,
+// 22%, 24%, 95% e 100% — saíam todas nos 2 px do `min-width`. Uma coluna
+// inteira ocupando espaço e não dizendo nada.
+//
+// E as porcentagens saíam com ponto: "51.0%" numa tela onde todo o resto já
+// vinha em pt-BR — R$ 21,00, 1.631, 3.268.760. `toFixed` não fala português.
+{
+  const caixa = await navegador.newContext({ viewport: { width: 390, height: 844 } });
+  const pg = await caixa.newPage();
+  await pg.goto(endereco, { waitUntil: 'networkidle' });
+  await pg.click('#escolher');
+  await esperarFechamento(pg, 20000);
+  await abrir(pg, 'simular');
+  await pg.click('#simular');
+  await pg.waitForFunction(() => document.querySelector('#simulacao table'), null, { timeout: 60000 });
+
+  const barras = await pg.evaluate(() => [...document.querySelectorAll('#simulacao .barra')]
+    .map((b) => ({
+      pedido: Number.parseFloat(b.style.width),
+      trilho: b.parentElement.getBoundingClientRect().width,
+      real: b.getBoundingClientRect().width,
+    })));
+  // Uma barra desenha o que a linha diz — a fatia pedida do trilho, nunca menos
+  // que os 2 px que a fazem existir.
+  const erradas = barras.filter(({ pedido, trilho, real }) =>
+    Math.abs(real - Math.max(2, (pedido * trilho) / 100)) > 1.5);
+  conferir('cada barra da distribuição mede a fatia que a linha diz',
+    barras.length >= 3 && erradas.length === 0,
+    barras.map((b) => `${b.pedido}% de ${Math.round(b.trilho)} deu ${Math.round(b.real)}`).join(' · '));
+  // E o defeito antigo passava pela conferência acima se o trilho fosse zero:
+  // 2 px é o mínimo, e todo mundo em 2 px "confere". O que ele não sobrevive é
+  // a esta: barras de tamanhos diferentes têm de sair diferentes.
+  conferir('e barras de tamanhos diferentes saem diferentes',
+    new Set(barras.map((b) => Math.round(b.real))).size >= 3,
+    barras.map((b) => Math.round(b.real)).join(' '));
+
+  const aba = (await pg.locator('#aba-simular').innerText()).replace(/\s+/g, ' ');
+  const comPonto = aba.match(/\d+\.\d+\s*%/g) ?? [];
+  conferir('nenhuma porcentagem escrita com ponto decimal', comPonto.length === 0,
+    comPonto.join(' · '));
+  conferir('e a comparação com o chute vem em porcentagem brasileira',
+    /\d+,\d+\s*%/.test(aba), aba.match(/[\d.,]+\s*%/g)?.join(' · ') ?? '(nenhuma porcentagem)');
+
+  await pg.click('#tab-resumo');
+  await pg.click('#det-acaso > summary');
+  await pg.waitForTimeout(200);
+  const acaso = (await pg.locator('#acaso').innerText()).replace(/\s+/g, ' ');
+  const pontoNoAcaso = acaso.match(/\d+\.\d+\s*%/g) ?? [];
+  // A exigência de haver uma porcentagem à brasileira não é enfeite: sem ela,
+  // um "e se eu jogasse no chute?" que não desenhasse porcentagem nenhuma
+  // passaria por não ter ponto em lugar nenhum.
+  conferir('nem no "e se eu jogasse no chute?"',
+    pontoNoAcaso.length === 0 && /\d+,\d+\s*%/.test(acaso),
+    `com ponto: ${pontoNoAcaso.join(' · ') || 'nenhuma'} · todas: ${
+      acaso.match(/[\d.,]+\s*%/g)?.join(' ') ?? 'nenhuma'}`);
+
+  // ── e o cabeçalho gruda como uma peça só ─────────────────────────────────
+  //
+  // Título e abas grudavam no topo cada um por sua conta, e o de baixo carregava
+  // a altura do de cima escrita à mão: `top: 3rem` contra os 63 px que o título
+  // mede. Assim que a página rolava, as abas subiam **por cima** dos 15 px de
+  // baixo do título — e do botão "Voltar", que é a única saída da área.
+  await pg.click('#tab-simular');
+  await pg.evaluate(() => { document.getElementById('analise').scrollTop = 600; });
+  await pg.waitForTimeout(150);
+  const cabeca = await pg.evaluate(() => {
+    const t = document.querySelector('.analise-topo').getBoundingClientRect();
+    const a = document.getElementById('abas').getBoundingClientRect();
+    const v = document.getElementById('voltar').getBoundingClientRect();
+    return {
+      rolou: document.getElementById('analise').scrollTop,
+      // Positivo quer dizer que as abas invadiram o que está acima delas.
+      sobreOTitulo: Math.round(t.bottom - a.top),
+      sobreOVoltar: Math.round(v.bottom - a.top),
+    };
+  });
+  // `rolou > 0` não é enfeite: sem rolagem nada gruda, e a conferência passaria
+  // sem ter olhado para o que ela existe para olhar.
+  conferir('rolando, as abas não sobem por cima do título nem do "Voltar"',
+    cabeca.rolou > 0 && cabeca.sobreOTitulo <= 0 && cabeca.sobreOVoltar <= 0,
+    JSON.stringify(cabeca));
   await caixa.close();
 }
 

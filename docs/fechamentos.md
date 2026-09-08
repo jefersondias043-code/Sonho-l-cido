@@ -310,9 +310,9 @@ Daí tudo o mais decorre:
 
 Sem WebAssembly no cliente, sem *web workers*, sem banco de sessões, sem retomada
 de trabalho interrompido. Nada disso tem razão de existir quando não há nada a
-esperar. O cliente inteiro dá **2.492 linhas** somando JavaScript, HTML e CSS —
+esperar. O cliente inteiro dá **2.534 linhas** somando JavaScript, HTML e CSS —
 teto de 2.600 cobrado pela construção —, e o peso inicial (casca, índice, preços
-e distribuições) dá **43 KiB comprimidos**.
+e distribuições) dá **44 KiB comprimidos**.
 
 O teto foi 1.500 enquanto havia uma porta de entrada só, 1.700 quando a segunda
 chegou, 2.250 com a área de análise, 2.400 com a comparação contra o chute,
@@ -1003,6 +1003,134 @@ imagens com `alt`, marcos (`main`, `footer`, `dialog`, `tablist`) no lugar, e o
 foco voltando para o botão *"Visualizar cartelas"* quando a área de análise
 fecha.
 
+## A quinta aba não cabia em telefone nenhum
+
+A área de análise tem cinco abas — cartelas, conferir, simular, valores, resumo
+—, e as cinco somam **455 px** de conteúdo. A barra rolava na horizontal quando
+não coubesse, com a barra de rolagem escondida por estilo. Medindo a largura
+útil dela nos telefones que existem:
+
+| tela | cabe | precisa | a última aba termina em |
+|---|---:|---:|---:|
+| 320 px | 288 | 455 | 471 |
+| 360 px | 328 | 455 | 471 |
+| 390 px | 358 | 455 | 471 |
+| 414 px | 382 | 455 | 471 |
+
+Em nenhuma. E nada dizia que havia mais: sem barra de rolagem, sem sombra na
+borda, sem meia aba assomando — a quinta simplesmente não existia para quem
+olhasse. A escondida era a do **resumo**, que é onde mora a varredura exaustiva:
+a prova, no aparelho da pessoa, da garantia que a primeira tela anuncia. O
+aplicativo escondia a própria prova atrás de um gesto que ninguém tinha motivo
+para tentar.
+
+A barra passou a quebrar em duas linhas, e as abas de cada linha repartem a
+sobra entre si em vez de deixar um buraco à direita. Custa cerca de 50 px de
+altura no topo da área, em telefone; numa tela larga as cinco voltam a caber
+numa linha só. *"Uma coisa de cada vez, todas a um toque"* só era verdade na
+metade que se via.
+
+Repartir a linha trouxe junto uma pergunta que a rolagem escondia: **que linha?**
+Numa tela de 1.200 px o conteúdo da área fica numa coluna de 704, centrada, e a
+barra de navegação dele ficava com os 1.168 da janela — cinco pílulas de 230 px
+alinhadas com nada. O cabeçalho passou a viver na mesma coluna do conteúdo, e a
+conferência mede as duas caixas e cobra que as bordas coincidam.
+
+A conferência é de posição, e não de estilo — qualquer jeito de fazer as cinco
+caberem passa: ela abre a área nas quatro larguras e reprova qualquer aba cuja
+caixa comece antes de zero ou termine depois da borda. Com a rolagem de volta,
+ela aponta as quatro larguras, uma a uma, com a medida ao lado.
+
+### E o cabeçalho grudava em duas peças
+
+Achado no mesmo lugar, medindo a mesma barra. O título da área — com o botão
+*"Voltar"*, que é a única saída dela — e a barra de abas grudam no topo quando a
+página rola, e grudavam **cada um por sua conta**. O de baixo precisava então
+saber a altura do de cima, e sabia por um número escrito à mão: `top: 3rem`,
+contra os **63 px** que o título mede de verdade.
+
+A diferença de 15 px era o quanto as abas subiam por cima do título assim que a
+página rolasse — cobrindo o rodapé do botão de sair. Não é defeito novo: `3rem`
+nunca foi 63 px, e a sobreposição estava lá desde que os dois passaram a grudar.
+O que mudou foi a chance de alguém dar de cara com ela — a barra de abas ficou
+com duas linhas e o dobro de peso na tela.
+
+Os dois passaram a ser um bloco só, que gruda inteiro. Não há número a acertar:
+a conta passou a ser a do navegador. A conferência rola a área e mede as três
+caixas — título, abas e botão —, exigindo que nenhuma invada a outra; e exige
+antes que a rolagem tenha de fato acontecido, porque sem rolar nada gruda e a
+conferência passaria sem ter olhado para o que existe para olhar.
+
+
+## A barra que media sempre a mesma coisa
+
+Na tabela de distribuição da simulação — *"melhor cartela do sorteio"* — havia
+uma quarta coluna com uma barrinha, para a leitura de relance antes do número.
+Ela desenhava **sempre o mesmo traço**. Medido nas seis linhas de uma simulação
+de 100 sorteios:
+
+| a linha pedia | a barra saiu | a célula tinha |
+|---:|---:|---:|
+| 0% | 2 px | 12 px |
+| 2% | 2 px | 12 px |
+| 22% | 2 px | 12 px |
+| 24% | 2 px | 12 px |
+| 95% | 2 px | 12 px |
+| 100% | 2 px | 12 px |
+
+A largura ia em porcentagem, e porcentagem se resolve contra a caixa de quem
+contém. Quem continha era uma célula de tabela sem largura própria, que por sua
+vez se dimensionava pelo conteúdo — a barra. A conta era circular, o navegador
+resolvia em quase nada, e todas as barras caíam nos 2 px do `min-width` que
+existia justamente para nenhuma sumir. Uma coluna inteira ocupando espaço numa
+tela de telefone e não dizendo nada, desde que foi escrita.
+
+O conserto é um trilho de largura fixa — 3 rem — em volta da barra: agora a
+porcentagem tem contra o que se medir, e o trilho ainda mostra o que falta para
+o máximo. A conferência mede cada barra contra a fatia que a linha pediu, e
+cobra também que barras de tamanhos diferentes **saiam** diferentes — porque a
+primeira conferência sozinha passaria se o trilho voltasse a zero, com todo
+mundo empatado nos 2 px do mínimo.
+
+## Um ponto onde o Brasil escreve vírgula
+
+A tabela que compara o fechamento com o chute dizia **"51.0%"** e **"46.0%"**; o
+*"e se eu jogasse no chute?"*, **"94.7%"**. Numa tela onde o resto já vinha em
+português — R$ 21,00, 1.631 cartelas, 1 concurso a cada 3.268.760 —, eram os
+únicos números escritos como em inglês. `toFixed` não fala português, e era ele
+que os escrevia.
+
+Não muda conta nenhuma, e é exatamente por isso que vale: um número escrito de
+dois jeitos na mesma tela é do tipo de coisa que faz a pessoa desconfiar de tudo
+o que ela não tem como conferir sozinha — e o que este aplicativo pede que ela
+aceite é justamente uma conta que ela não vai refazer. A conferência varre a aba
+inteira atrás de qualquer porcentagem com ponto decimal, e a mesma varredura
+passa pelo *"e se eu jogasse no chute?"*.
+
+## Um teste que reprovava por sorteio
+
+A suíte de tela reprovou uma vez, com a tela certa. A frase era esta:
+
+> *1 sorteio caiu inteiro dentro do seu pool — e só nesses a garantia de 12
+> acertos vale.*
+
+O molde que a procurava era `ca[íi]ram?`: casa "caíram" e casa "caíra", e não
+casa **"caiu"**. A frase tem três formas — nenhum, um, vários — e a do singular
+sai quando exatamente um dos cem sorteios cai no pool. Num pool de 22 dezenas
+cada sorteio cai dentro com probabilidade `C(22,15)/C(25,15) = 5,22%`, e sair
+exatamente um em cem tem **2,6%** de chance: uma corrida em trinta e nove. Nas
+outras trinta e oito a conferência passava.
+
+Um teste que reprova por sorteio é pior do que um teste que falta: ele gasta o
+crédito da suíte inteira, e ensina quem mantém o projeto a rodar de novo em vez
+de olhar. E o mesmo molde alimentava a contagem da linha seguinte — *"na vida
+real isso acontece poucas vezes, não sempre"* —, que no singular lia zero e
+aprovava sem olhar para nada.
+
+As três formas passaram a se conferir de uma vez, sem sorteio nenhum, e só
+depois a frase de verdade passa pelo mesmo molde. Com o molde antigo de volta, a
+forma do singular reprova todas as vezes, e não uma em trinta e nove.
+
 ## Duzentas e quarenta e três folhas, sem avisar
 
 *"Imprimir volantes"* montava os volantes e chamava a impressão do sistema no
@@ -1126,6 +1254,7 @@ cargo test --release -p gerar-catalogo   # a construção de Turán, por força 
 node app/testar-estrategia.mjs           # a função que decide o que se compra
 node app/testar-catalogo.mjs             # soma de verificação, posições, bolão
 node app/testar-conferir.mjs             # a varredura do cliente, contra o catálogo
+node app/testar-analise.mjs              # a conta do prêmio, e a decomposição da cartela
 node servidor/testar-intencao.mjs        # o leitor que responde sem modelo
 node servidor/testar-explicar.mjs        # a regra que descarta número inventado
 node servidor/testar-resultado.mjs       # o sorteio oficial, sem sair para a rede
@@ -1136,8 +1265,9 @@ node app/testar-tela.mjs                 # a tela, num navegador de verdade
 node app/testar-tela.mjs /repo/fechamentos/   # e de novo, na subpasta em que vai ao ar
 node ferramentas/testar-convivencia.mjs       # os dois aplicativos no mesmo endereço
 
-# Quanto a tela leva para responder em 3G rápido.
+# Quanto a tela leva para responder em 3G rápido — na primeira visita, e na volta.
 node ferramentas/medir-3g.mjs
+node ferramentas/medir-volta.mjs
 
 # E a prévia de arquivo único, para abrir o aplicativo sem servidor de arquivos.
 python3 ferramentas/previa-artefato.py previa.html
@@ -1175,8 +1305,9 @@ um caminho absoluto esquecido funciona na raiz e quebra só depois de publicado.
 `publicar.yml` monta os dois e, **antes de publicar qualquer um**, roda a
 varredura exaustiva das 330 entradas. Uma falha ali bloqueia a publicação do site
 inteiro, de propósito: pôr no ar metade seria pôr no ar um endereço que promete o
-que não confere. `catalogo.yml` roda a mesma varredura e as sete suítes a cada
-envio, em qualquer branch.
+que não confere. `catalogo.yml` roda a mesma varredura e as **dez** suítes a cada
+envio, em qualquer branch — cinco do cliente (a da tela duas vezes, na raiz e na
+subpasta), três do servidor e duas de ferramenta.
 
 ## As 18 entradas sem bilhetes
 

@@ -121,6 +121,11 @@
      era o que enchia a primeira tela de cartelas que ninguém tinha pedido. -->
 <section class="analise" id="analise" hidden role="dialog" aria-modal="true"
   aria-label="Cartelas e análise">
+  <!-- O título e as abas grudam no topo juntos, num bloco só. Grudando cada um
+       por conta própria, o de baixo precisava saber a altura do de cima — e
+       sabia errado: 3rem contra os 63 px que o outro mede, 15 px de diferença,
+       que as abas cobriam do botão "Voltar" assim que a página rolava. -->
+  <div class="analise-cabeca">
   <div class="analise-topo">
     <button type="button" id="voltar" class="discreto">‹ Voltar</button>
     <strong id="analise-titulo"></strong>
@@ -132,6 +137,7 @@
     <button type="button" role="tab" id="tab-valores" aria-controls="aba-valores" data-aba="valores" aria-selected="false">Valores</button>
     <button type="button" role="tab" id="tab-resumo" aria-controls="aba-resumo" data-aba="resumo" aria-selected="false">Resumo</button>
   </nav>
+  </div>
 
   <div class="aba" id="aba-cartelas" role="tabpanel" aria-labelledby="tab-cartelas" tabindex="0">
     <div id="lista-cartelas"></div>
