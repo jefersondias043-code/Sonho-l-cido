@@ -456,6 +456,66 @@ conferir('a carteira registra o retorno',
   /voltou R\$/.test(await pagina.locator('.registros li').innerText()),
   await pagina.locator('.registros li').innerText());
 
+// ── e o que está guardado volta para a tela ────────────────────────────────
+//
+// A carteira guardava tudo o que descreve o pedido — as dezenas do dia e a
+// combinação — e não oferecia jeito nenhum de usá-lo. Quem quisesse conferir na
+// quarta-feira o jogo que fez no sábado tinha de remontá-lo de cabeça: as
+// mesmas dezenas, uma a uma, e o mesmo dinheiro, torcendo para cair na mesma
+// linha do catálogo. Conferir um jogo velho contra o sorteio de hoje é
+// exatamente o que se faz com um bilhete de loteria.
+const guardado = (await pagina.locator('.registros li').innerText()).replace(/\s+/g, ' ');
+const marcadasAntes = await pagina.locator('.grade [aria-pressed=true]').count();
+// Mexer no dinheiro é o jeito mais curto de sair do fechamento guardado: solta o
+// fechamento nomeado e devolve o que o orçamento compraria, que é outra coisa.
+await pagina.fill('#valor', 'R$ 7,00');
+await pagina.dispatchEvent('#valor', 'change');
+await pagina.waitForTimeout(300);
+const outroFechamento = (await pagina.locator('.resposta').innerText()).replace(/\s+/g, ' ');
+conferir('mexer no dinheiro tira o fechamento guardado da tela',
+  !outroFechamento.includes(guardado.match(/(\d+) cartelas? de (\d+) dezenas/)?.[0] ?? '§'),
+  outroFechamento.slice(0, 100));
+
+// O toque vem depois de conferir que há onde tocar. Clicar num botão que não
+// existe faz o Playwright esperar e **estourar**, e a suíte inteira morre sem
+// relatar nada — verde nenhum, vermelho nenhum, só um rastro de pilha. Um teste
+// que aborta é pior do que um que reprova: ele não diz o que está errado.
+const temBotao = await pagina.locator('.registros [data-reabrir="0"]').count();
+conferir('o registro guardado oferece como voltar para a tela',
+  temBotao === 1, `${temBotao} botões de reabrir`);
+if (temBotao === 1) {
+  await pagina.click('.registros [data-reabrir="0"]');
+  await esperarFechamento(pagina, 20000);
+  await pagina.waitForTimeout(300);
+}
+const devolta = (await pagina.locator('.resposta').innerText()).replace(/\s+/g, ' ');
+const quantasEComo = guardado.match(/(\d+) cartelas? de (\d+) dezenas/)?.[0] ?? '§';
+conferir('e o que está guardado volta para a tela com um toque',
+  devolta.includes(quantasEComo), `guardado: ${quantasEComo} · na tela: ${devolta.slice(0, 110)}`);
+// E a tela diz de onde ele veio. Sem isto ela dizia *"você montou este
+// fechamento à mão, em montar do meu jeito"* — verdade para o modo manual,
+// mentira para um jogo que voltou da carteira, e a linha existe justamente para
+// explicar por que o número na tela não é o que o dinheiro compraria.
+const degrau = (await pagina.locator('#degrau').innerText()).replace(/\s+/g, ' ');
+conferir('e a tela diz que ele veio da carteira, e não da mão',
+  degrau.includes('carteira'), degrau);
+conferir('com as mesmas dezenas marcadas',
+  (await pagina.locator('.grade [aria-pressed=true]').count()) === marcadasAntes,
+  `${await pagina.locator('.grade [aria-pressed=true]').count()} de ${marcadasAntes}`);
+// E as cartelas de verdade voltam junto: a resposta certa com a lista vazia
+// seria uma manchete sobre nada.
+//
+// O mesmo cuidado de cima, e pelo mesmo motivo: sem o fechamento de volta não
+// há cartão gerado, logo não há "Visualizar cartelas", e abrir sem conferir
+// antes fazia a suíte estourar em vez de reprovar. Quem confere um conserto
+// tirando-o do lugar precisa que a suíte sobreviva ao buraco.
+const podeAbrir = await pagina.locator('[data-acao=abrir]').count();
+if (podeAbrir === 1) await abrir(pagina, 'cartelas');
+conferir('e as cartelas voltam junto',
+  podeAbrir === 1 && (await pagina.locator('.bilhetes li').count()) > 0,
+  `${podeAbrir} botões de visualizar`);
+if (podeAbrir === 1) await fechar(pagina);
+
 // ── preços editáveis, e a tela dizendo que não os audita ────────────────────
 
 await pagina.click('#det-dinheiro summary');
@@ -1328,6 +1388,40 @@ await trancado.close();
     .map((b) => b.getAttribute('aria-label') || b.textContent.trim()));
   conferir('cada parte do bolão tem seu próprio nome',
     partes.length === 4 && new Set(partes).size === 4, partes.join(' · '));
+
+  // A carteira tem o mesmo problema, e por mais tempo: cada registro guardado
+  // traz "Abrir" e "Apagar", e com três jogos guardados são seis botões e duas
+  // palavras. Na tela a linha ao lado diz de que jogo são; na lista de botões,
+  // não — e apagar o errado apaga o jogo de outro dia, sem desfazer.
+  await pg.evaluate(() => {
+    document.getElementById('det-carteira').open = true;
+  });
+  // Três jogos diferentes, guardados um a um: é assim que a carteira de alguém
+  // fica, e é com mais de um registro que a repetição aparece. `esperarFechamento`
+  // não serve aqui — o cartão já está na tela desde o "escolher por mim", e ela
+  // voltaria na hora, antes de as cartelas do orçamento novo chegarem.
+  for (const orcamento of ['R$ 40,00', 'R$ 300,00', 'R$ 2.000,00']) {
+    await pg.fill('#valor', orcamento);
+    await pg.dispatchEvent('#valor', 'change');
+    await pg.waitForTimeout(700);
+    await pg.click('[data-acao=guardar]');
+    await pg.waitForTimeout(150);
+  }
+  const carteira = await pg.evaluate(() => ({
+    nomes: [...document.querySelectorAll('.registros button')]
+      .map((b) => b.getAttribute('aria-label') || b.textContent.trim()),
+    // Os registros em si, sem o texto dos botões: se dois deles saíssem iguais,
+    // dois nomes iguais seriam a verdade e não um defeito — e a conferência
+    // estaria reprovando o preparo, não o produto.
+    linhas: [...document.querySelectorAll('.registros li')]
+      .map((li) => li.innerText.replace(/Abrir|Apagar/g, '').replace(/\s+/g, ' ').trim()),
+  }));
+  conferir('e cada botão da carteira também tem o seu',
+    carteira.nomes.length >= 4
+    && new Set(carteira.linhas).size === carteira.linhas.length
+    && new Set(carteira.nomes).size === carteira.nomes.length,
+    `${carteira.nomes.length} botões, ${new Set(carteira.nomes).size} nomes · ${
+      carteira.nomes.join(' | ')}`);
 
   // Pular de `h1` para `h3` deixa um degrau vazio: quem navega por título passa
   // do nome do aplicativo direto para a tabela de preços sem saber o que pulou.

@@ -359,7 +359,11 @@ function frasedoDegrau(plano) {
   // Nomeado, não há "próximo degrau": a escada é de quem pergunta o que o
   // dinheiro compra, e aqui a pergunta foi outra.
   if (estado.link) return 'Este é o fechamento do bolão que compartilharam com você.';
-  if (estado.fixo) return 'Você montou este fechamento à mão, em "montar do meu jeito".';
+  if (estado.fixo) {
+    return estado.fixo.de === 'carteira'
+      ? 'Este fechamento veio da sua carteira, em "o que eu já joguei".'
+      : 'Você montou este fechamento à mão, em "montar do meu jeito".';
+  }
   const p = plano.pedido;
   if (p) {
     return p.degrau
@@ -806,15 +810,54 @@ function desenharPrecos() {
     <p class="ajuda">Valores de ${estado.precosPublicados.vigencia}.</p>`;
 }
 
+/// Um registro guardado pode voltar à tela quando o catálogo ainda tem aquela
+/// combinação **e** as dezenas do dia foram guardadas junto. Registros de
+/// versões antigas não têm dezenas, e um fechamento sem as dezenas dele não é
+/// um fechamento — é um preço.
+const podeReabrir = (r) => Array.isArray(r.dezenas) && r.dezenas.length === r.v
+  && fixoValido({ v: r.v, k: r.k, t: r.t }) != null;
+
+/// Põe de volta na tela o fechamento que a pessoa guardou: as mesmas dezenas, a
+/// mesma combinação, as mesmas cartelas — que saem do catálogo de sempre, e não
+/// do que foi guardado.
+///
+/// A carteira já guardava tudo o que descreve o pedido, e não oferecia jeito
+/// nenhum de usá-lo: quem quisesse conferir na quarta-feira o jogo que fez no
+/// sábado tinha de remontá-lo de cabeça — as mesmas dezenas, uma a uma, e o
+/// mesmo dinheiro — e torcer para cair na mesma linha do catálogo. Conferir um
+/// jogo velho contra o sorteio de hoje é o que se faz com um bilhete de loteria.
+///
+/// As dezenas entram sem passar por `trocarDezenas`, de propósito: aquela porta
+/// solta o fechamento nomeado, que é exatamente o que se quer fixar aqui.
+function reabrir(registro) {
+  if (!podeReabrir(registro)) return;
+  estado.dezenas = new Set(registro.dezenas);
+  guardar('dezenas', [...estado.dezenas]);
+  estado.link = null;
+  fixar(fixoValido({ v: registro.v, k: registro.k, t: registro.t, de: 'carteira' }));
+  responder();
+  mostrarAResposta();
+}
+
 function desenharCarteira() {
   if (!estado.carteira.length) { $('carteira').innerHTML = '<p class="ajuda">Nada guardado.</p>'; return; }
+  // Na tela, "Abrir" e "Apagar" bastam: a linha ao lado diz de que fechamento
+  // são. Na lista de botões de um leitor de tela são a mesma palavra repetida
+  // uma vez por registro, sem nada que os separe — e apagar o errado apaga o
+  // jogo de outro dia. O texto visível continua curto; o nome acessível
+  // descreve o registro. É a mesma lição dos quatro "Copiar link" do bolão.
+  const qual = (r) => `o fechamento de ${r.t} acertos com ${
+    plural(r.jogos, 'cartela', 'cartelas')}, de ${new Date(r.data).toLocaleDateString('pt-BR')}`;
   $('carteira').innerHTML = `<ol class="registros">${estado.carteira
     .map((r, i) => `<li><b>${r.t} acertos garantidos</b> ·
         ${plural(r.jogos, 'cartela', 'cartelas')} de ${r.k} dezenas ·
         ${dinheiro(r.custo)} · ${new Date(r.data).toLocaleDateString('pt-BR')}${
       r.retorno == null ? ''
         : ` · <b>voltou ${dinheiro(r.retorno)}</b>${r.concurso ? ` no concurso ${r.concurso}` : ''}`}
-        <button type="button" class="discreto" data-apagar="${i}">Apagar</button></li>`)
+        ${podeReabrir(r) ? `<button type="button" class="discreto" data-reabrir="${i}"
+          aria-label="Abrir de novo ${qual(r)}">Abrir</button>` : ''}
+        <button type="button" class="discreto" data-apagar="${i}"
+          aria-label="Apagar ${qual(r)}">Apagar</button></li>`)
     .join('')}</ol>`;
 }
 
@@ -840,7 +883,10 @@ function fixoValido(pedido) {
   if (!estado.indice || !(v && k && t)) return null;
   const existe = fechamentosDe(estado.indice, estado.precos, v)
     .some((e) => e.k === k && e.t === t);
-  return existe ? { v, k, t } : null;
+  // `de` diz de onde veio o pedido, e a tela conta isso para a pessoa. Dois
+  // valores, e o padrão é a mão: um `de` estragado no armazenamento não pode
+  // virar frase na tela, como nada mais do que entra de fora.
+  return existe ? { v, k, t, de: pedido.de === 'carteira' ? 'carteira' : 'mao' } : null;
 }
 
 /// O fechamento que a pessoa nomeou, como plano — o mesmo formato que a
@@ -1007,6 +1053,8 @@ function ligarControles() {
     if (link) ev.target.textContent = (await volante.copiar(link)) ? 'Copiado' : link;
   });
   $('carteira').addEventListener('click', (ev) => {
+    const abrir = ev.target.dataset?.reabrir;
+    if (abrir != null) return reabrir(estado.carteira[Number(abrir)]);
     const i = ev.target.dataset?.apagar;
     if (i == null) return;
     estado.carteira.splice(Number(i), 1);

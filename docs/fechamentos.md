@@ -314,15 +314,17 @@ Daí tudo o mais decorre:
 
 Sem WebAssembly no cliente, sem *web workers*, sem banco de sessões, sem retomada
 de trabalho interrompido. Nada disso tem razão de existir quando não há nada a
-esperar. O cliente inteiro dá **2.534 linhas** somando JavaScript, HTML e CSS —
-teto de 2.600 cobrado pela construção —, e o peso inicial (casca, índice, preços
-e distribuições) dá **44 KiB comprimidos**.
+esperar. O cliente inteiro dá **2.582 linhas** somando JavaScript, HTML e CSS —
+teto de 2.700 cobrado pela construção —, e o peso inicial (casca, índice, preços
+e distribuições) dá **45 KiB comprimidos**.
 
 O teto foi 1.500 enquanto havia uma porta de entrada só, 1.700 quando a segunda
 chegou, 2.250 com a área de análise, 2.400 com a comparação contra o chute,
 2.500 quando o que entra de fora — endereço, armazenamento do aparelho,
-resultado guardado — passou a ser conferido antes de virar tela, e 2.600 quando
-o prêmio passou a decompor cada cartela nas apostas simples que ela é. Nenhuma
+resultado guardado — passou a ser conferido antes de virar tela, 2.600 quando o
+prêmio passou a decompor cada cartela nas apostas simples que ela é, e 2.700
+quando a carteira deixou de ser só uma lista — o fechamento guardado volta para a
+tela com um toque, e a tela diz de onde ele veio. Nenhuma
 dessas subidas veio de o cliente passar a resolver mais. **Resolver** é procurar quais
 cartelas usar, e isso segue inteiro no motor em Rust, fora do aparelho.
 **Simular** é contar acertos de cartelas que já existem: um `and` e um popcount
@@ -839,6 +841,73 @@ sabe expressar, e é o que faz sentido: quem organiza um bolão divide o
 fechamento; quem recebeu uma parte não tem o que redividir. A suíte cobra que a
 soma das partes vistas por um participante seja o fechamento inteiro, e não a
 parte dele.
+
+## A carteira guardava tudo, e não devolvia nada
+
+*"O que eu já joguei"* guarda, de cada fechamento, o que descreve o pedido
+inteiro: as dezenas daquele dia, a combinação, quantas cartelas, quanto custou,
+a data e — depois de conferido — quanto voltou. Tudo o que é preciso para
+remontar aquele fechamento exatamente.
+
+E não havia como. Cada registro oferecia um botão: *apagar*.
+
+O jogo é feito no sábado e o sorteio sai no sábado à noite, mas a conferência de
+verdade é a de dias depois, quando a pessoa lembra. Aí ela abre o aplicativo e
+encontra a linha certa na carteira — *13 acertos garantidos · 694 cartelas de 15
+dezenas · R$ 2.429,00 · 05/09/2026* — e não tem o que fazer com ela. Para
+conferir, precisaria remontar o fechamento de cabeça: marcar de novo as mesmas
+vinte e três dezenas, uma a uma, e acertar o mesmo dinheiro, torcendo para cair
+na mesma linha do catálogo. Conferir um bilhete velho contra o sorteio de hoje é
+a coisa mais comum que se faz com um bilhete de loteria, e era a única que a
+carteira não deixava fazer.
+
+Cada registro ganhou um segundo botão, **Abrir**. Ele põe de volta as dezenas e
+fixa a combinação; as cartelas saem do catálogo de sempre, e não do que foi
+guardado — o registro é o pedido, não a resposta. A conferência então já
+funciona como sempre funcionou, e `anotarNaCarteira` reencontra o mesmo registro
+e escreve nele quanto voltou.
+
+E a tela passou a dizer de onde ele veio. A linha abaixo da régua explica por
+que o número na tela não é o que o dinheiro compraria, e ela tinha duas
+respostas: *"este é o fechamento do bolão que compartilharam com você"* e
+*"você montou este fechamento à mão, em montar do meu jeito"*. Um jogo que volta
+da carteira não é nenhum dos dois, e cairia no segundo — a tela contando à
+pessoa uma história que não foi a dela. O pedido guardado passou a carregar de
+onde veio, com dois valores possíveis e o padrão na mão, para que um
+armazenamento estragado não vire frase na tela.
+
+O botão só aparece quando o registro **pode** voltar: as dezenas guardadas têm
+de existir e ser tantas quantas o pool diz, e a combinação tem de continuar no
+catálogo. Registros de versões antigas não guardavam dezenas, e um fechamento
+sem as dezenas dele não é um fechamento — é um preço. Melhor não oferecer do que
+oferecer e devolver outra coisa.
+
+A conferência guarda um jogo, mexe no dinheiro para tirá-lo da tela, e cobra
+cinco coisas: que haja onde tocar, que a resposta volte a ser a mesma, que a
+tela diga que ela veio da carteira, que as dezenas marcadas voltem a ser as
+mesmas, e que as cartelas venham junto — uma manchete certa sobre uma lista
+vazia seria o pior jeito de isto falhar.
+
+A primeira dessas quatro nasceu de a prova ter dado errado. Tirado o botão para
+ver a suíte reprovar, ela não reprovou: **abortou**. O toque estava escrito
+direto, e clicar num botão que não existe faz o navegador esperar e estourar,
+matando a suíte inteira sem relatar nada — nem verde, nem vermelho, só um rastro
+de pilha. Um teste que aborta é pior do que um que reprova, porque não diz o que
+está errado. Agora ele confere que há onde tocar antes de tocar, e sem o botão
+saem três reprovações com o defeito escrito em cada uma.
+
+### E os botões da carteira também eram todos iguais
+
+Com três jogos guardados, a carteira mostra seis botões e duas palavras:
+*Abrir*, *Apagar*, *Abrir*, *Apagar*, *Abrir*, *Apagar*. Na tela isso basta — a
+linha ao lado diz de que jogo cada par é. Na lista de botões de um leitor de
+tela, não diz nada, e apagar o errado apaga o jogo de outro dia, sem desfazer. É
+exatamente o caso dos quatro *"Copiar link"* do bolão, que já tinha sido
+consertado ali e não tinha sido procurado aqui.
+
+O texto visível continua curto; o nome acessível passa a descrever o registro —
+*"Apagar o fechamento de 13 acertos com 694 cartelas, de 05/09/2026"*. A
+conferência guarda três jogos diferentes e cobra que os seis nomes sejam seis.
 
 ## O que estava guardado também vem de fora
 
