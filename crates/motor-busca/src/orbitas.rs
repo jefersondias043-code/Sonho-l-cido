@@ -159,6 +159,45 @@ pub struct InstanciaCiclica {
     inverso: Vec<Vec<u32>>,
 }
 
+/// As órbitas de alvo que um representante de cartela alcança.
+///
+/// Para cada quantidade `i ≥ t'` de elementos em comum: escolhe-se `i` dentro do
+/// representante e completa-se o alvo fora dele. Com `t' = a` o laço externo tem
+/// uma volta só, `parte` é o próprio representante, e isto é a continência de
+/// sempre.
+fn alvos_do_representante(
+    rep: u32,
+    v: u32,
+    a: u32,
+    b: u32,
+    t_linha: u32,
+    indice_b: &HashMap<u32, usize>,
+) -> Vec<u32> {
+    let livres: Vec<u32> = (0..v).filter(|i| rep & (1 << i) == 0).collect();
+    let dentro: Vec<u32> = (0..v).filter(|i| rep & (1 << i) != 0).collect();
+    let mut alvos = Vec::new();
+    for quantos in t_linha..=a.min(b) {
+        if quantos > b {
+            break;
+        }
+        combinar(&dentro, quantos as usize, &mut |parte: &[u32]| {
+            let base = parte.iter().fold(0u32, |m, &e| m | 1 << e);
+            combinar(&livres, (b - quantos) as usize, &mut |extra: &[u32]| {
+                let mut m = base;
+                for &e in extra {
+                    m |= 1 << e;
+                }
+                if let Some(&i) = indice_b.get(&canonico(m, v)) {
+                    alvos.push(i as u32);
+                }
+            });
+        });
+    }
+    alvos.sort_unstable();
+    alvos.dedup();
+    alvos
+}
+
 impl InstanciaCiclica {
     /// Monta a instância, ou devolve `None` quando ela não cabe.
     ///
@@ -197,7 +236,7 @@ impl InstanciaCiclica {
         teto: usize,
         parar: Option<&Controle>,
     ) -> Option<Self> {
-        Self::montar_geral(v, a, b, t_linha, teto, parar)
+        Self::montar_geral(v, a, b, t_linha, teto, None, parar)
     }
 
     /// Como [`InstanciaCiclica::montar`], com o teto de ligações escolhido por
@@ -209,7 +248,47 @@ impl InstanciaCiclica {
         teto: usize,
         parar: Option<&Controle>,
     ) -> Option<Self> {
-        Self::montar_geral(v, a, b, a, teto, parar)
+        Self::montar_geral(v, a, b, a, teto, None, parar)
+    }
+
+    /// A mesma instância com **uma amostra** das órbitas candidatas, para os
+    /// casos em que a tabela inteira não cabe em memória nenhuma.
+    ///
+    /// ## Por que amostrar funciona aqui, e não é desespero
+    ///
+    /// A conta que decide: em 25 dezenas com cartela de 18 garantindo 13, uma
+    /// órbita de cartelas — as 25 rotações de um conjunto — cobre **quase 80%**
+    /// das órbitas de alvo sozinha. O representante alcança 202.164 dos
+    /// 3.268.760 sorteios, e as 25 rotações espalham isso por
+    /// `1 − (1 − 6,2%)²⁵ ≈ 80%` das 130.750 órbitas de alvo.
+    ///
+    /// Uma solução ali tem **cinco** órbitas. Guardar as 19.228 candidatas para
+    /// escolher cinco pede 2 bilhões de ligações — 16 GB —, e é só por isso que
+    /// os 23 piores casos do catálogo ficavam fora da simetria. Com 800
+    /// candidatas a tabela cai para 333 MB, e escolher cinco entre 800 que
+    /// cobrem 80% cada continua sendo um problema com muitas soluções.
+    ///
+    /// Todas as órbitas do mesmo tamanho cobrem a **mesma quantidade** de alvos
+    /// — é simetria, não sorte —, então nenhuma amostra é enviesada por
+    /// construção. O que muda entre elas é só como as coberturas se sobrepõem.
+    ///
+    /// ## O buraco que a amostra poderia abrir, e não abre
+    ///
+    /// Uma amostra pode deixar alguma órbita de alvo sem nenhuma candidata que
+    /// a cubra, e aí não existiria solução alguma. Depois de amostrar, toda
+    /// órbita de alvo descoberta ganha uma candidata construída em cima dela —
+    /// `t'` dezenas do próprio alvo mais o que faltar. A instância continua
+    /// sempre resolúvel.
+    pub fn montar_amostrado(
+        v: usize,
+        a: usize,
+        b: usize,
+        t_linha: usize,
+        max_candidatos: usize,
+        semente: u64,
+        parar: Option<&Controle>,
+    ) -> Option<Self> {
+        Self::montar_geral(v, a, b, t_linha, usize::MAX, Some((max_candidatos, semente)), parar)
     }
 
     fn montar_geral(
@@ -218,6 +297,7 @@ impl InstanciaCiclica {
         b: usize,
         t_linha: usize,
         teto: usize,
+        amostra: Option<(usize, u64)>,
         parar: Option<&Controle>,
     ) -> Option<Self> {
         // `a > b` só é recusa quando cobrir significa conter: um conjunto maior
@@ -231,10 +311,23 @@ impl InstanciaCiclica {
         }
         let (v, a, b, t_linha) = (v as u32, a as u32, b as u32, t_linha as u32);
 
-        let orb_a = orbitas(v, a);
+        let mut orb_a = orbitas(v, a);
         let orb_b = orbitas(v, b);
         if orb_a.is_empty() || orb_b.is_empty() {
             return None;
+        }
+        // A amostra, quando pedida: embaralha e corta. `Pcg64Mcg` com semente
+        // fixa para que a mesma instância se remonte igual — uma busca que não
+        // se reproduz não se depura.
+        if let Some((max, semente)) = amostra {
+            if orb_a.len() > max {
+                let mut rng = Pcg64Mcg::new(u128::from(semente) | 1);
+                for i in (1..orb_a.len()).rev() {
+                    orb_a.swap(i, rng.gen_range(0..=i));
+                }
+                orb_a.truncate(max);
+                orb_a.sort_unstable();
+            }
         }
         // Quantos alvos cada conjunto alcança, para recusar antes de alocar.
         // Com `t' = a` a soma tem um termo só e é o `C(v−a, b−a)` de antes.
@@ -267,30 +360,7 @@ impl InstanciaCiclica {
             if parou(parar) {
                 return None;
             }
-            let livres: Vec<u32> = (0..v).filter(|i| rep & (1 << i) == 0).collect();
-            let dentro: Vec<u32> = (0..v).filter(|i| rep & (1 << i) != 0).collect();
-            let mut alvos = Vec::new();
-            // Para cada quantidade `i ≥ t'` de elementos em comum: escolhe-se
-            // `i` dentro do representante e completa-se o alvo fora dele. Com
-            // `t' = a` o laço externo tem uma volta só, `parte` é o próprio
-            // representante, e isto vira exatamente o que era antes.
-            for quantos in t_linha..=a.min(b) {
-                combinar(&dentro, quantos as usize, &mut |parte: &[u32]| {
-                    let base = parte.iter().fold(0u32, |m, &e| m | 1 << e);
-                    combinar(&livres, (b - quantos) as usize, &mut |extra: &[u32]| {
-                        let mut m = base;
-                        for &e in extra {
-                            m |= 1 << e;
-                        }
-                        if let Some(&i) = indice_b.get(&canonico(m, v)) {
-                            alvos.push(i as u32);
-                        }
-                    });
-                });
-            }
-            alvos.sort_unstable();
-            alvos.dedup();
-            cobre.push(alvos);
+            cobre.push(alvos_do_representante(rep, v, a, b, t_linha, &indice_b));
         }
 
         // O índice invertido é o que torna a reparação barata: para fechar um
@@ -301,6 +371,54 @@ impl InstanciaCiclica {
             for &alvo in alvos {
                 inverso[alvo as usize].push(i as u32);
             }
+        }
+
+        // O buraco que a amostra pode abrir, tapado. Uma órbita de alvo sem
+        // candidata nenhuma tornaria a instância insolúvel — não por falta de
+        // solução no problema, mas por falta de peça na amostra. Cada uma
+        // dessas ganha uma candidata construída em cima dela: `min(a, b)`
+        // dezenas do próprio alvo, que já garante `t'`, mais o que faltar de
+        // fora. Sem amostra este laço não encontra nada e não custa nada.
+        for j in 0..orb_b.len() {
+            if !inverso[j].is_empty() {
+                continue;
+            }
+            let alvo = orb_b[j].0;
+            let mut m = 0u32;
+            let mut faltam = a;
+            for i in 0..v {
+                if faltam == 0 {
+                    break;
+                }
+                if alvo & (1 << i) != 0 {
+                    m |= 1 << i;
+                    faltam -= 1;
+                }
+            }
+            for i in 0..v {
+                if faltam == 0 {
+                    break;
+                }
+                if m & (1 << i) == 0 {
+                    m |= 1 << i;
+                    faltam -= 1;
+                }
+            }
+            let rep = canonico(m, v);
+            let i = match orb_a.iter().position(|&(r, _)| r == rep) {
+                Some(i) => i,
+                None => {
+                    orb_a.push((rep, tamanho_da_orbita(rep, v)));
+                    cobre.push(alvos_do_representante(
+                        rep, v, a, b, t_linha, &indice_b,
+                    ));
+                    for &alvo in cobre.last().unwrap() {
+                        inverso[alvo as usize].push((orb_a.len() - 1) as u32);
+                    }
+                    orb_a.len() - 1
+                }
+            };
+            debug_assert!(inverso[j].contains(&(i as u32)));
         }
 
         Some(InstanciaCiclica { v, orb_a, peso_b, cobre, inverso })
@@ -584,6 +702,87 @@ impl MelhorQue for Option<(usize, u64, u64)> {
 
 #[cfg(test)]
 mod testes {
+
+    /// A amostra nunca deixa alvo sem candidata, e o guloso resolve mesmo com
+    /// uma fração das órbitas.
+    ///
+    /// É a garantia que faz a amostragem valer: sem ela, cortar candidatas
+    /// poderia deixar uma órbita de alvo sem ninguém que a cubra, e a instância
+    /// ficaria insolúvel — não por falta de solução no problema, mas por falta
+    /// de peça na amostra. O teto é posto baixo de propósito, para que o
+    /// remendo tenha de trabalhar.
+    #[test]
+    fn a_amostra_nunca_deixa_alvo_sem_candidata() {
+        for (v, a, b, t_linha, max) in
+            [(15usize, 4usize, 5usize, 3usize, 20usize), (17, 5, 6, 3, 30), (19, 4, 6, 2, 15)]
+        {
+            let inst = InstanciaCiclica::montar_amostrado(v, a, b, t_linha, max, 7, None)
+                .expect("a instância amostrada tem de montar");
+            let inteira = InstanciaCiclica::montar_com_intersecao(v, a, b, t_linha, usize::MAX, None)
+                .expect("a instância inteira tem de montar");
+            assert_eq!(
+                inst.alvos(),
+                inteira.alvos(),
+                "({v},{a},{b},{t_linha}) amostrar não pode mudar os alvos"
+            );
+            assert!(
+                inst.candidatos() <= inteira.candidatos(),
+                "({v},{a},{b},{t_linha}) amostrar não pode inventar candidatas além do total"
+            );
+            for (j, quem) in inst.inverso().iter().enumerate() {
+                assert!(
+                    !quem.is_empty(),
+                    "({v},{a},{b},{t_linha}) a órbita de alvo {j} ficou sem candidata"
+                );
+            }
+            let escolha = inst.guloso(1);
+            let (descobertos, _) = inst.descobertos_e_excesso(&escolha, 1);
+            assert_eq!(
+                descobertos, 0,
+                "({v},{a},{b},{t_linha}) o guloso não fechou na amostra"
+            );
+        }
+    }
+
+    /// E o que ela devolve são cartelas de verdade: toda a garantia conferida
+    /// por força bruta, sem reusar a tabela que a busca usou.
+    #[test]
+    fn a_solucao_amostrada_cobre_de_verdade() {
+        let (v, a, b, t_linha) = (17u32, 5u32, 6u32, 3u32);
+        let inst = InstanciaCiclica::montar_amostrado(
+            v as usize, a as usize, b as usize, t_linha as usize, 30, 4243, None,
+        )
+        .unwrap();
+        let mascaras: Vec<u32> = inst
+            .expandir(&inst.guloso(1))
+            .iter()
+            .map(|c| c.indices().iter().fold(0u32, |m, &i| m | 1 << i))
+            .collect();
+        // Todo `b`-subconjunto de `[v]` encontra alguma cartela — no avesso, o
+        // que falta à cartela encontra `t'` do que falta ao sorteio.
+        let mut alvo: Vec<u32> = (0..b).collect();
+        loop {
+            let m: u32 = alvo.iter().fold(0u32, |acc, &i| acc | 1 << i);
+            assert!(
+                mascaras.iter().any(|&c| (!c & mascara_cheia(v) & m).count_ones() >= t_linha),
+                "o alvo {alvo:?} ficou descoberto"
+            );
+            let mut i = b as usize;
+            loop {
+                if i == 0 {
+                    return;
+                }
+                i -= 1;
+                if alvo[i] != i as u32 + v - b {
+                    alvo[i] += 1;
+                    for k in i + 1..b as usize {
+                        alvo[k] = alvo[k - 1] + 1;
+                    }
+                    break;
+                }
+            }
+        }
+    }
     use super::*;
 
     #[test]

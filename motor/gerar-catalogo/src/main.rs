@@ -405,7 +405,19 @@ fn buscar_ciclica(v: usize, k: usize, t: usize, orcamento: Duration) -> Option<V
         .ok()
         .and_then(|s| s.parse().ok())
         .unwrap_or(120_000_000);
-    let inst = InstanciaCiclica::montar_com_intersecao(v, a, b, t_linha, teto, None)?;
+    // A tabela inteira quando ela cabe; uma amostra das órbitas candidatas
+    // quando não cabe. Os 23 piores casos do catálogo — pool de 24 e 25 com
+    // garantia parcial, folga de 5× a 6× até o piso — pediam bilhões de
+    // ligações e ficavam sem simetria nenhuma. A amostra os traz para dentro:
+    // ali uma órbita de cartelas sozinha já cobre quase 80% das órbitas de
+    // alvo, e a solução tem cinco, então escolher cinco entre oitocentas
+    // continua sendo um problema com muitas soluções.
+    let amostra: usize = std::env::var("CATALOGO_ORBITAS_AMOSTRADAS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(800);
+    let inst = InstanciaCiclica::montar_com_intersecao(v, a, b, t_linha, teto, None)
+        .or_else(|| InstanciaCiclica::montar_amostrado(v, a, b, t_linha, amostra, 20260908, None))?;
 
     // Duas sementes, cada uma com metade do orçamento: a busca cíclica reinicia
     // sozinha quando estanca, e trocar de semente troca o vale inteiro.
