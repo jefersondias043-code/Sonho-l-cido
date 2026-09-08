@@ -186,6 +186,28 @@ bilhete simples devolve **25,7%** do que custa nas faixas fixas — e é o mesmo
 para qualquer arranjo dos mesmos bilhetes, que é justamente o que faz dele a
 prova de que o fechamento compra certeza, e não lucro.
 
+### Todo número da tela, refeito de fora
+
+Depois do conserto, os números que a tela mostra para quatro fechamentos foram
+recolhidos do navegador e recalculados em Python, do zero — hipergeométrica,
+binomiais e tabela de preços, sem tocar em nenhum arquivo do catálogo:
+
+| fechamento | custo | média por concurso, na tela | recalculada | retorno |
+|---|---:|---:|---:|---:|
+| 22 dezenas, cartela de 15, garante 11 | R$ 21,00 | R$ 5,39 | R$ 5,39 | 25,67% |
+| 25 dezenas, cartela de 16, garante 11 | R$ 1.568,00 | R$ 402,44 | R$ 402,44 | 25,67% |
+| 25 dezenas, cartela de 17, garante 12 | R$ 22.848,00 | R$ 5.864,10 | R$ 5.864,10 | 25,67% |
+| 25 dezenas, cartela de 15, garante 13 | R$ 12.628,00 | R$ 3.241,06 | R$ 3.241,06 | 25,67% |
+
+Batem ao centavo, e a coluna da direita é a demonstração em quatro linhas:
+**25,67% em cartela de 15, de 16 e de 17**. A taxa não depende do tamanho da
+cartela nem do fechamento — depende só do preço da aposta simples e da tabela de
+prêmios.
+
+E, no mesmo movimento, os **330 pisos** do índice foram refeitos pela cota de
+contagem e as **255 probabilidades** de `acaso.json` pela hipergeométrica, também
+em Python, também sem tocar nos arquivos: nenhum diverge.
+
 ### Um bilhete de mais de 15 dezenas são várias apostas
 
 Esse número estava certo para bilhete de 15 dezenas e **errado para todos os

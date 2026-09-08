@@ -584,7 +584,7 @@ function desenharAcaso() {
   const media = e.jogos * analise.binomial(e.k, SORTEIO) * porAposta;
   $('acaso').innerHTML = `
     <p>Com ${dinheiro(e.custo)} você compra ${e.jogos} ${e.jogos === 1 ? 'cartela' : 'cartelas'}
-      de ${e.k} dezenas. Se eles fossem escolhidos no chute, chegariam a ${e.t} acertos em
+      de ${e.k} dezenas. Se elas fossem escolhidas no chute, chegariam a ${e.t} acertos em
       <b>${(noChute * 100).toFixed(noChute > 0.995 ? 2 : 1)}%</b> dos sorteios que caem dentro das
       suas ${e.v} dezenas. Com o fechamento, em <b>100%</b>.</p>
     <p class="ressalva">Em média os dois pagam o mesmo: a mesma quantidade de cartelas do mesmo
