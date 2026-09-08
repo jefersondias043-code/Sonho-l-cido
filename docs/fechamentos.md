@@ -797,6 +797,142 @@ o **piso** é fraco. Cotas de contagem e de Schönheim são notoriamente frouxas
 covering designs, e usá-las para estimar quanto ainda dá para economizar leva a
 esperar um ganho que não existe.
 
+## E depois ele voltou a melhorar, com as duas coisas que faltavam
+
+A seção acima terminou nomeando o que faltava: *"melhorar estes números agora
+exige **outra coisa** — mais tempo por caso em ordens de grandeza, outra técnica,
+ou uma construção algébrica que o motor não conhece"*. As três foram medidas. A
+primeira não paga; as outras duas, sim, e as duas estavam mais perto do que
+parecia.
+
+### Mais tempo não paga, e partir do zero é pior
+
+Trezentos segundos por caso, partindo do catálogo publicado, nos casos acima do
+piso: **uma** melhoria em dezessete casos buscados — `19/15/14`, de 127 para 125.
+Partir **do zero** com o mesmo tempo perde nos três casos medidos:
+
+| caso | publicado | do zero, 300 s |
+|---|---:|---:|
+| 20/15/14 | 452 | 458 |
+| 21/15/13 | 111 | 114 |
+| 20/16/15 | 1.367 | 1.422 |
+
+O motor livre, sozinho e nesta escala de tempo, já colheu o que havia. O que a
+seção anterior chamou de *"repetir uma pergunta já respondida"* continua valendo
+— e é por isso que a resposta veio de outro lugar.
+
+### A construção que só existia numa das cinco linhas
+
+No avesso, a regra do fechamento é uma só. Com `a = v − k` dezenas faltando ao
+bilhete e `b = v − 15` faltando ao sorteio:
+
+```text
+|K ∩ S| ≥ t   ⟺   |M ∩ T| ≥ t + a − 15 =: t'
+```
+
+Com `t' = a` isso é *"as `a` que faltam ao bilhete estão todas entre as `b` que
+faltam ao sorteio"* — um sistema de Turán, e é a linha `t = 15`. O gerador tinha
+construção fechada só para esse caso. Nas outras quatro linhas ele não tinha
+construção nenhuma: partia do catálogo anterior e entregava tudo ao motor.
+
+E é exatamente ali que a distância até o piso é maior. Medido no catálogo
+publicado, das 112 entradas acima do piso:
+
+| garantia pedida | entradas acima do piso | razão mediana |
+|---|---:|---:|
+| `t = 11` | 15 | 2,00× |
+| `t = 12` | 19 | 4,00× |
+| `t = 13` | 28 | 3,92× |
+| `t = 14` | 30 | 3,08× |
+| `t = 15` | 20 | 1,97× |
+
+**92 das 112 têm `t < 15`** — a linha que tinha construção é a que está mais
+perto do piso, e não por acaso.
+
+As três ideias de sempre valem inteiras com `t' < a`: todos os `C(v,a)`
+subconjuntos; a recursão por um ponto — ou `x` está no `b`-conjunto, e sobra um
+`(b−1)`-conjunto para uma família de `a−1` com garantia `t'−1`, ou não está, e
+serve a família do resto; e a casa dos pombos por grupos. Entrou uma quarta:
+**grupos disjuntos que não cobrem tudo**, porque deixar dezenas de fora concentra
+o sorteio nos grupos que existem em vez de diluí-lo em partes demais. A monotonia
+em `a`, em `b` e em `t'` fecha a conta de graça — cartela maior, sorteio maior ou
+garantia menor nunca custam mais.
+
+Sem um segundo de busca, a família assim construída já nasce menor que o
+catálogo publicado em nove entradas:
+
+| caso | publicado | só a construção | piso |
+|---|---:|---:|---:|
+| 25/19/12 | 9 | **4** | 3 |
+| 24/18/12 | 8 | **4** | 3 |
+| 25/17/11 | 11 | **7** | 3 |
+| 25/22/14 | 11 | **8** | 8 ← alcançado |
+| 24/19/13 | 21 | **16** | 6 |
+| 24/20/14 | 46 | **36** | 14 |
+| 25/20/13 | 19 | **16** | 5 |
+| 25/18/12 | 22 | **19** | 4 |
+| 25/21/14 | 40 | **36** | 13 |
+
+Os testes do módulo cobram cada família por força bruta — para todo `(v,a,b,t')`
+até `v = 11`, todo `b`-subconjunto tem de encontrar algum membro em `t'`
+elementos, e o tamanho construído tem de bater com o medido. E o catálogo inteiro
+assim gerado passa no `conferir-tudo`, que não compartilha uma linha com o
+gerador: 330 entradas, 239.494.601 sorteios varridos.
+
+### A técnica que estava no repositório e nunca tinha sido chamada
+
+`motor-busca` tem uma busca que **nunca quebra a simetria**: a unidade que ela
+move é a órbita do grupo cíclico, então as `v` rotações andam juntas. Ela nasceu
+para a Lotinha, onde oito dos vinte fechamentos em aberto eram perfeitamente
+invariantes por rotação — sinal de que a busca livre, que move uma cartela por
+vez, nunca tinha aceitado um movimento neles.
+
+`montar_com_intersecao` já aceitava garantia parcial. A peça estava pronta, e o
+gerador do catálogo da Lotofácil nunca a tinha chamado.
+
+Medida em doze casos com 90 s cada, contra o catálogo publicado, **ganha em
+seis**:
+
+| caso | publicado | só simetria, 90 s |
+|---|---:|---:|
+| 22/16/14 | 932 | **748** |
+| 22/15/14 | 4.184 | **3.916** |
+| 20/16/14 | 90 | **80** |
+| 21/17/14 | 71 | **63** |
+| 22/18/14 | 61 | **55** |
+| 20/15/13 | 42 | **40** |
+
+Perde nos outros seis, então não substitui a busca livre — as duas correm e vale
+a menor. Mas o ganho maior não é nenhuma das duas sozinha: **o que a simetria
+acha vira partida da busca livre**, que então quebra a simetria e desce abaixo do
+ótimo cíclico.
+
+| caso | publicado | só simetria | simetria e depois o motor |
+|---|---:|---:|---:|
+| 20/16/14 | 90 | 80 | **72** |
+| 22/16/14 | 932 | 748 | **742** |
+| 21/17/14 | 71 | 63 | **63** |
+| 22/15/14 | 4.184 | 3.916 | **3.904** |
+
+Onde a simetria não cabe: a tabela de ligações cresce com `C(v,a)/v` vezes
+quantos alvos cada conjunto alcança, e nas garantias parciais de pool grande isso
+passa de bilhões. Dos 112 casos acima do piso, **75 cabem** no teto de 150
+milhões de ligações; `25/18/13` pediria 2,5 bilhões e fica de fora.
+
+### E o piso continua sendo fraco
+
+A ressalva da seção anterior não caiu, e vale repetir com número. Em `25/18/13` o
+piso de 17 cartelas vem da cota de contagem: cada cartela atende 202.164 dos
+3.268.760 sorteios possíveis, e 3.268.760 ÷ 202.164 = 16,17. Alcançar 17 exigiria
+que dezessete cartelas se sobrepusessem em **95%** do que cobrem — o que não
+existe em fechamento nenhum desse tamanho.
+
+Ou seja: a folga de 6,5× que o índice mostra ali não é um fechamento seis vezes
+menor esperando ser achado. Parte dela é o piso, e não o motor. O que **é** do
+motor se mede pelo que ele consegue quando lhe dão outra ferramenta — e ali,
+com cinco minutos de busca livre partindo do zero, o mesmo caso saiu de 111
+para 108.
+
 ## A resposta estava fora da tela
 
 Medido, em vez de suposto: depois do toque em *"escolher por mim"*, o número da
