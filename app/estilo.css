@@ -33,8 +33,10 @@ main { max-width: var(--coluna); margin: 0 auto; padding: 1rem; }
 
 h1 {
   font-size: 1rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
-  color: var(--tinta-fraca); margin: 0.5rem 0 1rem;
+  color: var(--tinta-fraca); margin: 0.5rem 0 0.25rem;
 }
+
+.oque-e { font-size: 0.95rem; color: var(--tinta); margin: 0 0 1rem; }
 
 /* Os títulos das tabelas de preço. São `h2` porque o único título acima deles
    é o `h1` do aplicativo, e pular de 1 para 3 quebra a navegação por título de

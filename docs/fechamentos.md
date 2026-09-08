@@ -275,15 +275,16 @@ Daí tudo o mais decorre:
 
 Sem WebAssembly no cliente, sem *web workers*, sem banco de sessões, sem retomada
 de trabalho interrompido. Nada disso tem razão de existir quando não há nada a
-esperar. O cliente inteiro dá **2.486 linhas** somando JavaScript, HTML e CSS —
-teto de 2.500 cobrado pela construção —, e o peso inicial (casca, índice, preços
+esperar. O cliente inteiro dá **2.492 linhas** somando JavaScript, HTML e CSS —
+teto de 2.600 cobrado pela construção —, e o peso inicial (casca, índice, preços
 e distribuições) dá **43 KiB comprimidos**.
 
 O teto foi 1.500 enquanto havia uma porta de entrada só, 1.700 quando a segunda
-chegou, 2.250 com a área de análise, 2.400 com a comparação contra o chute, e
+chegou, 2.250 com a área de análise, 2.400 com a comparação contra o chute,
 2.500 quando o que entra de fora — endereço, armazenamento do aparelho,
-resultado guardado — passou a ser conferido antes de virar tela. Nenhuma dessas
-subidas veio de o cliente passar a resolver mais. **Resolver** é procurar quais
+resultado guardado — passou a ser conferido antes de virar tela, e 2.600 quando
+o prêmio passou a decompor cada cartela nas apostas simples que ela é. Nenhuma
+dessas subidas veio de o cliente passar a resolver mais. **Resolver** é procurar quais
 cartelas usar, e isso segue inteiro no motor em Rust, fora do aparelho.
 **Simular** é contar acertos de cartelas que já existem: um `and` e um popcount
 por cartela, mil sorteios contra 3.608 cartelas em 85 ms. São coisas de ordens diferentes, e só a primeira é a que o
@@ -860,6 +861,24 @@ código antigo, cada uma com o defeito dela escrito no relatório; as outras sei
 são a pergunta de base onde ela já passava. Um teste que passa dos dois jeitos
 não prova nada, e por isso todo caso aqui tem pelo menos uma conferência que se
 viu reprovar.
+
+## O que é isto, dito antes de pedir dinheiro
+
+A primeira tela abria com o nome do aplicativo e, logo abaixo, um campo pedindo
+**quanto você quer gastar**. Quem chega pelo link não sabe de que loteria se
+trata, nem o que vai receber em troca — o `<title>` e a descrição do HTML dizem,
+e ninguém lê nenhum dos dois num telefone.
+
+Uma linha, sem jargão de quem já sabe:
+
+> Cartelas da Lotofácil que, juntas, garantem acertos.
+
+Sete palavras que carregam as três coisas: **qual loteria**, **o que sai** e
+**de onde vem a garantia** — do "juntas". A palavra *fechamento* não aparece, e
+a conferência cobra isso: a linha tem de citar a Lotofácil, tem de falar em
+cartelas e em garantir, e **não pode** conter "fechamento", "cobertura" nem
+"covering". A especificação pede que alguém que nunca ouviu falar de covering
+design use o aplicativo sem ajuda; o primeiro parágrafo é onde isso começa.
 
 ## Uma palavra só para a mesma coisa
 

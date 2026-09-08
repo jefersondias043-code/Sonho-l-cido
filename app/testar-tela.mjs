@@ -83,6 +83,16 @@ await pagina.goto(endereco, { waitUntil: 'networkidle' });
 
 // ── a tela chega inteira ────────────────────────────────────────────────────
 
+// Quem chega pelo link não sabe o que é isto, e a primeira coisa que a tela
+// pede é dinheiro. A linha do topo tem de dizer a loteria e a ideia — que as
+// cartelas se completam — sem jargão de quem já sabe.
+const abertura = (await pagina.locator('.oque-e').innerText().catch(() => '')).trim();
+conferir('a tela diz de que loteria se trata antes de pedir dinheiro',
+  /lotofácil/i.test(abertura), abertura);
+conferir('e diz o que ela entrega, sem falar em fechamento nem em cobertura',
+  /cartelas/i.test(abertura) && /garant/i.test(abertura)
+  && !/fechamento|cobertura|covering/i.test(abertura), abertura);
+
 conferir('a grade tem as 25 dezenas', (await pagina.locator('.grade button').count()) === 25);
 conferir('o campo de dinheiro é o primeiro controle',
   await pagina.locator('#valor').isVisible());
