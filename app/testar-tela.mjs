@@ -473,7 +473,7 @@ await pagina.dispatchEvent('#valor', 'change');
 await pagina.waitForTimeout(300);
 const outroFechamento = (await pagina.locator('.resposta').innerText()).replace(/\s+/g, ' ');
 conferir('mexer no dinheiro tira o fechamento guardado da tela',
-  !outroFechamento.includes(guardado.match(/(\d+) cartelas? de (\d+) dezenas/)?.[0] ?? '§'),
+  !outroFechamento.includes(guardado.match(/([\d.]+) cartelas? de (\d+) dezenas/)?.[0] ?? '§'),
   outroFechamento.slice(0, 100));
 
 // O toque vem depois de conferir que há onde tocar. Clicar num botão que não
@@ -489,7 +489,7 @@ if (temBotao === 1) {
   await pagina.waitForTimeout(300);
 }
 const devolta = (await pagina.locator('.resposta').innerText()).replace(/\s+/g, ' ');
-const quantasEComo = guardado.match(/(\d+) cartelas? de (\d+) dezenas/)?.[0] ?? '§';
+const quantasEComo = guardado.match(/([\d.]+) cartelas? de (\d+) dezenas/)?.[0] ?? '§';
 conferir('e o que está guardado volta para a tela com um toque',
   devolta.includes(quantasEComo), `guardado: ${quantasEComo} · na tela: ${devolta.slice(0, 110)}`);
 // E a tela diz de onde ele veio. Sem isto ela dizia *"você montou este
@@ -649,10 +649,157 @@ conferir('e a lista já é a desse pool',
     .every((l) => /de 1[5-8] dezenas/.test(l.replace(/\s+/g, ' '))),
   (await pagina.locator('#m-fechamento option').allInnerTexts()).join(' | '));
 
+// ── o pedido manda, e vale ao pé da letra ──────────────────────────────────
+//
+// Três defeitos moravam aqui, e os três davam na mesma queixa: a pessoa dizia
+// uma coisa e a tela mostrava outra.
+//
+// 1. A garantia era "no mínimo". Com `15-14` na lista, baixar de 14 para 11
+//    deixava a linha antiga passando no filtro novo — 14 é no mínimo 11 —, e a
+//    resposta continuava sendo 452 cartelas por R$ 1.582,00 onde o pedido novo
+//    custava R$ 14,00. Mudar o pedido não mudava a resposta.
+// 2. Um descarte por dominância escondia **66 dos 237** fechamentos: pedir 11
+//    acertos com cartela de 15 num pool de 20 dava lista vazia, porque a linha
+//    de 11 tinha sido comida pela de 14, que custa o mesmo.
+// 3. E um pedido sem resposta virava outro fechamento: `fixar(null)` devolvia a
+//    palavra ao orçamento, e a tela anunciava com manchete e selo um fechamento
+//    que ninguém pediu, com o "não há" em cinza três dedos abaixo.
+const respostaDiz = async () => (await pagina.locator('.resposta').innerText()).replace(/\s+/g, ' ');
+
+await opcoesDe(20, '', 15, 14);
+conferir('pedindo 14 acertos, a tela dá 14',
+  /14 acertos garantidos/.test(await respostaDiz()), (await respostaDiz()).slice(0, 80));
+await pagina.selectOption('#m-t', '11');
+await pagina.waitForTimeout(400);
+const baixou = await respostaDiz();
+conferir('e baixando para 11, a tela dá 11 — e não o 14 de antes',
+  /11 acertos garantidos/.test(baixou) && !/14 acertos garantidos/.test(baixou),
+  baixou.slice(0, 90));
+conferir('com o fechamento de 11, que custa uma fração do de 14',
+  /4 cartelas de 15 dezenas · R\$ 14,00/.test(baixou), baixou.slice(0, 110));
+
+// Nada é escondido: com o tamanho de cartela fixo, toda garantia que o catálogo
+// publica para aquele pool tem de ser escolhível e chegar exatamente nela.
+for (const t of [11, 12, 13, 14]) {
+  await opcoesDe(20, '', 15, t);
+  const diz = await respostaDiz();
+  conferir(`20 dezenas, cartela de 15, garantindo ${t}: a tela dá ${t}`,
+    new RegExp(`${t} acertos garantidos`).test(diz)
+    && (await pagina.inputValue('#m-fechamento')) === `15-${t}`,
+    `select=${await pagina.inputValue('#m-fechamento')} · ${diz.slice(0, 70)}`);
+}
+
+// ── e o que não existe é avisado antes de ser escolhido ────────────────────
+//
+// `20/15/15` é o beco mais curto do catálogo: o pool tem cartela de 15 e tem
+// garantia de 15, cada select oferecia os dois, e juntos não existem. Agora o
+// select diz isso na própria opção — e escolher assim mesmo dá a recusa com o
+// tamanho que o fechamento teria, que é informação e não um beco.
+await opcoesDe(20, '', 15, '');
+const garantiasDe20 = await pagina.locator('#m-t option').allInnerTexts();
+conferir('com cartela de 15, a garantia de 15 vem marcada como sem fechamento',
+  garantiasDe20.some((l) => /^15 acertos — sem fechamento/.test(l.trim()))
+  && garantiasDe20.filter((l) => /sem fechamento/.test(l)).length === 1,
+  garantiasDe20.map((l) => l.trim()).join(' | '));
+await opcoesDe(20, '', '', 15);
+const cartelasDe20 = await pagina.locator('#m-k option').allInnerTexts();
+conferir('e com garantia de 15, é a cartela de 15 que vem marcada',
+  cartelasDe20.some((l) => /^15 por cartela — sem fechamento/.test(l.trim()))
+  && cartelasDe20.filter((l) => /sem fechamento/.test(l)).length === 1,
+  cartelasDe20.map((l) => l.trim()).join(' | '));
+await opcoesDe(20, '', 15, 15);
+const beco = await respostaDiz();
+conferir('escolhendo o beco, a recusa diz de que tamanho seria o fechamento',
+  beco.includes('Não há fechamento catalogado')
+  && /todas as combinações de 15 entre as suas 20 dezenas/.test(beco)
+  && beco.includes('15.504 cartelas') && beco.includes('R$ 54.264,00'),
+  beco.slice(0, 220));
+
+// ── escolher uma linha é dizer os dois valores ─────────────────────────────
+//
+// A escolha vivia só na lista, e a lista se refaz a cada troca de pool. Quem
+// escolhia "cartela de 16, garantindo 14" num pool de 18 e voltava o pool para
+// 15 — onde cartela de 16 não existe — via o navegador selecionar a primeira
+// opção sozinho, e o aplicativo montava essa: cartela de 15, outra garantia,
+// outro preço. Quinze pares somem só nessa troca.
+await opcoesDe(18);
+await pagina.selectOption('#m-fechamento', '16-14');
+await esperarFechamento(pagina, 20000);
+await pagina.waitForTimeout(400);
+conferir('escolher uma linha da lista escreve os dois controles',
+  (await pagina.inputValue('#m-k')) === '16' && (await pagina.inputValue('#m-t')) === '14',
+  `k=${await pagina.inputValue('#m-k')} t=${await pagina.inputValue('#m-t')}`);
+await pagina.selectOption('#m-pool', '15');
+await pagina.waitForTimeout(800);
+const encolheu = await respostaDiz();
+conferir('e encolher o pool até o pedido não caber é recusa, não troca',
+  encolheu.includes('Não há fechamento catalogado') && encolheu.includes('cartela de 16')
+  && encolheu.includes('14 acertos garantidos')
+  && (await pagina.locator('.resposta .numero, .resposta .unidade').count()) === 0,
+  encolheu.slice(0, 160));
+
+// ── e um pedido sem resposta é dito, não trocado ───────────────────────────
+await opcoesDe(25, '', 16, 14);
+const semResposta = await respostaDiz();
+conferir('um pedido que o catálogo não tem é recusado por escrito',
+  semResposta.includes('Não há fechamento catalogado')
+  && semResposta.includes('25 dezenas') && semResposta.includes('cartela de 16')
+  && semResposta.includes('14 acertos garantidos'), semResposta.slice(0, 140));
+// "Não monta outro" é medido no que a resposta desenha, e não no texto: um
+// fechamento montado tem manchete, unidade e selo, e a recusa não tem nenhum
+// dos três. Era assim que o defeito aparecia — a recusa em cinza embaixo de um
+// número grande anunciando um fechamento que ninguém pediu.
+const montado = await pagina.locator(
+  '.resposta .numero, .resposta .unidade, .resposta .selo').count();
+conferir('e a tela não monta outro fechamento no lugar', montado === 0, `${montado} pedaços`);
+// A recusa também diz de que tamanho o fechamento pedido teria de ser.
+conferir('e diz o piso do que foi pedido',
+  /pelo menos .*3\.014 cartelas/.test(semResposta), semResposta.slice(0, 220));
+// Um "não há" sem saída é um beco. As vizinhanças existem, e um toque nelas
+// resolve — senão a pessoa fica procurando qual dos quatro controles afrouxar.
+const saidas = await pagina.locator('.resposta [data-manual]').count();
+conferir('e mostra o que o catálogo tem perto disso', saidas > 0, `${saidas} saídas`);
+await pagina.locator('.resposta [data-manual]').first().click();
+await esperarFechamento(pagina, 20000);
+await pagina.waitForTimeout(400);
+const depoisDaSaida = await respostaDiz();
+conferir('e um toque na saída monta aquele fechamento',
+  /\d+ acertos garantidos/.test(depoisDaSaida)
+  && !depoisDaSaida.includes('Não há fechamento'), depoisDaSaida.slice(0, 90));
+
+// O teto de cartelas é pedido como os outros, e esvaziá-lo também é recusa por
+// escrito — antes ficava na tela o fechamento anterior, que violava o teto que
+// a pessoa acabara de digitar.
+await opcoesDe(20, '1', 15, 11);
+const comTeto = await respostaDiz();
+conferir('o teto de cartelas que não cabe também é recusado por escrito',
+  comTeto.includes('Não há fechamento catalogado') && comTeto.includes('no máximo 1 cartela'),
+  comTeto.slice(0, 140));
+await pagina.fill('#m-teto', '');
+await pagina.dispatchEvent('#m-teto', 'input');
+await pagina.waitForTimeout(400);
+conferir('e tirar o teto devolve o fechamento',
+  /11 acertos garantidos/.test(await respostaDiz()), (await respostaDiz()).slice(0, 80));
+
+// E o beco sem garantia pedida, que era o único que ficava sem saída: só o
+// tamanho da cartela e um teto que nada daquele tamanho atende. As duas
+// vizinhanças de sempre — a mesma garantia noutro tamanho, o mesmo tamanho numa
+// garantia menor — não existem quando não há garantia pedida.
+await opcoesDe(20, '1', 15, '');
+const semGarantia = await respostaDiz();
+conferir('sem garantia pedida, um teto apertado ainda tem saída',
+  semGarantia.includes('Não há fechamento catalogado')
+  && (await pagina.locator('.resposta [data-manual]').count()) > 0,
+  `${await pagina.locator('.resposta [data-manual]').count()} saídas · ${
+    semGarantia.slice(0, 120)}`);
+await pagina.fill('#m-teto', '');
+await pagina.dispatchEvent('#m-teto', 'input');
+await pagina.waitForTimeout(400);
+
 const de23 = await opcoesDe(23);
 conferir('o pool de 23 dezenas abre uma lista de fechamentos', de23.length > 5, `${de23.length}`);
 conferir('e cada linha diz garantia, preço, cartelas e tamanho',
-  de23.every((t) => /^garante \d+ acertos · R\$ [\d.]+,\d\d · \d+ cartelas? de \d+ dezenas$/.test(t)),
+  de23.every((t) => /^garante \d+ acertos · R\$ [\d.]+,\d\d · [\d.]+ cartelas? de \d+ dezenas$/.test(t)),
   de23.slice(0, 3).join(' | '));
 // A lista existe para mostrar o que a escada esconde: sem isso o modo manual
 // seria o automático com outra roupa.
@@ -712,13 +859,18 @@ conferir('e um teto quebrado desce para o inteiro de baixo',
   `${(await opcoesDe(23, '5.5')).length} contra ${(await opcoesDe(23, '5')).length}`);
 
 // Um pedido impossível não pode deixar a pessoa no escuro: a tela diz o que ela
-// pediu, para ela saber o que afrouxar, em vez de só não ter opção nenhuma.
+// pediu, para ela saber o que afrouxar, em vez de só não ter opção nenhuma. E
+// diz nos dois lugares — ao lado do select, onde ela está mexendo, e na resposta
+// lá em cima, que é para onde ela olha.
 await opcoesDe(25, '1');
 const semSaida = await pagina.locator('#manual').innerText();
 conferir('um teto impossível é explicado, e não silencioso',
-  semSaida.includes('não há fechamento catalogado'), semSaida);
+  /não há fechamento catalogado/i.test(semSaida), semSaida);
 conferir('e a explicação nomeia o que foi pedido',
   semSaida.includes('no máximo 1 cartela'), semSaida);
+conferir('e a resposta lá em cima diz o mesmo',
+  /não há fechamento catalogado/i.test(await pagina.locator('.resposta').innerText()),
+  (await pagina.locator('.resposta').innerText()).replace(/\s+/g, ' ').slice(0, 110));
 
 // Dois pedidos ao mesmo tempo viram uma frase, e não uma lista com vírgula
 // solta no fim: quem lê isso já está confuso, e a frase é a saída.
@@ -880,7 +1032,7 @@ conferir('um toque só abre a área, mesmo vindo do campo de dinheiro',
   !(await pagina.locator('#analise').isHidden()));
 
 conferir('a área diz o que está mostrando',
-  /\d+ cartelas? de \d+ dezenas/.test(await pagina.locator('#analise-titulo').innerText()),
+  /[\d.]+ cartelas? de \d+ dezenas/.test(await pagina.locator('#analise-titulo').innerText()),
   await pagina.locator('#analise-titulo').innerText());
 conferir('e as cartelas estão lá',
   (await pagina.locator('#lista-cartelas .bilhetes li').count()) > 0);
@@ -1835,6 +1987,36 @@ for (const [nome, guardado, esperado] of [
   conferir(`com o resultado guardado ${nome}, o botão diz o que houve`,
     ruins.length === 0 && rotulo.startsWith(esperado),
     `${ruins.join(' | ')} · o botão diz "${rotulo}"`);
+  await caixa.close();
+}
+
+// ── o que volta de outra sessão volta descrito por inteiro ─────────────────
+//
+// O fechamento nomeado sobrevive à sessão, e os controles têm de voltar dizendo
+// **qual** é. Voltava só o tamanho da cartela: a garantia ficava em "tanto
+// faz", que descreve um pedido mais largo do que o fechamento em uso — e mexer
+// em qualquer outro controle resolvia esse pedido largo, trazendo de volta um
+// fechamento que não era o guardado.
+{
+  const caixa = await navegador.newContext({ viewport: { width: 360, height: 740 } });
+  await caixa.addInitScript(() => {
+    localStorage.setItem('dezenas', JSON.stringify([...Array(20)].map((_, i) => i + 1)));
+    localStorage.setItem('fixo', JSON.stringify({ v: 20, k: 15, t: 12, de: 'mao' }));
+  });
+  const pg = await caixa.newPage();
+  await pg.goto(endereco, { waitUntil: 'networkidle' });
+  await esperarFechamento(pg, 20000);
+  await pg.click('#det-manual summary');
+  await pg.waitForTimeout(300);
+  conferir('o fechamento guardado volta descrito nos dois controles',
+    (await pg.inputValue('#m-k')) === '15' && (await pg.inputValue('#m-t')) === '12'
+    && (await pg.inputValue('#m-fechamento')) === '15-12',
+    `k=${await pg.inputValue('#m-k')} t=${await pg.inputValue('#m-t')} ` +
+    `fechamento=${await pg.inputValue('#m-fechamento')}`);
+  conferir('e é ele que a tela mostra',
+    /12 acertos garantidos/.test((await pg.locator('.resposta').innerText())
+      .replace(/\s+/g, ' ')),
+    (await pg.locator('.resposta').innerText()).replace(/\s+/g, ' ').slice(0, 90));
   await caixa.close();
 }
 

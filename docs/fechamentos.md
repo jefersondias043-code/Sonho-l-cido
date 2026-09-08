@@ -314,17 +314,18 @@ Daí tudo o mais decorre:
 
 Sem WebAssembly no cliente, sem *web workers*, sem banco de sessões, sem retomada
 de trabalho interrompido. Nada disso tem razão de existir quando não há nada a
-esperar. O cliente inteiro dá **2.582 linhas** somando JavaScript, HTML e CSS —
-teto de 2.700 cobrado pela construção —, e o peso inicial (casca, índice, preços
-e distribuições) dá **45 KiB comprimidos**.
+esperar. O cliente inteiro dá **2.747 linhas** somando JavaScript, HTML e CSS —
+teto de 2.800 cobrado pela construção —, e o peso inicial (casca, índice, preços
+e distribuições) dá **48 KiB comprimidos**.
 
 O teto foi 1.500 enquanto havia uma porta de entrada só, 1.700 quando a segunda
 chegou, 2.250 com a área de análise, 2.400 com a comparação contra o chute,
 2.500 quando o que entra de fora — endereço, armazenamento do aparelho,
 resultado guardado — passou a ser conferido antes de virar tela, 2.600 quando o
-prêmio passou a decompor cada cartela nas apostas simples que ela é, e 2.700
+prêmio passou a decompor cada cartela nas apostas simples que ela é, 2.700
 quando a carteira deixou de ser só uma lista — o fechamento guardado volta para a
-tela com um toque, e a tela diz de onde ele veio. Nenhuma
+tela com um toque, e a tela diz de onde ele veio —, e 2.800 quando o "montar do
+meu jeito" passou a respeitar o pedido ao pé da letra. Nenhuma
 dessas subidas veio de o cliente passar a resolver mais. **Resolver** é procurar quais
 cartelas usar, e isso segue inteiro no motor em Rust, fora do aparelho.
 **Simular** é contar acertos de cartelas que já existem: um `and` e um popcount
@@ -470,6 +471,143 @@ recebia um terço do novo, chamado de parte de um bolão que já não estava na 
 E limpar a grade com um fechamento de 22 dezenas fixado deixava dezesseis
 bilhetes **vazios** sob uma manchete de garantia: não havia mais dezena nenhuma
 de onde tirar os números.
+
+### O pedido manda, e vale ao pé da letra
+
+O modo tinha um nome que ele não cumpria. Três defeitos, e os três davam na mesma
+queixa: a pessoa dizia uma coisa e a tela mostrava outra.
+
+**A garantia era "no mínimo".** O filtro era `e.t >= t`, e a lista guardava a
+escolha anterior sempre que ela continuasse passando. Com `15-14` escolhido,
+baixar a garantia de 14 para 11 não mudava nada — 14 é no mínimo 11 —, e a
+resposta seguia sendo **452 cartelas por R$ 1.582,00** onde o pedido novo custava
+**R$ 14,00**. Mudar o pedido não mudava a resposta; era o mesmo defeito visto
+pelos dois lados da queixa.
+
+Passou a ser igualdade. Não se perde nada com isso: o catálogo é **monótono em
+`t`** — nos 237 fechamentos publicados não há um par `(v, k)` em que subir a
+garantia barateie o fechamento —, então o de **exatamente** `t` é sempre o jeito
+mais barato de conseguir ao menos `t`. O que se ganha é o pedido valendo ao pé
+da letra.
+
+**E havia um descarte que escondia 66 dos 237.** A lista sumia com a linha que,
+no mesmo tamanho de cartela, custasse igual ou mais e garantisse menos — ruído,
+quando ninguém a escolheria. Com garantia exata deixa de ser ruído e passa a ser
+a resposta a outra pergunta: pedir 11 acertos com cartela de 15 num pool de 20
+devolvia **lista vazia**, porque a linha de 11 tinha sido comida pela de 12 —
+as duas custam as mesmas quatro cartelas, R$ 14,00, e a de 12 garante mais.
+Medido: **66 dos 237** fechamentos publicados eram
+inalcançáveis mesmo fixando `k` e `t` nos valores exatos.
+
+O descarte saiu. A lista vem inteira, do mais barato ao mais caro e, no mesmo
+preço, da maior garantia para a menor — o melhor negócio continua sendo a
+primeira linha, e agora o resto existe. Conferido de fora, um a um, nos 237: com
+o pedido escrito nos controles, o aplicativo chega **em todos**, com o pool
+marcado certo e a resposta nomeando exatamente aquele fechamento.
+
+### Um pedido sem resposta é dito, e não trocado por outro
+
+O terceiro era o pior. Quando o pedido não tinha resposta — 25 dezenas, cartela
+de 16, garantindo 14, que o catálogo não tem — o código fazia `fixar(null)`, e
+`null` quer dizer "não há fechamento nomeado". A palavra voltava ao orçamento, e
+a tela anunciava, com o número grande, o selo e a frase da garantia:
+
+> **12 acertos garantidos** · 330 cartelas de 15 dezenas · R$ 1.155,00
+
+Um fechamento que ninguém pediu, com outro tamanho de cartela, outra garantia e
+outro preço. O *"não há fechamento catalogado"* existia — em cinza, ao lado do
+select, três dedos abaixo do número que dizia outra coisa.
+
+O estado que faltava é o do **pedido sem resposta**, que não é o mesmo que não
+ter pedido nada. Agora a resposta diz o que foi pedido, diz que não há, e mostra
+o que o catálogo tem perto: a mesma garantia noutro tamanho de cartela, e o mesmo
+tamanho numa garantia menor, cada uma com o preço. São botões, porque um "não há"
+sem saída é um beco — a pessoa fica olhando para a recusa sem saber qual dos
+quatro controles afrouxar.
+
+O mesmo vale para o teto de cartelas: digitar "no máximo 1" deixava na tela o
+fechamento anterior, de quatro cartelas, que violava o teto recém-digitado.
+
+### O que não existe é dito antes de ser escolhido
+
+Sobrava um jeito de cair na recusa sem culpa nenhuma: **os dois selects não se
+conheciam**. Cada um oferecia o que o pool tem — num pool de 20 há cartela de 15
+e há garantia de 15 —, e escolher os dois valores oferecidos dava uma combinação
+que não existe. `20/15/15` seria jogar **todas** as 15.504 combinações de 15
+entre 20 dezenas, e o catálogo não carrega um arquivo desses.
+
+São **255 combinações** que os dois selects deixam montar e **237 fechamentos**
+publicados. Os **18 becos** estão todos no mesmo canto — garantia alta com pool
+grande —, que é exatamente o cenário onde este modo parecia falhar mais. A falha
+não estava em montar: estava em não avisar antes.
+
+| pool | o que falta |
+| --- | --- |
+| 20, 21 | `15/15` |
+| 22 | `15/15`, `16/15` |
+| 23, 24 | `15/14`, `15/15`, `16/15`, `17/15` |
+| 25 | `15/14`, `15/15`, `16/14`, `16/15`, `17/15`, `18/15` |
+
+Cada valor passa a vir marcado quando, **junto com o resto do pedido**, não leva
+a fechamento nenhum: *"15 acertos — sem fechamento"*. O teto de cartelas conta
+junto: num pool de 20 com "no máximo 1 cartela" digitado, a cartela de 15 fica
+marcada, porque o menor fechamento de 15 dezenas ali tem quatro.
+
+Marcado, e **não removido**. Tirar o valor da lista seria decidir pela pessoa o
+que ela pode pedir — que é o defeito de origem deste modo, agora com boas
+intenções. Ela escolhe se quiser, e o que recebe é a recusa por escrito.
+
+E a recusa deixou de ser só um "não há". O índice guarda o **piso** das 330
+entradas, inclusive das 18 sem arquivo, e o piso é justamente o que falta saber:
+quem pede 25 dezenas com cartela de 16 garantindo 14 fica sabendo que o menor
+fechamento possível ali tem **3.014 cartelas, R$ 168.784,00** — e decide com
+isso na mão, em vez de achar que a tela quebrou. Onde piso e tamanho coincidem a
+conta fechou, e a frase muda: não é descuido do catálogo, é que um fechamento
+assim só pode ser todas as combinações, e não há menor. Em `20/15/15` isso dá
+R$ 54.264,00 — o preço exato de uma única cartela de 20 dezenas, que o catálogo
+tem, e que é a primeira saída oferecida ao lado.
+
+### Escolher uma linha da lista é dizer os dois valores
+
+A escolha na lista de fechamentos vivia só ali, e a lista se refaz a cada troca
+de pool. Quem escolhia *"cartela de 16, garantindo 14"* num pool de 18 e depois
+voltava o pool para 15 — onde cartela de 16 não existe — via o navegador
+selecionar a primeira opção sozinho, e o aplicativo montava **essa**: outro
+tamanho de cartela, outra garantia, outro preço, sem uma palavra. Só nessa troca
+somem quinze pares; entre todos os pools medidos, nenhum deles avisava.
+
+Agora escolher uma linha **escreve** o tamanho da cartela e a garantia nos dois
+controles. O pedido passa a morar sempre nos quatro, e o caso desaparece por
+construção: quando o pool novo não atende o pedido, o que aparece é a recusa por
+escrito com as saídas ao lado, e não um fechamento que ninguém escolheu.
+
+### E nenhuma recusa fica sem saída
+
+As duas vizinhanças oferecidas eram *a mesma garantia noutro tamanho de cartela*
+e *o mesmo tamanho numa garantia menor*. Nenhuma das duas existe quando não há
+garantia pedida — e aí a recusa ficava sozinha na tela: só o tamanho da cartela
+escolhido, um teto que nada daquele tamanho atende, e nenhum botão. Entrou uma
+rede por baixo: o menor fechamento que cabe no teto, seja de que tamanho for, e,
+se nada couber, o menor que existe para aquele pool. É a resposta a *"então o
+que dá para fazer com estas dezenas"*, que é a pergunta de quem chegou ali.
+
+### O que volta de outra sessão volta descrito por inteiro
+
+O fechamento nomeado sobrevive à sessão, e os controles voltavam dizendo metade:
+o tamanho da cartela sim, a garantia em *"tanto faz"*. Isso descreve um pedido
+mais largo do que o fechamento em uso, e o pedido largo é o que seria resolvido
+no toque seguinte — a pessoa mexia no pool e recebia de volta um fechamento que
+não era o que ela tinha guardado. Voltam os dois.
+
+### E um caminho só para os quatro controles
+
+Três dos quatro chamavam `desenharManual()` antes de chamar quem já a desenha, e
+a lista se refazia duas vezes por toque. Somava-se a isso o pool passando por
+`trocarDezenas`, que solta o fechamento nomeado e redesenha a tela inteira a
+partir do orçamento — no meio de um pedido manual que ainda ia ser resolvido três
+linhas adiante. Era uma resposta desenhada para ser jogada fora, e mais um
+momento em que o pedido podia ser lido pela metade. Ficou um caminho só.
+
 
 ## Mínimo provado e menor conhecido nunca se confundem
 

@@ -71,7 +71,7 @@ for arquivo in "$PARCIAL"/*; do
 done
 [ "$faltando" -eq 0 ] || exit 1
 
-# O cliente inteiro cabe em menos de 2.700 linhas somando JavaScript, HTML e CSS.
+# O cliente inteiro cabe em menos de 2.800 linhas somando JavaScript, HTML e CSS.
 #
 # Vale dizer o que este número é hoje, porque ele já não é o que era. Ele nasceu
 # em 1.500, como limite de projeto: o cliente tinha uma porta de entrada só, e o
@@ -82,9 +82,12 @@ done
 # contra o chute, a 2.500 quando o que entra de fora — endereço, armazenamento
 # do aparelho, resultado guardado — passou a ser conferido antes de virar tela,
 # a 2.600 quando o prêmio passou a decompor cada cartela nas apostas simples que
-# ela é, e a 2.700 quando a carteira deixou de ser só uma lista: o fechamento que
+# ela é, a 2.700 quando a carteira deixou de ser só uma lista — o fechamento que
 # a pessoa guardou volta para a tela com um toque, e a tela passou a dizer de
-# onde ele veio.
+# onde ele veio —, e a 2.800 quando o "montar do meu jeito" passou a respeitar o
+# pedido ao pé da letra: garantia exata em vez de "no mínimo", nenhuma linha
+# escondida (eram 66 dos 237), e um pedido que o catálogo não atende dito na
+# resposta, com as saídas, em vez de trocado em silêncio por outro fechamento.
 #
 # A regra que ele guardava continua de pé, e é esta: **o cliente não resolve
 # fechamento nenhum**. Procurar quais bilhetes usar é trabalho do motor em Rust,
@@ -103,8 +106,8 @@ done
 # paga por todas, e o aplicativo pagava por uma — e a linha do topo que diz a
 # quem chega pelo link o que é isto, antes de a tela pedir dinheiro.
 linhas=$(cat "$PARCIAL"/*.js "$PARCIAL"/*.css "$PARCIAL"/*.html | wc -l)
-if [ "$linhas" -ge 2700 ]; then
-  echo "o cliente passou de 2.700 linhas: $linhas" >&2
+if [ "$linhas" -ge 2800 ]; then
+  echo "o cliente passou de 2.800 linhas: $linhas" >&2
   exit 1
 fi
 
@@ -114,7 +117,7 @@ casca=$(cat "$PARCIAL"/*.js "$PARCIAL"/*.css "$PARCIAL"/*.html "$PARCIAL"/catalo
   gzip -9 | wc -c)
 
 echo "carimbo $carimbo"
-echo "$linhas linhas de cliente (teto: 2.700)"
+echo "$linhas linhas de cliente (teto: 2.800)"
 echo "$fechamentos fechamentos · ${peso} KiB no total"
 echo "peso inicial (casca + índice, comprimido): $((casca / 1024)) KiB"
 # Tudo passou: só agora a pasta publicável passa a existir.
