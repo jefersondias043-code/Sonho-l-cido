@@ -112,8 +112,8 @@ passou a dizer também quanto custa o que a pessoa quer.
 
 ## O catálogo encolheu, e isso é dinheiro de volta
 
-Quatro casos receberam quarenta minutos de motor cada um, partindo do que já
-estava publicado, e os quatro melhoraram:
+Dez casos receberam quarenta minutos de motor cada um, partindo do que já
+estava publicado, e os dez melhoraram:
 
 | caso | antes | agora | quanto sai da conta de quem compra |
 |---|---:|---:|---:|
@@ -159,8 +159,8 @@ plano:
 | 25-18-15 | 5.121 | **14.875** | 8.000 |
 | 25-16-14 | 3.014 | **15.495** | 8.000 |
 
-O de 23 dezenas está a 26% do teto — perto o bastante para valer horas. Os
-outros dois, não. Sem o número, os três pareciam iguais.
+O de 23 dezenas está 26% **acima** do teto — perto o bastante para valer horas.
+Os outros dois, não. Sem o número, os três pareciam iguais.
 
 ### O teto conta cartelas, e não dinheiro
 
