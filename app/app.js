@@ -62,13 +62,22 @@ const estado = {
   // `fixo` não leva conferência de forma aqui porque tem uma melhor logo
   // adiante: `fixoValido` é a única porta por onde fechamento nomeado entra, e
   // ela reprova qualquer coisa que não seja um fechamento que o catálogo tem.
-  plano: null, fixo: lembrar('fixo', null), link: null,
+  // `semResposta` é o pedido do modo manual que o catálogo não atende. Não é o
+  // mesmo que não ter pedido nada, e é por confundir os dois que a tela
+  // respondia com toda a confiança a uma pergunta que ninguém fez: sem este
+  // estado, um pedido impossível caía no que o **orçamento** compraria — outro
+  // tamanho de cartela, outra garantia, outro preço — sob a manchete de sempre.
+  plano: null, fixo: lembrar('fixo', null), semResposta: null, link: null,
   bilhetes: [], todos: [], mascaras: [], ultimoResultado: null,
 };
 
 /// Trocar o fechamento nomeado passa por aqui, sempre: é o que mantém o que está
 /// na tela e o que está guardado dizendo a mesma coisa.
-const fixar = (f) => { estado.fixo = f; guardar('fixo', f); };
+const fixar = (f, semResposta = null) => {
+  estado.fixo = f;
+  estado.semResposta = f ? null : semResposta;
+  guardar('fixo', f);
+};
 
 // ── dinheiro ────────────────────────────────────────────────────────────────
 
@@ -77,7 +86,11 @@ const dinheiro = (centavos) => reais.format((centavos ?? 0) / 100);
 /// "1 bilhete", "2 bilhetes". Um fechamento de uma cartela é raro no modo
 /// automático e comum no manual, e "1 bilhetes" é o tipo de erro que faz a
 /// pessoa desconfiar do resto da tela.
-const plural = (n, um, muitos) => `${n} ${n === 1 ? um : muitos}`;
+///
+/// E o número vem em pt-BR, como todo número desta tela. Vinha cru, e a mesma
+/// linha da resposta dizia "3876 cartelas · R$ 13.566,00" — dois jeitos de
+/// escrever número um ao lado do outro, um deles o de outra língua.
+const plural = (n, um, muitos) => `${n.toLocaleString('pt-BR')} ${n === 1 ? um : muitos}`;
 
 function emCentavos(texto) {
   const limpo = String(texto).replace(/[^\d,.]/g, '').replace(/\.(?=\d{3}\b)/g, '');
@@ -149,7 +162,12 @@ async function arrancar() {
   // em uso — guardado de outra sessão ou recebido num link. Daqui em diante quem
   // manda é a pessoa, e `trocarOpcoes` preserva o que ela escolher.
   if (estado.fixo) {
+    // Os dois, e não só o tamanho da cartela. Com a garantia em "tanto faz", os
+    // controles descreviam um pedido mais largo do que o fechamento que estava
+    // em uso, e mexer em qualquer outra coisa resolvia esse pedido largo — a
+    // pessoa via voltar um fechamento que não era o que ela tinha guardado.
     $('m-k').value = String(estado.fixo.k);
+    $('m-t').value = String(estado.fixo.t);
     desenharManual();
     $('m-fechamento').value = `${estado.fixo.k}-${estado.fixo.t}`;
   }
@@ -199,11 +217,18 @@ function responder() {
   desenharGrade();
   if (!estado.indice) return;
 
-  const plano = estado.fixo ? planoFixo(estado.fixo) : melhorEstrategia(estado.indice, estado.precos, {
+  const doOrcamento = () => melhorEstrategia(estado.indice, estado.precos, {
     orcamento: estado.orcamento,
     dezenas: estado.dezenas.size,
     garantiaMinima: estado.garantiaMinima,
   });
+  // Três origens para a resposta, nesta ordem: um pedido manual sem resposta, um
+  // fechamento nomeado, ou o que o dinheiro compra. A primeira existe para que a
+  // terceira **não** assuma quando a segunda falha — era assim que um pedido
+  // impossível virava uma resposta confiante a outra pergunta.
+  const plano = estado.semResposta
+    ? { motivo: 'sem-resposta', escolha: null, pedido: estado.semResposta }
+    : estado.fixo ? planoFixo(estado.fixo) : doOrcamento();
   estado.plano = plano;
   // Com um fechamento nomeado o campo de dinheiro é o preço **dele**, e não um
   // orçamento. Qualquer coisa que mexa nesse preço — editar a tabela de preços,
@@ -242,6 +267,13 @@ function responder() {
 }
 
 function desenharResposta(plano) {
+  // O pedido do modo manual que o catálogo não atende. A tela diz o que foi
+  // pedido, diz que não há, e mostra as saídas — em vez de responder outra coisa.
+  if (plano.motivo === 'sem-resposta') {
+    return `<p class="aviso">Não há fechamento catalogado com
+      <b>${comoSePede(plano.pedido)}</b>.</p>${porQueNaoHa(plano.pedido)}${
+      vizinhos(plano.pedido)}`;
+  }
   if (plano.motivo === 'poucas-dezenas') {
     const f = plano.faltam;
     return `<p class="aviso">Marque mais ${f} ${f === 1 ? 'dezena' : 'dezenas'} — ou toque em
@@ -927,42 +959,127 @@ function desenharManual() {
   const pedidoDeTeto = Math.floor(Number($('m-teto').value));
   const teto = pedidoDeTeto >= 1 ? pedidoDeTeto : Infinity;
   const todas = fechamentosDe(estado.indice, estado.precos, pool);
-  // Os dois filtros listam só os valores que este pool tem. Oferecer "18 por
-  // cartela" onde não existe fechamento de 18 não é dar escolha, é dar um beco.
-  for (const [id, campo, rotulo] of [['m-k', 'k', 'por cartela'], ['m-t', 't', 'acertos']]) {
-    trocarOpcoes(id, [['', 'tanto faz'], ...[...new Set(todas.map((e) => e[campo]))]
-      .sort((a, b) => a - b).map((n) => [n, `${n} ${rotulo}`])]);
-  }
   const k = Number($('m-k').value);
   const t = Number($('m-t').value);
-  // Duas linhas com o mesmo tamanho de cartela e o mesmo preço, uma garantindo
-  // menos, é ruído: ninguém escolheria a menor. A escada some com as dominadas
-  // entre tamanhos diferentes; aqui só somem as dominadas dentro do mesmo
-  // tamanho, porque escolher o tamanho é justamente o que este modo oferece.
-  // O descarte não esconde o fechamento em uso. Ele veio de uma escolha desta
-  // pessoa — ou de um link de bolão — e some-lo do select deixaria a lista
-  // dizendo uma coisa e a resposta acima dela, outra. Os **filtros** continuam
-  // valendo sobre ele: filtrar é a pessoa pedindo outra coisa, e o pedido novo
-  // manda no antigo.
-  const emUso = (e) => estado.fixo && e.v === estado.fixo.v && e.k === estado.fixo.k
-    && e.t === estado.fixo.t;
-  const quais = todas
-    .filter((e) => e.jogos <= teto && (!k || e.k === k) && (!t || e.t >= t))
-    .filter((e, _, ate) => emUso(e)
-      || !ate.some((o) => o.k === e.k && o.custo <= e.custo && o.t > e.t));
+  // Os dois filtros listam só os valores que este pool tem — e dizem quais deles
+  // não combinam com o resto do pedido.
+  //
+  // Cada um sozinho oferecia o que existe: num pool de 20 há cartela de 15 e há
+  // garantia de 15, então os dois selects mostravam as duas coisas. **Juntas
+  // elas não existem** — `20/15/15` seriam as 15.504 combinações inteiras, e o
+  // catálogo não as carrega —, e nada na tela avisava antes. A pessoa escolhia
+  // dois valores oferecidos e caía numa recusa, o que se parece com defeito.
+  //
+  // São 255 combinações que os dois selects deixam montar e 237 fechamentos
+  // publicados: **18 becos**, todos em garantia alta com pool grande — que é
+  // exatamente o "cenário complexo" onde este modo parecia falhar. Marcados,
+  // continuam escolhíveis: quem quiser ver a recusa por escrito, com o tamanho
+  // que o fechamento teria, escolhe e vê. O que some é a surpresa.
+  const cabeNoTeto = (e) => e.jogos <= teto;
+  for (const [id, campo, outro, fixado, rotulo] of [
+    ['m-k', 'k', 't', t, 'por cartela'], ['m-t', 't', 'k', k, 'acertos'],
+  ]) {
+    trocarOpcoes(id, [['', 'tanto faz'], ...[...new Set(todas.map((e) => e[campo]))]
+      .sort((a, b) => a - b).map((n) => [n, `${n} ${rotulo}${
+        todas.some((e) => e[campo] === n && cabeNoTeto(e) && (!fixado || e[outro] === fixado))
+          ? '' : ' — sem fechamento'}`])]);
+  }
+  // **Garantia exata, e não "no mínimo".** Era "no mínimo", e é de onde vinha o
+  // pior dos defeitos deste modo: com `15-14` escolhido, baixar a garantia de 14
+  // para 11 deixava a linha antiga passando no filtro novo — 14 é no mínimo 11 —,
+  // e a tela continuava mostrando 452 cartelas por R$ 1.582,00 onde o pedido
+  // agora custava R$ 14,00. A pessoa mudava o pedido e o aplicativo respondia o
+  // anterior.
+  //
+  // Trocar por igualdade não tira nada de ninguém: o catálogo é monótono em `t`
+  // — subir a garantia nunca barateia o fechamento, medido nos 237 —, então o
+  // fechamento de **exatamente** `t` é sempre o jeito mais barato de conseguir
+  // ao menos `t`. O que se ganha é o pedido valendo ao pé da letra.
+  //
+  // E nada mais é descartado. Havia um descarte por dominância — some a linha
+  // que, no mesmo tamanho de cartela, custa igual ou mais e garante menos —, e
+  // ele escondia **66 dos 237** fechamentos publicados: com garantia exata,
+  // pedir 11 acertos com cartela de 15 num pool de 20 devolvia lista vazia,
+  // porque a linha de 11 tinha sido comida pela de 12, que custa o mesmo R$ 14,00
+  // e garante mais. A lista vem inteira, do
+  // mais barato ao mais caro e, no mesmo preço, da maior garantia para a menor:
+  // o melhor negócio continua sendo o primeiro da lista, e agora o resto existe.
+  const quais = todas.filter((e) => cabeNoTeto(e) && (!k || e.k === k) && (!t || e.t === t));
   // Garantia e preço primeiro: num telefone a lista fechada mostra só o começo
   // do texto, e o começo tem de ser o que faz escolher entre uma linha e outra.
   trocarOpcoes('m-fechamento', quais.map((e) => [`${e.k}-${e.t}`,
     `garante ${e.t} acertos · ${dinheiro(e.custo)} ·
      ${plural(e.jogos, 'cartela', 'cartelas')} de ${e.k} dezenas`]));
+  const pedido = { v: pool, k, t, teto };
   // Lista vazia sem explicação é a pessoa achando que o aplicativo quebrou. A
-  // frase nomeia o que ela pediu, para ela saber o que afrouxar.
-  const pedido = [k && `${k} dezenas por cartela`, t && `${t} acertos garantidos`,
+  // frase nomeia o que ela pediu, para ela saber o que afrouxar — e a resposta
+  // lá em cima diz o mesmo, com as saídas.
+  $('manual').textContent = quais.length ? '' : `Não há fechamento catalogado com ${
+    comoSePede(pedido)}.`;
+  return pedido;
+}
+
+/// O pedido do modo manual, em português. A lista e a resposta falam do mesmo
+/// pedido, e escrevê-lo em dois lugares é escrevê-lo diferente em algum dia.
+function comoSePede({ v, k, t, teto }) {
+  const partes = [`${v} dezenas`, k && `cartela de ${k}`, t && `${t} acertos garantidos`,
     teto !== Infinity && `no máximo ${plural(teto, 'cartela', 'cartelas')}`].filter(Boolean);
-  const frase = pedido.length < 2 ? pedido.join('')
-    : `${pedido.slice(0, -1).join(', ')} e ${pedido.at(-1)}`;
-  $('manual').textContent = quais.length ? ''
-    : `Com ${pool} dezenas não há fechamento catalogado${frase ? ` com ${frase}` : ''}.`;
+  return partes.length < 2 ? partes.join('')
+    : `${partes.slice(0, -1).join(', ')} e ${partes.at(-1)}`;
+}
+
+/// Por que este pedido não tem resposta — em cartelas e em dinheiro.
+///
+/// "Não há" sozinho soa a falha do aplicativo. Mas os 18 becos não são buracos
+/// por descuido: o índice traz o **piso** de cada um, a menor quantidade de
+/// cartelas que um fechamento assim poderia ter, e ele é grande. Dizer o número
+/// transforma a recusa em informação — quem pediu 25 dezenas com cartela de 16
+/// garantindo 14 fica sabendo que o menor fechamento possível ali tem 3.014
+/// cartelas, e decide com isso na mão em vez de achar que a tela quebrou.
+///
+/// Quando piso e quantidade coincidem, a conta fechou: são todas as combinações
+/// de `k` entre `v`, não há fechamento menor, e o que impede é só o tamanho.
+function porQueNaoHa({ v, k, t }) {
+  if (!k || !t) return '';
+  const e = estado.indice.entradas.find((x) => x.v === v && x.k === k && x.t === t);
+  const preco = estado.precos.aposta[k];
+  if (!e?.piso || !preco) return '';
+  const quanto = `${plural(e.piso, 'cartela', 'cartelas')} — ${dinheiro(e.piso * preco)}`;
+  return `<p class="frase">${e.jogos === e.piso
+    ? `Não é descuido do catálogo: um fechamento assim só pode ser <b>todas</b> as
+       combinações de ${k} entre as suas ${v} dezenas — ${quanto} —, e não há menor.`
+    : `Um fechamento assim teria pelo menos <b>${quanto}</b>, e o catálogo ainda
+       não tem um.`}</p>`;
+}
+
+/// O que o catálogo tem perto do que se pediu, quando o pedido não tem resposta.
+///
+/// Um "não há" sozinho é um beco: a pessoa fica olhando para a recusa sem saber
+/// qual das quatro coisas afrouxar. Duas vizinhanças bastam e são as que ela
+/// escolheria — a mesma garantia noutro tamanho de cartela, e o mesmo tamanho
+/// numa garantia menor —, cada uma com o preço, porque é o preço que decide.
+function vizinhos({ v, k, t, teto }) {
+  const todas = fechamentosDe(estado.indice, estado.precos, v);
+  const cabe = (e) => e.jogos <= teto;
+  const perto = [
+    t && todas.find((e) => e.t === t && e.k !== k && cabe(e)),
+    k && (todas.filter((e) => e.k === k && e.t < t && cabe(e)).sort((a, b) => b.t - a.t)[0]
+      // Sem garantia pedida não há "garantia menor" a oferecer, e era aqui que a
+      // recusa ficava sem saída nenhuma: com só o tamanho da cartela e um teto
+      // apertado, as duas vizinhanças davam vazio e sobrava o beco puro.
+      || todas.find((e) => e.k === k && cabe(e))),
+    // E a rede por baixo de tudo: o menor fechamento que cabe no teto, seja de
+    // que tamanho for — ou, se nada couber, o menor que existe para este pool,
+    // que é a resposta a "então o que dá para fazer com estas dezenas".
+    todas.find(cabe) || todas[0],
+  ].filter(Boolean);
+  if (!perto.length) return '';
+  const unicos = perto.filter((e, i) => perto.findIndex((o) => o.k === e.k && o.t === e.t) === i)
+    .slice(0, 2);
+  return `<p class="ressalva">O catálogo tem, perto disso:</p>
+    <div class="linha">${unicos.map((e) => `<button type="button" class="discreto"
+      data-manual="${e.k}-${e.t}">${e.t} acertos · cartela de ${e.k} ·
+      ${dinheiro(e.custo)}</button>`).join('')}</div>`;
 }
 
 /// Aplica o que foi escolhido: ajusta a marcação ao pool pedido, fixa o
@@ -974,10 +1091,27 @@ function aplicarManual() {
   // novo**, e só então ler o que sobrou. Lendo antes, o fechamento vinha da
   // lista do pool anterior — uma combinação que o catálogo não tem — e a tela
   // morria dizendo "não há fechamento catalogado" para um pool cheio deles.
-  if (estado.dezenas.size !== pool) ajustarPara(pool);
-  desenharManual();
+  //
+  // A marcação entra direto, sem passar por `trocarDezenas`: aquela porta solta
+  // o fechamento nomeado e redesenha a tela inteira a partir do orçamento, no
+  // meio de um pedido manual que ainda vai ser resolvido três linhas abaixo.
+  // Era uma resposta desenhada para ser jogada fora, e uma chance a mais de a
+  // lista se refazer com o pedido pela metade.
+  if (estado.dezenas.size !== pool) {
+    estado.dezenas = ajustarPara(pool);
+    guardar('dezenas', [...estado.dezenas]);
+    estado.link = null;
+  }
+  const pedido = desenharManual();
   const [k, t] = ($('m-fechamento').value || '').split('-').map(Number);
-  fixar(fixoValido({ v: pool, k, t }));
+  const escolhido = fixoValido({ v: pool, k, t, de: 'mao' });
+  // **Um pedido sem resposta é dito, e não trocado por outro.** Era
+  // `fixar(null)` e pronto: o fechamento nomeado sumia, a resposta voltava a ser
+  // a do orçamento, e a tela anunciava com manchete e selo um fechamento que
+  // ninguém tinha pedido — 12 acertos com cartela de 15 para quem tinha pedido
+  // 14 com cartela de 16. O aviso ao lado do select dizia a verdade, em cinza,
+  // três dedos abaixo do número grande que dizia outra coisa.
+  fixar(escolhido, escolhido ? null : pedido);
   // Quem chegou por um link de bolão recebe uma parte, não o fechamento inteiro.
   // Montando outro fechamento à mão, aquela parte era de outro conjunto — e sem
   // isto a tela entregaria um terço do novo dizendo ser a parte do bolão antigo.
@@ -1018,6 +1152,18 @@ function ligarControles() {
   for (const id of ['secao-bilhetes', 'lista-cartelas', 'painel-corpo']) {
     $(id).addEventListener('click', (ev) => acaoDosBilhetes(ev.target.dataset?.acao));
   }
+  // As saídas de um pedido sem resposta. Um "não há" com as alternativas escritas
+  // ao lado ainda deixa a pessoa procurar qual select mexer; um toque resolve.
+  $('resposta').addEventListener('click', (ev) => {
+    const perto = ev.target.dataset?.manual;
+    if (!perto) return;
+    const [k, t] = perto.split('-');
+    $('m-k').value = k;
+    $('m-t').value = t;
+    $('m-teto').value = '';
+    $('det-manual').open = true;
+    aplicarManual();
+  });
   $('voltar').addEventListener('click', () => fecharAnalise());
   // "Voltar" do navegador, e o gesto de deslizar do telefone: fecham a área em
   // vez de sair do aplicativo.
@@ -1073,11 +1219,28 @@ function ligarControles() {
 
   // Trocar o pool mexe na grade, e o redesenho vem de lá — redesenhar aqui
   // devolveria o pool anterior antes de `aplicarManual` chegar a ler o novo.
-  $('m-pool').addEventListener('input', aplicarManual);
-  for (const id of ['m-teto', 'm-k', 'm-t']) {
-    $(id).addEventListener('input', () => { desenharManual(); aplicarManual(); });
+  // Um caminho só para os quatro controles. Três deles redesenhavam a lista
+  // antes de chamar quem já a redesenha, e ela se refazia duas vezes por toque —
+  // dois momentos em que o pedido podia ser lido pela metade.
+  for (const id of ['m-pool', 'm-teto', 'm-k', 'm-t']) {
+    $(id).addEventListener('input', aplicarManual);
   }
-  $('m-fechamento').addEventListener('change', aplicarManual);
+  // Escolher uma linha da lista **é** dizer o tamanho da cartela e a garantia,
+  // e os dois controles passam a dizer isso. Sem essa cópia, a escolha vivia só
+  // na lista, e a lista se refaz a cada troca de pool: quem tinha escolhido
+  // "cartela de 16, garantindo 14" num pool de 18 e depois voltava o pool para
+  // 15 — onde cartela de 16 não existe — via o navegador selecionar a primeira
+  // opção sozinho, e o aplicativo montava essa. Quinze pares somem só nessa
+  // troca, e nenhum deles avisava.
+  //
+  // Com a cópia, o pedido mora sempre nos quatro controles, e some o caso em que
+  // a tela responde uma coisa que ninguém escolheu: o pedido que o pool novo não
+  // atende vira recusa por escrito, com as saídas ao lado.
+  $('m-fechamento').addEventListener('change', () => {
+    const [k, t] = ($('m-fechamento').value || '').split('-');
+    if (k && t) { $('m-k').value = k; $('m-t').value = t; }
+    aplicarManual();
+  });
 
   $('varrer').addEventListener('click', varrerTudo);
   $('buscar-sorteio').addEventListener('click', buscarSorteio);
@@ -1124,7 +1287,7 @@ function sortearDezenas(quantas) {
 /// escolha por mexer no tamanho do pool; encolhendo, saem as últimas marcadas.
 function ajustarPara(quantas) {
   const fora = embaralhar(todasAsDezenas().filter((d) => !estado.dezenas.has(d)));
-  trocarDezenas(new Set([...estado.dezenas, ...fora].slice(0, quantas).sort((a, b) => a - b)));
+  return new Set([...estado.dezenas, ...fora].slice(0, quantas).sort((a, b) => a - b));
 }
 
 /// Toda troca de dezenas passa por aqui: guarda, desfaz os dois vínculos que
