@@ -33,8 +33,10 @@ main { max-width: var(--coluna); margin: 0 auto; padding: 1rem; }
 
 h1 {
   font-size: 1rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
-  color: var(--tinta-fraca); margin: 0.5rem 0 1rem;
+  color: var(--tinta-fraca); margin: 0.5rem 0 0.25rem;
 }
+
+.oque-e { font-size: 0.95rem; color: var(--tinta); margin: 0 0 1rem; }
 
 /* Os títulos das tabelas de preço. São `h2` porque o único título acima deles
    é o `h1` do aplicativo, e pular de 1 para 3 quebra a navegação por título de
@@ -199,26 +201,46 @@ footer {
   background: var(--fundo); padding: 0 1rem env(safe-area-inset-bottom, 1rem);
 }
 
+/* O cabeçalho inteiro — título e abas — gruda no topo como uma peça só.
+   Grudavam separados, e o de baixo carregava a altura do de cima como número
+   escrito à mão: `top: 3rem` contra os 63 px que o título mede. A diferença de
+   15 px era o quanto as abas cobriam do botão "Voltar" assim que a página
+   rolava. Num bloco só não há número a acertar: a conta é a do navegador. */
+.analise-cabeca {
+  position: sticky; top: 0; z-index: 2; background: var(--fundo);
+  /* Na mesma coluna do conteúdo. As abas repartem entre si a largura da linha,
+     e sem este limite elas repartiam a **janela**: numa tela de 1.200 px o
+     conteúdo fica numa coluna de 704 px, centrada, e a barra de navegação dele
+     ficava com 1.168 — cinco pílulas de 230 px cada, alinhadas com nada. */
+  max-width: var(--coluna); margin: 0 auto;
+}
+
 .analise-topo {
-  position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 0.6rem;
+  display: flex; align-items: center; gap: 0.6rem;
   padding: 0.7rem 0 0.5rem; background: var(--fundo);
 }
 
 .analise-topo strong { font-size: 0.95rem; font-weight: 600; }
 
-/* Rola na horizontal quando não couber, e nunca empurra a página junto. */
+/* Quebra em duas linhas quando não couber, e nunca rola na horizontal.
+   Rolava, e as cinco abas somam 455 px: em telefone nenhum — 320, 360, 390 ou
+   414 de largura — a última cabia. Ficava fora da tela, sem barra de rolagem
+   (escondida logo abaixo) e sem sombra na borda: nada dizia que havia mais.
+   A aba escondida era a do **resumo**, que é onde mora a varredura exaustiva —
+   a prova da promessa que o aplicativo faz na primeira tela. Quebrando, as
+   cinco aparecem de uma vez, que é o que "todas a um toque" queria dizer. */
 .abas {
-  position: sticky; top: 3rem; z-index: 2; display: flex; gap: 0.3rem; overflow-x: auto;
-  padding: 0.2rem 0 0.6rem; background: var(--fundo); scrollbar-width: none;
+  display: flex; flex-wrap: wrap; gap: 0.3rem;
+  padding: 0.2rem 0 0.6rem; background: var(--fundo);
   border-bottom: 1px solid var(--linha); margin-bottom: 0.9rem;
 }
 
-.abas::-webkit-scrollbar { display: none; }
-
 /* 44px, e não 40: é o alvo de toque mínimo, e a barra de abas é a navegação
-   inteira desta área — errar o alvo aqui troca de assunto. */
+   inteira desta área — errar o alvo aqui troca de assunto.
+   `flex: 1 1 auto` reparte a sobra da linha entre as abas que couberam, para
+   que a quebra não deixe um buraco à direita da primeira. */
 .abas button {
-  flex: 0 0 auto; min-height: 44px; padding: 0 0.85rem; border-radius: 999px; font: inherit;
+  flex: 1 1 auto; min-height: 44px; padding: 0 0.85rem; border-radius: 999px; font: inherit;
   font-size: 0.9rem; border: 1px solid var(--linha); background: var(--papel);
   color: var(--tinta-fraca); cursor: pointer;
 }
@@ -245,8 +267,17 @@ footer {
 .quadro tr:last-child td { border-bottom: 0; }
 .quadro .destaque td { font-weight: 700; }
 
-/* A barra de proporção da distribuição: a leitura de relance, antes do número. */
-.barra { display: block; height: 6px; border-radius: 3px; background: var(--realce); min-width: 2px; }
+/* A barra de proporção da distribuição: a leitura de relance, antes do número.
+   O trilho não é enfeite — é o que dá largura definida a quem a barra mede.
+   Sem ele a barra pedia `width` em porcentagem dentro de uma célula de tabela
+   sem largura própria, a porcentagem resolvia contra quase nada, e **toda**
+   barra saía nos 2 px do `min-width`: 2%, 24%, 95% e 100% desenhavam o mesmo
+   traço. A coluna existia e não dizia nada. */
+.barra-trilho {
+  display: block; width: 3rem; height: 6px; border-radius: 3px;
+  background: var(--linha); overflow: hidden;
+}
+.barra { display: block; height: 100%; border-radius: 3px; background: var(--realce); min-width: 2px; }
 
 .aba label { display: block; margin-top: 0.7rem; font-size: 0.9rem; color: var(--tinta-fraca); }
 .aba select, .aba input[type="text"], .aba input[type="number"] {

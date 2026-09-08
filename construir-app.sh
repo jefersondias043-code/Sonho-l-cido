@@ -71,7 +71,7 @@ for arquivo in "$PARCIAL"/*; do
 done
 [ "$faltando" -eq 0 ] || exit 1
 
-# O cliente inteiro cabe em menos de 2.500 linhas somando JavaScript, HTML e CSS.
+# O cliente inteiro cabe em menos de 2.700 linhas somando JavaScript, HTML e CSS.
 #
 # Vale dizer o que este número é hoje, porque ele já não é o que era. Ele nasceu
 # em 1.500, como limite de projeto: o cliente tinha uma porta de entrada só, e o
@@ -79,14 +79,18 @@ done
 # cresce". Passou a 1.700 com a segunda porta — a pessoa nomeando o fechamento
 # em vez de partir do dinheiro —, a 2.250 com a área de análise (as cartelas, a
 # conferência, a simulação e a conta do dinheiro), a 2.400 com a comparação
-# contra o chute, e a 2.500 quando o que entra de fora — endereço, armazenamento
-# do aparelho, resultado guardado — passou a ser conferido antes de virar tela.
+# contra o chute, a 2.500 quando o que entra de fora — endereço, armazenamento
+# do aparelho, resultado guardado — passou a ser conferido antes de virar tela,
+# a 2.600 quando o prêmio passou a decompor cada cartela nas apostas simples que
+# ela é, e a 2.700 quando a carteira deixou de ser só uma lista: o fechamento que
+# a pessoa guardou volta para a tela com um toque, e a tela passou a dizer de
+# onde ele veio.
 #
 # A regra que ele guardava continua de pé, e é esta: **o cliente não resolve
 # fechamento nenhum**. Procurar quais bilhetes usar é trabalho do motor em Rust,
 # fora do aparelho. O que o cliente faz é escolher uma linha de um catálogo
 # pronto e contar acertos de bilhetes que já existem — `and` e popcount, mil
-# sorteios contra os 3.634 bilhetes do maior fechamento em 66 ms.
+# sorteios contra as 3.608 cartelas do maior fechamento em 85 ms.
 #
 # Mas quem **cobra** essa regra não é este número, e nunca foi: é
 # `app/testar-conferir.mjs`, varrendo os fechamentos publicados sorteio a
@@ -94,12 +98,13 @@ done
 # crescimento — serve para que crescer seja uma decisão, e não um descuido.
 # Subi-lo é legítimo quando o aplicativo passa a oferecer algo que não oferecia;
 # não é legítimo quando uma decisão que devia ter ficado no catálogo vazou para
-# cá. Da última vez, o que entrou foi a leitura conferida do que estava guardado
-# no aparelho — quatro chaves estragadas davam tela em branco — e o painel de
-# volantes dizendo quantas folhas de papel serão antes de a impressão começar.
+# cá. Da última vez, o que entrou foi a conta que decompõe uma cartela de mais
+# de 15 dezenas nas apostas simples que ela **é** — a lotérica cobra por todas e
+# paga por todas, e o aplicativo pagava por uma — e a linha do topo que diz a
+# quem chega pelo link o que é isto, antes de a tela pedir dinheiro.
 linhas=$(cat "$PARCIAL"/*.js "$PARCIAL"/*.css "$PARCIAL"/*.html | wc -l)
-if [ "$linhas" -ge 2500 ]; then
-  echo "o cliente passou de 2.500 linhas: $linhas" >&2
+if [ "$linhas" -ge 2700 ]; then
+  echo "o cliente passou de 2.700 linhas: $linhas" >&2
   exit 1
 fi
 
@@ -109,7 +114,7 @@ casca=$(cat "$PARCIAL"/*.js "$PARCIAL"/*.css "$PARCIAL"/*.html "$PARCIAL"/catalo
   gzip -9 | wc -c)
 
 echo "carimbo $carimbo"
-echo "$linhas linhas de cliente (teto: 2.500)"
+echo "$linhas linhas de cliente (teto: 2.700)"
 echo "$fechamentos fechamentos · ${peso} KiB no total"
 echo "peso inicial (casca + índice, comprimido): $((casca / 1024)) KiB"
 # Tudo passou: só agora a pasta publicável passa a existir.

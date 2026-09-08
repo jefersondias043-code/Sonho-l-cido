@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0b1020">
 <title>Sonho Lúcido — fechamentos da Lotofácil</title>
-<meta name="description" content="Quanto você quer gastar, quais dezenas quer jogar, e os bilhetes prontos com a garantia que o dinheiro compra.">
+<meta name="description" content="Quanto você quer gastar, quais dezenas quer jogar, e as cartelas prontas com a garantia que o dinheiro compra.">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icone.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icone-180.png">
@@ -24,6 +24,10 @@
 <main id="painel-principal">
 
 <h1>Sonho Lúcido</h1>
+<!-- Quem chega pelo link não sabe o que é isto, e a primeira coisa que a tela
+     pede é dinheiro. Uma linha, sem jargão: diz a loteria e diz a ideia — as
+     cartelas se completam, e é daí que vem a garantia. -->
+<p class="oque-e">Cartelas da Lotofácil que, juntas, garantem acertos.</p>
 
 <section class="cartao" id="secao-dinheiro">
   <label for="valor">Quanto você quer gastar</label>
@@ -117,6 +121,11 @@
      era o que enchia a primeira tela de cartelas que ninguém tinha pedido. -->
 <section class="analise" id="analise" hidden role="dialog" aria-modal="true"
   aria-label="Cartelas e análise">
+  <!-- O título e as abas grudam no topo juntos, num bloco só. Grudando cada um
+       por conta própria, o de baixo precisava saber a altura do de cima — e
+       sabia errado: 3rem contra os 63 px que o outro mede, 15 px de diferença,
+       que as abas cobriam do botão "Voltar" assim que a página rolava. -->
+  <div class="analise-cabeca">
   <div class="analise-topo">
     <button type="button" id="voltar" class="discreto">‹ Voltar</button>
     <strong id="analise-titulo"></strong>
@@ -128,6 +137,7 @@
     <button type="button" role="tab" id="tab-valores" aria-controls="aba-valores" data-aba="valores" aria-selected="false">Valores</button>
     <button type="button" role="tab" id="tab-resumo" aria-controls="aba-resumo" data-aba="resumo" aria-selected="false">Resumo</button>
   </nav>
+  </div>
 
   <div class="aba" id="aba-cartelas" role="tabpanel" aria-labelledby="tab-cartelas" tabindex="0">
     <div id="lista-cartelas"></div>

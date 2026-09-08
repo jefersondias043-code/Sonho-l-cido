@@ -34,8 +34,8 @@ que quase nunca se cobra.
 | R$ 25,00 | 22 | **11 acertos** | 6 jogos de 15 dezenas | R$ 21,00 | piso 3 |
 | R$ 100,00 | 23 | **11 acertos** | 15 jogos de 15 dezenas | R$ 52,50 | piso 4 |
 | R$ 400,00 | 25 | **11 acertos** | 55 jogos de 15 dezenas | R$ 192,50 | piso 10 |
-| R$ 1.500,00 | 25 | **12 acertos** | 331 jogos de 15 dezenas | R$ 1.158,50 | piso 55 |
-| R$ 15.000,00 | 25 | **13 acertos** | 3634 jogos de 15 dezenas | R$ 12.719,00 | piso 671 |
+| R$ 1.500,00 | 25 | **12 acertos** | 330 jogos de 15 dezenas | R$ 1.155,00 | piso 55 |
+| R$ 15.000,00 | 25 | **13 acertos** | 3608 jogos de 15 dezenas | R$ 12.628,00 | piso 671 |
 <!-- fim de a tabela do dinheiro -->
 
 A primeira linha é a mais importante do produto: com cinco reais não há
@@ -110,6 +110,84 @@ Agora ele responde à pergunta que foi feita:
 É a outra metade do produto. O aplicativo já dizia o que o dinheiro compra;
 passou a dizer também quanto custa o que a pessoa quer.
 
+## O catálogo encolheu, e isso é dinheiro de volta
+
+Dezessete fechamentos publicados receberam tempo de motor — noventa segundos por
+caso na primeira passada, quarenta minutos por caso nas últimas —, sempre
+partindo do que já estava publicado. **Os dezessete encolheram.**
+
+| caso | antes | agora | quanto sai da conta de quem compra |
+|---|---:|---:|---:|
+| 23 dezenas, cartela de 15, garantindo 13 | 872 | **694** | −R$ 623,00 (20,4%) |
+| 23 dezenas, cartela de 16, garantindo 12 | 33 | **27** | −R$ 336,00 (18,2%) |
+| 23 dezenas, cartela de 16, garantindo 13 | 218 | **180** | −R$ 2.128,00 (17,4%) |
+| 22 dezenas, cartela de 15, garantindo 14 | 5.016 | **4.184** | −R$ 2.912,00 (16,6%) |
+| 24 dezenas, cartela de 15, garantindo 13 | 1.902 | **1.631** | −R$ 948,50 (14,2%) |
+| 25 dezenas, cartela de 17, garantindo 13 | 320 | **278** | −R$ 19.992,00 (13,1%) |
+| 25 dezenas, cartela de 16, garantindo 13 | 1.070 | **938** | −R$ 7.392,00 (12,3%) |
+| 25 dezenas, cartela de 16, garantindo 12 | 130 | **114** | −R$ 896,00 (12,3%) |
+| 22 dezenas, cartela de 16, garantindo 13 | 89 | **79** | −R$ 560,00 (11,2%) |
+| 21 dezenas, cartela de 16, garantindo 14 | 303 | **272** | −R$ 1.736,00 (10,2%) |
+| 21 dezenas, cartela de 15, garantindo 14 | 1.578 | **1.431** | −R$ 514,50 (9,3%) |
+| 24 dezenas, cartela de 16, garantindo 12 | 63 | **58** | −R$ 280,00 (7,9%) |
+| 24 dezenas, cartela de 15, garantindo 12 | 173 | **167** | −R$ 21,00 (3,5%) |
+| 23 dezenas, cartela de 15, garantindo 12 | 82 | **80** | −R$ 7,00 (2,4%) |
+| 20 dezenas, cartela de 16, garantindo 14 | 92 | **90** | −R$ 112,00 (2,2%) |
+| 25 dezenas, cartela de 15, garantindo 13 | 3.634 | **3.608** | −R$ 91,00 (0,7%) |
+| 25 dezenas, cartela de 15, garantindo 12 | 331 | **330** | −R$ 3,50 (0,3%) |
+
+Somando o que cada um deixou de custar, são **R$ 38.552,50** que saem da conta de
+quem compra esses dezessete fechamentos.
+
+O de R$ 15.000 é o que a escada oferece a quem tem esse dinheiro, e agora custa
+**R$ 12.628,00** em vez de R$ 12.719,00. O de R$ 1.500 caiu de R$ 1.158,50 para
+**R$ 1.155,00**.
+
+Cinco rodadas, e nenhuma voltou de mãos vazias — inclusive as que reincidiram
+sobre casos já melhorados: 25-17-13 caiu de 320 para 285 numa passada e de 285
+para 278 na seguinte; 24-15-13 fez 1.902 → 1.657 → 1.631. A leitura que interessa
+não é "o catálogo melhorou": é que **ele não está convergido**, e que cada
+passada com mais máquina ainda acha. Nenhum caso escolhido pela lista de
+prioridade ficou onde estava. Quem mantiver isto sabe onde gastar horas — e sabe
+que ainda há o que achar.
+
+Nada disso entra sem a varredura: `conferir-tudo`, que não compartilha uma linha
+com o gerador, refez os **249.307.987** sorteios das 330 entradas contra o
+catálogo novo. Um fechamento menor que não cobre tudo não é recorde, é defeito.
+
+Vale registrar o que a mesma quantidade de motor **não** achou. Os quatro casos
+cujo piso cabe abaixo do teto de publicação — 25-16-14, 23-17-15, 23-15-14 e
+25-18-15 — receberam vinte e cinco minutos cada e nenhum desceu das oito mil
+cartelas.
+
+E aqui o gerador estava escondendo o número que decide se vale insistir. A linha
+dizia só *"acima do teto"*, sem dizer **quanto** acima: faltou pouco ou muito?
+Agora ela mostra o que o motor alcançou, entre parênteses, e a resposta muda o
+plano:
+
+| caso | piso | onde o motor chega | teto |
+|---|---:|---:|---:|
+| 23-17-15 | 3.996 | **10.051** | 8.000 |
+| 25-18-15 | 5.121 | **14.875** | 8.000 |
+| 25-16-14 | 3.014 | **15.495** | 8.000 |
+
+O de 23 dezenas está 26% **acima** do teto — perto o bastante para valer horas.
+Os outros dois, não. Sem o número, os três pareciam iguais.
+
+### O teto conta cartelas, e não dinheiro
+
+Perseguir 23-17-15 tem um porém que a mesma medição revela. O teto de 8.000
+nasceu como fronteira econômica: oito mil cartelas de 15 dezenas custam mais de
+vinte mil reais. Mas ele conta **cartelas**, e oito mil cartelas de 17 dezenas
+custam **R$ 3,8 milhões**; de 20 dezenas, R$ 434 milhões. No catálogo publicado
+há vinte fechamentos acima de R$ 1 milhão, e o mais caro custa
+**R$ 59.907.456,00** — todos dentro do teto.
+
+Fica assim de propósito: o modo manual mostra o preço ao lado, e ver "R$ 59
+milhões" ensina por que ninguém fecha com cartela de 20. Trocar o teto por um em
+reais é decisão de produto, não conserto. O que não podia continuar é o
+comentário da constante dizendo o que ela não faz — e esse foi reescrito.
+
 ## Quanto isso devolve, em média
 
 Ao lado de *"em média os dois pagam o mesmo"* — que era uma frase que se lê como
@@ -124,6 +202,98 @@ direto da definição, sem tocar no arquivo, para as duas baterem ao centavo. Um
 bilhete simples devolve **25,7%** do que custa nas faixas fixas — e é o mesmo
 para qualquer arranjo dos mesmos bilhetes, que é justamente o que faz dele a
 prova de que o fechamento compra certeza, e não lucro.
+
+### Todo número da tela, refeito de fora
+
+Depois do conserto, os números que a tela mostra para quatro fechamentos foram
+recolhidos do navegador e recalculados em Python, do zero — hipergeométrica,
+binomiais e tabela de preços, sem tocar em nenhum arquivo do catálogo:
+
+| fechamento | custo | média por concurso, na tela | recalculada | retorno |
+|---|---:|---:|---:|---:|
+| 22 dezenas, cartela de 15, garante 11 | R$ 21,00 | R$ 5,39 | R$ 5,39 | 25,67% |
+| 25 dezenas, cartela de 16, garante 11 | R$ 1.568,00 | R$ 402,44 | R$ 402,44 | 25,67% |
+| 25 dezenas, cartela de 17, garante 12 | R$ 22.848,00 | R$ 5.864,10 | R$ 5.864,10 | 25,67% |
+| 25 dezenas, cartela de 15, garante 13 | R$ 12.628,00 | R$ 3.241,06 | R$ 3.241,06 | 25,67% |
+
+Batem ao centavo, e a coluna da direita é a demonstração em quatro linhas:
+**25,67% em cartela de 15, de 16 e de 17**. A taxa não depende do tamanho da
+cartela nem do fechamento — depende só do preço da aposta simples e da tabela de
+prêmios.
+
+E, no mesmo movimento, os **330 pisos** do índice foram refeitos pela cota de
+contagem e as **255 probabilidades** de `acaso.json` pela hipergeométrica, também
+em Python, também sem tocar nos arquivos: nenhum diverge.
+
+### Um bilhete de mais de 15 dezenas são várias apostas
+
+Esse número estava certo para bilhete de 15 dezenas e **errado para todos os
+outros** — e errado para menos, que é o pior lado para errar.
+
+A lotérica cobra R$ 56,00 por um bilhete de 16 dezenas, e R$ 3,50 pelo de 15.
+Dezesseis vezes mais, e não por acaso: um bilhete de 16 **é** as `C(16,15) = 16`
+apostas de 15 dezenas que cabem dentro dele. A tabela de preços do aplicativo já
+dizia isso em voz alta — 17 dezenas custam `C(17,15) = 136` apostas, 20 dezenas
+custam `C(20,15) = 15.504` — e o aplicativo cobrava por todas elas e **pagava
+por uma**.
+
+Um bilhete de 16 com 14 acertos não leva uma catorze. Das dezesseis apostas
+dentro dele, duas descartam uma das dezenas erradas e ficam com os 14 acertos;
+as outras catorze descartam uma certa e ficam com 13. São **duas catorzes e
+catorze trezes**. Em geral, com `j` dezenas do sorteio dentro de um bilhete de
+`k`, o número de apostas com exatamente `i` acertos é `C(j,i) · C(k−j, 15−i)` —
+escolher `i` das certas e o resto das erradas.
+
+O tamanho do erro, medido: o aplicativo mostrava, da expectativa verdadeira,
+
+| tamanho do bilhete | o que mostrava |
+|---|---:|
+| 16 dezenas | 14,3% |
+| 17 dezenas | 3,3% |
+| 18 dezenas | 0,97% |
+| 19 dezenas | 0,32% |
+| 20 dezenas | 0,11% |
+
+Na tela: um fechamento de 28 cartelas de 16 dezenas, conferido contra um
+sorteio, dizia que voltaram **R$ 42,00** onde voltam **R$ 280,00**. E a frase
+mais visível do aplicativo — *"esses 11 acertos pagam X por cartela premiada"* —
+dizia R$ 7,00 onde a cartela de 16 dezenas paga **R$ 35,00**: cinco das
+dezesseis apostas ficam com as onze certas, `C(11,11) · C(5,4) = 5`.
+
+Onde o número contradiz a tabela, a tela explica: a faixa de 11 acertos vale
+R$ 7,00 na tabela de preços, e a resposta diz que a cartela de 16 paga R$ 35,00
+— então a resposta diz também *"(são 5 apostas de 15 dentro dela)"*. E o título
+da tabela deixou de ser "quanto paga cada faixa" para ser **"quanto paga cada
+faixa, por aposta de 15"**, que é o que aqueles valores sempre foram.
+
+O conserto está num lugar só, `premioDoBilhete`, e para `k = 15` a soma tem um
+termo e devolve exatamente o que devolvia — o caso comum não se mexeu. Dele
+saem a conferência contra o sorteio, a simulação, a carteira, as duas colunas da
+comparação com o chute e a expectativa.
+
+E o conserto **melhora a frase que o aplicativo existe para dizer**. Por
+linearidade, a expectativa de um bilhete de `k` dezenas é `C(k,15)` vezes a de
+uma aposta simples; o preço também é `C(k,15)` vezes. A taxa de retorno é a
+mesma **em todo tamanho de bilhete e em todo fechamento**: 25,7% nas faixas
+fixas, sempre. "O fechamento compra certeza, não lucro" deixa de ser uma
+observação sobre arranjos dos mesmos bilhetes e passa a valer para qualquer
+escolha que se faça na tela. A suíte cobra isso como identidade, para os cinco
+tamanhos, com tolerância de 10⁻⁹.
+
+Nada disso muda uma recomendação: preço é preço e garantia é garantia, e a
+escada continua escolhendo o mesmo. O que muda é o dinheiro que o aplicativo
+mostra — que agora é o que a lotérica deposita.
+
+E o tamanho do estrago, medido no catálogo: dos **237** fechamentos que a tela
+pode oferecer, **191 usam cartela maior que 15 dezenas** — 81%. Quarenta e um
+deles custam menos de mil reais. Não era um canto exótico do aplicativo: era
+quatro em cada cinco fechamentos que o modo manual alcança.
+
+No modo automático o alcance era outro, e vale dizer por quê: em nenhum par
+(pool, garantia) uma cartela maior sai **mais barata** que uma de 15 — quando
+ela vence, é porque não existe fechamento de 15 dezenas publicado ali. A escada
+só chega a uma cartela grande com orçamento acima de R$ 145.600. Quem foi
+enganado pelo número foi quem montou à mão.
 
 ## A decisão que define o produto: o cliente não resolve nada
 
@@ -144,18 +314,21 @@ Daí tudo o mais decorre:
 
 Sem WebAssembly no cliente, sem *web workers*, sem banco de sessões, sem retomada
 de trabalho interrompido. Nada disso tem razão de existir quando não há nada a
-esperar. O cliente inteiro dá **2.400 linhas** somando JavaScript, HTML e CSS —
-teto de 2.500 cobrado pela construção —, e o peso inicial (casca, índice, preços
-e distribuições) dá **41 KiB comprimidos**.
+esperar. O cliente inteiro dá **2.582 linhas** somando JavaScript, HTML e CSS —
+teto de 2.700 cobrado pela construção —, e o peso inicial (casca, índice, preços
+e distribuições) dá **45 KiB comprimidos**.
 
 O teto foi 1.500 enquanto havia uma porta de entrada só, 1.700 quando a segunda
-chegou, 2.250 com a área de análise, 2.400 com a comparação contra o chute, e
+chegou, 2.250 com a área de análise, 2.400 com a comparação contra o chute,
 2.500 quando o que entra de fora — endereço, armazenamento do aparelho,
-resultado guardado — passou a ser conferido antes de virar tela. Nenhuma dessas
-subidas veio de o cliente passar a resolver mais. **Resolver** é procurar quais bilhetes usar, e isso segue inteiro
-no motor em Rust, fora do aparelho. **Simular** é contar acertos de bilhetes que
-já existem: um `and` e um popcount por cartela, mil sorteios contra 3.634
-bilhetes em 66 ms. São coisas de ordens diferentes, e só a primeira é a que o
+resultado guardado — passou a ser conferido antes de virar tela, 2.600 quando o
+prêmio passou a decompor cada cartela nas apostas simples que ela é, e 2.700
+quando a carteira deixou de ser só uma lista — o fechamento guardado volta para a
+tela com um toque, e a tela diz de onde ele veio. Nenhuma
+dessas subidas veio de o cliente passar a resolver mais. **Resolver** é procurar quais
+cartelas usar, e isso segue inteiro no motor em Rust, fora do aparelho.
+**Simular** é contar acertos de cartelas que já existem: um `and` e um popcount
+por cartela, mil sorteios contra 3.608 cartelas em 85 ms. São coisas de ordens diferentes, e só a primeira é a que o
 catálogo existe para evitar.
 
 E o que esse teto de fato protege — que o cliente não resolva nada — quem cobra
@@ -546,10 +719,12 @@ organizado, e cada coisa está a um toque de onde faz sentido procurá-la.
 
 A simulação sorteia resultados e conta acertos das cartelas que **já existem**:
 um `and` e um popcount por cartela sobre a máscara do sorteio. Mil sorteios
-contra o maior fechamento do catálogo — **3.634** bilhetes — levam **66 ms**, e
-**127 ms** com o chute do lado, que é o dobro do trabalho contra os mesmos
-sorteios. Procurar **quais** bilhetes usar — isso sim é resolver, e segue
-inteiro no motor em Rust, fora do aparelho.
+contra o maior fechamento do catálogo — **3.608** cartelas — levam **85 ms**, e
+**158 ms** com o chute do lado, que é o dobro do trabalho contra os mesmos
+sorteios. Eram 66 e 127 antes de o prêmio passar a decompor cada cartela nas
+apostas simples que ela é: trinta milissegundos por mil sorteios é o preço de
+mostrar o dinheiro certo. Procurar **quais** cartelas usar — isso sim é
+resolver, e segue inteiro no motor em Rust, fora do aparelho.
 
 O número velho aqui dizia 3.678 bilhetes, de uma passada do motor que já não é
 a publicada. Um número que ninguém refaz envelhece calado; este foi refeito
@@ -667,6 +842,73 @@ fechamento; quem recebeu uma parte não tem o que redividir. A suíte cobra que 
 soma das partes vistas por um participante seja o fechamento inteiro, e não a
 parte dele.
 
+## A carteira guardava tudo, e não devolvia nada
+
+*"O que eu já joguei"* guarda, de cada fechamento, o que descreve o pedido
+inteiro: as dezenas daquele dia, a combinação, quantas cartelas, quanto custou,
+a data e — depois de conferido — quanto voltou. Tudo o que é preciso para
+remontar aquele fechamento exatamente.
+
+E não havia como. Cada registro oferecia um botão: *apagar*.
+
+O jogo é feito no sábado e o sorteio sai no sábado à noite, mas a conferência de
+verdade é a de dias depois, quando a pessoa lembra. Aí ela abre o aplicativo e
+encontra a linha certa na carteira — *13 acertos garantidos · 694 cartelas de 15
+dezenas · R$ 2.429,00 · 05/09/2026* — e não tem o que fazer com ela. Para
+conferir, precisaria remontar o fechamento de cabeça: marcar de novo as mesmas
+vinte e três dezenas, uma a uma, e acertar o mesmo dinheiro, torcendo para cair
+na mesma linha do catálogo. Conferir um bilhete velho contra o sorteio de hoje é
+a coisa mais comum que se faz com um bilhete de loteria, e era a única que a
+carteira não deixava fazer.
+
+Cada registro ganhou um segundo botão, **Abrir**. Ele põe de volta as dezenas e
+fixa a combinação; as cartelas saem do catálogo de sempre, e não do que foi
+guardado — o registro é o pedido, não a resposta. A conferência então já
+funciona como sempre funcionou, e `anotarNaCarteira` reencontra o mesmo registro
+e escreve nele quanto voltou.
+
+E a tela passou a dizer de onde ele veio. A linha abaixo da régua explica por
+que o número na tela não é o que o dinheiro compraria, e ela tinha duas
+respostas: *"este é o fechamento do bolão que compartilharam com você"* e
+*"você montou este fechamento à mão, em montar do meu jeito"*. Um jogo que volta
+da carteira não é nenhum dos dois, e cairia no segundo — a tela contando à
+pessoa uma história que não foi a dela. O pedido guardado passou a carregar de
+onde veio, com dois valores possíveis e o padrão na mão, para que um
+armazenamento estragado não vire frase na tela.
+
+O botão só aparece quando o registro **pode** voltar: as dezenas guardadas têm
+de existir e ser tantas quantas o pool diz, e a combinação tem de continuar no
+catálogo. Registros de versões antigas não guardavam dezenas, e um fechamento
+sem as dezenas dele não é um fechamento — é um preço. Melhor não oferecer do que
+oferecer e devolver outra coisa.
+
+A conferência guarda um jogo, mexe no dinheiro para tirá-lo da tela, e cobra
+cinco coisas: que haja onde tocar, que a resposta volte a ser a mesma, que a
+tela diga que ela veio da carteira, que as dezenas marcadas voltem a ser as
+mesmas, e que as cartelas venham junto — uma manchete certa sobre uma lista
+vazia seria o pior jeito de isto falhar.
+
+A primeira dessas quatro nasceu de a prova ter dado errado. Tirado o botão para
+ver a suíte reprovar, ela não reprovou: **abortou**. O toque estava escrito
+direto, e clicar num botão que não existe faz o navegador esperar e estourar,
+matando a suíte inteira sem relatar nada — nem verde, nem vermelho, só um rastro
+de pilha. Um teste que aborta é pior do que um que reprova, porque não diz o que
+está errado. Agora ele confere que há onde tocar antes de tocar, e sem o botão
+saem três reprovações com o defeito escrito em cada uma.
+
+### E os botões da carteira também eram todos iguais
+
+Com três jogos guardados, a carteira mostra seis botões e duas palavras:
+*Abrir*, *Apagar*, *Abrir*, *Apagar*, *Abrir*, *Apagar*. Na tela isso basta — a
+linha ao lado diz de que jogo cada par é. Na lista de botões de um leitor de
+tela, não diz nada, e apagar o errado apaga o jogo de outro dia, sem desfazer. É
+exatamente o caso dos quatro *"Copiar link"* do bolão, que já tinha sido
+consertado ali e não tinha sido procurado aqui.
+
+O texto visível continua curto; o nome acessível passa a descrever o registro —
+*"Apagar o fechamento de 13 acertos com 694 cartelas, de 05/09/2026"*. A
+conferência guarda três jogos diferentes e cobra que os seis nomes sejam seis.
+
 ## O que estava guardado também vem de fora
 
 O aplicativo já tratava o endereço como texto de estranho: `lerLink` lê o que
@@ -728,6 +970,57 @@ são a pergunta de base onde ela já passava. Um teste que passa dos dois jeitos
 não prova nada, e por isso todo caso aqui tem pelo menos uma conferência que se
 viu reprovar.
 
+## O que é isto, dito antes de pedir dinheiro
+
+A primeira tela abria com o nome do aplicativo e, logo abaixo, um campo pedindo
+**quanto você quer gastar**. Quem chega pelo link não sabe de que loteria se
+trata, nem o que vai receber em troca — o `<title>` e a descrição do HTML dizem,
+e ninguém lê nenhum dos dois num telefone.
+
+Uma linha, sem jargão de quem já sabe:
+
+> Cartelas da Lotofácil que, juntas, garantem acertos.
+
+Sete palavras que carregam as três coisas: **qual loteria**, **o que sai** e
+**de onde vem a garantia** — do "juntas". A palavra *fechamento* não aparece, e
+a conferência cobra isso: a linha tem de citar a Lotofácil, tem de falar em
+cartelas e em garantir, e **não pode** conter "fechamento", "cobertura" nem
+"covering". A especificação pede que alguém que nunca ouviu falar de covering
+design use o aplicativo sem ajuda; o primeiro parágrafo é onde isso começa.
+
+## Uma palavra só para a mesma coisa
+
+No mesmo cartão, para quem nunca ouviu falar de fechamento, a tela dizia:
+
+> **28 jogos** de 16 dezenas · R$ 1.568,00
+> Se as 15 dezenas sorteadas saírem todas entre as suas 25, ao menos um destes
+> **bilhetes** terá 11 acertos ou mais.
+> …
+> **28 cartelas** de 16 dezenas
+
+Três palavras para o mesmo papel preenchido, em dez linhas. E a distinção
+passou a carregar peso: uma **cartela** de 16 dezenas contém 16 **apostas**
+simples, e é dessa diferença que sai o prêmio. Com as palavras embaralhadas, a
+explicação não tem onde se apoiar.
+
+O aplicativo passou a usar três palavras para três coisas, e só:
+
+| palavra | o que é |
+|---|---|
+| **cartela** | um papel preenchido, com `k` dezenas |
+| **aposta** | uma das `C(k,15)` apostas simples dentro de uma cartela |
+| **fechamento** | o conjunto de cartelas que se completam |
+
+A conferência não olha uma frase: varre as três regiões que a pessoa lê antes de
+abrir a análise — a resposta, o cartão do que foi gerado e o rodapé do degrau —
+e reprova se aparecer mais de uma palavra para o papel, tanto no fechamento
+escolhido pelo dinheiro quanto num montado à mão com cartela de 16. Ao desfazer
+a troca, ela aponta com as palavras que achou: *usou cartela e bilhete e jogo*.
+
+Junto veio um número que não tinha unidade. Ao lado de "R$ 1.568,00", o selo de
+*menor conhecido* dizia **"nenhum fechamento faz isso com menos de 5"** — cinco
+o quê? Cinco reais, para quem lê rápido. Agora diz cinco cartelas.
+
 ## Quarenta e quatro pixels
 
 O alvo de toque mínimo não é opinião: é a largura aproximada de uma ponta de
@@ -783,15 +1076,143 @@ imagens com `alt`, marcos (`main`, `footer`, `dialog`, `tablist`) no lugar, e o
 foco voltando para o botão *"Visualizar cartelas"* quando a área de análise
 fecha.
 
+## A quinta aba não cabia em telefone nenhum
+
+A área de análise tem cinco abas — cartelas, conferir, simular, valores, resumo
+—, e as cinco somam **455 px** de conteúdo. A barra rolava na horizontal quando
+não coubesse, com a barra de rolagem escondida por estilo. Medindo a largura
+útil dela nos telefones que existem:
+
+| tela | cabe | precisa | a última aba termina em |
+|---|---:|---:|---:|
+| 320 px | 288 | 455 | 471 |
+| 360 px | 328 | 455 | 471 |
+| 390 px | 358 | 455 | 471 |
+| 414 px | 382 | 455 | 471 |
+
+Em nenhuma. E nada dizia que havia mais: sem barra de rolagem, sem sombra na
+borda, sem meia aba assomando — a quinta simplesmente não existia para quem
+olhasse. A escondida era a do **resumo**, que é onde mora a varredura exaustiva:
+a prova, no aparelho da pessoa, da garantia que a primeira tela anuncia. O
+aplicativo escondia a própria prova atrás de um gesto que ninguém tinha motivo
+para tentar.
+
+A barra passou a quebrar em duas linhas, e as abas de cada linha repartem a
+sobra entre si em vez de deixar um buraco à direita. Custa cerca de 50 px de
+altura no topo da área, em telefone; numa tela larga as cinco voltam a caber
+numa linha só. *"Uma coisa de cada vez, todas a um toque"* só era verdade na
+metade que se via.
+
+Repartir a linha trouxe junto uma pergunta que a rolagem escondia: **que linha?**
+Numa tela de 1.200 px o conteúdo da área fica numa coluna de 704, centrada, e a
+barra de navegação dele ficava com os 1.168 da janela — cinco pílulas de 230 px
+alinhadas com nada. O cabeçalho passou a viver na mesma coluna do conteúdo, e a
+conferência mede as duas caixas e cobra que as bordas coincidam.
+
+A conferência é de posição, e não de estilo — qualquer jeito de fazer as cinco
+caberem passa: ela abre a área nas quatro larguras e reprova qualquer aba cuja
+caixa comece antes de zero ou termine depois da borda. Com a rolagem de volta,
+ela aponta as quatro larguras, uma a uma, com a medida ao lado.
+
+### E o cabeçalho grudava em duas peças
+
+Achado no mesmo lugar, medindo a mesma barra. O título da área — com o botão
+*"Voltar"*, que é a única saída dela — e a barra de abas grudam no topo quando a
+página rola, e grudavam **cada um por sua conta**. O de baixo precisava então
+saber a altura do de cima, e sabia por um número escrito à mão: `top: 3rem`,
+contra os **63 px** que o título mede de verdade.
+
+A diferença de 15 px era o quanto as abas subiam por cima do título assim que a
+página rolasse — cobrindo o rodapé do botão de sair. Não é defeito novo: `3rem`
+nunca foi 63 px, e a sobreposição estava lá desde que os dois passaram a grudar.
+O que mudou foi a chance de alguém dar de cara com ela — a barra de abas ficou
+com duas linhas e o dobro de peso na tela.
+
+Os dois passaram a ser um bloco só, que gruda inteiro. Não há número a acertar:
+a conta passou a ser a do navegador. A conferência rola a área e mede as três
+caixas — título, abas e botão —, exigindo que nenhuma invada a outra; e exige
+antes que a rolagem tenha de fato acontecido, porque sem rolar nada gruda e a
+conferência passaria sem ter olhado para o que existe para olhar.
+
+
+## A barra que media sempre a mesma coisa
+
+Na tabela de distribuição da simulação — *"melhor cartela do sorteio"* — havia
+uma quarta coluna com uma barrinha, para a leitura de relance antes do número.
+Ela desenhava **sempre o mesmo traço**. Medido nas seis linhas de uma simulação
+de 100 sorteios:
+
+| a linha pedia | a barra saiu | a célula tinha |
+|---:|---:|---:|
+| 0% | 2 px | 12 px |
+| 2% | 2 px | 12 px |
+| 22% | 2 px | 12 px |
+| 24% | 2 px | 12 px |
+| 95% | 2 px | 12 px |
+| 100% | 2 px | 12 px |
+
+A largura ia em porcentagem, e porcentagem se resolve contra a caixa de quem
+contém. Quem continha era uma célula de tabela sem largura própria, que por sua
+vez se dimensionava pelo conteúdo — a barra. A conta era circular, o navegador
+resolvia em quase nada, e todas as barras caíam nos 2 px do `min-width` que
+existia justamente para nenhuma sumir. Uma coluna inteira ocupando espaço numa
+tela de telefone e não dizendo nada, desde que foi escrita.
+
+O conserto é um trilho de largura fixa — 3 rem — em volta da barra: agora a
+porcentagem tem contra o que se medir, e o trilho ainda mostra o que falta para
+o máximo. A conferência mede cada barra contra a fatia que a linha pediu, e
+cobra também que barras de tamanhos diferentes **saiam** diferentes — porque a
+primeira conferência sozinha passaria se o trilho voltasse a zero, com todo
+mundo empatado nos 2 px do mínimo.
+
+## Um ponto onde o Brasil escreve vírgula
+
+A tabela que compara o fechamento com o chute dizia **"51.0%"** e **"46.0%"**; o
+*"e se eu jogasse no chute?"*, **"94.7%"**. Numa tela onde o resto já vinha em
+português — R$ 21,00, 1.631 cartelas, 1 concurso a cada 3.268.760 —, eram os
+únicos números escritos como em inglês. `toFixed` não fala português, e era ele
+que os escrevia.
+
+Não muda conta nenhuma, e é exatamente por isso que vale: um número escrito de
+dois jeitos na mesma tela é do tipo de coisa que faz a pessoa desconfiar de tudo
+o que ela não tem como conferir sozinha — e o que este aplicativo pede que ela
+aceite é justamente uma conta que ela não vai refazer. A conferência varre a aba
+inteira atrás de qualquer porcentagem com ponto decimal, e a mesma varredura
+passa pelo *"e se eu jogasse no chute?"*.
+
+## Um teste que reprovava por sorteio
+
+A suíte de tela reprovou uma vez, com a tela certa. A frase era esta:
+
+> *1 sorteio caiu inteiro dentro do seu pool — e só nesses a garantia de 12
+> acertos vale.*
+
+O molde que a procurava era `ca[íi]ram?`: casa "caíram" e casa "caíra", e não
+casa **"caiu"**. A frase tem três formas — nenhum, um, vários — e a do singular
+sai quando exatamente um dos cem sorteios cai no pool. Num pool de 22 dezenas
+cada sorteio cai dentro com probabilidade `C(22,15)/C(25,15) = 5,22%`, e sair
+exatamente um em cem tem **2,6%** de chance: uma corrida em trinta e nove. Nas
+outras trinta e oito a conferência passava.
+
+Um teste que reprova por sorteio é pior do que um teste que falta: ele gasta o
+crédito da suíte inteira, e ensina quem mantém o projeto a rodar de novo em vez
+de olhar. E o mesmo molde alimentava a contagem da linha seguinte — *"na vida
+real isso acontece poucas vezes, não sempre"* —, que no singular lia zero e
+aprovava sem olhar para nada.
+
+As três formas passaram a se conferir de uma vez, sem sorteio nenhum, e só
+depois a frase de verdade passa pelo mesmo molde. Com o molde antigo de volta, a
+forma do singular reprova todas as vezes, e não uma em trinta e nove.
+
 ## Duzentas e quarenta e três folhas, sem avisar
 
 *"Imprimir volantes"* montava os volantes e chamava a impressão do sistema no
 mesmo toque. Com as 55 cartelas de R$ 400 isso são quatro folhas e ninguém se
-machuca. Com as **3.634** de R$ 15.000 são **243** — quinze volantes por folha
+machuca. Com as **3.608** de R$ 15.000 são **241** — quinze volantes por folha
 A4, medido no próprio desenho com a mídia de impressão emulada — e nada na tela
 tinha dito isso antes de a caixa de impressão aparecer com a resma carregada.
 
-O painel passou a dizer o tamanho: *"3.634 volantes · cerca de 243 folhas de
+O painel passou a dizer o tamanho: *"3.608 volantes · cerca de 241 folhas de
 papel"*, os volantes abaixo para conferir, e um botão que diz quantas folhas
 vai imprimir. A funcionalidade não saiu de lugar nenhum — ganhou a conta na
 frente da conta. A linha do aviso e o botão são da tela e não vão para o papel:
@@ -829,14 +1250,18 @@ primeira medição feita em HTTP/1.1 mostrou ganho zero para as dicas de
 
 | | antes das dicas | com as dicas | hoje |
 |---|---:|---:|---:|
-| primeira pintura | 1.200 ms | 1.260 ms | 1.308 ms |
-| grade tocável | 1.880 ms | 1.360 ms | 1.442 ms |
-| resposta na tela | 2.500 ms | 1.370 ms | 1.464 ms |
+| primeira pintura | 1.200 ms | 1.260 ms | 1.340 ms |
+| grade tocável | 1.880 ms | 1.360 ms | 1.474 ms |
+| resposta na tela | 2.500 ms | 1.370 ms | 1.501 ms |
 | pedidos no caminho crítico | 14 | 9 | 11 |
 
-A coluna de hoje carrega a área de análise e o módulo de simulação: 41 KiB
-comprimidos contra 26, dois pedidos a mais, e noventa milissegundos. O caminho
-continua sendo **uma onda só**, que é o que as dicas compraram.
+A coluna de hoje carrega a área de análise, o módulo de simulação, a conta que
+decompõe um bilhete grande em apostas simples e o que a carteira passou a
+devolver: 45 KiB comprimidos contra 26, dois pedidos a mais, e cento e trinta
+milissegundos. O caminho continua sendo **uma onda só**, que é o que as dicas
+compraram. As últimas quatro passadas de trabalho não custaram nada mensurável
+aqui — os números são a mediana de três corridas, e a diferença para a medição
+anterior cabe no ruído entre elas.
 
 Esse 11 quase virou 25. O medidor contava os pedidos no servidor, e o servidor
 vê também o que vem **depois** da resposta: o service worker instalando, que
@@ -852,7 +1277,7 @@ E uma linha do medidor dizia o contrário do que se mede. O comentário sobre o
 "vinte e seis pedidos no lugar de doze". Medido dos dois jeitos, `no-store` e
 `max-age=600` dão a **mesma** contagem: a segunda onda acontece de qualquer
 forma. O cabeçalho continua sendo o do GitHub Pages, por fidelidade, e o
-comentário passou a dizer o que a medição diz. Ela custa cerca de 41 KiB depois
+comentário passou a dizer o que a medição diz. Ela custa cerca de 43 KiB depois
 que a resposta já está na tela, e não atrasa ninguém — mas é tráfego que a
 pessoa paga, e agora está escrito.
 
@@ -884,6 +1309,54 @@ que este aplicativo não tem. Com uma latência de 3G real (150 a 300 ms) as
 mesmas duas idas e voltas dão 300 a 600 ms, dentro do alvo. Fica registrado
 assim, com a latência dita, em vez de escolhido o número que passa.
 
+### E a segunda visita, que nunca tinha sido medida
+
+`medir-3g.mjs` mede quem chega pela primeira vez — é o número da especificação.
+Metade da promessa do aplicativo, porém, é sobre a **volta**: *"depois disso o
+aplicativo funciona sem ela"*, diz a tela quando a primeira visita falha por
+falta de rede. Essa metade nunca teve número.
+
+`ferramentas/medir-volta.mjs` faz a visita de instalação, espera o service
+worker assumir e a casca inteira entrar no cache dele, **apaga o cache HTTP do
+navegador** e só então mede. A limpeza é o ponto: sem ela a segunda visita
+acontece segundos depois da primeira, tudo ainda cabe no `max-age=600` que o
+GitHub Pages manda, e o que sai é o número de quem recarregou a página — não o
+de quem voltou no dia seguinte, que é quem o service worker existe para atender.
+
+O resultado, igual em todas as corridas:
+
+> **13 pedidos** chegam ao servidor antes de a resposta aparecer — `index.html`,
+> os seis módulos, o estilo, os três arquivos do catálogo, o ícone e o próprio
+> `sw.js`. A casca inteira, de novo.
+
+É o que a estratégia manda, e ela é deliberada: para a casca vale **rede
+primeiro, cache atrás**, para que uma correção publicada chegue no mesmo
+instante. O cache do service worker é a rede de segurança — entra quando a rede
+falha —, e não um atalho. O que faltava era o preço disso escrito em algum
+lugar, e agora está: a promessa de funcionar sem internet **não** é a promessa
+de carregar rápido na volta.
+
+Trocar por *cache primeiro* pareceria óbvio e não é. O rodapé mostra o carimbo
+da versão, e ele é lido de `sw.js` a cada visita justamente para a pessoa
+conferir se o que está na mão dela é o que acabou de ser publicado. Servindo a
+casca do cache, a página seria a antiga e o carimbo poderia ser o novo — o
+rodapé passaria a mentir sobre a única coisa que ele existe para dizer. Fica
+como está, agora com o custo medido ao lado.
+
+### O relógio, aqui, mede o arranjo da medição
+
+A ferramenta imprime também os milissegundos, com uma ressalva grande: **eles não
+valem como medida de rede.** A estrangulação do protocolo de depuração vale para
+a página, e não para o service worker — os `fetch` que ele faz por conta própria
+saem por outro alvo e não passam pelo mesmo funil. Medido: quando ele está no
+comando a resposta sai em ~100 ms; quando não está, em ~1.450 ms. A mesma casca,
+a mesma rede declarada, catorze vezes de diferença — decidida por *quem buscou*,
+e não por quanto custou.
+
+Fica registrado em vez de apagado, porque a contagem de pedidos, essa sim, é
+contada no servidor e não muda: é ela que responde à pergunta. Uma ferramenta
+que imprimisse só o relógio pareceria mais convincente e diria menos.
+
 ## Como mexer
 
 ```bash
@@ -905,6 +1378,7 @@ cargo test --release -p gerar-catalogo   # a construção de Turán, por força 
 node app/testar-estrategia.mjs           # a função que decide o que se compra
 node app/testar-catalogo.mjs             # soma de verificação, posições, bolão
 node app/testar-conferir.mjs             # a varredura do cliente, contra o catálogo
+node app/testar-analise.mjs              # a conta do prêmio, e a decomposição da cartela
 node servidor/testar-intencao.mjs        # o leitor que responde sem modelo
 node servidor/testar-explicar.mjs        # a regra que descarta número inventado
 node servidor/testar-resultado.mjs       # o sorteio oficial, sem sair para a rede
@@ -915,8 +1389,9 @@ node app/testar-tela.mjs                 # a tela, num navegador de verdade
 node app/testar-tela.mjs /repo/fechamentos/   # e de novo, na subpasta em que vai ao ar
 node ferramentas/testar-convivencia.mjs       # os dois aplicativos no mesmo endereço
 
-# Quanto a tela leva para responder em 3G rápido.
+# Quanto a tela leva para responder em 3G rápido — na primeira visita, e na volta.
 node ferramentas/medir-3g.mjs
+node ferramentas/medir-volta.mjs
 
 # E a prévia de arquivo único, para abrir o aplicativo sem servidor de arquivos.
 python3 ferramentas/previa-artefato.py previa.html
@@ -954,8 +1429,9 @@ um caminho absoluto esquecido funciona na raiz e quebra só depois de publicado.
 `publicar.yml` monta os dois e, **antes de publicar qualquer um**, roda a
 varredura exaustiva das 330 entradas. Uma falha ali bloqueia a publicação do site
 inteiro, de propósito: pôr no ar metade seria pôr no ar um endereço que promete o
-que não confere. `catalogo.yml` roda a mesma varredura e as sete suítes a cada
-envio, em qualquer branch.
+que não confere. `catalogo.yml` roda a mesma varredura e as **dez** suítes a cada
+envio, em qualquer branch — cinco do cliente (a da tela duas vezes, na raiz e na
+subpasta), três do servidor e duas de ferramenta.
 
 ## As 18 entradas sem bilhetes
 

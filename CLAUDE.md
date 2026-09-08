@@ -16,6 +16,21 @@ do `site/` local **não** é o mesmo do publicado: o CI recompila o Rust e o `.w
 não sai byte a byte igual entre máquinas. **O carimbo que vale é o do que está no
 ar.**
 
+São dois carimbos, e não um — a raiz de `gh-pages` é o motor, `fechamentos/` é o
+aplicativo de fechamentos:
+
+```bash
+git show FETCH_HEAD:sw.js              # o motor
+git show FETCH_HEAD:fechamentos/sw.js  # os fechamentos
+```
+
+O de `fechamentos/` **é** reproduzível: ali não há Rust nem `.wasm`, só arquivos
+copiados do repositório, e `./construir-app.sh` na mesma árvore dá o mesmo
+número que o CI publicou. Medido: reconstruído aqui, o commit `ff41372` deu
+`86fc42b8397e` — byte a byte o que o CI tinha publicado dele. Continua valendo
+conferir o que está no ar; o que se ganha é poder prever o número antes de
+publicar, e desconfiar na hora se ele não bater.
+
 Como obter:
 
 ```bash

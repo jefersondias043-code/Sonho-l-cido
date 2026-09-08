@@ -8,7 +8,21 @@
 // concurso conhecido e aceita as 15 dezenas digitadas à mão.
 
 const ORIGEM = 'https://servicebus2.caixa.gov.br/portaldeloterias/api/lotofacil';
+
+// Duas perguntas diferentes saem por esta mesma porta, e elas não envelhecem
+// no mesmo passo.
+//
+// Um concurso **nomeado** — `?concurso=3210` — nunca mais muda: as dezenas
+// dele foram sorteadas e acabou. Um dia de cache é pouco, e não faz mal.
+//
+// O **último** muda a cada sorteio: de segunda a sábado, por volta das 20h. Com
+// um dia de cache, quem abrisse o aplicativo depois do sorteio de hoje receberia
+// as dezenas de ontem — e o aplicativo as conferiria contra os bilhetes sem
+// desconfiar de nada, porque o concurso vem rotulado e o rótulo estaria certo
+// para as dezenas erradas. Não é um número feio na tela: é uma conferência que
+// diz que você não ganhou. Dez minutos.
 const UM_DIA = 86400;
+const DEZ_MINUTOS = 600;
 
 export default {
   async fetch(pedido) {
@@ -42,7 +56,7 @@ export default {
       return json(
         { concurso: bruto.numero, dezenas, data: bruto.dataApuracao ?? null },
         200,
-        `public, max-age=${UM_DIA}`,
+        `public, max-age=${concurso ? UM_DIA : DEZ_MINUTOS}`,
       );
     } catch {
       // Sem inventar resultado. Quem chamou tem caminho alternativo — o último

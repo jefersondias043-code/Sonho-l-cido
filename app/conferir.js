@@ -17,7 +17,7 @@
 // Sem web worker: o laço cede o processador a cada fatia, então a tela continua
 // respondendo enquanto ele roda.
 
-import { contarBits } from './analise.js';
+import { binomial, contarBits } from './analise.js';
 
 const FATIA = 2000000;
 
@@ -116,10 +116,4 @@ function quantosBits(bits) {
     total += (((x + (x >>> 4)) & 0x0f0f0f0f) * 0x01010101) >>> 24;
   }
   return total;
-}
-
-function binomial(n, k) {
-  let r = 1;
-  for (let i = 0; i < Math.min(k, n - k); i++) r = (r * (n - i)) / (i + 1);
-  return k > n ? 0 : Math.round(r);
 }

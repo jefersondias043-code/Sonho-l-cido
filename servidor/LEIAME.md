@@ -9,7 +9,7 @@ quatro segundos ou responde fora do esquema.
 |---|---|---|
 | `intencao.js` | texto livre → `{orcamento, dezenas[], quantasDezenas, garantiaMinima}` | um leitor por expressão regular, dentro do cliente, lê o mesmo pedido |
 | `explicar.js` | números já calculados → uma frase | a frase determinística que já está na tela permanece |
-| `resultado.js` | o último concurso da Lotofácil, com cache de 24 h | o último concurso guardado no aparelho, ou as 15 dezenas digitadas |
+| `resultado.js` | o último concurso da Lotofácil, com cache de 10 min — ou de 24 h, quando se pede um concurso pelo número, que nunca muda | o último concurso guardado no aparelho, ou as 15 dezenas digitadas |
 
 ## Onde o cliente as procura
 

@@ -13,6 +13,9 @@ import { escada, fechamentosDe, melhorEstrategia, melhorPool } from './estrategi
 
 const $ = (id) => document.getElementById(id);
 const UNIVERSO = 25;
+// Quantas a Lotofácil sorteia — e, por isso, o tamanho da aposta simples em que
+// todo bilhete maior se decompõe.
+const SORTEIO = 15;
 // Quantos volantes cabem numa folha A4, para dizer o preço em papel antes de
 // imprimir. Medido no próprio desenho, com a mídia de impressão emulada e a
 // folha a 96 dpi com 1 cm de margem (718×1047 px): três por linha, cinco linhas.
@@ -260,29 +263,30 @@ function desenharResposta(plano) {
   if (plano.motivo === 'um-bilhete') {
     return `
       <p class="numero">1</p>
-      <p class="unidade">bilhete de ${e.k} dezenas</p>
+      <p class="unidade">cartela de ${e.k} dezenas</p>
       <p class="detalhe"><b>${dinheiro(e.custo)}</b>${
       plano.sobra ? ` · sobram ${dinheiro(plano.sobra)}` : ''}</p>
-      <p class="frase">Um bilhete não é fechamento: não há vários jogos se completando para
-        cobrir o que falta a cada um, então não há garantia a comprar — só a sorte de sempre.${
-      e.k < e.v ? ` E das suas ${e.v} dezenas, só ${e.k} entram nele.` : ''}</p>`;
+      <p class="frase">Uma cartela não é fechamento: não há várias se completando para
+        cobrir o que falta a cada uma, então não há garantia a comprar — só a sorte de sempre.${
+      e.k < e.v ? ` E das suas ${e.v} dezenas, só ${e.k} entram nela.` : ''}</p>`;
   }
   const selo = e.provado
     ? '<span class="selo provado">mínimo provado</span>'
     : `<span class="selo conhecido">menor conhecido</span>
-       <span class="piso">nenhum fechamento faz isso com menos de ${e.piso}</span>`;
+       <span class="piso">nenhum fechamento faz isso com menos de
+         ${plural(e.piso, 'cartela', 'cartelas')}</span>`;
 
   return `
     <p class="numero">${e.t}</p>
     <p class="unidade">acertos garantidos</p>
-    <p class="detalhe">${plural(e.jogos, 'jogo', 'jogos')} de ${e.k} dezenas ·
+    <p class="detalhe">${plural(e.jogos, 'cartela', 'cartelas')} de ${e.k} dezenas ·
       <b>${dinheiro(e.custo)}</b>${plano.sobra ? ` · sobram ${dinheiro(plano.sobra)}, que não
       compram garantia maior` : ''}</p>
     <p class="selos">${selo}</p>
     <p class="frase">Se as 15 dezenas sorteadas saírem todas entre as suas ${e.v},
-      ao menos um destes bilhetes terá <b>${e.t} acertos ou mais</b>. Não é probabilidade:
+      ao menos uma destas cartelas terá <b>${e.t} acertos ou mais</b>. Não é probabilidade:
       é certeza, conferida sorteio por sorteio.</p>
-    <p class="ressalva">${chanceDeCairDentro(e.v)} ${quantoPagaAGarantia(e.t)}</p>`;
+    <p class="ressalva">${chanceDeCairDentro(e.v)} ${quantoPagaAGarantia(e.t, e.k)}</p>`;
 }
 
 /// Pede ao servidor uma frase sobre os números que já estão na tela — a troca
@@ -319,9 +323,18 @@ async function pedirAFrase(onde, dados) {
 
 /// Quanto a garantia vale em dinheiro. Sem este número "garantido" se lê como
 /// lucro garantido, e nas faixas fixas o prêmio fica abaixo do que se gastou.
-function quantoPagaAGarantia(t) {
+///
+/// O tamanho da cartela entra na conta: uma cartela de 16 dezenas com 11
+/// acertos não paga uma onze, paga cinco — são cinco das dezesseis apostas
+/// dentro dela que ficam com as onze certas.
+function quantoPagaAGarantia(t, k) {
   if (t > 13) return `O prêmio de ${t} acertos é rateado e muda a cada concurso.`;
-  return `Esses ${t} acertos pagam ${dinheiro(estado.precos.premio[t])} por cartela premiada —
+  const porCartela = analise.premioDoBilhete(k, t, { [t]: estado.precos.premio[t] });
+  // Sem a explicação ao lado, o número contradiz a tabela de preços logo abaixo,
+  // onde a faixa de 11 vale R$ 7,00 e a cartela de 16 paga R$ 35,00.
+  const dentro = k > SORTEIO
+    ? ` (são ${analise.apostasComAcertos(k, t, t)} apostas de ${SORTEIO} dentro dela)` : '';
+  return `Esses ${t} acertos pagam ${dinheiro(porCartela)} por cartela premiada${dentro} —
     o fechamento compra certeza, não lucro.`;
 }
 
@@ -346,7 +359,11 @@ function frasedoDegrau(plano) {
   // Nomeado, não há "próximo degrau": a escada é de quem pergunta o que o
   // dinheiro compra, e aqui a pergunta foi outra.
   if (estado.link) return 'Este é o fechamento do bolão que compartilharam com você.';
-  if (estado.fixo) return 'Você montou este fechamento à mão, em "montar do meu jeito".';
+  if (estado.fixo) {
+    return estado.fixo.de === 'carteira'
+      ? 'Este fechamento veio da sua carteira, em "o que eu já joguei".'
+      : 'Você montou este fechamento à mão, em "montar do meu jeito".';
+  }
   const p = plano.pedido;
   if (p) {
     return p.degrau
@@ -362,7 +379,7 @@ function frasedoDegrau(plano) {
   // Depois de um bilhete só, o degrau seguinte não é "subir de 11 para 12": é
   // passar a ter fechamento. A tela não disse 11 nenhum, e não pode partir dele.
   if (plano.motivo === 'um-bilhete') {
-    return `Por mais ${dinheiro(d.falta)} você compra ${d.jogos} bilhetes que se completam e
+    return `Por mais ${dinheiro(d.falta)} você compra ${d.jogos} cartelas que se completam e
       garantem ${d.t} acertos.`;
   }
   return `Por mais ${dinheiro(d.falta)} você sobe de ${plano.escolha.t} para ${d.t} acertos
@@ -373,7 +390,7 @@ async function trazerBilhetes(escolha) {
   try {
     estado.mascaras = await catalogo.carregarFechamento(escolha);
   } catch (erro) {
-    $('secao-bilhetes').innerHTML = `<p class="aviso">Não deu para trazer os bilhetes:
+    $('secao-bilhetes').innerHTML = `<p class="aviso">Não deu para trazer as cartelas:
       ${erro.message}. O que você já abriu continua aqui.</p>`;
     return;
   }
@@ -538,12 +555,12 @@ function desenharResumo() {
   const linhas = [
     ['Dezenas no seu pool', `${e.v}`],
     ['Dezenas em cada cartela', `${e.k}`],
-    ['Acertos garantidos', e.jogos === 1 ? '— (um bilhete não é fechamento)' : `${e.t}`],
+    ['Acertos garantidos', e.jogos === 1 ? '— (uma cartela não é fechamento)' : `${e.t}`],
     ['Cartelas no fechamento', e.jogos.toLocaleString('pt-BR')],
     ...(n === e.jogos ? [] : [['Cartelas que cabem a você', n.toLocaleString('pt-BR')]]),
     ['Custo', dinheiro(n * estado.precos.aposta[e.k])],
     ['Tamanho', e.provado ? 'mínimo provado — nenhum fechamento faz isso com menos'
-      : `menor conhecido — nenhum faz com menos de ${e.piso}`],
+      : `menor conhecido — nenhum faz com menos de ${plural(e.piso, 'cartela', 'cartelas')}`],
   ];
   $('resumo').innerHTML = quadro(null, linhas.map(([r, v]) => linha(r, v)))
     + `<p class="ressalva">${chanceDeCairDentro(e.v)}</p>`;
@@ -557,17 +574,24 @@ function desenharAcaso() {
   const noChute = 1 - (1 - p) ** e.jogos;
   // E quanto isso devolve por concurso, em média. Só as faixas de prêmio fixo:
   // 14 e 15 são rateadas, e somá-las trocaria um número exato por um palpite.
-  // Hipergeométrico, não simulado, e igual para qualquer arranjo dos mesmos
-  // bilhetes — que é justamente o que faz dele a prova de "certeza, não lucro".
-  const solto = estado.acaso.chegam?.[`${UNIVERSO}-${e.k}`] ?? {};
-  const media = e.jogos * [11, 12, 13].reduce(
-    (soma, f) => soma + ((solto[f] ?? 0) - (solto[f + 1] ?? 0)) * estado.precos.premio[f], 0);
+  //
+  // A conta é por aposta simples, e não por cartela, porque é assim que a
+  // lotérica cobra e paga: uma cartela de `k` dezenas **são** as `C(k,15)`
+  // apostas de 15 que cabem dentro dela. Por linearidade, a expectativa de uma
+  // cartela de `k` é `C(k,15)` vezes a de uma aposta simples — e como o preço
+  // é `C(k,15)` vezes o de uma aposta simples, a taxa de retorno é **a mesma
+  // para todo tamanho de cartela**. Isso não é um detalhe: é o que transforma
+  // "o fechamento compra certeza, não lucro" de frase em teorema.
+  const simples = estado.acaso.chegam?.[`${UNIVERSO}-${SORTEIO}`] ?? {};
+  const porAposta = [11, 12, 13].reduce(
+    (soma, f) => soma + ((simples[f] ?? 0) - (simples[f + 1] ?? 0)) * estado.precos.premio[f], 0);
+  const media = e.jogos * analise.binomial(e.k, SORTEIO) * porAposta;
   $('acaso').innerHTML = `
-    <p>Com ${dinheiro(e.custo)} você compra ${e.jogos} ${e.jogos === 1 ? 'bilhete' : 'bilhetes'}
-      de ${e.k} dezenas. Se eles fossem escolhidos no chute, chegariam a ${e.t} acertos em
-      <b>${(noChute * 100).toFixed(noChute > 0.995 ? 2 : 1)}%</b> dos sorteios que caem dentro das
+    <p>Com ${dinheiro(e.custo)} você compra ${e.jogos} ${e.jogos === 1 ? 'cartela' : 'cartelas'}
+      de ${e.k} dezenas. Se elas fossem escolhidas no chute, chegariam a ${e.t} acertos em
+      <b>${porcentagem(noChute * 100, noChute > 0.995 ? 2 : 1)}</b> dos sorteios que caem dentro das
       suas ${e.v} dezenas. Com o fechamento, em <b>100%</b>.</p>
-    <p class="ressalva">Em média os dois pagam o mesmo: a mesma quantidade de bilhetes do mesmo
+    <p class="ressalva">Em média os dois pagam o mesmo: a mesma quantidade de cartelas do mesmo
       tamanho tem a mesma expectativa de prêmio, com fechamento ou sem${media ? `, que aqui é
       <b>${dinheiro(Math.round(media))}</b> por concurso nas faixas de 11, 12 e 13 acertos — mais
       o que sair de 14 e 15, que é rateado e ninguém sabe de antemão` : ''}. O que o fechamento
@@ -622,7 +646,7 @@ async function rodarSimulacao() {
   const meus = mascarasNaMao();
   const r = analise.simular({
     mascaras: meus, dezenas: estado.dezenas, universo: UNIVERSO, quantos,
-    dentroDoPool, premios: estado.precos.premio, garantia: e.jogos === 1 ? 0 : e.t,
+    dentroDoPool, premios: estado.precos.premio, garantia: e.jogos === 1 ? 0 : e.t, k: e.k,
     custo: estado.bilhetes.length * estado.precos.aposta[e.k],
     // Os mesmos bilhetes no chute, contra os mesmos sorteios. É a pergunta que
     // o aplicativo responde por escrito desde sempre — "o fechamento compra
@@ -641,10 +665,39 @@ async function rodarSimulacao() {
 // diferença entre uma tabela que informa e uma que engana com um número grande.
 const FIXAS = [11, 12, 13];
 const RATEADAS = [14, 15];
-const pagam = (placar, faixas) => (!placar ? 0 : faixas.reduce(
-  (soma, f) => soma + (placar.faixas.get(f) ?? 0) * estado.precos.premio[f], 0));
+/// Só as faixas pedidas, para o mesmo cálculo de prêmio valer nas duas colunas.
+const soAsFaixas = (faixas) => Object.fromEntries(
+  faixas.map((f) => [f, estado.precos.premio[f] ?? 0]));
+const pagam = (placar, faixas, k) => (!placar ? 0
+  : analise.premioDe(placar.faixas, soAsFaixas(faixas), k));
 
-const porcento = (parte, total) => (total ? `${((100 * parte) / total).toFixed(1)}%` : '—');
+/// Por que o dinheiro de um bilhete grande não bate com a conta de cabeça.
+///
+/// Quem vê "1 × 14 acertos" e um preço de catorze na tabela espera o valor de
+/// uma catorze. Com bilhete de mais de 15 dezenas ele recebe mais, e sem esta
+/// frase o número parece errado — ou, pior, parece propaganda. O exemplo é
+/// calculado, não escrito: é a decomposição de verdade daquele tamanho.
+function comoPaga(k) {
+  if (k <= SORTEIO) return '';
+  const partes = [];
+  for (let i = SORTEIO; i >= 11; i--) {
+    const quantas = analise.apostasComAcertos(k, 14, i);
+    if (quantas) partes.push(`${quantas} de ${i}`);
+  }
+  return `<p class="ressalva">Cada cartela de ${k} dezenas vale
+    ${analise.binomial(k, SORTEIO)} apostas de 15 — é por isso que ele custa
+    ${dinheiro(estado.precos.aposta[k])} e não ${dinheiro(estado.precos.aposta[SORTEIO])}. O
+    prêmio segue a mesma conta: uma cartela de ${k} que cruza 14 dezenas com o sorteio paga
+    ${partes.join(', ')} acertos — e não uma catorze só.</p>`;
+}
+
+/// Porcentagem como o Brasil a escreve: vírgula, não ponto. `toFixed` não sabe
+/// disso, e punha "44.0%" numa tela onde todo o resto — R$ 21,00, 1.631 — já
+/// vinha em pt-BR. Um número escrito de dois jeitos na mesma tela é o tipo de
+/// coisa que faz a pessoa desconfiar do que ela não tem como conferir.
+const porcentagem = (x, casas = 1) => `${x.toLocaleString('pt-BR',
+  { minimumFractionDigits: casas, maximumFractionDigits: casas })}%`;
+const porcento = (parte, total) => (total ? porcentagem((100 * parte) / total) : '—');
 const saldo = (c) => `${c >= 0 ? '' : '−'}${dinheiro(Math.abs(c))}`;
 
 function desenharSimulacao(r, e) {
@@ -669,8 +722,8 @@ function desenharSimulacao(r, e) {
     ${r.garantia ? quadro([`Alcançou ${r.garantia} acertos`, 'Seu fechamento', 'No chute'],
     [total('dos sorteios', porcento(r.alcancaram, r.quantos),
       porcento(r.rival.alcancaram, r.quantos))])
-    + `<p class="ressalva">"No chute" são ${plural(estado.bilhetes.length, 'bilhete tirado',
-      'bilhetes tirados')} ao acaso do mesmo pool, do mesmo tamanho, contra os mesmos sorteios:
+    + `<p class="ressalva">"No chute" são ${plural(estado.bilhetes.length, 'cartela tirada',
+      'cartelas tiradas')} ao acaso do mesmo pool, do mesmo tamanho, contra os mesmos sorteios:
       o que o mesmo dinheiro compraria sem fechamento nenhum. ${r.alcancaram === r.rival.alcancaram
       ? 'Aqui os dois deram no mesmo — nesta configuração a garantia não compra nada que o acaso já não desse.'
       : 'A diferença entre as duas colunas é o que o fechamento compra.'}</p>` : ''}
@@ -678,19 +731,23 @@ function desenharSimulacao(r, e) {
     ? premiadas.map((f) => linha(`${f} acertos`, numero(r.faixas.get(f)),
       numero(r.rival?.faixas.get(f) ?? 0), numero(r.sorteiosComFaixa.get(f))))
     : [linha('Nenhuma cartela premiada.', 0, 0, 0)])}
-    ${quadro(['Melhor bilhete do sorteio', 'Seu fechamento', 'No chute', ''],
+    ${quadro(['Melhor cartela do sorteio', 'Seu fechamento', 'No chute', ''],
     melhores.map((acertos) => {
       const meu = r.distribuicao.get(acertos) ?? 0;
       return linha(`${acertos} acertos`, numero(meu),
         numero(r.rival?.distribuicao.get(acertos) ?? 0),
-        `<span class="barra" style="width:${Math.round((100 * meu) / maior)}%"></span>`);
+        `<span class="barra-trilho"><span class="barra"
+          style="width:${Math.round((100 * meu) / maior)}%"></span></span>`);
     }))}
     ${quadro(['', 'Seu fechamento', 'No chute'], [
     linha('Gasto', dinheiro(r.gasto), dinheiro(r.gasto)),
-    linha('Prêmios de 11 a 13', dinheiro(pagam(r, FIXAS)), dinheiro(pagam(r.rival, FIXAS))),
-    linha('Prêmios de 14 e 15', dinheiro(pagam(r, RATEADAS)), dinheiro(pagam(r.rival, RATEADAS))),
+    linha('Prêmios de 11 a 13',
+      dinheiro(pagam(r, FIXAS, e.k)), dinheiro(pagam(r.rival, FIXAS, e.k))),
+    linha('Prêmios de 14 e 15',
+      dinheiro(pagam(r, RATEADAS, e.k)), dinheiro(pagam(r.rival, RATEADAS, e.k))),
     total('Resultado', saldo(r.saldo), saldo(r.rival?.saldo ?? -r.gasto)),
   ])}
+    ${comoPaga(e.k)}
     <p class="ressalva">As duas primeiras faixas se comparam: 11, 12 e 13 acertos pagam valor
       fixo, os dois lados custam o mesmo e, na média, pagam o mesmo — é assim que a matemática
       funciona. A linha de 14 e 15 não se compara: são rateadas, e <b>um único acerto de 15 num
@@ -711,7 +768,7 @@ function desenharBolao() {
   $('bolao').innerHTML = `<ol class="partes">${grupos
     .map((g, i) => {
       const link = volante.linkDaParte(base, { dezenas: estado.dezenas, v, k, t, parte: i, partes });
-      return `<li><b>Parte ${i + 1}</b> — ${plural(g.length, 'bilhete', 'bilhetes')} ·
+      return `<li><b>Parte ${i + 1}</b> — ${plural(g.length, 'cartela', 'cartelas')} ·
         ${dinheiro(g.length * estado.precos.aposta[k])}
         <button type="button" class="discreto" data-link="${link}"
           aria-label="Copiar o link da parte ${i + 1}">Copiar link</button></li>`;
@@ -732,7 +789,7 @@ function fechamentoDaConta() {
   const voltou = conferidos.reduce((soma, r) => soma + r.retorno, 0);
   const gastoConferido = conferidos.reduce((soma, r) => soma + r.custo, 0);
   return quadro(null, [
-    linha(plural(estado.carteira.length, 'jogo guardado', 'jogos guardados'), dinheiro(gasto)),
+    linha(plural(estado.carteira.length, 'fechamento guardado', 'fechamentos guardados'), dinheiro(gasto)),
     ...(conferidos.length ? [
       linha(`${plural(conferidos.length, 'já conferido', 'já conferidos')} · custaram`,
         dinheiro(gastoConferido)),
@@ -743,7 +800,8 @@ function fechamentoDaConta() {
 }
 
 function desenharPrecos() {
-  const grupos = [['aposta', 'Quanto custa a aposta', 'dezenas'], ['premio', 'Quanto paga cada faixa', 'acertos']];
+  const grupos = [['aposta', 'Quanto custa a cartela', 'dezenas'],
+    ['premio', 'Quanto paga cada faixa, por aposta de 15', 'acertos']];
   $('tabela-precos').innerHTML = `${grupos.map(([grupo, titulo, unidade]) =>
     `<div class="precos"><h2>${titulo}</h2>${Object.keys(estado.precos[grupo]).map((k) =>
       `<label>${k} ${unidade}<input type="text" inputmode="decimal" data-grupo="${grupo}"
@@ -752,15 +810,54 @@ function desenharPrecos() {
     <p class="ajuda">Valores de ${estado.precosPublicados.vigencia}.</p>`;
 }
 
+/// Um registro guardado pode voltar à tela quando o catálogo ainda tem aquela
+/// combinação **e** as dezenas do dia foram guardadas junto. Registros de
+/// versões antigas não têm dezenas, e um fechamento sem as dezenas dele não é
+/// um fechamento — é um preço.
+const podeReabrir = (r) => Array.isArray(r.dezenas) && r.dezenas.length === r.v
+  && fixoValido({ v: r.v, k: r.k, t: r.t }) != null;
+
+/// Põe de volta na tela o fechamento que a pessoa guardou: as mesmas dezenas, a
+/// mesma combinação, as mesmas cartelas — que saem do catálogo de sempre, e não
+/// do que foi guardado.
+///
+/// A carteira já guardava tudo o que descreve o pedido, e não oferecia jeito
+/// nenhum de usá-lo: quem quisesse conferir na quarta-feira o jogo que fez no
+/// sábado tinha de remontá-lo de cabeça — as mesmas dezenas, uma a uma, e o
+/// mesmo dinheiro — e torcer para cair na mesma linha do catálogo. Conferir um
+/// jogo velho contra o sorteio de hoje é o que se faz com um bilhete de loteria.
+///
+/// As dezenas entram sem passar por `trocarDezenas`, de propósito: aquela porta
+/// solta o fechamento nomeado, que é exatamente o que se quer fixar aqui.
+function reabrir(registro) {
+  if (!podeReabrir(registro)) return;
+  estado.dezenas = new Set(registro.dezenas);
+  guardar('dezenas', [...estado.dezenas]);
+  estado.link = null;
+  fixar(fixoValido({ v: registro.v, k: registro.k, t: registro.t, de: 'carteira' }));
+  responder();
+  mostrarAResposta();
+}
+
 function desenharCarteira() {
   if (!estado.carteira.length) { $('carteira').innerHTML = '<p class="ajuda">Nada guardado.</p>'; return; }
+  // Na tela, "Abrir" e "Apagar" bastam: a linha ao lado diz de que fechamento
+  // são. Na lista de botões de um leitor de tela são a mesma palavra repetida
+  // uma vez por registro, sem nada que os separe — e apagar o errado apaga o
+  // jogo de outro dia. O texto visível continua curto; o nome acessível
+  // descreve o registro. É a mesma lição dos quatro "Copiar link" do bolão.
+  const qual = (r) => `o fechamento de ${r.t} acertos com ${
+    plural(r.jogos, 'cartela', 'cartelas')}, de ${new Date(r.data).toLocaleDateString('pt-BR')}`;
   $('carteira').innerHTML = `<ol class="registros">${estado.carteira
     .map((r, i) => `<li><b>${r.t} acertos garantidos</b> ·
-        ${plural(r.jogos, 'jogo', 'jogos')} de ${r.k} dezenas ·
+        ${plural(r.jogos, 'cartela', 'cartelas')} de ${r.k} dezenas ·
         ${dinheiro(r.custo)} · ${new Date(r.data).toLocaleDateString('pt-BR')}${
       r.retorno == null ? ''
         : ` · <b>voltou ${dinheiro(r.retorno)}</b>${r.concurso ? ` no concurso ${r.concurso}` : ''}`}
-        <button type="button" class="discreto" data-apagar="${i}">Apagar</button></li>`)
+        ${podeReabrir(r) ? `<button type="button" class="discreto" data-reabrir="${i}"
+          aria-label="Abrir de novo ${qual(r)}">Abrir</button>` : ''}
+        <button type="button" class="discreto" data-apagar="${i}"
+          aria-label="Apagar ${qual(r)}">Apagar</button></li>`)
     .join('')}</ol>`;
 }
 
@@ -786,7 +883,10 @@ function fixoValido(pedido) {
   if (!estado.indice || !(v && k && t)) return null;
   const existe = fechamentosDe(estado.indice, estado.precos, v)
     .some((e) => e.k === k && e.t === t);
-  return existe ? { v, k, t } : null;
+  // `de` diz de onde veio o pedido, e a tela conta isso para a pessoa. Dois
+  // valores, e o padrão é a mão: um `de` estragado no armazenamento não pode
+  // virar frase na tela, como nada mais do que entra de fora.
+  return existe ? { v, k, t, de: pedido.de === 'carteira' ? 'carteira' : 'mao' } : null;
 }
 
 /// O fechamento que a pessoa nomeou, como plano — o mesmo formato que a
@@ -953,6 +1053,8 @@ function ligarControles() {
     if (link) ev.target.textContent = (await volante.copiar(link)) ? 'Copiado' : link;
   });
   $('carteira').addEventListener('click', (ev) => {
+    const abrir = ev.target.dataset?.reabrir;
+    if (abrir != null) return reabrir(estado.carteira[Number(abrir)]);
     const i = ev.target.dataset?.apagar;
     if (i == null) return;
     estado.carteira.splice(Number(i), 1);
@@ -1051,7 +1153,7 @@ async function acaoDosBilhetes(acao) {
   } else if (acao === 'csv') {
     volante.baixar(`${nome}.csv`, volante.comoCsv(estado.bilhetes), 'text/csv');
   } else if (acao === 'imprimir') {
-    // Quem toca aqui com 3.634 cartelas na mão estava a um toque de **243
+    // Quem toca aqui com 3.608 cartelas na mão estava a um toque de **241
     // folhas** de papel, e nada na tela dizia isso: o painel abria e a caixa de
     // impressão do sistema aparecia junto. Agora o painel diz quantas folhas
     // são, mostra os volantes, e a impressão só começa quando ela pedir de
@@ -1089,7 +1191,7 @@ async function varrerTudo() {
        ${e.v} dezenas. No pior deles, o melhor bilhete faz <b>${pior} acertos</b> — a garantia de
        ${e.t} está de pé. ${comQuinze
       ? `Em ${comQuinze.toLocaleString('pt-BR')} deles, alguém acerta os 15.` : ''}`
-    : `<b>A garantia não se sustentou</b>: existe resultado em que o melhor bilhete faz só
+    : `<b>A garantia não se sustentou</b>: existe resultado em que a melhor cartela faz só
        ${pior} acertos. Não use este fechamento e avise quem publicou.`;
 }
 
@@ -1134,21 +1236,23 @@ function conferirContraOSorteio() {
       : '<p class="ajuda">Escreva as 15 dezenas sorteadas, separadas por espaço.</p>';
     return;
   }
+  const e = estado.plano.escolha;
   const { faixas, melhor } = analise.umSorteio(mascarasNaMao(),
     analise.mascaraDoSorteio(sorteadas, [...estado.dezenas].sort((a, b) => a - b)));
-  const voltou = analise.premioDe(faixas, estado.precos.premio);
-  const custo = estado.bilhetes.length * estado.precos.aposta[estado.plano.escolha.k];
+  const voltou = analise.premioDe(faixas, estado.precos.premio, e.k);
+  const custo = estado.bilhetes.length * estado.precos.aposta[e.k];
   const linhas = [...faixas.entries()].sort((a, b) => b[0] - a[0]);
   anotarNaCarteira(sorteadas, voltou);
   estado.ultimoResultado = { titulo: 'Conferência contra o sorteio',
     premiadas: [...faixas.values()].reduce((a, b) => a + b, 0), gasto: custo, premio: voltou };
   if (!$('analise').hidden) desenharValores();
   $('conferencia').innerHTML = `
-    <p>Melhor bilhete: <b>${melhor} acertos</b>.</p>
+    <p>Melhor cartela: <b>${melhor} acertos</b>.</p>
     ${linhas.length ? `<ul>${linhas.map(([a, q]) => `<li>${q} × ${a} acertos</li>`).join('')}</ul>`
-      : '<p>Nenhum bilhete premiado.</p>'}
+      : '<p>Nenhuma cartela premiada.</p>'}
     <p>Custou ${dinheiro(custo)}, voltou ${dinheiro(voltou)} — <b>${voltou >= custo ? 'saldo de'
       : 'faltaram'} ${dinheiro(Math.abs(voltou - custo))}</b>.</p>
+    ${comoPaga(e.k)}
     <p class="frase narracao">Prêmios de 14 e 15 acertos variam a cada concurso; os valores
       aqui são os da sua tabela.</p>`;
   pedirAFrase('#conferencia .narracao',

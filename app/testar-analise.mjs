@@ -7,8 +7,8 @@
 //     node app/testar-analise.mjs
 
 import { readFileSync } from 'node:fs';
-import { bilhetesAoAcaso, contarBits, mascaraDoSorteio, premioDe, simular, sortearResultado,
-  umSorteio } from './analise.js';
+import { apostasComAcertos, bilhetesAoAcaso, binomial, contarBits, mascaraDoSorteio, premioDe,
+  premioDoBilhete, simular, sortearResultado, umSorteio } from './analise.js';
 
 let feitos = 0;
 const falhas = [];
@@ -124,6 +124,71 @@ conferir('o prêmio soma faixa por faixa',
   premioDe(new Map([[11, 3], [13, 2]]), premios) === 3 * 700 + 2 * 3500);
 conferir('faixa sem prêmio na tabela vale zero',
   premioDe(new Map([[9, 100]]), premios) === 0);
+
+// ── um bilhete de mais de 15 dezenas são várias apostas ─────────────────────
+//
+// É o que a lotérica cobra: um bilhete de 16 custa R$ 56,00, que são 16 apostas
+// simples de R$ 3,50; um de 17 custa R$ 476,00, que são 136. Porque cobra
+// assim, paga assim — e o aplicativo pagava um prêmio só por bilhete.
+
+conferir('C(16,15) são 16 apostas', binomial(16, 15) === 16);
+conferir('C(17,15) são 136', binomial(17, 15) === 136);
+conferir('C(20,15) são 15.504', binomial(20, 15) === 15504);
+conferir('C de k maior que n é zero', binomial(3, 7) === 0);
+
+// Um bilhete de 16 com 15 acertos: uma aposta é o sorteio inteiro; as outras
+// quinze trocam uma dezena certa pela errada e param em 14.
+conferir('16 dezenas com 15 acertos dá uma quinze', apostasComAcertos(16, 15, 15) === 1);
+conferir('e quinze catorzes', apostasComAcertos(16, 15, 14) === 15);
+// Com 14 acertos há duas dezenas erradas: descartar uma delas mantém os 14.
+conferir('16 dezenas com 14 acertos dá duas catorzes', apostasComAcertos(16, 14, 14) === 2);
+conferir('e catorze trezes', apostasComAcertos(16, 14, 13) === 14);
+// Um bilhete de 17 com 11 acertos: escolher as 11 certas e 4 das 6 erradas.
+conferir('17 dezenas com 11 acertos dá quinze onzes', apostasComAcertos(17, 11, 11) === 15);
+
+// Toda aposta de dentro do bilhete cai em alguma faixa: a soma sobre os acertos
+// possíveis tem de dar exatamente C(k,15).
+for (const k of [15, 16, 17, 18, 19, 20]) {
+  for (const j of [11, 13, 15]) {
+    const soma = Array.from({ length: 16 }, (_, i) => apostasComAcertos(k, j, i))
+      .reduce((a, b) => a + b, 0);
+    conferir(`as apostas de um bilhete de ${k} com ${j} acertos somam C(${k},15)`,
+      soma === binomial(k, 15), `${soma} ≠ ${binomial(k, 15)}`);
+  }
+}
+
+// O caso comum não pode ter mudado: com 15 dezenas, um bilhete é uma aposta.
+for (let j = 11; j <= 15; j++) {
+  conferir(`bilhete de 15 com ${j} acertos paga a faixa ${j} e nada mais`,
+    premioDoBilhete(15, j, premios) === premios[j]);
+}
+conferir('bilhete de 16 com 14 acertos paga duas catorzes e catorze trezes',
+  premioDoBilhete(16, 14, premios) === 2 * premios[14] + 14 * premios[13]);
+conferir('bilhete de 17 com 11 acertos paga quinze onzes',
+  premioDoBilhete(17, 11, premios) === 15 * premios[11]);
+conferir('abaixo de 11 acertos nada paga, em qualquer tamanho',
+  [15, 16, 17, 18, 19, 20].every((k) => premioDoBilhete(k, 10, premios) === 0));
+conferir('e premioDe leva o tamanho do bilhete em conta',
+  premioDe(new Map([[14, 3]]), premios, 16) === 3 * (2 * premios[14] + 14 * premios[13]));
+
+// O que faz disto uma correção e não uma opinião: a expectativa de um bilhete
+// de `k` dezenas é exatamente `C(k,15)` vezes a de uma aposta simples. Como o
+// preço também é `C(k,15)` vezes, a **taxa de retorno é a mesma em todo
+// tamanho de bilhete** — o fechamento compra cobertura, nunca vantagem.
+{
+  const hiper = (k, j) => (binomial(k, j) * binomial(25 - k, 15 - j)) / binomial(25, 15);
+  const fixas = { 11: premios[11], 12: premios[12], 13: premios[13] };
+  const esperado = (k) => Array.from({ length: 16 }, (_, j) => hiper(k, j)
+    * premioDoBilhete(k, j, fixas)).reduce((a, b) => a + b, 0);
+  const simples = esperado(15);
+  for (const k of [16, 17, 18, 19, 20]) {
+    const razao = esperado(k) / (binomial(k, 15) * simples);
+    conferir(`a expectativa de um bilhete de ${k} é C(${k},15) vezes a de uma aposta`,
+      Math.abs(razao - 1) < 1e-9, `razão ${razao}`);
+  }
+  conferir('e a aposta simples devolve 25,7% nas faixas fixas',
+    Math.abs(simples / 350 - 0.2567) < 0.001, `${(simples / 350).toFixed(4)}`);
+}
 
 // ── simulação, contra o catálogo de verdade ─────────────────────────────────
 
