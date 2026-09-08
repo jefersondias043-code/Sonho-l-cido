@@ -263,27 +263,28 @@ function desenharResposta(plano) {
   if (plano.motivo === 'um-bilhete') {
     return `
       <p class="numero">1</p>
-      <p class="unidade">bilhete de ${e.k} dezenas</p>
+      <p class="unidade">cartela de ${e.k} dezenas</p>
       <p class="detalhe"><b>${dinheiro(e.custo)}</b>${
       plano.sobra ? ` · sobram ${dinheiro(plano.sobra)}` : ''}</p>
-      <p class="frase">Um bilhete não é fechamento: não há vários jogos se completando para
-        cobrir o que falta a cada um, então não há garantia a comprar — só a sorte de sempre.${
-      e.k < e.v ? ` E das suas ${e.v} dezenas, só ${e.k} entram nele.` : ''}</p>`;
+      <p class="frase">Uma cartela não é fechamento: não há várias se completando para
+        cobrir o que falta a cada uma, então não há garantia a comprar — só a sorte de sempre.${
+      e.k < e.v ? ` E das suas ${e.v} dezenas, só ${e.k} entram nela.` : ''}</p>`;
   }
   const selo = e.provado
     ? '<span class="selo provado">mínimo provado</span>'
     : `<span class="selo conhecido">menor conhecido</span>
-       <span class="piso">nenhum fechamento faz isso com menos de ${e.piso}</span>`;
+       <span class="piso">nenhum fechamento faz isso com menos de
+         ${plural(e.piso, 'cartela', 'cartelas')}</span>`;
 
   return `
     <p class="numero">${e.t}</p>
     <p class="unidade">acertos garantidos</p>
-    <p class="detalhe">${plural(e.jogos, 'jogo', 'jogos')} de ${e.k} dezenas ·
+    <p class="detalhe">${plural(e.jogos, 'cartela', 'cartelas')} de ${e.k} dezenas ·
       <b>${dinheiro(e.custo)}</b>${plano.sobra ? ` · sobram ${dinheiro(plano.sobra)}, que não
       compram garantia maior` : ''}</p>
     <p class="selos">${selo}</p>
     <p class="frase">Se as 15 dezenas sorteadas saírem todas entre as suas ${e.v},
-      ao menos um destes bilhetes terá <b>${e.t} acertos ou mais</b>. Não é probabilidade:
+      ao menos uma destas cartelas terá <b>${e.t} acertos ou mais</b>. Não é probabilidade:
       é certeza, conferida sorteio por sorteio.</p>
     <p class="ressalva">${chanceDeCairDentro(e.v)} ${quantoPagaAGarantia(e.t, e.k)}</p>`;
 }
@@ -370,7 +371,7 @@ function frasedoDegrau(plano) {
   // Depois de um bilhete só, o degrau seguinte não é "subir de 11 para 12": é
   // passar a ter fechamento. A tela não disse 11 nenhum, e não pode partir dele.
   if (plano.motivo === 'um-bilhete') {
-    return `Por mais ${dinheiro(d.falta)} você compra ${d.jogos} bilhetes que se completam e
+    return `Por mais ${dinheiro(d.falta)} você compra ${d.jogos} cartelas que se completam e
       garantem ${d.t} acertos.`;
   }
   return `Por mais ${dinheiro(d.falta)} você sobe de ${plano.escolha.t} para ${d.t} acertos
@@ -381,7 +382,7 @@ async function trazerBilhetes(escolha) {
   try {
     estado.mascaras = await catalogo.carregarFechamento(escolha);
   } catch (erro) {
-    $('secao-bilhetes').innerHTML = `<p class="aviso">Não deu para trazer os bilhetes:
+    $('secao-bilhetes').innerHTML = `<p class="aviso">Não deu para trazer as cartelas:
       ${erro.message}. O que você já abriu continua aqui.</p>`;
     return;
   }
@@ -546,12 +547,12 @@ function desenharResumo() {
   const linhas = [
     ['Dezenas no seu pool', `${e.v}`],
     ['Dezenas em cada cartela', `${e.k}`],
-    ['Acertos garantidos', e.jogos === 1 ? '— (um bilhete não é fechamento)' : `${e.t}`],
+    ['Acertos garantidos', e.jogos === 1 ? '— (uma cartela não é fechamento)' : `${e.t}`],
     ['Cartelas no fechamento', e.jogos.toLocaleString('pt-BR')],
     ...(n === e.jogos ? [] : [['Cartelas que cabem a você', n.toLocaleString('pt-BR')]]),
     ['Custo', dinheiro(n * estado.precos.aposta[e.k])],
     ['Tamanho', e.provado ? 'mínimo provado — nenhum fechamento faz isso com menos'
-      : `menor conhecido — nenhum faz com menos de ${e.piso}`],
+      : `menor conhecido — nenhum faz com menos de ${plural(e.piso, 'cartela', 'cartelas')}`],
   ];
   $('resumo').innerHTML = quadro(null, linhas.map(([r, v]) => linha(r, v)))
     + `<p class="ressalva">${chanceDeCairDentro(e.v)}</p>`;
@@ -578,11 +579,11 @@ function desenharAcaso() {
     (soma, f) => soma + ((simples[f] ?? 0) - (simples[f + 1] ?? 0)) * estado.precos.premio[f], 0);
   const media = e.jogos * analise.binomial(e.k, SORTEIO) * porAposta;
   $('acaso').innerHTML = `
-    <p>Com ${dinheiro(e.custo)} você compra ${e.jogos} ${e.jogos === 1 ? 'bilhete' : 'bilhetes'}
+    <p>Com ${dinheiro(e.custo)} você compra ${e.jogos} ${e.jogos === 1 ? 'cartela' : 'cartelas'}
       de ${e.k} dezenas. Se eles fossem escolhidos no chute, chegariam a ${e.t} acertos em
       <b>${(noChute * 100).toFixed(noChute > 0.995 ? 2 : 1)}%</b> dos sorteios que caem dentro das
       suas ${e.v} dezenas. Com o fechamento, em <b>100%</b>.</p>
-    <p class="ressalva">Em média os dois pagam o mesmo: a mesma quantidade de bilhetes do mesmo
+    <p class="ressalva">Em média os dois pagam o mesmo: a mesma quantidade de cartelas do mesmo
       tamanho tem a mesma expectativa de prêmio, com fechamento ou sem${media ? `, que aqui é
       <b>${dinheiro(Math.round(media))}</b> por concurso nas faixas de 11, 12 e 13 acertos — mais
       o que sair de 14 e 15, que é rateado e ninguém sabe de antemão` : ''}. O que o fechamento
@@ -675,10 +676,10 @@ function comoPaga(k) {
     const quantas = analise.apostasComAcertos(k, 14, i);
     if (quantas) partes.push(`${quantas} de ${i}`);
   }
-  return `<p class="ressalva">Cada bilhete de ${k} dezenas vale
+  return `<p class="ressalva">Cada cartela de ${k} dezenas vale
     ${analise.binomial(k, SORTEIO)} apostas de 15 — é por isso que ele custa
     ${dinheiro(estado.precos.aposta[k])} e não ${dinheiro(estado.precos.aposta[SORTEIO])}. O
-    prêmio segue a mesma conta: um bilhete de ${k} que cruza 14 dezenas com o sorteio paga
+    prêmio segue a mesma conta: uma cartela de ${k} que cruza 14 dezenas com o sorteio paga
     ${partes.join(', ')} acertos — e não uma catorze só.</p>`;
 }
 
@@ -707,8 +708,8 @@ function desenharSimulacao(r, e) {
     ${r.garantia ? quadro([`Alcançou ${r.garantia} acertos`, 'Seu fechamento', 'No chute'],
     [total('dos sorteios', porcento(r.alcancaram, r.quantos),
       porcento(r.rival.alcancaram, r.quantos))])
-    + `<p class="ressalva">"No chute" são ${plural(estado.bilhetes.length, 'bilhete tirado',
-      'bilhetes tirados')} ao acaso do mesmo pool, do mesmo tamanho, contra os mesmos sorteios:
+    + `<p class="ressalva">"No chute" são ${plural(estado.bilhetes.length, 'cartela tirada',
+      'cartelas tiradas')} ao acaso do mesmo pool, do mesmo tamanho, contra os mesmos sorteios:
       o que o mesmo dinheiro compraria sem fechamento nenhum. ${r.alcancaram === r.rival.alcancaram
       ? 'Aqui os dois deram no mesmo — nesta configuração a garantia não compra nada que o acaso já não desse.'
       : 'A diferença entre as duas colunas é o que o fechamento compra.'}</p>` : ''}
@@ -716,7 +717,7 @@ function desenharSimulacao(r, e) {
     ? premiadas.map((f) => linha(`${f} acertos`, numero(r.faixas.get(f)),
       numero(r.rival?.faixas.get(f) ?? 0), numero(r.sorteiosComFaixa.get(f))))
     : [linha('Nenhuma cartela premiada.', 0, 0, 0)])}
-    ${quadro(['Melhor bilhete do sorteio', 'Seu fechamento', 'No chute', ''],
+    ${quadro(['Melhor cartela do sorteio', 'Seu fechamento', 'No chute', ''],
     melhores.map((acertos) => {
       const meu = r.distribuicao.get(acertos) ?? 0;
       return linha(`${acertos} acertos`, numero(meu),
@@ -752,7 +753,7 @@ function desenharBolao() {
   $('bolao').innerHTML = `<ol class="partes">${grupos
     .map((g, i) => {
       const link = volante.linkDaParte(base, { dezenas: estado.dezenas, v, k, t, parte: i, partes });
-      return `<li><b>Parte ${i + 1}</b> — ${plural(g.length, 'bilhete', 'bilhetes')} ·
+      return `<li><b>Parte ${i + 1}</b> — ${plural(g.length, 'cartela', 'cartelas')} ·
         ${dinheiro(g.length * estado.precos.aposta[k])}
         <button type="button" class="discreto" data-link="${link}"
           aria-label="Copiar o link da parte ${i + 1}">Copiar link</button></li>`;
@@ -773,7 +774,7 @@ function fechamentoDaConta() {
   const voltou = conferidos.reduce((soma, r) => soma + r.retorno, 0);
   const gastoConferido = conferidos.reduce((soma, r) => soma + r.custo, 0);
   return quadro(null, [
-    linha(plural(estado.carteira.length, 'jogo guardado', 'jogos guardados'), dinheiro(gasto)),
+    linha(plural(estado.carteira.length, 'fechamento guardado', 'fechamentos guardados'), dinheiro(gasto)),
     ...(conferidos.length ? [
       linha(`${plural(conferidos.length, 'já conferido', 'já conferidos')} · custaram`,
         dinheiro(gastoConferido)),
@@ -797,7 +798,7 @@ function desenharCarteira() {
   if (!estado.carteira.length) { $('carteira').innerHTML = '<p class="ajuda">Nada guardado.</p>'; return; }
   $('carteira').innerHTML = `<ol class="registros">${estado.carteira
     .map((r, i) => `<li><b>${r.t} acertos garantidos</b> ·
-        ${plural(r.jogos, 'jogo', 'jogos')} de ${r.k} dezenas ·
+        ${plural(r.jogos, 'cartela', 'cartelas')} de ${r.k} dezenas ·
         ${dinheiro(r.custo)} · ${new Date(r.data).toLocaleDateString('pt-BR')}${
       r.retorno == null ? ''
         : ` · <b>voltou ${dinheiro(r.retorno)}</b>${r.concurso ? ` no concurso ${r.concurso}` : ''}`}
@@ -1130,7 +1131,7 @@ async function varrerTudo() {
        ${e.v} dezenas. No pior deles, o melhor bilhete faz <b>${pior} acertos</b> — a garantia de
        ${e.t} está de pé. ${comQuinze
       ? `Em ${comQuinze.toLocaleString('pt-BR')} deles, alguém acerta os 15.` : ''}`
-    : `<b>A garantia não se sustentou</b>: existe resultado em que o melhor bilhete faz só
+    : `<b>A garantia não se sustentou</b>: existe resultado em que a melhor cartela faz só
        ${pior} acertos. Não use este fechamento e avise quem publicou.`;
 }
 
@@ -1186,9 +1187,9 @@ function conferirContraOSorteio() {
     premiadas: [...faixas.values()].reduce((a, b) => a + b, 0), gasto: custo, premio: voltou };
   if (!$('analise').hidden) desenharValores();
   $('conferencia').innerHTML = `
-    <p>Melhor bilhete: <b>${melhor} acertos</b>.</p>
+    <p>Melhor cartela: <b>${melhor} acertos</b>.</p>
     ${linhas.length ? `<ul>${linhas.map(([a, q]) => `<li>${q} × ${a} acertos</li>`).join('')}</ul>`
-      : '<p>Nenhum bilhete premiado.</p>'}
+      : '<p>Nenhuma cartela premiada.</p>'}
     <p>Custou ${dinheiro(custo)}, voltou ${dinheiro(voltou)} — <b>${voltou >= custo ? 'saldo de'
       : 'faltaram'} ${dinheiro(Math.abs(voltou - custo))}</b>.</p>
     ${comoPaga(e.k)}

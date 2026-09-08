@@ -382,7 +382,7 @@ await outra.fill('#partes', '2');
 await outra.dispatchEvent('#partes', 'input');
 const partesNaParte = await outra.locator('.partes li').allInnerTexts();
 const somaDasPartes = partesNaParte
-  .map((t) => Number(t.match(/(\d+) bilhetes/)[1]))
+  .map((t) => Number(t.match(/(\d+) cartelas/)[1]))
   .reduce((a, b) => a + b, 0);
 conferir('quem é parte divide o fechamento inteiro, e não a parte dele',
   somaDasPartes === noFechamento, `${somaDasPartes} de ${noFechamento} (parte tem ${naParte})`);
@@ -392,10 +392,10 @@ conferir('quem é parte divide o fechamento inteiro, e não a parte dele',
 // que é só o dela: a conta não fechava para ninguém.
 await outra.click('[data-acao=guardar]');
 const naCarteira = (await outra.locator('.registros li').first().innerText()).replace(/\s+/g, ' ');
-// Comparado como número, e não como pedaço de texto: com 15 jogos guardados e
-// 5 na mão, `includes('5 jogos')` acha "15 jogos" e o teste passa sobre o
-// defeito. Foi o que aconteceu na primeira versão desta conferência.
-const jogosNaCarteira = Number(naCarteira.match(/· (\d+) jogos/)?.[1]);
+// Comparado como número, e não como pedaço de texto: com 15 cartelas guardadas
+// e 5 na mão, `includes('5 cartelas')` acha "15 cartelas" e o teste passa sobre
+// o defeito. Foi o que aconteceu na primeira versão desta conferência.
+const jogosNaCarteira = Number(naCarteira.match(/· (\d+) cartelas/)?.[1]);
 conferir('a carteira de quem é parte guarda a parte, e não o bolão',
   jogosNaCarteira === naParte, `${jogosNaCarteira} guardados, ${naParte} na mão`);
 // E o defeito que só aparece no aparelho de outra pessoa: o link carrega o
@@ -422,7 +422,7 @@ await abrir(pagina, 'conferir');
 await pagina.fill('#sorteio', '1 2 3 4 5 6 7 8 9 10 11 12 13 14 15');
 await pagina.dispatchEvent('#sorteio', 'change');
 const conferencia = await pagina.locator('#conferencia').innerText();
-conferir('a conferência diz o melhor bilhete', /Melhor bilhete: \d+ acertos/.test(conferencia),
+conferir('a conferência diz a melhor cartela', /Melhor cartela: \d+ acertos/.test(conferencia),
   conferencia);
 conferir('e fecha a conta do dinheiro', /Custou R\$/.test(conferencia));
 
@@ -676,8 +676,8 @@ const kPedido = Number(escolhido.match(/de (\d+) dezenas$/)[1]);
 const tPedido = Number(escolhido.match(/^garante (\d+) acertos/)[1]);
 const respostaManual = (await pagina.locator('.resposta').innerText()).replace(/\s+/g, ' ');
 conferir('a resposta é o fechamento escolhido, e não outro',
-  respostaManual.includes(`${jogosPedidos} jogos de ${kPedido} dezenas`)
-  || respostaManual.includes(`bilhete de ${kPedido} dezenas`),
+  respostaManual.includes(`${jogosPedidos} cartelas de ${kPedido} dezenas`)
+  || respostaManual.includes(`cartela de ${kPedido} dezenas`),
   `pedido ${escolhido} — veio ${respostaManual}`);
 conferir('e a garantia é a que foi pedida',
   jogosPedidos === 1 || respostaManual.includes(`${tPedido} acertos garantidos`), respostaManual);
@@ -725,7 +725,7 @@ const opcoesDaParte = await daParte.locator('#m-fechamento option').evaluateAll(
 await daParte.selectOption('#m-fechamento', opcoesDaParte[0]);
 await daParte.waitForTimeout(1500);
 const jogosDoNovo = Number((await daParte.locator('.resposta').innerText())
-  .replace(/\s+/g, ' ').match(/(\d+) jogos de/)?.[1] ?? 1);
+  .replace(/\s+/g, ' ').match(/(\d+) cartelas de/)?.[1] ?? 1);
 conferir('montar à mão desfaz o vínculo com o bolão',
   !(await daParte.locator('#secao-bilhetes').innerText()).includes('Você é a parte'),
   (await daParte.locator('#secao-bilhetes').innerText()).replace(/\s+/g, ' ').slice(0, 120));
@@ -749,7 +749,7 @@ conferir('mexer no dinheiro devolve o modo automático',
 // O rodapé automático fala de dinheiro e garantia — o degrau seguinte, ou o
 // preço da garantia que a pessoa pediu e ainda não cabe.
 const doAutomatico = [/Por mais R\$/, /Garantir \d+ acertos com \d+ dezenas custa/,
-  /Não há fechamento catalogado que/, /marque mais dezenas/, /bilhetes que se completam/];
+  /Não há fechamento catalogado que/, /marque mais dezenas/, /cartelas que se completam/];
 const rodape = await pagina.locator('#degrau').innerText();
 conferir('e o rodapé volta a falar de dinheiro e garantia, como no automático',
   doAutomatico.some((r) => r.test(rodape)), rodape);
@@ -884,7 +884,7 @@ const garantia = Number((await pagina.locator('.numero').innerText()).match(/\d+
 // abaixo dela.
 const melhoresPorSorteio = await pagina.evaluate(() => {
   const tabela = [...document.querySelectorAll('#simulacao .quadro')]
-    .find((t) => t.innerText.includes('Melhor bilhete do sorteio'));
+    .find((t) => t.innerText.includes('Melhor cartela do sorteio'));
   return [...(tabela?.querySelectorAll('tbody tr') ?? [])].map((tr) => ({
     acertos: Number(tr.cells[0].innerText.match(/\d+/)?.[0] ?? -1),
     doFechamento: Number(tr.cells[1].innerText.replace(/\D/g, '')),
@@ -937,7 +937,7 @@ conferir('e o chute não a alcança mais do que o fechamento',
 // não tem sorteio nenhum abaixo da garantia; o chute tem.
 const abaixo = await pagina.evaluate(() => {
   const t = [...document.querySelectorAll('#simulacao .quadro')]
-    .find((x) => x.innerText.includes('Melhor bilhete do sorteio'));
+    .find((x) => x.innerText.includes('Melhor cartela do sorteio'));
   return [...t.querySelectorAll('tbody tr')].map((tr) => ({
     acertos: Number(tr.cells[0].innerText.match(/\d+/)[0]),
     meu: Number(tr.cells[1].innerText.replace(/\D/g, '')),
@@ -1088,7 +1088,8 @@ await semMemoria.dispatchEvent('#valor', 'change');
 await semMemoria.click('#escolher');
 await esperarFechamento(semMemoria, 20000);
 const manchete = await semMemoria.locator('.resposta').innerText();
-conferir('com um bilhete a manchete é o bilhete', /bilhete de \d+ dezenas/.test(manchete), manchete);
+conferir('com uma cartela a manchete é a cartela',
+  /cartela de \d+ dezenas/.test(manchete), manchete);
 conferir('e não promete acertos garantidos', !/acertos garantidos/.test(manchete), manchete);
 conferir('e diz que um bilhete não é fechamento', manchete.includes('não é fechamento'), manchete);
 // E não fala d*a* garantia logo depois de dizer que não há garantia nenhuma: a
@@ -1100,7 +1101,7 @@ conferir('e a tela entrega esse um bilhete',
   (await quantasCartelas(semMemoria)) === 1);
 
 conferir('e o degrau ensina onde o fechamento começa, sem partir de garantia nenhuma',
-  /bilhetes que se completam/.test(await semMemoria.locator('#degrau').innerText()),
+  /cartelas que se completam/.test(await semMemoria.locator('#degrau').innerText()),
   await semMemoria.locator('#degrau').innerText());
 
 // "1 bilhetes", "1 jogos", "1 cartelas": o erro que faz a pessoa desconfiar do
@@ -1112,12 +1113,13 @@ await semMemoria.click('#det-manual summary');
 await semMemoria.selectOption('#m-pool', '15');
 await semMemoria.waitForTimeout(800);
 const aPaginaToda = await semMemoria.locator('body').innerText();
-const singularErrado = ['1 bilhetes', '1 jogos', '1 cartelas', '1 dezenas', '1 partes']
+const singularErrado = ['1 bilhetes', '1 jogos', '1 cartelas', '1 dezenas', '1 partes',
+  '1 fechamentos']
   .filter((erro) => aPaginaToda.includes(erro));
 conferir('e nenhum plural sobra num contador de um só', singularErrado.length === 0,
   singularErrado.join(', '));
-conferir('a carteira guarda "1 jogo", no singular',
-  /· 1 jogo de \d+ dezenas/.test(aPaginaToda.replace(/\s+/g, ' ')),
+conferir('a carteira guarda "1 cartela", no singular',
+  /· 1 cartela de \d+ dezenas/.test(aPaginaToda.replace(/\s+/g, ' ')),
   await semMemoria.locator('.registros li').innerText());
 
 // Marcar exatamente as quinze favoritas é o que muita gente faz de primeira, e
@@ -1134,6 +1136,58 @@ conferir('com as quinze marcadas, a tela diz o que fazer em vez de dar em nada',
 
 await trancado.close();
 
+
+
+// ── uma palavra só para a mesma coisa ───────────────────────────────────────
+//
+// A tela dizia "28 jogos de 16 dezenas", "ao menos um destes bilhetes" e "28
+// cartelas de 16 dezenas" — três palavras para o mesmo papel preenchido, no
+// mesmo cartão, para quem nunca ouviu falar de fechamento. E a distinção passou
+// a carregar peso: uma **cartela** de 16 dezenas contém 16 **apostas** simples,
+// e é essa diferença que explica o prêmio. Com as palavras embaralhadas, a
+// explicação não tem onde se apoiar.
+//
+// A varredura não olha uma frase: olha as três regiões que a pessoa lê antes de
+// abrir a análise, e reprova se aparecer mais de uma palavra para o papel.
+{
+  const nomes = { cartela: /\bcartelas?\b/i, bilhete: /\bbilhetes?\b/i, jogo: /\bjogos?\b/i };
+  const caixa = await navegador.newContext({ viewport: { width: 390, height: 844 } });
+  const pg = await caixa.newPage();
+  await pg.goto(endereco, { waitUntil: 'networkidle' });
+
+  const misturadas = async (onde) => {
+    const texto = (await pg.locator(onde).innerText().catch(() => '')).replace(/\s+/g, ' ');
+    return Object.entries(nomes).filter(([, r]) => r.test(texto)).map(([n]) => n);
+  };
+  const olhar = async (rotulo) => {
+    for (const onde of ['.resposta', '#secao-bilhetes', '#degrau']) {
+      const achadas = await misturadas(onde);
+      conferir(`${rotulo}: ${onde} usa uma palavra só para a cartela`,
+        achadas.length <= 1, `usou ${achadas.join(' e ')}`);
+    }
+  };
+
+  await pg.click('#escolher');
+  await esperarFechamento(pg, 20000);
+  await olhar('escolhido pelo dinheiro');
+
+  // E com cartela maior que a aposta simples, que é onde as duas palavras
+  // precisam mais estar separadas.
+  await pg.click('#det-manual summary');
+  await pg.selectOption('#m-pool', '25');
+  await pg.selectOption('#m-k', '16');
+  await pg.waitForTimeout(400);
+  await pg.selectOption('#m-fechamento', '16-11');
+  await esperarFechamento(pg, 20000);
+  await olhar('montado à mão, cartela de 16');
+
+  // E o piso não é um número solto: "menos de 5" ao lado de "R$ 1.568,00" se lê
+  // como cinco reais.
+  const piso = (await pg.locator('.piso').innerText().catch(() => '')).replace(/\s+/g, ' ');
+  conferir('e o piso diz de que são as unidades',
+    /menos de \d+ cartelas?/.test(piso), piso);
+  await caixa.close();
+}
 
 // ── um bilhete grande são várias apostas, e paga como várias ────────────────
 //

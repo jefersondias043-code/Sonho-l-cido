@@ -197,7 +197,7 @@ Daí tudo o mais decorre:
 
 Sem WebAssembly no cliente, sem *web workers*, sem banco de sessões, sem retomada
 de trabalho interrompido. Nada disso tem razão de existir quando não há nada a
-esperar. O cliente inteiro dá **2.474 linhas** somando JavaScript, HTML e CSS —
+esperar. O cliente inteiro dá **2.475 linhas** somando JavaScript, HTML e CSS —
 teto de 2.500 cobrado pela construção —, e o peso inicial (casca, índice, preços
 e distribuições) dá **43 KiB comprimidos**.
 
@@ -780,6 +780,39 @@ código antigo, cada uma com o defeito dela escrito no relatório; as outras sei
 são a pergunta de base onde ela já passava. Um teste que passa dos dois jeitos
 não prova nada, e por isso todo caso aqui tem pelo menos uma conferência que se
 viu reprovar.
+
+## Uma palavra só para a mesma coisa
+
+No mesmo cartão, para quem nunca ouviu falar de fechamento, a tela dizia:
+
+> **28 jogos** de 16 dezenas · R$ 1.568,00
+> Se as 15 dezenas sorteadas saírem todas entre as suas 25, ao menos um destes
+> **bilhetes** terá 11 acertos ou mais.
+> …
+> **28 cartelas** de 16 dezenas
+
+Três palavras para o mesmo papel preenchido, em dez linhas. E a distinção
+passou a carregar peso: uma **cartela** de 16 dezenas contém 16 **apostas**
+simples, e é dessa diferença que sai o prêmio. Com as palavras embaralhadas, a
+explicação não tem onde se apoiar.
+
+O aplicativo passou a usar três palavras para três coisas, e só:
+
+| palavra | o que é |
+|---|---|
+| **cartela** | um papel preenchido, com `k` dezenas |
+| **aposta** | uma das `C(k,15)` apostas simples dentro de uma cartela |
+| **fechamento** | o conjunto de cartelas que se completam |
+
+A conferência não olha uma frase: varre as três regiões que a pessoa lê antes de
+abrir a análise — a resposta, o cartão do que foi gerado e o rodapé do degrau —
+e reprova se aparecer mais de uma palavra para o papel, tanto no fechamento
+escolhido pelo dinheiro quanto num montado à mão com cartela de 16. Ao desfazer
+a troca, ela aponta com as palavras que achou: *usou cartela e bilhete e jogo*.
+
+Junto veio um número que não tinha unidade. Ao lado de "R$ 1.568,00", o selo de
+*menor conhecido* dizia **"nenhum fechamento faz isso com menos de 5"** — cinco
+o quê? Cinco reais, para quem lê rápido. Agora diz cinco cartelas.
 
 ## Quarenta e quatro pixels
 
