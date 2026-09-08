@@ -118,9 +118,13 @@ estava publicado, e os quatro melhoraram:
 | caso | antes | agora | quanto sai da conta de quem compra |
 |---|---:|---:|---:|
 | 23 dezenas, cartela de 15, garantindo 13 | 872 | **694** | −R$ 623,00 (20,4%) |
+| 23 dezenas, cartela de 16, garantindo 13 | 218 | **180** | −R$ 2.128,00 (17,4%) |
+| 22 dezenas, cartela de 15, garantindo 14 | 5.016 | **4.184** | −R$ 2.912,00 (16,6%) |
 | 24 dezenas, cartela de 15, garantindo 13 | 1.902 | **1.631** | −R$ 948,50 (14,2%) |
 | 25 dezenas, cartela de 16, garantindo 13 | 1.070 | **938** | −R$ 7.392,00 (12,3%) |
+| 25 dezenas, cartela de 16, garantindo 12 | 130 | **114** | −R$ 896,00 (12,3%) |
 | 25 dezenas, cartela de 17, garantindo 13 | 320 | **285** | −R$ 16.660,00 (10,9%) |
+| 21 dezenas, cartela de 16, garantindo 14 | 303 | **272** | −R$ 1.736,00 (10,2%) |
 | 25 dezenas, cartela de 15, garantindo 13 | 3.634 | **3.608** | −R$ 91,00 (0,7%) |
 | 25 dezenas, cartela de 15, garantindo 12 | 331 | **330** | −R$ 3,50 (0,3%) |
 
@@ -128,11 +132,12 @@ O de R$ 15.000 é o que a escada oferece a quem tem esse dinheiro, e agora custa
 **R$ 12.628,00** em vez de R$ 12.719,00. O de R$ 1.500 caiu de R$ 1.158,50 para
 **R$ 1.155,00**.
 
-Duas rodadas, e a segunda achou mais que a primeira nos mesmos casos — 1.657
+Três rodadas, e a segunda achou mais que a primeira nos mesmos casos — 1.657
 virou 1.631, 957 virou 938. A leitura que interessa não é "o catálogo melhorou":
 é que **ele não estava convergido**, e que a passada anterior tinha dado noventa
-segundos por caso onde estes tiveram quarenta minutos. Quem mantiver isto sabe
-onde gastar máquina.
+segundos por caso onde estes tiveram quarenta minutos. Dez fechamentos em dez
+tentativas melhoraram; nenhum caso escolhido pela lista de prioridade ficou onde
+estava. Quem mantiver isto sabe onde gastar máquina.
 
 Nada disso entra sem a varredura: `conferir-tudo`, que não compartilha uma linha
 com o gerador, refez os **249.307.987** sorteios das 330 entradas contra o
