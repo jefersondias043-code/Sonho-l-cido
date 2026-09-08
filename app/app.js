@@ -324,7 +324,7 @@ async function pedirAFrase(onde, dados) {
 /// Quanto a garantia vale em dinheiro. Sem este número "garantido" se lê como
 /// lucro garantido, e nas faixas fixas o prêmio fica abaixo do que se gastou.
 ///
-/// O tamanho do bilhete entra na conta: uma cartela de 16 dezenas com 11
+/// O tamanho da cartela entra na conta: uma cartela de 16 dezenas com 11
 /// acertos não paga uma onze, paga cinco — são cinco das dezesseis apostas
 /// dentro dela que ficam com as onze certas.
 function quantoPagaAGarantia(t, k) {
@@ -571,12 +571,12 @@ function desenharAcaso() {
   // E quanto isso devolve por concurso, em média. Só as faixas de prêmio fixo:
   // 14 e 15 são rateadas, e somá-las trocaria um número exato por um palpite.
   //
-  // A conta é por aposta simples, e não por bilhete, porque é assim que a
-  // lotérica cobra e paga: um bilhete de `k` dezenas **são** as `C(k,15)`
-  // apostas de 15 que cabem dentro dele. Por linearidade, a expectativa de um
-  // bilhete de `k` é `C(k,15)` vezes a de uma aposta simples — e como o preço
+  // A conta é por aposta simples, e não por cartela, porque é assim que a
+  // lotérica cobra e paga: uma cartela de `k` dezenas **são** as `C(k,15)`
+  // apostas de 15 que cabem dentro dela. Por linearidade, a expectativa de uma
+  // cartela de `k` é `C(k,15)` vezes a de uma aposta simples — e como o preço
   // é `C(k,15)` vezes o de uma aposta simples, a taxa de retorno é **a mesma
-  // para todo tamanho de bilhete**. Isso não é um detalhe: é o que transforma
+  // para todo tamanho de cartela**. Isso não é um detalhe: é o que transforma
   // "o fechamento compra certeza, não lucro" de frase em teorema.
   const simples = estado.acaso.chegam?.[`${UNIVERSO}-${SORTEIO}`] ?? {};
   const porAposta = [11, 12, 13].reduce(
