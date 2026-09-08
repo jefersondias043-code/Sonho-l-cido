@@ -112,8 +112,8 @@ passou a dizer também quanto custa o que a pessoa quer.
 
 ## O catálogo encolheu, e isso é dinheiro de volta
 
-Dez casos receberam quarenta minutos de motor cada um, partindo do que já
-estava publicado, e os dez melhoraram:
+Quatorze casos receberam quarenta minutos de motor cada um, partindo do que já
+estava publicado, e os quatorze melhoraram:
 
 | caso | antes | agora | quanto sai da conta de quem compra |
 |---|---:|---:|---:|
@@ -123,21 +123,29 @@ estava publicado, e os dez melhoraram:
 | 24 dezenas, cartela de 15, garantindo 13 | 1.902 | **1.631** | −R$ 948,50 (14,2%) |
 | 25 dezenas, cartela de 16, garantindo 13 | 1.070 | **938** | −R$ 7.392,00 (12,3%) |
 | 25 dezenas, cartela de 16, garantindo 12 | 130 | **114** | −R$ 896,00 (12,3%) |
+| 22 dezenas, cartela de 16, garantindo 13 | 89 | **79** | −R$ 560,00 (11,2%) |
 | 25 dezenas, cartela de 17, garantindo 13 | 320 | **285** | −R$ 16.660,00 (10,9%) |
 | 21 dezenas, cartela de 16, garantindo 14 | 303 | **272** | −R$ 1.736,00 (10,2%) |
+| 21 dezenas, cartela de 15, garantindo 14 | 1.578 | **1.431** | −R$ 514,50 (9,3%) |
+| 24 dezenas, cartela de 16, garantindo 12 | 63 | **58** | −R$ 280,00 (7,9%) |
+| 20 dezenas, cartela de 16, garantindo 14 | 92 | **90** | −R$ 112,00 (2,2%) |
 | 25 dezenas, cartela de 15, garantindo 13 | 3.634 | **3.608** | −R$ 91,00 (0,7%) |
 | 25 dezenas, cartela de 15, garantindo 12 | 331 | **330** | −R$ 3,50 (0,3%) |
+
+Somando o que cada um deixou de custar, são **R$ 34.856,50** que saem da conta
+de quem compra esses quatorze fechamentos.
 
 O de R$ 15.000 é o que a escada oferece a quem tem esse dinheiro, e agora custa
 **R$ 12.628,00** em vez de R$ 12.719,00. O de R$ 1.500 caiu de R$ 1.158,50 para
 **R$ 1.155,00**.
 
-Três rodadas, e a segunda achou mais que a primeira nos mesmos casos — 1.657
+Quatro rodadas, e a segunda achou mais que a primeira nos mesmos casos — 1.657
 virou 1.631, 957 virou 938. A leitura que interessa não é "o catálogo melhorou":
 é que **ele não estava convergido**, e que a passada anterior tinha dado noventa
-segundos por caso onde estes tiveram quarenta minutos. Dez fechamentos em dez
-tentativas melhoraram; nenhum caso escolhido pela lista de prioridade ficou onde
-estava. Quem mantiver isto sabe onde gastar máquina.
+segundos por caso onde estes tiveram quarenta minutos. Quatorze fechamentos em
+quatorze tentativas melhoraram; nenhum caso escolhido pela lista de prioridade
+ficou onde estava. Quem mantiver isto sabe onde gastar máquina — e sabe que
+ainda há o que achar.
 
 Nada disso entra sem a varredura: `conferir-tudo`, que não compartilha uma linha
 com o gerador, refez os **249.307.987** sorteios das 330 entradas contra o
