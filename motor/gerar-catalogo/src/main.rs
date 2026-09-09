@@ -240,6 +240,8 @@ mod exaustao {
         // não o número de cartelas, que decide o tamanho de cada nó.
         (21, 17, 13, 7),
         (22, 18, 13, 6),
+        (23, 19, 13, 6),
+        (24, 20, 13, 6),
     ];
 
     pub fn piso(v: usize, k: usize, t: usize) -> Option<u64> {
