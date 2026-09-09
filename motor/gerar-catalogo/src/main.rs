@@ -242,6 +242,7 @@ mod exaustao {
         (22, 18, 13, 6),
         (23, 19, 13, 6),
         (24, 20, 13, 6),
+        (25, 21, 13, 6),
     ];
 
     pub fn piso(v: usize, k: usize, t: usize) -> Option<u64> {
