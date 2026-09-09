@@ -239,6 +239,7 @@ mod exaustao {
         // `n = 6` quando o custo por nó é baixo — aqui `a = v − k = 4`, e é ele,
         // não o número de cartelas, que decide o tamanho de cada nó.
         (21, 17, 13, 7),
+        (22, 18, 13, 6),
     ];
 
     pub fn piso(v: usize, k: usize, t: usize) -> Option<u64> {
