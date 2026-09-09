@@ -1047,11 +1047,11 @@ Cinco entradas entraram:
 | 23/15/14 | 10.167 | 4.378 | R$ 35.584,50 | |
 | 23/17/15 | 10.051 | 3.996 | R$ 4.784.276,00 | |
 
- era o exemplo que a própria tela usava ao recusar um pedido. Agora
+`25/16/14` era o exemplo que a própria tela usava ao recusar um pedido. Agora
 ela monta.
 
-E três ficaram de fora de propósito —  em 18.928,  em 24.770
-e  em 26.782. Subir o teto de novo para capturá-las seria mover a
+E três ficaram de fora de propósito — `22/16/15` em 18.928, `24/15/14` em
+24.770 e `24/17/15` em 26.782. Subir o teto de novo para capturá-las seria mover a
 trave: ele foi fixado em 16.000 por uma razão dita em voz alta, os 110 KiB, e os
 números novos não mudam essa razão. Nessas o aplicativo diz o piso e mostra o
 que há perto, que é o comportamento certo para um pedido que não tem resposta.
