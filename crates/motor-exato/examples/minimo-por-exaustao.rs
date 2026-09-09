@@ -49,6 +49,7 @@ use std::time::Instant;
 
 const SORTEIO: u32 = 15;
 
+
 fn binomial(n: u64, k: u64) -> u64 {
     if k > n {
         return 0;
@@ -119,11 +120,19 @@ fn repartir(bl: &[Bloco], quantas: u32, acao: &mut impl FnMut(&[u32])) {
 /// Um vetor `(c₀, …, c_r)` com `Σcᵢ = 15` representa `∏ C(|blocoᵢ|, cᵢ)`
 /// sorteios de verdade, e todos cruzam cada cartela na mesma quantidade.
 /// Descoberto é o vetor em que nenhuma cartela alcança `t`.
-fn descobertos(bl: &[Bloco], quantas_cartelas: usize, t: u32) -> (u64, Vec<Vec<u32>>) {
+/// Quantos alvos descobertos se guardam para escolher por onde ramificar.
+///
+/// Guardar todos custaria caro à toa: escolher o mais apertado entre uma
+/// amostra já dá um fator de ramificação pequeno, e o custo por nó — que é
+/// `alvos × classes` — deixa de crescer com o número de blocos. A completude
+/// não depende de qual alvo se escolhe, só de que ele esteja descoberto.
+const ALVOS_GUARDADOS: usize = 48;
+
+fn descobertos(bl: &[Bloco], quantas_cartelas: usize, j: u32, t: u32) -> (u64, Vec<Vec<u32>>) {
     let mut total = 0u64;
     let mut quais = Vec::new();
     let mut cruz = vec![0u32; quantas_cartelas];
-    repartir(bl, SORTEIO, &mut |c: &[u32]| {
+    repartir(bl, j, &mut |c: &[u32]| {
         cruz.iter_mut().for_each(|x| *x = 0);
         let mut peso = 1u64;
         for (i, b) in bl.iter().enumerate() {
@@ -139,7 +148,9 @@ fn descobertos(bl: &[Bloco], quantas_cartelas: usize, t: u32) -> (u64, Vec<Vec<u
         }
         if !cruz.iter().any(|&x| x >= t) {
             total += peso;
-            quais.push(c.to_vec());
+            if quais.len() < ALVOS_GUARDADOS {
+                quais.push(c.to_vec());
+            }
         }
     });
     (total, quais)
@@ -158,11 +169,11 @@ fn alcanca(c: &[u32], u: &[u32], t: u32) -> bool {
 
 /// Quantos sorteios uma cartela sozinha atende — o teto de uma cartela, para a
 /// poda por contagem.
-fn alcance_de_uma(v: u32, k: u32, t: u32) -> u64 {
-    (t..=SORTEIO.min(k))
+fn alcance_de_uma(v: u32, k: u32, j: u32, t: u32) -> u64 {
+    (t..=j.min(k))
         .map(|i| {
             binomial(u64::from(k), u64::from(i))
-                .saturating_mul(binomial(u64::from(v - k), u64::from(SORTEIO - i)))
+                .saturating_mul(binomial(u64::from(v - k), u64::from(j - i)))
         })
         .sum()
 }
@@ -170,6 +181,8 @@ fn alcance_de_uma(v: u32, k: u32, t: u32) -> u64 {
 struct Varredura {
     v: u32,
     k: u32,
+    /// Tamanho do alvo. No direito é o sorteio, 15; no avesso é `v − 15`.
+    j: u32,
     t: u32,
     n: usize,
     alcance: u64,
@@ -190,7 +203,7 @@ impl Varredura {
             return Desfecho::Excedido;
         }
         let bl = blocos(familia, self.v);
-        let (falta, alvos) = descobertos(&bl, familia.len(), self.t);
+        let (falta, alvos) = descobertos(&bl, familia.len(), self.j, self.t);
         if falta == 0 {
             return Desfecho::Achou(familia.clone());
         }
@@ -216,17 +229,21 @@ impl Varredura {
         // o menor disponível em vez de ser sempre o total de classes.
         let mut melhor: Option<Vec<usize>> = None;
         for u in &alvos {
-            let servem: Vec<usize> = classes
-                .iter()
-                .enumerate()
-                .filter(|(_, c)| alcanca(c, u, self.t))
-                .map(|(i, _)| i)
-                .collect();
+            let mut servem: Vec<usize> = Vec::new();
+            let teto = melhor.as_ref().map_or(usize::MAX, |m: &Vec<usize>| m.len());
+            for (i, c) in classes.iter().enumerate() {
+                if alcanca(c, u, self.t) {
+                    servem.push(i);
+                    if servem.len() >= teto {
+                        break; // já não é o mais apertado; não vale contar o resto
+                    }
+                }
+            }
             // Sorteio descoberto que nenhuma classe atende: o ramo é morto.
             if servem.is_empty() {
                 return Desfecho::NaoExiste;
             }
-            if melhor.as_ref().is_none_or(|m| servem.len() < m.len()) {
+            if servem.len() < teto {
                 melhor = Some(servem);
             }
         }
@@ -284,6 +301,26 @@ fn confere(cartelas: &[u32], v: u32, t: u32) -> bool {
     true
 }
 
+/// A orientação em que a varredura é mais barata.
+///
+/// O problema `(v, k, 15, t)` **é** o problema `(v, a, b, t')` com `a = v − k`,
+/// `b = v − 15` e `t' = t + a − 15`: o que falta à cartela cruza o que falta ao
+/// sorteio, e a equivalência é exata. Mas o custo de cada nó não é o mesmo nos
+/// dois: ele é dominado pelas repartições de `k` e de `j` sobre os blocos, e
+/// enumerar repartições de 7 é ordens de grandeza mais barato que de 15.
+///
+/// Em `22/15/11` o direito reparte 15 e 15; o avesso reparte 7 e 7. É a
+/// diferença entre não terminar e terminar.
+fn orientar(v: u32, k: u32, t: u32) -> (u32, u32, u32, bool) {
+    let (a, b) = (v - k, v - SORTEIO);
+    let t_linha = (t + v).saturating_sub(k + SORTEIO);
+    if t_linha == 0 || t_linha > a.min(b) || a + b >= k + SORTEIO {
+        (k, SORTEIO, t, false)
+    } else {
+        (a, b, t_linha, true)
+    }
+}
+
 fn main() {
     let teto_de_nos: u64 = std::env::var("TETO_DE_NOS")
         .ok()
@@ -297,38 +334,46 @@ fn main() {
         }
         let (v, k, t) = (p[0], p[1], p[2]);
         let n: usize = n.parse().unwrap_or(0);
+        let (kv, jv, tv, avesso) = orientar(v, k, t);
         let comeco = Instant::now();
         let mut vr = Varredura {
             v,
-            k,
-            t,
+            k: kv,
+            j: jv,
+            t: tv,
             n,
-            alcance: alcance_de_uma(v, k, t),
+            alcance: alcance_de_uma(v, kv, jv, tv),
             nos: 0,
             teto_de_nos,
         };
         let mut familia = Vec::new();
         let desfecho = vr.varrer(&mut familia);
         let s = comeco.elapsed().as_secs_f64();
+        let lado = if avesso { " (no avesso)" } else { "" };
         match desfecho {
             Desfecho::Achou(f) => {
-                let ok = confere(&f, v, t);
+                // No avesso o que se achou são os complementos; a cartela é o
+                // resto do pool.
+                let cheia = if v >= 32 { u32::MAX } else { (1u32 << v) - 1 };
+                let cartelas: Vec<u32> =
+                    if avesso { f.iter().map(|m| !m & cheia).collect() } else { f.clone() };
+                let ok = confere(&cartelas, v, t);
                 println!(
-                    "{v}/{k}/{t}: EXISTE com {n} cartelas · confere {} · {} nós · {s:.1}s",
+                    "{v}/{k}/{t}: EXISTE com {n} cartelas{lado} · confere {} · {} nós · {s:.1}s",
                     if ok { "sim" } else { "NÃO" },
                     vr.nos
                 );
-                for m in &f {
+                for m in &cartelas {
                     let d: Vec<u32> = (0..v).filter(|i| m & (1 << i) != 0).map(|i| i + 1).collect();
                     println!("    {d:?}");
                 }
             }
             Desfecho::NaoExiste => println!(
-                "{v}/{k}/{t}: PROVADO que {n} cartelas não bastam · {} nós · {s:.1}s",
+                "{v}/{k}/{t}: PROVADO que {n} cartelas não bastam{lado} · {} nós · {s:.1}s",
                 vr.nos
             ),
             Desfecho::Excedido => println!(
-                "{v}/{k}/{t}: não sei — o teto de {teto_de_nos} nós estourou · {s:.1}s"
+                "{v}/{k}/{t}: não sei — o teto de {teto_de_nos} nós estourou{lado} · {s:.1}s"
             ),
         }
     }
