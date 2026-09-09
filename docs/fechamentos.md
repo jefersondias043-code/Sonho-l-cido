@@ -32,10 +32,10 @@ que quase nunca se cobra.
 |---:|---:|---|---|---:|---|
 | R$ 5,00 | 19 | — | 1 bilhete de 15 dezenas | R$ 3,50 | não é fechamento |
 | R$ 25,00 | 22 | **11 acertos** | 6 jogos de 15 dezenas | R$ 21,00 | piso 3 |
-| R$ 100,00 | 23 | **11 acertos** | 15 jogos de 15 dezenas | R$ 52,50 | piso 4 |
-| R$ 400,00 | 25 | **11 acertos** | 55 jogos de 15 dezenas | R$ 192,50 | piso 10 |
-| R$ 1.500,00 | 25 | **12 acertos** | 330 jogos de 15 dezenas | R$ 1.155,00 | piso 55 |
-| R$ 15.000,00 | 25 | **13 acertos** | 3608 jogos de 15 dezenas | R$ 12.628,00 | piso 671 |
+| R$ 100,00 | 24 | **11 acertos** | 24 jogos de 15 dezenas | R$ 84,00 | piso 7 |
+| R$ 400,00 | 25 | **11 acertos** | 50 jogos de 15 dezenas | R$ 175,00 | piso 10 |
+| R$ 1.500,00 | 25 | **12 acertos** | 325 jogos de 15 dezenas | R$ 1.137,50 | piso 55 |
+| R$ 15.000,00 | 25 | **13 acertos** | 3525 jogos de 15 dezenas | R$ 12.337,50 | piso 671 |
 <!-- fim de a tabela do dinheiro -->
 
 A primeira linha é a mais importante do produto: com cinco reais não há
@@ -105,7 +105,7 @@ validado e descartado em silêncio.
 
 Agora ele responde à pergunta que foi feita:
 
-> *Garantir 14 acertos com 20 dezenas custa R$ 1.582,00 — faltam R$ 1.282,00.*
+> *Garantir 14 acertos com 20 dezenas custa R$ 1.540,00 — faltam R$ 1.240,00.*
 
 É a outra metade do produto. O aplicativo já dizia o que o dinheiro compra;
 passou a dizer também quanto custa o que a pessoa quer.
@@ -193,10 +193,10 @@ comentário da constante dizendo o que ela não faz — e esse foi reescrito.
 Ao lado de *"em média os dois pagam o mesmo"* — que era uma frase que se lê como
 consolo — agora vem o número:
 
-> *…que aqui é **R$ 49,41** por concurso nas faixas de 11, 12 e 13 acertos —
+> *…que aqui é **R$ 44,91** por concurso nas faixas de 11, 12 e 13 acertos —
 > mais o que sair de 14 e 15, que é rateado e ninguém sabe de antemão.*
 
-Contra R$ 192,50 gastos. É exato e é hipergeométrico, não simulado: sai das
+Contra R$ 175,00 gastos. É exato e é hipergeométrico, não simulado: sai das
 distribuições de `acaso.json` por diferença, e a suíte refaz a mesma média
 direto da definição, sem tocar no arquivo, para as duas baterem ao centavo. Um
 bilhete simples devolve **25,7%** do que custa nas faixas fixas — e é o mesmo
@@ -480,7 +480,8 @@ queixa: a pessoa dizia uma coisa e a tela mostrava outra.
 **A garantia era "no mínimo".** O filtro era `e.t >= t`, e a lista guardava a
 escolha anterior sempre que ela continuasse passando. Com `15-14` escolhido,
 baixar a garantia de 14 para 11 não mudava nada — 14 é no mínimo 11 —, e a
-resposta seguia sendo **452 cartelas por R$ 1.582,00** onde o pedido novo custava
+resposta seguia sendo **452 cartelas por R$ 1.582,00** — o preço daquele
+fechamento antes de o motor o encolher para 440 — onde o pedido novo custava
 **R$ 14,00**. Mudar o pedido não mudava a resposta; era o mesmo defeito visto
 pelos dois lados da queixa.
 
@@ -620,7 +621,7 @@ encontram. Na tela isso vira dois selos que não se parecem:
 - **menor conhecido** — este é o menor que se achou, e ao lado aparece o piso:
   *"nenhum fechamento faz isso com menos de 46"*.
 
-Hoje o catálogo tem **206 das 330 no mínimo provado** e 312 com bilhetes
+Hoje o catálogo tem **226 das 330 no mínimo provado** e 317 com bilhetes
 publicados. E vale dizer em que cada prova se apoia, porque não são todas iguais:
 
 <!-- a tabela das provas: gerada por ferramentas/numeros-do-catalogo.py -->
@@ -628,12 +629,13 @@ publicados. E vale dizer em que cada prova se apoia, porque não são todas igua
 |---|---:|---|
 | aritmética fechada — um bilhete de `k` num pool de `v` cruza `k + 15 − v` com qualquer sorteio, e quando isso já alcança `t` o mínimo é 1 | 145 | `conferir-tudo` refaz o argumento |
 | fórmula — `k = 15` com `t = 15` exige que o bilhete **seja** o sorteio, logo todos os `C(v,15)` | 10 | `conferir-tudo` refaz o argumento |
-| cota de Turán no avesso | 34 | a cota vem de `motor-core`, validada lá contra números publicados |
+| cota de Turán no avesso | 35 | a cota vem de `motor-core`, validada lá contra números publicados |
+| exaustão | 19 | a cota vem de `motor-core`, validada lá contra números publicados |
 | cota de Schönheim | 17 | a cota vem de `motor-core`, validada lá contra números publicados |
 <!-- fim de a tabela das provas -->
 
 Nos 155 primeiros o conferidor independente não acredita em ninguém: recalcula. Nos
-51 restantes a prova se apoia numa cota que o `motor-core` implementa e testa
+71 restantes a prova se apoia numa cota que o `motor-core` implementa e testa
 contra a literatura — e o conferidor só cobra que a cota anunciada não seja menor
 que a cota de contagem que ele mesmo recalcula. É menos do que uma prova
 independente, e é isto que se pode afirmar sem exagero.
@@ -796,6 +798,319 @@ O contraponto útil: a folga que o índice mostra entre `jogos` e `piso` chega a
 o **piso** é fraco. Cotas de contagem e de Schönheim são notoriamente frouxas em
 covering designs, e usá-las para estimar quanto ainda dá para economizar leva a
 esperar um ganho que não existe.
+
+## E depois ele voltou a melhorar, com as duas coisas que faltavam
+
+A seção acima terminou nomeando o que faltava: *"melhorar estes números agora
+exige **outra coisa** — mais tempo por caso em ordens de grandeza, outra técnica,
+ou uma construção algébrica que o motor não conhece"*. As três foram medidas. A
+primeira não paga; as outras duas, sim, e as duas estavam mais perto do que
+parecia.
+
+### Mais tempo não paga, e partir do zero é pior
+
+Trezentos segundos por caso, partindo do catálogo publicado, nos casos acima do
+piso: **uma** melhoria em dezessete casos buscados — `19/15/14`, de 127 para 125.
+Partir **do zero** com o mesmo tempo perde nos três casos medidos:
+
+| caso | publicado | do zero, 300 s |
+|---|---:|---:|
+| 20/15/14 | 452 | 458 |
+| 21/15/13 | 111 | 114 |
+| 20/16/15 | 1.367 | 1.422 |
+
+O motor livre, sozinho e nesta escala de tempo, já colheu o que havia. O que a
+seção anterior chamou de *"repetir uma pergunta já respondida"* continua valendo
+— e é por isso que a resposta veio de outro lugar.
+
+### A construção que só existia numa das cinco linhas
+
+No avesso, a regra do fechamento é uma só. Com `a = v − k` dezenas faltando ao
+bilhete e `b = v − 15` faltando ao sorteio:
+
+```text
+|K ∩ S| ≥ t   ⟺   |M ∩ T| ≥ t + a − 15 =: t'
+```
+
+Com `t' = a` isso é *"as `a` que faltam ao bilhete estão todas entre as `b` que
+faltam ao sorteio"* — um sistema de Turán, e é a linha `t = 15`. O gerador tinha
+construção fechada só para esse caso. Nas outras quatro linhas ele não tinha
+construção nenhuma: partia do catálogo anterior e entregava tudo ao motor.
+
+E é exatamente ali que a distância até o piso é maior. Medido no catálogo
+publicado, das 112 entradas acima do piso:
+
+| garantia pedida | entradas acima do piso | razão mediana |
+|---|---:|---:|
+| `t = 11` | 15 | 2,00× |
+| `t = 12` | 19 | 4,00× |
+| `t = 13` | 28 | 3,92× |
+| `t = 14` | 30 | 3,08× |
+| `t = 15` | 20 | 1,97× |
+
+**92 das 112 têm `t < 15`** — a linha que tinha construção é a que está mais
+perto do piso, e não por acaso.
+
+As três ideias de sempre valem inteiras com `t' < a`: todos os `C(v,a)`
+subconjuntos; a recursão por um ponto — ou `x` está no `b`-conjunto, e sobra um
+`(b−1)`-conjunto para uma família de `a−1` com garantia `t'−1`, ou não está, e
+serve a família do resto; e a casa dos pombos por grupos. Entrou uma quarta:
+**grupos disjuntos que não cobrem tudo**, porque deixar dezenas de fora concentra
+o sorteio nos grupos que existem em vez de diluí-lo em partes demais. A monotonia
+em `a`, em `b` e em `t'` fecha a conta de graça — cartela maior, sorteio maior ou
+garantia menor nunca custam mais.
+
+Sem um segundo de busca, a família assim construída já nasce menor que o
+catálogo publicado em nove entradas:
+
+| caso | publicado | só a construção | piso |
+|---|---:|---:|---:|
+| 25/19/12 | 9 | **4** | 3 |
+| 24/18/12 | 8 | **4** | 3 |
+| 25/17/11 | 11 | **7** | 3 |
+| 25/22/14 | 11 | **8** | 8 ← alcançado |
+| 24/19/13 | 21 | **16** | 6 |
+| 24/20/14 | 46 | **36** | 14 |
+| 25/20/13 | 19 | **16** | 5 |
+| 25/18/12 | 22 | **19** | 4 |
+| 25/21/14 | 40 | **36** | 13 |
+
+Os testes do módulo cobram cada família por força bruta — para todo `(v,a,b,t')`
+até `v = 11`, todo `b`-subconjunto tem de encontrar algum membro em `t'`
+elementos, e o tamanho construído tem de bater com o medido. E o catálogo inteiro
+assim gerado passa no `conferir-tudo`, que não compartilha uma linha com o
+gerador: 330 entradas, 239.494.601 sorteios varridos.
+
+### A técnica que estava no repositório e nunca tinha sido chamada
+
+`motor-busca` tem uma busca que **nunca quebra a simetria**: a unidade que ela
+move é a órbita do grupo cíclico, então as `v` rotações andam juntas. Ela nasceu
+para a Lotinha, onde oito dos vinte fechamentos em aberto eram perfeitamente
+invariantes por rotação — sinal de que a busca livre, que move uma cartela por
+vez, nunca tinha aceitado um movimento neles.
+
+`montar_com_intersecao` já aceitava garantia parcial. A peça estava pronta, e o
+gerador do catálogo da Lotofácil nunca a tinha chamado.
+
+Medida em doze casos com 90 s cada, contra o catálogo publicado, **ganha em
+seis**:
+
+| caso | publicado | só simetria, 90 s |
+|---|---:|---:|
+| 22/16/14 | 932 | **748** |
+| 22/15/14 | 4.184 | **3.916** |
+| 20/16/14 | 90 | **80** |
+| 21/17/14 | 71 | **63** |
+| 22/18/14 | 61 | **55** |
+| 20/15/13 | 42 | **40** |
+
+Perde nos outros seis, então não substitui a busca livre — as duas correm e vale
+a menor. Mas o ganho maior não é nenhuma das duas sozinha: **o que a simetria
+acha vira partida da busca livre**, que então quebra a simetria e desce abaixo do
+ótimo cíclico.
+
+| caso | publicado | só simetria | simetria e depois o motor |
+|---|---:|---:|---:|
+| 20/16/14 | 90 | 80 | **72** |
+| 22/16/14 | 932 | 748 | **742** |
+| 21/17/14 | 71 | 63 | **63** |
+| 22/15/14 | 4.184 | 3.916 | **3.904** |
+
+Onde a simetria não cabe: a tabela de ligações cresce com `C(v,a)/v` vezes
+quantos alvos cada conjunto alcança, e nas garantias parciais de pool grande isso
+passa de bilhões. Dos 112 casos acima do piso, **75 cabem** no teto de 150
+milhões de ligações; `25/18/13` pediria 2,5 bilhões e fica de fora.
+
+### A colheita
+
+As três capacidades foram postas a trabalhar em quatro turnos: os 75 casos em
+que a instância cíclica cabe inteira, os 14 maiores um de cada vez com a tabela
+solta até 4 GB, e os 23 que só a amostragem alcança. Somando com as nove que a
+construção fechada entrega sem busca, **66 dos 312 fechamentos publicados
+encolheram**.
+
+Nos casos buscados a taxa foi alta e subiu com o tamanho do pool: 55% nos 75
+primeiros, e **17 de 17** entre os que a amostragem trouxe para dentro — que são
+justamente os de maior folga. As rodadas anteriores colhiam uma ou duas.
+
+| caso | antes | depois | piso | fora da conta |
+|---|---:|---:|---:|---:|
+| 25/19/12 | 9 | **4** | 4 | R$ 67.830,00 |
+| 24/18/12 | 8 | **4** | 4 | R$ 11.424,00 |
+| 24/20/14 | 46 | **24** | 14 | R$ 1.193.808,00 |
+| 25/17/11 | 11 | **7** | 3 | R$ 1.904,00 |
+| 22/16/12 | 16 | **11** | 4 | R$ 280,00 |
+| 24/16/14 | 6.719 | **4.766** | 1.496 | R$ 109.368,00 |
+| 25/17/14 | 3.678 | **2.647** | 641 | R$ 490.756,00 |
+| 24/17/14 | 1.592 | **1.152** | 300 | R$ 209.440,00 |
+| 25/22/14 | 11 | **8** | 8 | — |
+| 25/18/14 | 1.018 | **750** | 181 | R$ 765.408,00 |
+| 24/16/13 | 481 | **357** | 79 | R$ 6.944,00 |
+| 21/17/15 | 1.094 | **819** | 554 | R$ 130.900,00 |
+| 23/16/14 | 2.600 | **1.976** | 573 | R$ 34.944,00 |
+| 24/19/13 | 21 | **16** | 6 | R$ 67.830,00 |
+| 20/16/14 | 90 | **69** | 40 | R$ 1.176,00 |
+| 24/15/11 | 31 | **24** | 7 | R$ 24,50 |
+| 24/18/14 | 413 | **320** | 72 | R$ 265.608,00 |
+| 25/20/14 | 112 | **87** | 22 | R$ 1.356.600,00 |
+| 23/17/14 | 621 | **483** | 140 | R$ 65.688,00 |
+| 22/17/14 | 222 | **176** | 53 | R$ 21.896,00 |
+| 22/16/14 | 932 | **742** | 257 | R$ 10.640,00 |
+| 25/21/14 | 40 | **32** | 13 | — |
+| 24/19/14 | 136 | **109** | 30 | R$ 366.282,00 |
+| 23/18/14 | 171 | **138** | 44 | R$ 94.248,00 |
+| 25/19/14 | 308 | **250** | 53 | R$ 786.828,00 |
+| 22/17/13 | 27 | **22** | 8 | R$ 2.380,00 |
+| 24/17/13 | 145 | **120** | 24 | R$ 11.900,00 |
+| 22/16/13 | 79 | **66** | 19 | R$ 728,00 |
+| 25/20/13 | 19 | **16** | 5 | R$ 162.792,00 |
+| 23/16/12 | 27 | **23** | 7 | R$ 224,00 |
+| 25/18/13 | 111 | **95** | 17 | R$ 45.696,00 |
+| 24/15/13 | 1.631 | **1.398** | 334 | R$ 815,50 |
+| 24/16/11 | 14 | **12** | 4 | R$ 112,00 |
+| 25/18/12 | 22 | **19** | 4 | R$ 8.568,00 |
+| 22/18/14 | 61 | **53** | 20 | R$ 22.848,00 |
+| 21/16/13 | 33 | **29** | 12 | R$ 224,00 |
+| 21/17/14 | 71 | **63** | 30 | R$ 3.808,00 |
+| 25/16/11 | 28 | **25** | 5 | R$ 168,00 |
+| 23/16/13 | 180 | **161** | 40 | R$ 1.064,00 |
+| 25/17/13 | 278 | **250** | 46 | R$ 13.328,00 |
+| 23/17/12 | 11 | **10** | 4 | R$ 476,00 |
+| 23/20/14 | 11 | **10** | 9 | R$ 54.264,00 |
+| 25/15/11 | 55 | **50** | 10 | R$ 17,50 |
+| 22/15/13 | 290 | **264** | 74 | R$ 91,00 |
+| 23/17/13 | 67 | **61** | 15 | R$ 2.856,00 |
+| 22/19/14 | 13 | **12** | 10 | R$ 13.566,00 |
+| 21/16/14 | 272 | **252** | 111 | R$ 1.120,00 |
+| 23/15/13 | 694 | **644** | 161 | R$ 175,00 |
+| 20/15/13 | 42 | **39** | 16 | R$ 10,50 |
+| 25/19/13 | 43 | **40** | 8 | R$ 40.698,00 |
+| 22/15/14 | 4.184 | **3.900** | 1.609 | R$ 994,00 |
+| 25/16/13 | 938 | **875** | 154 | R$ 3.528,00 |
+| 23/19/14 | 49 | **46** | 18 | R$ 40.698,00 |
+| 21/15/13 | 111 | **105** | 37 | R$ 21,00 |
+| 23/18/13 | 24 | **23** | 8 | R$ 2.856,00 |
+| 21/15/14 | 1.431 | **1.372** | 679 | R$ 206,50 |
+| 24/17/12 | 25 | **24** | 5 | R$ 476,00 |
+| 24/18/13 | 50 | **48** | 10 | R$ 5.712,00 |
+| 20/15/14 | 452 | **440** | 208 | R$ 42,00 |
+| 25/15/13 | 3.608 | **3.525** | 671 | R$ 290,50 |
+| 24/20/15 | 334 | **327** | 150 | R$ 379.848,00 |
+| 20/16/15 | 1.367 | **1.340** | 1.037 | R$ 1.512,00 |
+| 19/15/14 | 127 | **125** | 81 | R$ 7,00 |
+| 25/15/12 | 330 | **325** | 55 | R$ 17,50 |
+| 23/18/15 | 2.138 | **2.132** | 835 | R$ 17.136,00 |
+| 25/19/15 | 3.856 | **3.855** | 1.261 | R$ 13.566,00 |
+
+Somando, são **R$ 6.914.666,50** que deixam de ser cobrados de quem compra. E os
+números mais visíveis do aplicativo se moveram junto:
+
+- *"garantir 14 acertos com 20 dezenas"*, o rodapé de quem pede uma garantia que
+  ainda não cabe no bolso, passou de R$ 1.582,00 para **R$ 1.540,00**;
+- a resposta de R$ 400 — 25 dezenas garantindo 11 acertos — passou de 55 para
+  **50 cartelas**, de R$ 192,50 para **R$ 175,00**;
+- a de R$ 1.500 passou de 330 para **325**, e a de R$ 15.000 de 3.608 para
+  **3.525**.
+
+Tudo isso passou pelo `conferir-tudo`, que não compartilha uma linha com o
+gerador nem com a busca: 330 entradas, 249.307.987 sorteios varridos, e cada
+sorteio possível encontrando alguma cartela com a garantia prometida.
+
+### Cinco becos fecharam, e o teto passou a dizer a verdade
+
+O "montar do meu jeito" tinha **18 becos**: combinações que os dois selects
+deixam montar e que o catálogo não atende. Eles não eram descuido — eram
+entradas cujo fechamento o motor nunca tinha alcançado, ou cujo resultado
+passava do teto de publicação.
+
+O teto era o problema maior, e ele mesmo já admitia: *"ele conta cartelas, e não
+dinheiro, e por isso não é a fronteira que o parágrafo acima descreve"*. Com o
+corte em 8.000 cartelas, o catálogo publicava dezoito fechamentos acima de
+R$ 1 milhão — o mais caro em R$ 59.907.456 — e recusava , que o motor
+resolve com 10.167 cartelas de 15 dezenas por **R$ 35.584,50**. Mais barato que
+49 dos que já estavam lá. O teto não protegia o bolso de ninguém: barrava
+justamente os fechamentos baratos, porque são os que precisam de muitas
+cartelas.
+
+Ele passou a ser o que sempre foi de fato — um teto de **peso** do catálogo e do
+tempo de conferência —, em 16.000 cartelas, cerca de 110 KiB por arquivo. O
+bolso continua protegido pelo lugar certo: o preço ao lado de cada fechamento na
+tela.
+
+Cinco entradas entraram:
+
+| entrada | cartelas | piso | custo | |
+|---|---:|---:|---:|---|
+| 20/15/15 | 15.504 | 15.504 | R$ 54.264,00 | mínimo provado |
+| 25/18/15 | 14.850 | 5.121 | R$ 42.411.600,00 | |
+| 25/16/14 | 10.944 | 3.014 | R$ 612.864,00 | |
+| 23/15/14 | 10.167 | 4.378 | R$ 35.584,50 | |
+| 23/17/15 | 10.051 | 3.996 | R$ 4.784.276,00 | |
+
+`25/16/14` era o exemplo que a própria tela usava ao recusar um pedido. Agora
+ela monta.
+
+E três ficaram de fora de propósito — `22/16/15` em 18.928, `24/15/14` em
+24.770 e `24/17/15` em 26.782. Subir o teto de novo para capturá-las seria mover a
+trave: ele foi fixado em 16.000 por uma razão dita em voz alta, os 110 KiB, e os
+números novos não mudam essa razão. Nessas o aplicativo diz o piso e mostra o
+que há perto, que é o comportamento certo para um pedido que não tem resposta.
+
+O modo manual passa de 237 para **242 fechamentos alcançáveis**, e de 18 para
+**13 becos**.
+
+### E onde a folga era da cota, não do fechamento
+
+O piso do índice é uma **cota inferior**: diz que nada menor existe, não que
+aquele tamanho exista. Em covering designs essas cotas são notoriamente frouxas,
+e a folga que o aplicativo mostrava era, em muitos casos, promessa de uma
+economia que ninguém poderia cumprir.
+
+O provador de exaustão responde a outra pergunta, e a resposta é definitiva:
+existe algum fechamento com `n` cartelas? Ele varre o espaço inteiro, com duas
+reduções que tornam isso possível — enumerar famílias a menos de simetria, pelas
+repartições das dezenas em blocos de pertinência, e conferir a cobertura sem
+olhar sorteio nenhum, porque `|B ∩ S|` só depende de quantas dezenas o sorteio
+toma de cada bloco. Os 3.268.760 sorteios viram alguns milhares de vetores de
+contagem.
+
+Catorze entradas ficaram provadas ótimas, em algumas centenas de nós cada:
+
+| caso | piso antes | mínimo provado | o que o catálogo já tinha |
+|---|---:|---:|---:|
+| 23/16/11 | 3 | **5** | 5 |
+| 22/16/11 | 2 | **4** | 4 |
+| 23/17/11 | 2 | **4** | 4 |
+| 24/17/11 | 2 | **4** | 4 |
+| 24/18/11 | 2 | **4** | 4 |
+| 25/18/11 | 2 | **4** | 4 |
+| 25/19/11 | 2 | **4** | 4 |
+| 21/15/11 | 3 | **4** | 4 |
+| 22/17/12 | 3 | **4** | 4 |
+| 23/18/12 | 3 | **4** | 4 |
+| 24/18/12 | 3 | **4** | 4 |
+| 24/19/12 | 3 | **4** | 4 |
+| 25/19/12 | 3 | **4** | 4 |
+| 25/20/12 | 3 | **4** | 4 |
+
+Em todas elas o fechamento publicado **já era o mínimo**. O catálogo passa de 207
+para **221 entradas no mínimo provado** sem que um único bilhete mude — e catorze
+folgas de 33% a 100% somem da tela porque nunca existiram.
+
+### E o piso continua sendo fraco
+### E o piso continua sendo fraco
+
+A ressalva da seção anterior não caiu, e vale repetir com número. Em `25/18/13` o
+piso de 17 cartelas vem da cota de contagem: cada cartela atende 202.164 dos
+3.268.760 sorteios possíveis, e 3.268.760 ÷ 202.164 = 16,17. Alcançar 17 exigiria
+que dezessete cartelas se sobrepusessem em **95%** do que cobrem — o que não
+existe em fechamento nenhum desse tamanho.
+
+Ou seja: a folga de 6,5× que o índice mostra ali não é um fechamento seis vezes
+menor esperando ser achado. Parte dela é o piso, e não o motor. O que **é** do
+motor se mede pelo que ele consegue quando lhe dão outra ferramenta — e ali,
+com cinco minutos de busca livre partindo do zero, o mesmo caso saiu de 111
+para 108.
 
 ## A resposta estava fora da tela
 
@@ -1571,7 +1886,7 @@ que não confere. `catalogo.yml` roda a mesma varredura e as **dez** suítes a c
 envio, em qualquer branch — cinco do cliente (a da tela duas vezes, na raiz e na
 subpasta), três do servidor e duas de ferramenta.
 
-## As 18 entradas sem bilhetes
+## As 13 entradas sem bilhetes
 
 Dezoito das 330 guardam só o piso, e por um motivo econômico, não matemático: o
 menor fechamento conhecido passa de oito mil bilhetes, o que descreve compras de

@@ -49,7 +49,10 @@ mod turan;
 use std::collections::{BTreeMap, HashMap};
 use std::time::{Duration, Instant};
 
-use motor_busca::{CondicoesDeParada, Configuracao, Controle, MotorBusca, Silencioso};
+use motor_busca::{
+    BuscaCiclica, CondicoesDeParada, Configuracao, Controle, InstanciaCiclica, MotorBusca,
+    Silencioso,
+};
 use motor_core::limites::{limite_inferior, LimiteInferior};
 use motor_core::{Cartela, MotorCobertura, Objetivo, Problema, RegraCobertura};
 
@@ -61,26 +64,40 @@ const GARANTIA_MIN: usize = 11;
 
 /// Acima disto o fechamento não vai para o catálogo.
 ///
-/// Nasceu como fronteira econômica — oito mil cartelas de 15 dezenas custam
-/// mais de vinte mil reais, e o catálogo existe para responder "como gasto
-/// melhor este dinheiro", não para arquivar curiosidades. Acima do teto a
-/// entrada guarda só o piso provado, e o aplicativo diz que ali não há
-/// fechamento catalogado.
+/// ## O que ele guarda, dito com honestidade
 ///
-/// **Mas ele conta cartelas, e não dinheiro, e por isso não é a fronteira que
-/// o parágrafo acima descreve.** Oito mil cartelas de 15 dezenas são
-/// R$ 28.000; oito mil de 17 são R$ 3,8 milhões; oito mil de 20 são
-/// R$ 434 milhões. Medido no catálogo publicado, vinte fechamentos passam de
-/// R$ 1 milhão e o mais caro custa R$ 59.907.456,00 — todos abaixo do teto.
-/// Fica assim de propósito: o modo manual mostra o preço junto, e ver "R$ 59
-/// milhões" ensina por que ninguém fecha com cartela de 20. Trocar o teto por
-/// um em reais é decisão de produto, não conserto; o que não pode é o
-/// comentário dizer o que a constante não faz.
+/// Ele nasceu como fronteira econômica — "oito mil cartelas de 15 dezenas
+/// custam mais de vinte mil reais, e o catálogo existe para responder como
+/// gasto melhor este dinheiro". Mas ele **conta cartelas, e não dinheiro**, e o
+/// comentário anterior admitia isso sem tirar a consequência: oito mil cartelas
+/// de 15 são R$ 28.000; oito mil de 20 são R$ 434 milhões.
+///
+/// A consequência, medida: com o teto em 8.000, o catálogo publicava dezoito
+/// fechamentos acima de R$ 1 milhão — o mais caro em **R$ 59.907.456** — e
+/// recusava `23/15/14`, que o motor resolve com 10.162 cartelas de 15 dezenas
+/// por **R$ 35.567**. Mais barato que 49 dos que já estavam lá. O teto não
+/// estava protegendo o bolso de ninguém: estava barrando justamente os
+/// fechamentos baratos, porque são os que precisam de muitas cartelas.
+///
+/// Então ele passa a ser o que sempre foi de fato: um **teto de peso** do
+/// catálogo e do tempo de conferência. Dezesseis mil bilhetes são cerca de 110
+/// KiB de arquivo, e a varredura exaustiva de um fechamento desses leva
+/// segundos. O bolso continua protegido pelo lugar certo — o preço aparece ao
+/// lado de cada fechamento na tela, e ver "R$ 59 milhões" ensina por que
+/// ninguém fecha com cartela de 20.
+///
+/// ## O que isso abre
+///
+/// Sete das dezoito entradas sem bilhetes têm piso abaixo deste teto, e as
+/// quatro já medidas cabem: `23/15/14` em 10.162, `23/17/15` em 10.051,
+/// `25/16/14` em 10.941 e `25/18/15` em 14.850. Cada uma que entra é um beco a
+/// menos no "montar do meu jeito" — e `25/16/14` é justamente o exemplo que a
+/// tela usa quando recusa um pedido.
 ///
 /// O teto vale para o resultado **final**, depois de o motor ter feito o que
 /// podia — vários casos nascem com dezenas de milhares e terminam com poucas
 /// centenas.
-const TETO_DE_PUBLICACAO: usize = 8_000;
+const TETO_DE_PUBLICACAO: usize = 16_000;
 
 /// Acima disto nem vale materializar a construção de Turán como partida.
 ///
@@ -190,6 +207,52 @@ struct Entrada {
     alcancado: Option<usize>,
 }
 
+/// Os pisos que a varredura exaustiva provou, e que nenhuma cota alcança.
+///
+/// Cada linha aqui é o resultado de `minimo-por-exaustao` em
+/// `crates/motor-exato/examples/`: varreu o espaço inteiro de famílias com uma
+/// cartela a menos, a menos de simetria, e não achou nenhuma que cubra. O
+/// número é, portanto, **o mínimo**, e não uma estimativa por baixo.
+///
+/// Por que isto vive numa tabela em vez de rodar junto: a varredura é barata
+/// nestes casos e cara em geral, e o gerador não pode ficar refém dela. Quem
+/// acrescentar uma linha aqui roda o exemplo e cola o resultado — e o teste
+/// abaixo cobra que nenhuma linha contradiga o que o catálogo publica.
+mod exaustao {
+    /// `(v, k, t, mínimo provado)`.
+    pub const PROVADOS: &[(usize, usize, usize, u64)] = &[
+        (21, 15, 11, 4),
+        (22, 16, 11, 4),
+        (22, 17, 12, 4),
+        (23, 16, 11, 5),
+        (23, 17, 11, 4),
+        (23, 18, 12, 4),
+        (24, 17, 11, 4),
+        (24, 18, 11, 4),
+        (24, 18, 12, 4),
+        (24, 19, 12, 4),
+        (25, 18, 11, 4),
+        (25, 19, 11, 4),
+        (25, 19, 12, 4),
+        (25, 20, 12, 4),
+        // A mais cara até agora: 1.225.584 nós em 421 s. A varredura alcança
+        // `n = 6` quando o custo por nó é baixo — aqui `a = v − k = 4`, e é ele,
+        // não o número de cartelas, que decide o tamanho de cada nó.
+        (21, 17, 13, 7),
+        (22, 18, 13, 6),
+        (23, 19, 13, 6),
+        (24, 20, 13, 6),
+        (25, 21, 13, 6),
+    ];
+
+    pub fn piso(v: usize, k: usize, t: usize) -> Option<u64> {
+        PROVADOS
+            .iter()
+            .find(|&&(pv, pk, pt, _)| (pv, pk, pt) == (v, k, t))
+            .map(|&(_, _, _, n)| n)
+    }
+}
+
 /// Resolve um caso `(v, k, t)`.
 fn resolver(
     v: usize,
@@ -197,7 +260,7 @@ fn resolver(
     t: usize,
     sementes: &BTreeMap<(usize, usize, usize), Vec<Cartela>>,
     orcamento: Duration,
-    memo: &mut HashMap<(usize, usize, usize), u64>,
+    memo: &mut turan::Memo,
 ) -> Entrada {
     let a = v - k;
     let b = v - SORTEIO;
@@ -233,6 +296,13 @@ fn resolver(
     .expect("(v, k, t) do catálogo é sempre uma configuração válida");
     let cobertura = MotorCobertura::novo(&problema).expect("C(25,15) cabe no limite de alvos");
     let LimiteInferior { valor: piso, metodo } = limite_inferior(&cobertura);
+    // A varredura exaustiva tem a última palavra. Onde ela rodou, o piso deixa
+    // de ser cota e vira fato: não existe fechamento com uma cartela a menos,
+    // varrido o espaço inteiro a menos de simetria.
+    let (piso, metodo) = match exaustao::piso(v, k, t) {
+        Some(provado) if provado > piso => (provado, "exaustão".to_string()),
+        _ => (piso, metodo.to_string()),
+    };
 
     // O bilhete precisa conter o sorteio inteiro **e** falta-lhe exatamente o
     // que falta ao sorteio: só serve o fechamento com todos os `C(v,15)`
@@ -252,7 +322,7 @@ fn resolver(
             k,
             t,
             piso,
-            metodo: metodo.to_string(),
+            metodo: metodo.clone(),
             jogos: Some(total),
             provado: total as u64 == piso,
             bilhetes,
@@ -269,7 +339,7 @@ fn resolver(
             k,
             t,
             piso,
-            metodo: metodo.to_string(),
+            metodo: metodo.clone(),
             jogos: None,
             provado: false,
             bilhetes: Vec::new(),
@@ -288,10 +358,13 @@ fn resolver(
         origem = "catálogo";
     }
 
-    // Garantia total: a construção de Turán é um fechamento completo pronto, e
-    // em `a ≤ 2` já é o valor exato.
-    if t == SORTEIO && turan::tamanho(v, a, b, memo) <= TETO_DA_CONSTRUCAO {
-        let faltas = turan::construir(&(0..v).collect::<Vec<_>>(), a, b, memo);
+    // A construção fechada, que agora vale em toda linha e não só na de `t = 15`.
+    // É um fechamento completo pronto: onde ela sai menor que o catálogo, entra
+    // no lugar dele; onde sai maior, ainda serve de partida ao motor, que é
+    // outro vale para explorar além do que já estava publicado.
+    let t_linha = t_linha.max(0) as usize;
+    if turan::tamanho(v, a, b, t_linha, memo) <= TETO_DA_CONSTRUCAO {
+        let faltas = turan::construir(&(0..v).collect::<Vec<_>>(), a, b, t_linha, memo);
         let construida: Vec<Cartela> = faltas
             .iter()
             .map(|fora| {
@@ -300,12 +373,36 @@ fn resolver(
             .collect();
         if melhor.is_empty() || construida.len() < melhor.len() {
             melhor = construida;
-            origem = if a <= 2 { "fórmula" } else { "Turán" };
+            origem = if a <= 2 { "fórmula" } else { "construção" };
         }
     }
 
+    // A busca por simetria, que este gerador nunca tinha chamado.
+    //
+    // Ela nasceu para a Lotinha e ficou lá: `gerar-catalogo` só conhecia a
+    // construção fechada. Mas `montar_com_intersecao` já aceita garantia
+    // parcial, e a peça estava pronta — faltava ligá-la. Medida em doze casos
+    // com 90 s cada, contra o catálogo publicado, ela **ganha em seis**:
+    // `22/16/14` de 932 para 748, `22/15/14` de 4.184 para 3.916, `20/16/14` de
+    // 90 para 80, `21/17/14` de 71 para 63, `22/18/14` de 61 para 55 e
+    // `20/15/13` de 42 para 40.
+    //
+    // Por que ela alcança o que a busca livre não alcança: a unidade que ela
+    // move é a **órbita**, então as `v` rotações andam juntas. A busca livre
+    // move uma cartela por vez, e um fechamento simétrico é um vale de onde só
+    // um salto coordenado de `v` cartelas sai. Não substitui a busca livre —
+    // em seis dos doze ela perde —, por isso as duas correm e vale a menor.
+    //
+    // E o que ela achar vira **partida** da busca livre, que pode quebrar a
+    // simetria e descer abaixo do ótimo cíclico.
     if !orcamento.is_zero() {
-        let achado = buscar(&problema, &melhor, orcamento);
+        if let Some(ciclica) = buscar_ciclica(v, k, t, orcamento / 3) {
+            if melhor.is_empty() || ciclica.len() < melhor.len() {
+                melhor = ciclica;
+                origem = "simetria";
+            }
+        }
+        let achado = buscar(&problema, &melhor, orcamento - orcamento / 3);
         if !achado.is_empty() && (melhor.is_empty() || achado.len() < melhor.len()) {
             melhor = achado;
             origem = "motor";
@@ -318,7 +415,7 @@ fn resolver(
             k,
             t,
             piso,
-            metodo: metodo.to_string(),
+            metodo: metodo.clone(),
             jogos: None,
             provado: false,
             bilhetes: Vec::new(),
@@ -347,13 +444,88 @@ fn resolver(
         k,
         t,
         piso,
-        metodo: metodo.to_string(),
+        metodo: metodo.clone(),
         jogos: Some(jogos),
         provado: jogos as u64 == piso,
         bilhetes: melhor,
         origem,
         alcancado: None,
     }
+}
+
+/// Procura no espaço das soluções invariantes por rotação.
+///
+/// Devolve `None` quando a instância cíclica não cabe na memória — a tabela de
+/// ligações cresce com `C(v,a)/v` vezes quantos alvos cada conjunto alcança, e
+/// nas garantias parciais de pool grande isso passa de bilhões. Dos 112 casos
+/// acima do piso, 85 cabem no teto padrão.
+///
+/// O teto é do ambiente (`CATALOGO_TETO_CICLICO`) porque ele é uma decisão de
+/// máquina, e não de matemática: quem tiver memória sobrando alcança mais casos.
+fn buscar_ciclica(v: usize, k: usize, t: usize, orcamento: Duration) -> Option<Vec<Cartela>> {
+    let (a, b) = (v - k, v - SORTEIO);
+    let t_linha = (t + v).checked_sub(k + SORTEIO)?;
+    if t_linha == 0 || t_linha > a.min(b) {
+        return None;
+    }
+    let teto: usize = std::env::var("CATALOGO_TETO_CICLICO")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(120_000_000);
+    // A tabela inteira quando ela cabe; uma amostra das órbitas candidatas
+    // quando não cabe. Os 23 piores casos do catálogo — pool de 24 e 25 com
+    // garantia parcial, folga de 5× a 6× até o piso — pediam bilhões de
+    // ligações e ficavam sem simetria nenhuma. A amostra os traz para dentro:
+    // ali uma órbita de cartelas sozinha já cobre quase 80% das órbitas de
+    // alvo, e a solução tem cinco, então escolher cinco entre oitocentas
+    // continua sendo um problema com muitas soluções.
+    let inteira = InstanciaCiclica::montar_com_intersecao(v, a, b, t_linha, teto, None);
+
+    // Duas sementes, cada uma com metade do orçamento: a busca cíclica reinicia
+    // sozinha quando estanca, e trocar de semente troca o vale inteiro.
+    //
+    // Quando a instância é **amostrada**, a semente troca mais do que o vale:
+    // troca o conjunto de candidatas, que é o que limita ali. Duas amostras
+    // diferentes são dois problemas diferentes, e cada um pode ter a solução
+    // que o outro não tem — enquanto duas trajetórias na mesma amostra dividem
+    // o mesmo teto. Por isso a amostra se remonta a cada semente, e o custo de
+    // remontar é bem gasto.
+    let mut melhor: Option<Vec<Cartela>> = None;
+    for semente in [7u64, 4243] {
+        let inst = match &inteira {
+            Some(i) => i.clone(),
+            None => match InstanciaCiclica::montar_amostrado(
+                v,
+                a,
+                b,
+                t_linha,
+                teto,
+                20260908_u64.wrapping_add(semente),
+                None,
+            ) {
+                Some(i) => i,
+                None => return melhor,
+            },
+        };
+        let mut busca = BuscaCiclica::nova(inst, 1, semente);
+        let ate = Instant::now() + orcamento / 2;
+        while Instant::now() < ate {
+            busca.avancar(50);
+        }
+        let achado = busca.melhor_solucao();
+        if achado.is_empty() {
+            continue;
+        }
+        // Cobrança independente antes de aceitar: a solução cíclica vem de outro
+        // caminho, e `cobre_tudo` é a varredura por força bruta deste arquivo.
+        if !cobre_tudo(v, t, &achado) {
+            continue;
+        }
+        if melhor.as_ref().is_none_or(|m| achado.len() < m.len()) {
+            melhor = Some(achado);
+        }
+    }
+    melhor
 }
 
 /// Põe o motor persistente para trabalhar a partir do que já houver.
@@ -690,5 +862,52 @@ mod sementes {
             }
         }
         banco
+    }
+}
+
+#[cfg(test)]
+mod testes_da_exaustao {
+    use super::exaustao;
+
+    /// Nenhum piso provado pode passar do que o catálogo publica.
+    ///
+    /// A tabela é colada à mão a partir da saída de `minimo-por-exaustao`, e um
+    /// erro de digitação ali viraria uma afirmação falsa na tela: "mínimo
+    /// provado 5" onde o catálogo entrega 4 seria dizer que o próprio
+    /// fechamento publicado é impossível. Aqui isso reprova.
+    #[test]
+    fn nenhum_piso_provado_contradiz_o_catalogo() {
+        let Ok(texto) = std::fs::read_to_string("catalogo/indice.json")
+            .or_else(|_| std::fs::read_to_string("../../catalogo/indice.json"))
+        else {
+            return; // sem catálogo à mão não há o que conferir
+        };
+        for &(v, k, t, piso) in exaustao::PROVADOS {
+            let alvo = format!("[{v},{k},{t},");
+            let Some(i) = texto.find(&alvo) else { continue };
+            let linha: Vec<u64> = texto[i + 1..]
+                .split(']')
+                .next()
+                .unwrap_or("")
+                .split(',')
+                .filter_map(|x| x.trim().parse().ok())
+                .collect();
+            // `[v, k, t, piso, jogos, …]`
+            if let Some(&jogos) = linha.get(4) {
+                assert!(
+                    piso <= jogos,
+                    "({v},{k},{t}): a exaustão diz mínimo {piso}, e o catálogo publica {jogos}"
+                );
+            }
+        }
+    }
+
+    /// A tabela não repete combinação, que seria duas verdades para o mesmo caso.
+    #[test]
+    fn a_tabela_nao_repete_combinacao() {
+        let mut vistos = std::collections::HashSet::new();
+        for &(v, k, t, _) in exaustao::PROVADOS {
+            assert!(vistos.insert((v, k, t)), "({v},{k},{t}) aparece duas vezes");
+        }
     }
 }
