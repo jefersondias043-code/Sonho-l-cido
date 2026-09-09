@@ -113,15 +113,18 @@ fn repartir(bl: &[Bloco], quantas: u32, acao: &mut impl FnMut(&[u32])) {
     passo(bl, 0, quantas, &mut atual, acao);
 }
 
-/// Quantos sorteios a família deixa descobertos.
+/// Os sorteios que a família deixa descobertos: quantos são, e quais vetores de
+/// contagem os descrevem.
 ///
-/// Um vetor de contagem `(c₀, …, c_r)` com `Σcᵢ = 15` representa
-/// `∏ C(|blocoᵢ|, cᵢ)` sorteios de verdade, e todos cruzam cada cartela na
-/// mesma quantidade. Descoberto é o vetor em que nenhuma cartela alcança `t`.
-fn descobertos(bl: &[Bloco], quantas_cartelas: usize, t: u32) -> u64 {
+/// Um vetor `(c₀, …, c_r)` com `Σcᵢ = 15` representa `∏ C(|blocoᵢ|, cᵢ)`
+/// sorteios de verdade, e todos cruzam cada cartela na mesma quantidade.
+/// Descoberto é o vetor em que nenhuma cartela alcança `t`.
+fn descobertos(bl: &[Bloco], quantas_cartelas: usize, t: u32) -> (u64, Vec<Vec<u32>>) {
     let mut total = 0u64;
+    let mut quais = Vec::new();
+    let mut cruz = vec![0u32; quantas_cartelas];
     repartir(bl, SORTEIO, &mut |c: &[u32]| {
-        let mut cruz = vec![0u32; quantas_cartelas];
+        cruz.iter_mut().for_each(|x| *x = 0);
         let mut peso = 1u64;
         for (i, b) in bl.iter().enumerate() {
             if c[i] == 0 {
@@ -136,9 +139,21 @@ fn descobertos(bl: &[Bloco], quantas_cartelas: usize, t: u32) -> u64 {
         }
         if !cruz.iter().any(|&x| x >= t) {
             total += peso;
+            quais.push(c.to_vec());
         }
     });
-    total
+    (total, quais)
+}
+
+/// Uma cartela da classe `c` pode atender algum sorteio da classe `u`?
+///
+/// Dentro de um bloco, cartela e sorteio se cruzam em no máximo o menor dos
+/// dois — e o estabilizador da família permite alinhá-los justamente assim, sem
+/// mexer no que já foi escolhido. Então o melhor cruzamento possível é
+/// `Σ min(uᵢ, cᵢ)`, e se ele não alcança `t`, nenhuma cartela daquela classe
+/// serve para aquele alvo.
+fn alcanca(c: &[u32], u: &[u32], t: u32) -> bool {
+    c.iter().zip(u).map(|(&a, &b)| a.min(b)).sum::<u32>() >= t
 }
 
 /// Quantos sorteios uma cartela sozinha atende — o teto de uma cartela, para a
@@ -175,7 +190,7 @@ impl Varredura {
             return Desfecho::Excedido;
         }
         let bl = blocos(familia, self.v);
-        let falta = descobertos(&bl, familia.len(), self.t);
+        let (falta, alvos) = descobertos(&bl, familia.len(), self.t);
         if falta == 0 {
             return Desfecho::Achou(familia.clone());
         }
@@ -189,8 +204,37 @@ impl Varredura {
             return Desfecho::NaoExiste;
         }
 
+        // Todas as classes de cartela que a estrutura de blocos permite.
+        let mut classes: Vec<Vec<u32>> = Vec::new();
+        repartir(&bl, self.k, &mut |c: &[u32]| classes.push(c.to_vec()));
+
+        // **Ramificar pelo alvo mais apertado.** Todo fechamento precisa atender
+        // todo sorteio; então escolhe-se o sorteio descoberto com menos classes
+        // capazes de atendê-lo e ramifica-se só sobre elas. Continua completo —
+        // alguma das cartelas que faltam tem de atender aquele sorteio, e a
+        // ordem entre as que faltam é livre —, e o fator de ramificação cai para
+        // o menor disponível em vez de ser sempre o total de classes.
+        let mut melhor: Option<Vec<usize>> = None;
+        for u in &alvos {
+            let servem: Vec<usize> = classes
+                .iter()
+                .enumerate()
+                .filter(|(_, c)| alcanca(c, u, self.t))
+                .map(|(i, _)| i)
+                .collect();
+            // Sorteio descoberto que nenhuma classe atende: o ramo é morto.
+            if servem.is_empty() {
+                return Desfecho::NaoExiste;
+            }
+            if melhor.as_ref().is_none_or(|m| servem.len() < m.len()) {
+                melhor = Some(servem);
+            }
+        }
+        let servem = melhor.unwrap_or_else(|| (0..classes.len()).collect());
+
         let mut proximas: Vec<u32> = Vec::new();
-        repartir(&bl, self.k, &mut |c: &[u32]| {
+        for &i in &servem {
+            let c = &classes[i];
             let mut m = 0u32;
             for (i, b) in bl.iter().enumerate() {
                 for &d in b.dezenas.iter().take(c[i] as usize) {
@@ -198,7 +242,7 @@ impl Varredura {
                 }
             }
             proximas.push(m);
-        });
+        }
         let mut excedeu = false;
         for m in proximas {
             if familia.contains(&m) {

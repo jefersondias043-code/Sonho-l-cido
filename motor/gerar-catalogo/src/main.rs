@@ -457,14 +457,35 @@ fn buscar_ciclica(v: usize, k: usize, t: usize, orcamento: Duration) -> Option<V
     // ali uma órbita de cartelas sozinha já cobre quase 80% das órbitas de
     // alvo, e a solução tem cinco, então escolher cinco entre oitocentas
     // continua sendo um problema com muitas soluções.
-    let inst = InstanciaCiclica::montar_com_intersecao(v, a, b, t_linha, teto, None)
-        .or_else(|| InstanciaCiclica::montar_amostrado(v, a, b, t_linha, teto, 20260908, None))?;
+    let inteira = InstanciaCiclica::montar_com_intersecao(v, a, b, t_linha, teto, None);
 
     // Duas sementes, cada uma com metade do orçamento: a busca cíclica reinicia
     // sozinha quando estanca, e trocar de semente troca o vale inteiro.
+    //
+    // Quando a instância é **amostrada**, a semente troca mais do que o vale:
+    // troca o conjunto de candidatas, que é o que limita ali. Duas amostras
+    // diferentes são dois problemas diferentes, e cada um pode ter a solução
+    // que o outro não tem — enquanto duas trajetórias na mesma amostra dividem
+    // o mesmo teto. Por isso a amostra se remonta a cada semente, e o custo de
+    // remontar é bem gasto.
     let mut melhor: Option<Vec<Cartela>> = None;
     for semente in [7u64, 4243] {
-        let mut busca = BuscaCiclica::nova(inst.clone(), 1, semente);
+        let inst = match &inteira {
+            Some(i) => i.clone(),
+            None => match InstanciaCiclica::montar_amostrado(
+                v,
+                a,
+                b,
+                t_linha,
+                teto,
+                20260908_u64.wrapping_add(semente),
+                None,
+            ) {
+                Some(i) => i,
+                None => return melhor,
+            },
+        };
+        let mut busca = BuscaCiclica::nova(inst, 1, semente);
         let ate = Instant::now() + orcamento / 2;
         while Instant::now() < ate {
             busca.avancar(50);
