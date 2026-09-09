@@ -64,26 +64,40 @@ const GARANTIA_MIN: usize = 11;
 
 /// Acima disto o fechamento não vai para o catálogo.
 ///
-/// Nasceu como fronteira econômica — oito mil cartelas de 15 dezenas custam
-/// mais de vinte mil reais, e o catálogo existe para responder "como gasto
-/// melhor este dinheiro", não para arquivar curiosidades. Acima do teto a
-/// entrada guarda só o piso provado, e o aplicativo diz que ali não há
-/// fechamento catalogado.
+/// ## O que ele guarda, dito com honestidade
 ///
-/// **Mas ele conta cartelas, e não dinheiro, e por isso não é a fronteira que
-/// o parágrafo acima descreve.** Oito mil cartelas de 15 dezenas são
-/// R$ 28.000; oito mil de 17 são R$ 3,8 milhões; oito mil de 20 são
-/// R$ 434 milhões. Medido no catálogo publicado, vinte fechamentos passam de
-/// R$ 1 milhão e o mais caro custa R$ 59.907.456,00 — todos abaixo do teto.
-/// Fica assim de propósito: o modo manual mostra o preço junto, e ver "R$ 59
-/// milhões" ensina por que ninguém fecha com cartela de 20. Trocar o teto por
-/// um em reais é decisão de produto, não conserto; o que não pode é o
-/// comentário dizer o que a constante não faz.
+/// Ele nasceu como fronteira econômica — "oito mil cartelas de 15 dezenas
+/// custam mais de vinte mil reais, e o catálogo existe para responder como
+/// gasto melhor este dinheiro". Mas ele **conta cartelas, e não dinheiro**, e o
+/// comentário anterior admitia isso sem tirar a consequência: oito mil cartelas
+/// de 15 são R$ 28.000; oito mil de 20 são R$ 434 milhões.
+///
+/// A consequência, medida: com o teto em 8.000, o catálogo publicava dezoito
+/// fechamentos acima de R$ 1 milhão — o mais caro em **R$ 59.907.456** — e
+/// recusava `23/15/14`, que o motor resolve com 10.162 cartelas de 15 dezenas
+/// por **R$ 35.567**. Mais barato que 49 dos que já estavam lá. O teto não
+/// estava protegendo o bolso de ninguém: estava barrando justamente os
+/// fechamentos baratos, porque são os que precisam de muitas cartelas.
+///
+/// Então ele passa a ser o que sempre foi de fato: um **teto de peso** do
+/// catálogo e do tempo de conferência. Dezesseis mil bilhetes são cerca de 110
+/// KiB de arquivo, e a varredura exaustiva de um fechamento desses leva
+/// segundos. O bolso continua protegido pelo lugar certo — o preço aparece ao
+/// lado de cada fechamento na tela, e ver "R$ 59 milhões" ensina por que
+/// ninguém fecha com cartela de 20.
+///
+/// ## O que isso abre
+///
+/// Sete das dezoito entradas sem bilhetes têm piso abaixo deste teto, e as
+/// quatro já medidas cabem: `23/15/14` em 10.162, `23/17/15` em 10.051,
+/// `25/16/14` em 10.941 e `25/18/15` em 14.850. Cada uma que entra é um beco a
+/// menos no "montar do meu jeito" — e `25/16/14` é justamente o exemplo que a
+/// tela usa quando recusa um pedido.
 ///
 /// O teto vale para o resultado **final**, depois de o motor ter feito o que
 /// podia — vários casos nascem com dezenas de milhares e terminam com poucas
 /// centenas.
-const TETO_DE_PUBLICACAO: usize = 8_000;
+const TETO_DE_PUBLICACAO: usize = 16_000;
 
 /// Acima disto nem vale materializar a construção de Turán como partida.
 ///
