@@ -193,6 +193,44 @@ struct Entrada {
     alcancado: Option<usize>,
 }
 
+/// Os pisos que a varredura exaustiva provou, e que nenhuma cota alcança.
+///
+/// Cada linha aqui é o resultado de `minimo-por-exaustao` em
+/// `crates/motor-exato/examples/`: varreu o espaço inteiro de famílias com uma
+/// cartela a menos, a menos de simetria, e não achou nenhuma que cubra. O
+/// número é, portanto, **o mínimo**, e não uma estimativa por baixo.
+///
+/// Por que isto vive numa tabela em vez de rodar junto: a varredura é barata
+/// nestes casos e cara em geral, e o gerador não pode ficar refém dela. Quem
+/// acrescentar uma linha aqui roda o exemplo e cola o resultado — e o teste
+/// abaixo cobra que nenhuma linha contradiga o que o catálogo publica.
+mod exaustao {
+    /// `(v, k, t, mínimo provado)`.
+    pub const PROVADOS: &[(usize, usize, usize, u64)] = &[
+        (21, 15, 11, 4),
+        (22, 16, 11, 4),
+        (22, 17, 12, 4),
+        (23, 16, 11, 5),
+        (23, 17, 11, 4),
+        (23, 18, 12, 4),
+        (24, 17, 11, 4),
+        (24, 18, 11, 4),
+        (24, 18, 12, 4),
+        (24, 19, 12, 4),
+        (25, 18, 11, 4),
+        (25, 19, 11, 4),
+        (25, 19, 12, 4),
+        (25, 20, 12, 4),
+    ];
+
+    pub fn piso(v: usize, k: usize, t: usize) -> Option<u64> {
+        PROVADOS
+            .iter()
+            .find(|&&(pv, pk, pt, _)| (pv, pk, pt) == (v, k, t))
+            .map(|&(_, _, _, n)| n)
+    }
+}
+
 /// Resolve um caso `(v, k, t)`.
 fn resolver(
     v: usize,
@@ -236,6 +274,13 @@ fn resolver(
     .expect("(v, k, t) do catálogo é sempre uma configuração válida");
     let cobertura = MotorCobertura::novo(&problema).expect("C(25,15) cabe no limite de alvos");
     let LimiteInferior { valor: piso, metodo } = limite_inferior(&cobertura);
+    // A varredura exaustiva tem a última palavra. Onde ela rodou, o piso deixa
+    // de ser cota e vira fato: não existe fechamento com uma cartela a menos,
+    // varrido o espaço inteiro a menos de simetria.
+    let (piso, metodo) = match exaustao::piso(v, k, t) {
+        Some(provado) if provado > piso => (provado, "exaustão".to_string()),
+        _ => (piso, metodo.to_string()),
+    };
 
     // O bilhete precisa conter o sorteio inteiro **e** falta-lhe exatamente o
     // que falta ao sorteio: só serve o fechamento com todos os `C(v,15)`
@@ -255,7 +300,7 @@ fn resolver(
             k,
             t,
             piso,
-            metodo: metodo.to_string(),
+            metodo: metodo.clone(),
             jogos: Some(total),
             provado: total as u64 == piso,
             bilhetes,
@@ -272,7 +317,7 @@ fn resolver(
             k,
             t,
             piso,
-            metodo: metodo.to_string(),
+            metodo: metodo.clone(),
             jogos: None,
             provado: false,
             bilhetes: Vec::new(),
@@ -348,7 +393,7 @@ fn resolver(
             k,
             t,
             piso,
-            metodo: metodo.to_string(),
+            metodo: metodo.clone(),
             jogos: None,
             provado: false,
             bilhetes: Vec::new(),
@@ -377,7 +422,7 @@ fn resolver(
         k,
         t,
         piso,
-        metodo: metodo.to_string(),
+        metodo: metodo.clone(),
         jogos: Some(jogos),
         provado: jogos as u64 == piso,
         bilhetes: melhor,
@@ -774,5 +819,52 @@ mod sementes {
             }
         }
         banco
+    }
+}
+
+#[cfg(test)]
+mod testes_da_exaustao {
+    use super::exaustao;
+
+    /// Nenhum piso provado pode passar do que o catálogo publica.
+    ///
+    /// A tabela é colada à mão a partir da saída de `minimo-por-exaustao`, e um
+    /// erro de digitação ali viraria uma afirmação falsa na tela: "mínimo
+    /// provado 5" onde o catálogo entrega 4 seria dizer que o próprio
+    /// fechamento publicado é impossível. Aqui isso reprova.
+    #[test]
+    fn nenhum_piso_provado_contradiz_o_catalogo() {
+        let Ok(texto) = std::fs::read_to_string("catalogo/indice.json")
+            .or_else(|_| std::fs::read_to_string("../../catalogo/indice.json"))
+        else {
+            return; // sem catálogo à mão não há o que conferir
+        };
+        for &(v, k, t, piso) in exaustao::PROVADOS {
+            let alvo = format!("[{v},{k},{t},");
+            let Some(i) = texto.find(&alvo) else { continue };
+            let linha: Vec<u64> = texto[i + 1..]
+                .split(']')
+                .next()
+                .unwrap_or("")
+                .split(',')
+                .filter_map(|x| x.trim().parse().ok())
+                .collect();
+            // `[v, k, t, piso, jogos, …]`
+            if let Some(&jogos) = linha.get(4) {
+                assert!(
+                    piso <= jogos,
+                    "({v},{k},{t}): a exaustão diz mínimo {piso}, e o catálogo publica {jogos}"
+                );
+            }
+        }
+    }
+
+    /// A tabela não repete combinação, que seria duas verdades para o mesmo caso.
+    #[test]
+    fn a_tabela_nao_repete_combinacao() {
+        let mut vistos = std::collections::HashSet::new();
+        for &(v, k, t, _) in exaustao::PROVADOS {
+            assert!(vistos.insert((v, k, t)), "({v},{k},{t}) aparece duas vezes");
+        }
     }
 }
