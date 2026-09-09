@@ -221,6 +221,10 @@ mod exaustao {
         (25, 19, 11, 4),
         (25, 19, 12, 4),
         (25, 20, 12, 4),
+        // A mais cara até agora: 1.225.584 nós em 421 s. A varredura alcança
+        // `n = 6` quando o custo por nó é baixo — aqui `a = v − k = 4`, e é ele,
+        // não o número de cartelas, que decide o tamanho de cada nó.
+        (21, 17, 13, 7),
     ];
 
     pub fn piso(v: usize, k: usize, t: usize) -> Option<u64> {
