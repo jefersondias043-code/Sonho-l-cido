@@ -1,0 +1,309 @@
+/* Tokens. Dois temas, um conjunto de nomes, agrupados aos pares: cor e fundo
+   de um selo são uma decisão só, e separá-los em duas linhas convida a
+   mexer numa e esquecer a outra. */
+:root {
+  --fundo: #f6f7fb; --papel: #ffffff;
+  --tinta: #14181f; --tinta-fraca: #4b5563; --linha: #d7dbe4;
+  --realce: #1d4ed8; --realce-tinta: #ffffff;
+  --provado: #0f6b3f; --provado-fundo: #d8f2e3;
+  --conhecido: #7a4a06; --conhecido-fundo: #fdeccd;
+  --aviso: #8a1c1c; --raio: 14px; --coluna: 34rem; color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --fundo: #0b1020; --papel: #151b2c;
+    --tinta: #eef1f7; --tinta-fraca: #a7b0c0; --linha: #2b3550;
+    --realce: #7aa2ff; --realce-tinta: #0b1020;
+    --provado: #7ff0b8; --provado-fundo: #10361f;
+    --conhecido: #ffd28a; --conhecido-fundo: #3a2a08;
+    --aviso: #ff9a9a;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0; background: var(--fundo); color: var(--tinta);
+  font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) 3rem env(safe-area-inset-left);
+}
+
+main { max-width: var(--coluna); margin: 0 auto; padding: 1rem; }
+
+h1 {
+  font-size: 1rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--tinta-fraca); margin: 0.5rem 0 0.25rem;
+}
+
+.oque-e { font-size: 0.95rem; color: var(--tinta); margin: 0 0 1rem; }
+
+/* Os títulos das tabelas de preço. São `h2` porque o único título acima deles
+   é o `h1` do aplicativo, e pular de 1 para 3 quebra a navegação por título de
+   quem usa leitor de tela — o desenho é o mesmo, o nível é que estava errado. */
+.precos h2 { font-size: 0.85rem; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.06em; color: var(--tinta-fraca); margin: 0 0 0.5rem; }
+
+label { display: block; font-size: 0.95rem; color: var(--tinta-fraca); margin-bottom: 0.35rem; }
+
+.cartao {
+  background: var(--papel); border: 1px solid var(--linha);
+  border-radius: var(--raio); padding: 1rem; margin-bottom: 1rem;
+}
+
+/* ── dinheiro ── */
+#valor {
+  width: 100%; font-size: 2.4rem; font-weight: 700; font-variant-numeric: tabular-nums;
+  border: 0; border-bottom: 2px solid var(--linha); background: transparent;
+  color: var(--tinta); padding: 0.2rem 0;
+}
+
+#regua { width: 100%; margin: 1rem 0 0.5rem; height: 44px; accent-color: var(--realce); }
+
+.degrau { margin: 0; font-size: 0.95rem; color: var(--tinta-fraca); min-height: 1.5em; }
+
+/* ── grade das dezenas: o elemento mais tocado do aplicativo ── */
+.grade { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0.5rem; }
+
+.grade button {
+  /* `padding` e `min-width` zerados de propósito: o botão genérico tem 1rem de
+     folga lateral, e numa grade de cinco colunas a 320 px isso empurra a linha
+     para fora da tela. */
+  min-height: 52px; padding: 0; min-width: 0; font-size: 1.1rem;
+  border: 1px solid var(--linha); border-radius: 10px; font-variant-numeric: tabular-nums;
+  background: var(--papel); color: var(--tinta); cursor: pointer;
+}
+
+.grade button[aria-pressed="true"] {
+  background: var(--realce); color: var(--realce-tinta);
+  border-color: var(--realce); font-weight: 700;
+}
+
+.linha { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin-top: 0.75rem; }
+
+.contagem { color: var(--tinta-fraca); font-size: 0.9rem; }
+
+button {
+  min-height: 44px; padding: 0 1rem; border-radius: 10px; font: inherit; font-weight: 600;
+  border: 1px solid var(--realce); background: var(--realce); color: var(--realce-tinta);
+  cursor: pointer;
+}
+
+button.discreto { background: transparent; color: var(--realce); }
+
+:focus-visible { outline: 3px solid var(--realce); outline-offset: 2px; }
+
+/* ── a resposta: o maior elemento da tela ── */
+.resposta { text-align: center; padding: 1.5rem 1rem; }
+
+.numero {
+  font-size: clamp(5rem, 30vw, 8rem); line-height: 0.9; font-weight: 800;
+  margin: 0; font-variant-numeric: tabular-nums;
+}
+
+.unidade { margin: 0.25rem 0 0.75rem; font-size: 1.25rem; font-weight: 600; }
+.detalhe { margin: 0 0 0.75rem; font-size: 1.05rem; color: var(--tinta-fraca); }
+.selos { margin: 0 0 1rem; }
+.selo { display: inline-block; padding: 0.25rem 0.7rem; border-radius: 999px; font-weight: 700; font-size: 0.85rem; }
+
+.selo.provado { background: var(--provado-fundo); color: var(--provado); }
+.selo.conhecido { background: var(--conhecido-fundo); color: var(--conhecido); }
+.piso { display: block; margin-top: 0.4rem; font-size: 0.85rem; color: var(--tinta-fraca); }
+
+.frase { margin: 0 auto; max-width: 30rem; text-align: left; }
+.ressalva, .ajuda { font-size: 0.88rem; color: var(--tinta-fraca); text-align: left; }
+.aviso { color: var(--aviso); font-size: 1.1rem; }
+
+/* ── bilhetes ── */
+.bilhetes { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.4rem; grid-template-columns: 1fr; }
+
+.bilhetes li {
+  background: var(--papel); border: 1px solid var(--linha); border-radius: 10px;
+  padding: 0.5rem; display: flex; flex-wrap: wrap; gap: 0.25rem; font-variant-numeric: tabular-nums;
+}
+
+.bilhetes span {
+  min-width: 2ch; text-align: center; font-size: 0.95rem;
+  padding: 0.1rem 0.25rem; border-radius: 5px; background: var(--fundo);
+}
+
+/* ── seções abaixo da dobra ── */
+hr { border: 0; border-top: 1px solid var(--linha); margin: 2rem 0 1rem; }
+
+details {
+  background: var(--papel); border: 1px solid var(--linha);
+  border-radius: var(--raio); margin-bottom: 0.6rem; padding: 0 1rem;
+}
+
+summary { cursor: pointer; padding: 0.9rem 0; font-weight: 600; min-height: 44px; }
+details > div { padding-bottom: 1rem; }
+details select, details input[type="text"], details input[type="number"] {
+  width: 100%; min-height: 44px; padding: 0 0.6rem; border-radius: 10px; font: inherit;
+  border: 1px solid var(--linha); background: var(--fundo); color: var(--tinta);
+}
+
+.precos { margin-bottom: 1rem; }
+/* 10,5rem, e não 8: o prêmio de 15 acertos é "R$ 1.700.000,00" e não cabia em
+   8rem — aparecia como "R$ 1.700.000," em qualquer largura de tela, com os
+   centavos cortados fora. Um valor de dinheiro cortado é um valor errado. */
+.precos label { display: grid; grid-template-columns: minmax(0, 1fr) 10.5rem;
+  align-items: center; gap: 0.5rem; margin-bottom: 0.4rem; }
+.precos input { text-align: right; }
+.partes, .registros { padding-left: 1.2rem; }
+.partes li, .registros li { margin-bottom: 0.5rem; }
+
+footer {
+  max-width: var(--coluna); margin: 2rem auto 0; padding: 0 1rem;
+  display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--tinta-fraca);
+}
+
+/* ── painel deslizante ── */
+/* Acima da área de análise, e não atrás dela. É de lá que se pede para
+   imprimir, e a área é uma camada opaca de tela cheia: sem esta linha o painel
+   de volantes abria escondido atrás dela — com o ✕ dele junto —, e quem
+   fechasse a caixa de impressão do sistema ficava com um painel aberto que não
+   dava para ver nem fechar. */
+.painel {
+  position: fixed; inset: auto 0 0 0; max-height: 85vh; overflow: auto; z-index: 30;
+  background: var(--papel); border-top: 1px solid var(--linha);
+  border-radius: var(--raio) var(--raio) 0 0; animation: subir 0.25s ease-out;
+  box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.25);
+}
+
+@keyframes subir { from { transform: translateY(100%); } to { transform: none; } }
+
+.painel-topo {
+  display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0;
+  padding: 0.75rem 1rem; border-bottom: 1px solid var(--linha); background: var(--papel);
+}
+
+.painel-topo button { background: transparent; color: var(--tinta); border: 0; }
+.painel-corpo { padding: 1rem; }
+
+/* ── volante para imprimir ── */
+.volante {
+  display: grid; grid-template-columns: repeat(5, 2.2rem); gap: 2px; margin: 0 0 1rem;
+  page-break-inside: avoid;
+}
+
+.volante i {
+  font-style: normal; font-size: 0.8rem; text-align: center; padding: 0.3rem 0;
+  border: 1px solid var(--linha); border-radius: 4px; font-variant-numeric: tabular-nums; }
+
+.volante i.marcada { background: var(--tinta); color: var(--papel); font-weight: 700; }
+
+/* ── a área de análise ────────────────────────────────────────────────────
+   Ocupa a tela inteira: gerar e analisar são dois assuntos, e o segundo tem
+   ferramentas demais para caber embaixo do primeiro. A barra de abas é a
+   navegação — uma coisa de cada vez, e todas a um toque. */
+.analise {
+  position: fixed; inset: 0; z-index: 20; overflow-y: auto; overscroll-behavior: contain;
+  background: var(--fundo); padding: 0 1rem env(safe-area-inset-bottom, 1rem);
+}
+
+/* O cabeçalho inteiro — título e abas — gruda no topo como uma peça só.
+   Grudavam separados, e o de baixo carregava a altura do de cima como número
+   escrito à mão: `top: 3rem` contra os 63 px que o título mede. A diferença de
+   15 px era o quanto as abas cobriam do botão "Voltar" assim que a página
+   rolava. Num bloco só não há número a acertar: a conta é a do navegador. */
+.analise-cabeca {
+  position: sticky; top: 0; z-index: 2; background: var(--fundo);
+  /* Na mesma coluna do conteúdo. As abas repartem entre si a largura da linha,
+     e sem este limite elas repartiam a **janela**: numa tela de 1.200 px o
+     conteúdo fica numa coluna de 704 px, centrada, e a barra de navegação dele
+     ficava com 1.168 — cinco pílulas de 230 px cada, alinhadas com nada. */
+  max-width: var(--coluna); margin: 0 auto;
+}
+
+.analise-topo {
+  display: flex; align-items: center; gap: 0.6rem;
+  padding: 0.7rem 0 0.5rem; background: var(--fundo);
+}
+
+.analise-topo strong { font-size: 0.95rem; font-weight: 600; }
+
+/* Quebra em duas linhas quando não couber, e nunca rola na horizontal.
+   Rolava, e as cinco abas somam 455 px: em telefone nenhum — 320, 360, 390 ou
+   414 de largura — a última cabia. Ficava fora da tela, sem barra de rolagem
+   (escondida logo abaixo) e sem sombra na borda: nada dizia que havia mais.
+   A aba escondida era a do **resumo**, que é onde mora a varredura exaustiva —
+   a prova da promessa que o aplicativo faz na primeira tela. Quebrando, as
+   cinco aparecem de uma vez, que é o que "todas a um toque" queria dizer. */
+.abas {
+  display: flex; flex-wrap: wrap; gap: 0.3rem;
+  padding: 0.2rem 0 0.6rem; background: var(--fundo);
+  border-bottom: 1px solid var(--linha); margin-bottom: 0.9rem;
+}
+
+/* 44px, e não 40: é o alvo de toque mínimo, e a barra de abas é a navegação
+   inteira desta área — errar o alvo aqui troca de assunto.
+   `flex: 1 1 auto` reparte a sobra da linha entre as abas que couberam, para
+   que a quebra não deixe um buraco à direita da primeira. */
+.abas button {
+  flex: 1 1 auto; min-height: 44px; padding: 0 0.85rem; border-radius: 999px; font: inherit;
+  font-size: 0.9rem; border: 1px solid var(--linha); background: var(--papel);
+  color: var(--tinta-fraca); cursor: pointer;
+}
+
+.abas button[aria-selected="true"] {
+  background: var(--realce); border-color: var(--realce); color: var(--realce-tinta);
+  font-weight: 600;
+}
+
+.aba { padding-bottom: 2rem; max-width: var(--coluna); margin: 0 auto; }
+
+/* O resumo que substituiu o despejo de cartelas: o que foi gerado, em número
+   grande, e o caminho para o resto. */
+.gerado { text-align: center; padding: 0.4rem 0 0.2rem; }
+.gerado .quantas { font-size: 2.4rem; font-weight: 800; line-height: 1.1; letter-spacing: -0.02em; }
+.gerado .oque { color: var(--tinta-fraca); }
+.gerado .abrir { margin-top: 0.8rem; }
+
+/* Tabelas de números: faixas, distribuição, dinheiro. */
+.quadro { width: 100%; border-collapse: collapse; margin: 0.6rem 0; font-variant-numeric: tabular-nums; }
+.quadro th, .quadro td { padding: 0.45rem 0.3rem; border-bottom: 1px solid var(--linha); text-align: right; }
+.quadro th:first-child, .quadro td:first-child { text-align: left; font-weight: 400; }
+.quadro th { font-size: 0.8rem; color: var(--tinta-fraca); font-weight: 600; }
+.quadro tr:last-child td { border-bottom: 0; }
+.quadro .destaque td { font-weight: 700; }
+
+/* A barra de proporção da distribuição: a leitura de relance, antes do número.
+   O trilho não é enfeite — é o que dá largura definida a quem a barra mede.
+   Sem ele a barra pedia `width` em porcentagem dentro de uma célula de tabela
+   sem largura própria, a porcentagem resolvia contra quase nada, e **toda**
+   barra saía nos 2 px do `min-width`: 2%, 24%, 95% e 100% desenhavam o mesmo
+   traço. A coluna existia e não dizia nada. */
+.barra-trilho {
+  display: block; width: 3rem; height: 6px; border-radius: 3px;
+  background: var(--linha); overflow: hidden;
+}
+.barra { display: block; height: 100%; border-radius: 3px; background: var(--realce); min-width: 2px; }
+
+.aba label { display: block; margin-top: 0.7rem; font-size: 0.9rem; color: var(--tinta-fraca); }
+.aba select, .aba input[type="text"], .aba input[type="number"] {
+  width: 100%; min-height: 44px; padding: 0 0.6rem; border-radius: 10px; font: inherit;
+  border: 1px solid var(--linha); background: var(--papel); color: var(--tinta);
+}
+
+@media print {
+  body { background: #fff; color: #000; }
+  main, footer, .painel-topo, .analise { display: none; }
+  .painel { position: static; max-height: none; box-shadow: none; border: 0; }
+  .painel-corpo { display: flex; flex-wrap: wrap; gap: 0.8rem; padding: 0; }
+  /* A conta de folhas e o botão de imprimir são da tela, e gastariam a
+     primeira folha para dizer quantas folhas seriam. */
+  .so-na-tela { display: none; }
+  .volante i { border-color: #999; }
+  .volante i.marcada { background: #000; color: #fff; }
+}
+
+/* Telas largas: a coluna cresce até um limite legível e os bilhetes se
+   distribuem — nunca aparece uma segunda coluna de navegação. */
+@media (min-width: 46rem) {
+  :root { --coluna: 44rem; }
+  .bilhetes { grid-template-columns: 1fr 1fr; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.001ms !important; transition: none !important; }
+}

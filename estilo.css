@@ -1,0 +1,1839 @@
+/*
+ * Interface do Sonho Lúcido.
+ *
+ * Pensada primeiro para o iPhone. Três coisas guiaram as decisões:
+ *
+ * 1. Áreas de toque nunca abaixo de 44px, que é o mínimo confortável.
+ * 2. Campos de entrada com 16px ou mais, porque abaixo disso o Safari do iOS
+ *    dá zoom sozinho ao focar e desalinha a tela toda.
+ * 3. `safe-area-inset` em cima e embaixo, para o conteúdo não ficar sob a ilha
+ *    dinâmica nem sob o indicador de início.
+ *
+ * O tema é escuro por escolha: a busca fica minutos na tela, e em telas OLED
+ * isso gasta bem menos bateria.
+ */
+
+:root {
+  --fundo: #0b1020;
+  --fundo-cartao: #151b31;
+  --fundo-campo: #1e2540;
+  --borda: #2a3352;
+  --texto: #e8ecf8;
+  --texto-fraco: #93a0c4;
+  --acento: #7aa2ff;
+  --ouro: #ffc75a;
+  --verde: #4ade80;
+  --vermelho: #ff8a8a;
+  --raio: 14px;
+}
+
+* { box-sizing: border-box; }
+
+/*
+ * `hidden` precisa ganhar de qualquer `display` daqui.
+ *
+ * O navegador esconde `[hidden]` por uma regra da folha de estilo dele, e
+ * **qualquer** regra deste arquivo vence essa — inclusive
+ * `.selo { display: inline-block }`. O efeito medido: o selo "★ ótimo provado"
+ * ficava visível em toda busca, o tempo inteiro, porque `elemento.hidden =
+ * true` ajustava o atributo e o `display` continuava valendo.
+ *
+ * Isso não era um defeito de aparência. O código da tela toma um cuidado
+ * enorme para nunca afirmar optimalidade nem recorde mundial sem que sejam
+ * verdade — e o CSS desfazia esse cuidado, exibindo as duas afirmações sempre,
+ * inclusive num fechamento a 240 jogos cujo piso conhecido é 114.
+ */
+[hidden] { display: none !important; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--fundo);
+  color: var(--texto);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 17px;
+  line-height: 1.45;
+  -webkit-text-size-adjust: 100%;
+  overscroll-behavior-y: contain;
+}
+
+body {
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: calc(env(safe-area-inset-bottom) + 24px);
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+/* ─────────── topo e abas ─────────── */
+
+.topo {
+  padding: 20px 20px 8px;
+}
+
+.topo h1 {
+  margin: 0;
+  font-size: 26px;
+  letter-spacing: -0.4px;
+  background: linear-gradient(100deg, var(--acento), var(--ouro));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.subtitulo {
+  margin: 2px 0 0;
+  color: var(--texto-fraco);
+  font-size: 13px;
+}
+
+/*
+ * As abas rolam em vez de se espremer.
+ *
+ * Com `flex: 1` cada aba nova encolhia todas as outras, e a partir da sexta o
+ * conjunto estourava a tela de 320px — a última ficava cortada pela borda, sem
+ * jeito de alcançá-la. Rolando, cabem quantas forem, e cada uma mantém a
+ * largura do seu rótulo.
+ */
+.abas {
+  display: flex;
+  gap: 5px;
+  padding: 12px 12px 4px;
+  position: sticky;
+  top: env(safe-area-inset-top);
+  background: var(--fundo);
+  z-index: 10;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.abas::-webkit-scrollbar { display: none; }
+
+.aba {
+  flex: 0 0 auto;
+  min-height: 44px;
+  padding: 0 4px;
+  border: 1px solid var(--borda);
+  background: transparent;
+  color: var(--texto-fraco);
+  border-radius: 999px;
+  /* Quatro abas precisam caber lado a lado num iPhone estreito sem quebrar a
+     palavra nem encolher a área de toque abaixo dos 44px confortáveis. */
+  font-size: 13.5px;
+  font-family: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+@media (min-width: 400px) {
+  .aba { font-size: 15px; }
+}
+
+.aba.ativa {
+  background: var(--acento);
+  border-color: var(--acento);
+  color: #0b1020;
+  font-weight: 600;
+}
+
+main { padding: 8px 16px 0; }
+
+.painel { display: none; }
+.painel.ativo { display: block; animation: entrar 0.18s ease-out; }
+
+@keyframes entrar {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* ─────────── cartões ─────────── */
+
+.cartao {
+  background: var(--fundo-cartao);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  padding: 16px;
+  margin-bottom: 14px;
+}
+
+.cartao h2 {
+  margin: 0 0 4px;
+  font-size: 15px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--texto-fraco);
+  font-weight: 600;
+}
+
+.cartao.destaque {
+  background: linear-gradient(155deg, #1d2745 0%, #151b31 100%);
+  border-color: #33406b;
+}
+
+.rotulo {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--texto-fraco);
+  margin-bottom: 6px;
+}
+
+.ajuda {
+  color: var(--texto-fraco);
+  font-size: 13.5px;
+  margin: 6px 0 0;
+}
+
+/* ─────────── campos ─────────── */
+
+.campo {
+  display: block;
+  margin-top: 14px;
+}
+
+.campo > span {
+  display: block;
+  font-size: 14px;
+  margin-bottom: 6px;
+}
+
+.campo em {
+  color: var(--texto-fraco);
+  font-style: normal;
+  font-size: 13px;
+}
+
+.campo input {
+  width: 100%;
+  min-height: 48px;
+  padding: 10px 14px;
+  /* 17px evita o zoom automático do Safari no iOS ao focar o campo. */
+  font-size: 17px;
+  font-family: inherit;
+  color: var(--texto);
+  background: var(--fundo-campo);
+  border: 1px solid var(--borda);
+  border-radius: 10px;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.campo input:focus,
+.campo select:focus {
+  outline: none;
+  border-color: var(--acento);
+}
+
+/* O seletor dentro de um campo se veste como o campo: mesma altura de toque,
+   mesma borda. Sem isto ele aparece com a aparência do sistema, que muda de
+   aparelho para aparelho e destoa da tela inteira. */
+.campo select {
+  width: 100%;
+  min-height: 48px;
+  padding: 10px 14px;
+  font-size: 17px;
+  font-family: inherit;
+  color: var(--texto);
+  background: var(--fundo-campo);
+  border: 1px solid var(--borda);
+  border-radius: 10px;
+}
+
+/* A frase do veredito. É a única linha da tela que pode dizer "mínimo", e por
+   isso ela é a maior: quem só olhar uma coisa vai olhar esta. */
+.referencia.veredito {
+  font-size: 16px;
+  line-height: 1.45;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--fundo-campo);
+  border: 1px solid var(--borda);
+  color: var(--texto);
+}
+
+/*
+ * A fileira de opções quebra em linhas.
+ *
+ * Sem `wrap`, `flex: 1` espremia os botões até o texto encostar na borda e,
+ * passado esse ponto, a fileira simplesmente transbordava — os últimos ficavam
+ * fora da tela e não havia como tocá-los. Aconteceu quando o pool passou a ir
+ * de 15 a 25: onze botões não cabem em 320px, e "24" e "25" saíram do alcance.
+ *
+ * Quebrando, cabem quantos forem, e `min-width` mantém cada um num alvo que o
+ * polegar acerta.
+ */
+.opcoes {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(44px, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.opcao {
+  min-height: 46px;
+  border: 1px solid var(--borda);
+  background: var(--fundo-campo);
+  color: var(--texto-fraco);
+  border-radius: 10px;
+  font-size: 14.5px;
+  font-family: inherit;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.opcao.ativa {
+  border-color: var(--acento);
+  color: var(--texto);
+  background: #24325c;
+}
+
+/* O último degrau de uma fileira que salta — em "cartelas premiadas" a escala
+   vai 1 2 3 … 8 e depois pula direto para o teto matemático. Sem marca, o
+   número do extremo parecia mais um da sequência. */
+.opcao-teto {
+  border-style: dashed;
+}
+
+/* ─────────── botões ─────────── */
+
+.principal, .secundario {
+  display: block;
+  width: 100%;
+  min-height: 54px;
+  border-radius: 12px;
+  font-size: 17px;
+  font-weight: 600;
+  font-family: inherit;
+  margin-bottom: 10px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.principal { background: var(--acento); color: #0b1020; }
+.principal:active { filter: brightness(0.9); }
+.principal:disabled { opacity: 0.4; }
+
+.secundario {
+  background: transparent;
+  border-color: var(--borda);
+  color: var(--texto);
+}
+
+/* Encerrar descarta o motor e a memória dele; a cor avisa antes do toque. */
+.secundario.perigo {
+  border-color: #6b3a3a;
+  color: var(--vermelho);
+}
+
+/* O cartão que apaga tudo. A borda avisa antes de a pessoa chegar no botão —
+   num cartão comum, um botão vermelho no fim é a primeira notícia de que ali
+   se perde alguma coisa. */
+.cartao.perigoso {
+  border-color: #6b3a3a;
+}
+
+.principal[data-ocupado="sim"] {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.controles { display: flex; gap: 10px; }
+.controles > button { flex: 1; }
+
+/* ─────────── situação da busca ─────────── */
+
+/*
+ * A faixa de situação responde à pergunta que o usuário faz o tempo todo:
+ * "isso está funcionando ou travou?". Por isso fica grudada no topo, sempre
+ * visível, e o ponto pulsa — movimento é a única prova de vida que não exige
+ * ler nada.
+ */
+.situacao {
+  position: sticky;
+  top: calc(env(safe-area-inset-top) + 56px);
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--fundo-campo);
+  border: 1px solid var(--borda);
+  border-radius: 999px;
+  padding: 10px 16px;
+  margin-bottom: 14px;
+  font-size: 14px;
+}
+
+.pulso {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--texto-fraco);
+  flex-shrink: 0;
+}
+
+.situacao.trabalhando .pulso {
+  background: var(--verde);
+  animation: pulsar 1.1s ease-in-out infinite;
+}
+
+.situacao.trabalhando { border-color: #2f5d43; }
+.situacao.pausada .pulso { background: var(--ouro); }
+.situacao.pausada { border-color: #6b5a2a; }
+.situacao.falhou .pulso { background: var(--vermelho); }
+.situacao.falhou { border-color: var(--vermelho); }
+
+@keyframes pulsar {
+  0%, 100% { opacity: 1; transform: scale(1); box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.5); }
+  50% { opacity: 0.65; transform: scale(1.25); box-shadow: 0 0 0 6px rgba(74, 222, 128, 0); }
+}
+
+/* Quem pediu menos animação não recebe o pulso — só a cor. */
+@media (prefers-reduced-motion: reduce) {
+  .situacao.trabalhando .pulso { animation: none; }
+}
+
+.relogio {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  color: var(--texto-fraco);
+  font-size: 13.5px;
+}
+
+/* ─────────── números grandes ─────────── */
+
+.numerao {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 2px 0 10px;
+}
+
+.numerao span {
+  font-size: 58px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -2px;
+  font-variant-numeric: tabular-nums;
+}
+
+.numerao small {
+  color: var(--texto-fraco);
+  font-size: 15px;
+}
+
+.selo {
+  display: inline-block;
+  background: rgba(74, 222, 128, 0.14);
+  border: 1px solid var(--verde);
+  color: var(--verde);
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+
+/* Superar o melhor conhecido no mundo é raro o bastante para não se confundir
+   com o selo de ótimo provado, que é comum. Daí a cor própria. */
+.selo.recorde {
+  background: rgba(255, 199, 90, 0.16);
+  border-color: var(--ouro);
+  color: var(--ouro);
+}
+
+/* A comparação com o mundo. Fica logo abaixo do número grande, porque é ela
+   que diz se aquele número é bom. */
+.referencia {
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--texto-fraco);
+  margin: 0 0 12px;
+}
+
+.referencia b {
+  color: var(--texto);
+  font-variant-numeric: tabular-nums;
+}
+
+.referencia em {
+  font-style: normal;
+}
+
+/* De onde a busca partiu. Fica logo abaixo da comparação com o mundo, um pouco
+   mais discreta: é contexto do processo, não o resultado. */
+.referencia.partida {
+  padding-top: 8px;
+  border-top: 1px dashed var(--borda);
+  font-size: 13px;
+}
+
+/* ─────────── a grade dos 25 números ─────────── */
+
+/*
+ * Cinco por linha, como no volante impresso. O reconhecimento é visual: quem
+ * marca números numa cartela de papel procura pela posição, e uma grade com
+ * outro número de colunas obriga a reler tudo.
+ */
+.grade-numeros {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.numero {
+  /* Quadrado, e nunca abaixo de 44px: são 25 alvos lado a lado, e errar o toque
+     aqui significa jogar um número que a pessoa não escolheu. */
+  aspect-ratio: 1;
+  min-height: 44px;
+  border: 1px solid var(--borda);
+  background: var(--fundo-campo);
+  color: var(--texto-fraco);
+  border-radius: 10px;
+  font-size: 16px;
+  font-weight: 600;
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 0.08s ease-out;
+}
+
+.numero:active { transform: scale(0.92); }
+
+.numero.escolhido {
+  background: var(--acento);
+  border-color: var(--acento);
+  color: #0b1020;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .numero { transition: none; }
+}
+
+/* ─────────── painel de economia da Lotinha ─────────── */
+
+/*
+ * Os dois ramos aparecem sempre juntos, e é por isso que cada um tem cor
+ * própria. O ramo vencedor de um fechamento é sedutor — custa pouco e paga
+ * muito — e mostrá-lo sozinho seria enganoso, porque o outro acontece em mais
+ * de 99% das vezes.
+ */
+.linha-economia {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--borda);
+  font-size: 14px;
+  /* Sem isto a linha do dinheiro estoura a tela num iPhone de 320 px: o saldo
+     sai do cartão e a página passa a rolar de lado. */
+  flex-wrap: wrap;
+}
+
+.linha-economia:last-of-type { border-bottom: none; }
+.linha-economia > span { color: var(--texto-fraco); min-width: 0; }
+.linha-economia b { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.linha-economia em { font-style: normal; color: var(--texto-fraco); font-size: 12.5px; }
+
+.linha-economia.ganha b { color: var(--verde); }
+.linha-economia.perde b { color: var(--vermelho); }
+
+.linha-economia.total {
+  border-top: 2px solid var(--borda);
+  margin-top: 4px;
+  padding-top: 12px;
+}
+.linha-economia.total b { color: var(--ouro); font-size: 18px; }
+
+/* Distribuição de acertos do simulador. */
+.faixas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.faixas > span {
+  background: var(--fundo-campo);
+  border: 1px solid var(--borda);
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 13px;
+}
+
+/* A matriz das 28 combinações. Rola sozinha em vez de espremer a página. */
+.rolagem { overflow-x: auto; margin-top: 10px; }
+
+.matriz {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.matriz th, .matriz td {
+  padding: 7px 10px;
+  text-align: right;
+  border-bottom: 1px solid var(--borda);
+  white-space: nowrap;
+}
+
+.matriz th {
+  color: var(--texto-fraco);
+  font-weight: 600;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.matriz td.aberto { color: var(--ouro); }
+
+/* ─────────── cartões que abrem e fecham ─────────── */
+
+/*
+ * Uma dobra **dentro** de um cartão: a curva de cobertura, que interessa a quem
+ * quer conferir e atrapalharia quem só quer o número. Mesmo alvo de 44 px da
+ * regra abaixo, sem o peso de um cartão inteiro.
+ */
+details.dobra {
+  margin-top: 12px;
+  border-top: 1px dashed var(--borda);
+  padding-top: 8px;
+}
+
+details.dobra > summary {
+  cursor: pointer;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  font-size: 13.5px;
+  color: var(--texto-fraco);
+}
+
+details.dobra > summary:hover {
+  color: var(--texto);
+}
+
+/*
+ * O título de um <details> é a única coisa que se toca para abri-lo, e o
+ * triângulo sozinho é pequeno demais para o dedo — errar o toque num <details>
+ * não dá retorno nenhum, a pessoa só acha que o cartão não abre. Sem esta regra
+ * a faixa tocável tinha 25 px de altura; 44 px é o mínimo que a Apple e a WCAG
+ * pedem, e é o que as outras coisas tocáveis do aplicativo já têm.
+ */
+details.cartao > summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 16px;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  /* A margem negativa devolve à faixa tocável a largura inteira do cartão, sem
+     empurrar o texto para dentro. */
+  margin: -6px -4px;
+  padding: 0 4px;
+}
+
+/*
+ * O triângulo que o navegador desenha sozinho some quando o <summary> vira
+ * flex, e sem ele nada diz que o cartão abre. Este é o mesmo sinal, desenhado
+ * de propósito: encostado na direita, onde o polegar já está, e virando para
+ * cima quando o cartão está aberto.
+ */
+details.cartao > summary::marker,
+details.cartao > summary::-webkit-details-marker {
+  display: none;
+  content: '';
+}
+
+details.cartao > summary::after {
+  content: '';
+  width: 9px;
+  height: 9px;
+  margin-left: auto;
+  margin-bottom: 4px;
+  border-right: 2px solid var(--texto-fraco);
+  border-bottom: 2px solid var(--texto-fraco);
+  transform: rotate(45deg);
+  transition: transform 0.15s ease-out;
+}
+
+details.cartao[open] > summary::after {
+  transform: rotate(-135deg);
+  margin-bottom: -4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  details.cartao > summary::after { transition: none; }
+}
+
+.acoes-linha {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.acoes-linha > button {
+  flex: 1;
+}
+
+.ajuda.erro {
+  color: var(--vermelho);
+  font-weight: 600;
+}
+
+.barra-limite {
+  display: flex;
+  gap: 8px;
+  border-top: 1px solid var(--borda);
+  padding-top: 12px;
+}
+
+.marca { flex: 1; }
+
+.marca .valor {
+  display: block;
+  font-size: 19px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.marca .chave {
+  display: block;
+  font-size: 11.5px;
+  color: var(--texto-fraco);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.grade {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px 8px;
+  margin-top: 12px;
+}
+
+.grade .item span {
+  display: block;
+  font-size: 21px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.grade .item small {
+  display: block;
+  font-size: 13px;
+  color: var(--texto-fraco);
+  line-height: 1.25;
+}
+
+/* ─────────── listas ─────────── */
+
+.recordes {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  max-height: 260px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.recordes li {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--borda);
+  font-size: 14px;
+}
+
+.recordes li:last-child { border-bottom: none; }
+
+.recordes .quantia {
+  font-weight: 700;
+  font-size: 17px;
+  color: var(--ouro);
+  font-variant-numeric: tabular-nums;
+}
+
+.recordes .via {
+  color: var(--texto-fraco);
+  font-size: 12.5px;
+  text-align: right;
+}
+
+.cartelas {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px;
+}
+
+.cartelas .cartela {
+  background: var(--fundo-campo);
+  border: 1px solid var(--borda);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-variant-numeric: tabular-nums;
+  font-size: 15px;
+  letter-spacing: 0.6px;
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.cartelas .indice {
+  color: var(--texto-fraco);
+  font-size: 11px;
+  min-width: 20px;
+}
+
+/*
+ * Levas: fatias de 60 cartelas que o navegador só desenha quando chegam perto.
+ *
+ * Um fechamento grande passa de 3.000 cartelas, e calcular o desenho de todas
+ * elas de uma vez custava 430 ms de tela parada a cada repintura. Com
+ * `content-visibility: auto` o trabalho é adiado até a leva se aproximar da
+ * janela; `contain-intrinsic-size: auto` guarda a altura medida da última vez
+ * que ela apareceu, e `--reserva-leva`, que o JavaScript acerta medindo a
+ * primeira leva, vale só antes da primeira aparição.
+ *
+ * Por que 60 e por que em leva, e não cartela por cartela: marcar 3.000 cartelas
+ * uma a uma faz o navegador vigiar 3.000 fronteiras a cada rolagem, e isso, medido,
+ * derruba a rolagem de 17 ms para 26 ms por quadro. Em levas de 60 são 50
+ * fronteiras, e a rolagem volta a ser exatamente a de antes. O 60 também não é
+ * arbitrário: a página tem 720 px de largura máxima, o que dá no máximo quatro
+ * colunas de 150 px, e 60 é divisível por 1, 2, 3 e 4 — toda leva fecha um
+ * número inteiro de linhas, em qualquer tela.
+ *
+ * Nada some da página: a cartela continua no DOM, continua selecionável,
+ * continua achável pela busca do navegador e continua saindo na exportação.
+ */
+.cartelas.em-levas {
+  display: block;
+}
+
+.cartelas.em-levas .leva {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px;
+  content-visibility: auto;
+  contain-intrinsic-size: auto var(--reserva-leva, 1800px);
+}
+
+.cartelas.em-levas .leva + .leva {
+  margin-top: 8px;
+}
+
+.alternador {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+  padding: 0 4px;
+  font-size: 15px;
+}
+
+.alternador input {
+  width: 26px;
+  height: 26px;
+  accent-color: var(--acento);
+}
+
+.proxima-etapa {
+  color: var(--ouro);
+  font-size: 13.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  padding: 0 8px;
+  min-height: 18px;
+}
+
+.rodape-nota {
+  color: var(--texto-fraco);
+  font-size: 12.5px;
+  text-align: center;
+  padding: 4px 8px 0;
+}
+
+/*
+ * O único link do aplicativo é o crédito da LJCR, e sem esta regra ele saía na
+ * cor padrão do navegador: azul escuro sobre fundo azul escuro, 2,0:1 de
+ * contraste, ilegível. Com `--acento` são 7,6:1, bem acima do mínimo, e a área
+ * tocável passa de 32 px para 44 px sem mexer no texto ao redor — a caixa em
+ * linha do link não abre espaço no parágrafo, então o acréscimo é só na faixa
+ * que o dedo alcança.
+ */
+.rodape-nota a {
+  color: var(--acento);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  display: inline-block;
+  padding: 6px 0;
+  margin: -6px 0;
+}
+
+/* ─────────── aviso flutuante ─────────── */
+
+.aviso {
+  position: fixed;
+  left: 16px;
+  right: 16px;
+  bottom: calc(env(safe-area-inset-bottom) + 16px);
+  background: var(--fundo-campo);
+  border: 1px solid var(--vermelho);
+  color: var(--texto);
+  padding: 14px 16px;
+  border-radius: 12px;
+  font-size: 14.5px;
+  z-index: 100;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+
+.aviso.bom { border-color: var(--verde); }
+
+/* Em telas largas, o painel de busca ganha respiro lateral. */
+@media (min-width: 560px) {
+  .grade { grid-template-columns: repeat(6, 1fr); }
+}
+
+/* Marca da construção que está rodando no aparelho. Discreta, mas presente:
+   é o que permite conferir se uma correção publicada chegou até aqui. */
+.versao {
+  display: inline-block;
+  margin-top: 6px;
+  font-variant-numeric: tabular-nums;
+  font-size: 11.5px;
+  opacity: 0.65;
+}
+
+/* ─────────── histórico ─────────── */
+
+/*
+ * Cada trabalho é um cartão tocável. O que o usuário procura ao abrir esta tela
+ * é "qual era mesmo aquele?", então o número de cartelas vem grande e primeiro;
+ * a configuração e a data ficam abaixo, para distinguir trabalhos parecidos.
+ */
+.sessao,
+.bloco {
+  background: var(--fundo-cartao);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  padding: 14px 16px;
+  margin-bottom: 12px;
+}
+
+.sessao.em-andamento {
+  border-color: var(--acento);
+  background: linear-gradient(155deg, #1d2745 0%, #151b31 100%);
+}
+
+.sessao-topo,
+.bloco-topo {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.sessao-quantia,
+.bloco-quantia {
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.sessao-unidade,
+.bloco-unidade {
+  color: var(--texto-fraco);
+  font-size: 13px;
+}
+
+.sessao-marca,
+.bloco-marca {
+  margin-left: auto;
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--borda);
+  color: var(--texto-fraco);
+  white-space: nowrap;
+}
+
+.sessao-marca.otima { border-color: var(--verde); color: var(--verde); }
+.sessao-marca.viva { border-color: var(--acento); color: var(--acento); }
+
+.sessao-config,
+.bloco-config {
+  color: var(--texto-fraco);
+  font-size: 12.5px;
+  margin-top: 8px;
+  line-height: 1.4;
+}
+
+.sessao-acoes,
+.bloco-acoes {
+  display: flex;
+  /* Quatro ações numa tela de 320 px não cabem numa linha só. Quebrando, cada
+     uma mantém o alvo de toque em vez de encolher até o texto se espremer. */
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.sessao-acoes button,
+.bloco-acoes button {
+  flex: 1;
+  min-height: 44px;
+  border-radius: 10px;
+  font-size: 14.5px;
+  font-family: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid var(--borda);
+  background: var(--fundo-campo);
+  color: var(--texto);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.sessao-acoes .continuar {
+  background: var(--acento);
+  border-color: var(--acento);
+  color: #0b1020;
+}
+
+/* Excluir é irreversível: ocupa menos espaço e não convida ao toque. */
+.sessao-acoes .excluir {
+  flex: 0 0 auto;
+  min-width: 52px;
+  color: var(--vermelho);
+  border-color: #6b3a3a;
+  background: transparent;
+}
+
+.historico-vazio {
+  text-align: center;
+  color: var(--texto-fraco);
+  padding: 32px 16px;
+  font-size: 14px;
+}
+
+/* ═════════════ Checar fechamento ═════════════ */
+
+/*
+ * A tela de conferência reusa tudo que já existe — `.cartao`, `.opcoes`,
+ * `.matriz`, `.cartelas` — e acrescenta só o que é próprio dela: a ficha do
+ * fechamento, as dezenas sorteadas, o destaque da premiação e a marcação das
+ * dezenas acertadas dentro da cartela.
+ */
+
+#chk-fechamento {
+  width: 100%;
+  min-height: 48px;
+  margin-top: 10px;
+  padding: 10px 14px;
+  /* 17px evita o zoom automático do Safari no iOS ao focar o campo. */
+  font-size: 17px;
+  font-family: inherit;
+  color: var(--texto);
+  background: var(--fundo-campo);
+  border: 1px solid var(--borda);
+  border-radius: 10px;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+#chk-fechamento:focus {
+  outline: none;
+  border-color: var(--acento);
+}
+
+#chk-resultado,
+#ex-resultado {
+  width: 100%;
+  margin-top: 10px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid var(--borda);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--texto);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 16px;
+  line-height: 1.6;
+  letter-spacing: 1px;
+  resize: vertical;
+}
+
+#chk-resultado:focus,
+#ex-resultado:focus {
+  outline: none;
+  border-color: var(--acento);
+}
+
+.ficha {
+  display: grid;
+  gap: 6px 16px;
+  margin-top: 4px;
+}
+
+@media (min-width: 480px) {
+  .ficha { grid-template-columns: 1fr 1fr; }
+}
+
+.ficha > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--borda);
+  font-size: 14px;
+}
+
+.ficha span { color: var(--texto-fraco); }
+.ficha b { font-weight: 600; text-align: right; }
+
+/* As 15 dezenas sorteadas, do jeito que uma pessoa lê um resultado. */
+.dezenas-sorteadas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 10px 0 14px;
+}
+
+.dezenas-sorteadas span {
+  min-width: 34px;
+  padding: 6px 4px;
+  text-align: center;
+  background: var(--acento);
+  color: #0b1020;
+  border-radius: 8px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  font-size: 15px;
+}
+
+/* A premiação, separada de tudo: só 15 paga, e a tela não pode sugerir outra
+   coisa nem por acidente de diagramação. */
+.premio {
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--borda);
+  background: var(--fundo-campo);
+  margin-bottom: 12px;
+}
+
+.premio b { display: block; font-size: 16px; }
+.premio em { display: block; font-style: normal; color: var(--texto-fraco); font-size: 13px; margin-top: 4px; }
+
+.premio.ganhou {
+  border-color: var(--ouro);
+  background: rgba(255, 199, 90, 0.12);
+}
+
+.premio.ganhou b { color: var(--ouro); }
+
+#chk-faixas td:last-child,
+#chk-estatistica td:not(:first-child) {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+#chk-faixas .faixa-premio td { color: var(--ouro); font-weight: 600; }
+#chk-faixas .faixa-vazia td { color: var(--texto-fraco); }
+#chk-faixas .faixa-resto td { color: var(--texto-fraco); font-size: 13px; }
+#chk-estatistica .faixa-premio td { color: var(--ouro); font-weight: 600; }
+#chk-estatistica caption {
+  caption-side: top;
+  text-align: left;
+  color: var(--texto-fraco);
+  font-size: 13px;
+  padding-bottom: 6px;
+}
+
+/* Uma cartela conferida: as dezenas acertadas marcadas, as outras apagadas. */
+.cartelas .cartela.conferida {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  position: relative;
+}
+
+.cartela.conferida .dezenas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  letter-spacing: 0;
+}
+
+.cartela.conferida .dezenas span {
+  min-width: 26px;
+  padding: 3px 2px;
+  text-align: center;
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--texto-fraco);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.cartela.conferida .dezenas span.acertou {
+  background: var(--acento);
+  color: #0b1020;
+  font-weight: 600;
+}
+
+.cartela.conferida .acertos {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  font-size: 12px;
+  color: var(--texto-fraco);
+}
+
+.cartela.conferida .acertos::after { content: ' acertos'; }
+
+/* Andamento de uma simulação longa: sem isto a tela fica parada por dezenas de
+   segundos e parece travada. */
+.barra-progresso {
+  height: 6px;
+  margin-top: 8px;
+  border-radius: 999px;
+  background: var(--fundo-campo);
+  overflow: hidden;
+}
+
+.barra-progresso > div {
+  height: 100%;
+  background: var(--acento);
+  transition: width 0.2s linear;
+}
+
+/* A barra que parou de andar, e que não vai andar mais.
+   Uma barra azul cheia a 87% lê-se como "faltam 13%" — e nesses casos não
+   falta nada: nenhuma disposição daquele tamanho cobre tudo, e o motor já
+   demonstrou isso. As listras dizem que aquilo é um limite alcançado, e não um
+   progresso em curso. */
+.barra-progresso > div.parada {
+  background: repeating-linear-gradient(
+    45deg,
+    var(--texto-fraco) 0 6px,
+    transparent 6px 12px
+  );
+  animation: none;
+}
+
+#chk-faixa-botoes { margin-bottom: 4px; }
+#chk-mais { margin-top: 10px; }
+
+/* O selo do veredito financeiro, dentro do cartão de economia.
+   Três estados, e nenhum deles pode se parecer com promessa de lucro: o
+   parágrafo do retorno esperado continua logo abaixo, dizendo que no longo
+   prazo a conta é negativa em todas as combinações. */
+.veredito {
+  margin: 10px 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--borda);
+  background: var(--fundo-campo);
+  font-size: 14px;
+}
+
+.veredito b { display: block; }
+
+.veredito em {
+  display: block;
+  font-style: normal;
+  color: var(--texto-fraco);
+  font-size: 13px;
+  margin-top: 3px;
+}
+
+.veredito.paga { border-color: var(--verde); }
+.veredito.paga b { color: var(--verde); }
+.veredito.paga b::before { content: '✓ '; }
+
+.veredito.quase { border-color: var(--ouro); }
+.veredito.quase b { color: var(--ouro); }
+.veredito.quase b::before { content: '⌛ '; }
+
+.veredito.nao-paga { border-color: var(--vermelho); }
+.veredito.nao-paga b { color: var(--vermelho); }
+.veredito.nao-paga b::before { content: '✕ '; }
+
+/* A coluna "paga?" da matriz das 45. */
+.matriz .paga { color: var(--verde); }
+.matriz .quase { color: var(--ouro); }
+.matriz .nao-paga { color: var(--vermelho); }
+.matriz .sem-cotacao { color: var(--texto-fraco); }
+
+/* Combinações em que nem o mínimo matemático paga: continuam disponíveis — a
+   decisão é do usuário — mas não competem visualmente com as que pagam. */
+.matriz .linha-apagada td { opacity: 0.55; }
+
+/* A régua da cotação: quanto seria neutro, e quanto a banca paga disso.
+   É a única informação da tela que muda o retorno — as outras mudam o formato
+   do risco — e por isso ela fica colada no campo, e não num rodapé. */
+.regua-cotacao {
+  display: block;
+  margin-top: 5px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--texto-fraco);
+}
+
+.regua-cotacao b { font-variant-numeric: tabular-nums; }
+
+.regua-cotacao .ruim b { color: var(--vermelho); }
+.regua-cotacao .media b { color: var(--ouro); }
+.regua-cotacao .boa b { color: var(--verde); }
+.regua-cotacao .acima { color: var(--verde); }
+.regua-cotacao .acima b { color: var(--verde); }
+
+/* ─────────── seletor do gatilho da diversificação ─────────── */
+
+/*
+ * O número em cima é grande de propósito: quem mexe no seletor está olhando a
+ * busca, não o seletor, e precisa ler o valor de relance.
+ *
+ * O `#gatilho-valor` usa um tamanho menor que o `.numerao` dos cartões de
+ * destaque porque este não é um resultado — é um ajuste. Competir em tamanho
+ * com "melhor solução conhecida" seria dizer que têm a mesma importância.
+ */
+#cartao-diversificacao .numerao span,
+#cartao-trocas .numerao span,
+#cartao-esforco .numerao span {
+  font-size: 38px;
+  letter-spacing: -1px;
+}
+
+#gatilho-diversificacao,
+#teto-de-trocas,
+#esforco-por-cartela {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 44px; /* alvo de toque, e não a espessura da barra */
+  background: transparent;
+  cursor: pointer;
+  margin: 0;
+}
+
+#gatilho-diversificacao::-webkit-slider-runnable-track,
+#teto-de-trocas::-webkit-slider-runnable-track,
+#esforco-por-cartela::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--fundo-campo);
+  border: 1px solid var(--borda);
+}
+
+#gatilho-diversificacao::-moz-range-track,
+#teto-de-trocas::-moz-range-track,
+#esforco-por-cartela::-moz-range-track {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--fundo-campo);
+  border: 1px solid var(--borda);
+}
+
+/* O punho é grande: este controle é para ser usado com o polegar, no celular,
+   possivelmente com o motor rodando e a tela pulsando. */
+#gatilho-diversificacao::-webkit-slider-thumb,
+#teto-de-trocas::-webkit-slider-thumb,
+#esforco-por-cartela::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 28px;
+  height: 28px;
+  margin-top: -12px;
+  border-radius: 50%;
+  background: var(--acento);
+  border: 3px solid var(--fundo-cartao);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+
+#gatilho-diversificacao::-moz-range-thumb,
+#teto-de-trocas::-moz-range-thumb,
+#esforco-por-cartela::-moz-range-thumb {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--acento);
+  border: 3px solid var(--fundo-cartao);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+
+#gatilho-diversificacao:focus-visible,
+#teto-de-trocas:focus-visible,
+#esforco-por-cartela:focus-visible {
+  outline: 2px solid var(--acento);
+  outline-offset: 4px;
+  border-radius: var(--raio);
+}
+
+.extremos {
+  display: flex;
+  justify-content: space-between;
+  color: var(--texto-fraco);
+  font-size: 13px;
+  margin: -4px 0 10px;
+}
+
+/* ─────────── painel de ajuste manual ─────────── */
+
+/*
+ * Cada controle do painel é um bloco compacto: rótulo, valor, seletor,
+ * extremos. Bem menor que os três cartões principais, e de propósito — são
+ * catorze, e dar a cada um o peso visual de um cartão de destaque tornaria a
+ * tela ilegível.
+ */
+.ajuste {
+  padding: 14px 0;
+  border-top: 1px solid var(--borda);
+}
+
+.ajuste-topo {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
+.ajuste-nome {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.ajuste-valor {
+  font-variant-numeric: tabular-nums;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--acento);
+}
+
+.ajuste input[type='range'] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 44px;
+  background: transparent;
+  cursor: pointer;
+  margin: 0;
+}
+
+.ajuste input[type='range']::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--fundo-campo);
+  border: 1px solid var(--borda);
+}
+
+.ajuste input[type='range']::-moz-range-track {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--fundo-campo);
+  border: 1px solid var(--borda);
+}
+
+.ajuste input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 26px;
+  height: 26px;
+  margin-top: -11px;
+  border-radius: 50%;
+  background: var(--acento);
+  border: 3px solid var(--fundo-cartao);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+
+.ajuste input[type='range']::-moz-range-thumb {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--acento);
+  border: 3px solid var(--fundo-cartao);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+
+.ajuste select {
+  width: 100%;
+  min-height: 44px;
+  background: var(--fundo-campo);
+  color: var(--texto);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  padding: 0 12px;
+  font-size: 15px;
+}
+
+.ajuste .extremos {
+  margin: -6px 0 6px;
+}
+
+/* O aviso dos parâmetros que eu não recomendaria mexer. Fica ao lado do
+   controle, e não escondido: esconder seria decidir pelo usuário. */
+.ajuste-risco {
+  display: block;
+  margin-top: 4px;
+  padding: 8px 10px;
+  border-left: 3px solid var(--ouro);
+  background: rgba(255, 199, 90, 0.08);
+  border-radius: 0 8px 8px 0;
+  color: var(--texto-fraco);
+  font-size: 13.5px;
+  line-height: 1.45;
+}
+
+/* ─────────── a escolha entre aplicativos ─────────── */
+
+/*
+ * Cada aplicativo é um alvo grande e inteiro, e não um título com um link
+ * pequeno ao lado: numa tela de celular o dedo mira o cartão, não a palavra.
+ */
+.aplicativo {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 120ms ease, transform 120ms ease;
+}
+
+.aplicativo:active {
+  transform: scale(0.99);
+  border-color: var(--acento);
+}
+
+.aplicativo h2 {
+  margin-bottom: 4px;
+}
+
+/*
+ * A pergunta que o aplicativo responde, e não o que ele é.
+ *
+ * "Fechamentos da Lotinha" só diz alguma coisa a quem já sabe o que é um
+ * fechamento. "Quais jogos preciso fazer para não perder?" é reconhecível por
+ * quem chegou aqui com o problema na mão e sem o vocabulário.
+ */
+.aplicativo-pergunta {
+  color: var(--texto);
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0 0 8px;
+}
+
+.aplicativo-entrar {
+  display: inline-block;
+  margin-top: 12px;
+  color: var(--acento);
+  font-weight: 600;
+  font-size: 15px;
+}
+
+/* ─────────── o Construtor ─────────── */
+
+.voltar {
+  display: inline-block;
+  color: var(--texto-fraco);
+  text-decoration: none;
+  font-size: 14px;
+  margin-bottom: 6px;
+  /* Era um alvo de 74 × 20 px, sob a área do notch, e é o único jeito de sair
+     de qualquer uma das telas internas. O mínimo recomendado é 44 × 44; a
+     margem negativa compensa o preenchimento para o cabeçalho não crescer. */
+  padding: 12px 8px;
+  margin: -12px -8px;
+}
+
+.voltar:active { color: var(--acento); }
+
+/*
+ * A régua: o vão entre o que se conseguiu e o que poderia existir.
+ *
+ * É o desenho central do aplicativo, e o que ele mostra não é "quanto falta
+ * terminar" — é quanto do que **havia para ganhar** já foi ganho. Um problema
+ * cujo mínimo já foi alcançado aparece cheio; um com folga aparece pela metade,
+ * e a metade vazia é honesta: pode ser que nada dela caia.
+ */
+.regua { margin: 14px 0 18px; }
+
+.regua-trilho {
+  height: 10px;
+  border-radius: 999px;
+  background: #0e1428;
+  border: 1px solid var(--borda);
+  overflow: hidden;
+}
+
+.regua-cheio {
+  height: 100%;
+  width: 0;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--acento), var(--verde));
+  transition: width 300ms ease;
+}
+
+.regua-pontas {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 6px;
+  font-size: 12.5px;
+  color: var(--texto-fraco);
+  font-variant-numeric: tabular-nums;
+}
+
+/* O veredito muda de cor porque muda de natureza: procurar, provar, ou avisar. */
+.veredito-provado { color: var(--verde); font-weight: 600; }
+.veredito-impossivel { color: var(--vermelho); font-weight: 600; }
+
+/* ─────────── a conferência do Construtor Exato ─────────── */
+
+/* Os preços por faixa. Duas colunas em tela larga porque são até dez campos, e
+   uma coluna só faria a pessoa rolar dez vezes para preencher um cenário. */
+.precos {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+@media (min-width: 480px) {
+  .precos { grid-template-columns: 1fr 1fr; }
+}
+
+.precos label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border: 1px solid var(--borda);
+  border-radius: 10px;
+  background: var(--fundo-campo);
+}
+
+.precos label span {
+  flex: 0 0 auto;
+  font-size: 13.5px;
+  color: var(--texto-fraco);
+  font-variant-numeric: tabular-nums;
+}
+
+/* A faixa que o fechamento garante é a que a pessoa procura na lista. */
+.precos label.garantida span { color: var(--ouro); font-weight: 600; }
+
+.precos input {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 40px;
+  padding: 6px 8px;
+  /* 17px evita o zoom automático do Safari no iOS ao focar o campo. */
+  font-size: 17px;
+  font-family: inherit;
+  text-align: right;
+  color: var(--texto);
+  background: transparent;
+  border: none;
+  font-variant-numeric: tabular-nums;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.precos input:focus { outline: none; }
+.precos label:focus-within { border-color: var(--acento); }
+
+#ex-conferencia-faixas td:not(:first-child),
+#ex-simulacao-faixas td:not(:first-child) {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+#ex-conferencia-faixas .faixa-garantida td { color: var(--ouro); font-weight: 600; }
+#ex-conferencia-faixas .faixa-vazia td { color: var(--texto-fraco); }
+#ex-conferencia-faixas .faixa-resto td { color: var(--texto-fraco); font-size: 13px; }
+#ex-simulacao-faixas .faixa-garantida td { color: var(--ouro); font-weight: 600; }
+
+#ex-conferencia-faixas caption,
+#ex-simulacao-faixas caption {
+  caption-side: top;
+  text-align: left;
+  color: var(--texto-fraco);
+  font-size: 13px;
+  padding-bottom: 6px;
+}
+
+/* O balanço: as três linhas que respondem "valeu a pena?". O líquido ganha
+   cor porque é a única cuja resposta é sim ou não. */
+.balanco {
+  margin-top: 14px;
+  border-top: 1px solid var(--borda);
+  padding-top: 10px;
+}
+
+.balanco > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 5px 0;
+  font-size: 14.5px;
+}
+
+.balanco span { color: var(--texto-fraco); }
+.balanco b { font-variant-numeric: tabular-nums; font-weight: 600; }
+.balanco .liquido { border-top: 1px solid var(--borda); margin-top: 4px; padding-top: 9px; }
+.balanco .liquido span { color: var(--texto); }
+.balanco .liquido b { font-size: 17px; }
+.balanco .positivo b { color: var(--verde); }
+.balanco .negativo b { color: var(--vermelho); }
+
+/*
+ * O botão que fecha a lista de cartelas, quando ela está aberta.
+ *
+ * Aberta num fechamento grande, a lista faz a página passar de 800.000 px —
+ * medido, 27.124 cartelas dão 827.626 px. O botão que a fecha fica no topo
+ * dela, e depois de rolar algumas telas para dentro não há como voltar sem
+ * rolar tudo de volta. Grudado embaixo, ele continua ao alcance do polegar em
+ * qualquer ponto da lista, que é o que faz abrir deixar de ser um caminho sem
+ * volta.
+ *
+ * Só enquanto está aberta: fechada, ele é um botão comum no fluxo da página.
+ */
+#ex-ver-cartelas.aberto {
+  /*
+   * Fixo, e não `sticky`. `sticky` com `bottom` só segura um elemento que está
+   * **abaixo** de quem lê; descendo pela lista, o botão fica para trás e some
+   * como qualquer outro — medido, ele parava 20.218 px acima da janela. Fixo,
+   * ele acompanha, que é o que a situação pede.
+   *
+   * Pílula estreita e centrada, em vez da barra larga que ele é fechado: aberto
+   * ele flutua sobre as cartelas, e uma barra de ponta a ponta esconderia uma
+   * linha inteira delas em cada tela.
+   */
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(env(safe-area-inset-bottom) + 14px);
+  z-index: 20;
+  width: auto;
+  min-width: 200px;
+  padding: 0 24px;
+  margin: 0;
+  border-color: var(--acento);
+  background: var(--fundo-cartao);
+  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.6);
+}
+
+/* ─────────── configurações ─────────── */
+
+/*
+ * O carimbo da versão, aqui, não é a nota discreta do rodapé: é o dado que a
+ * tela existe para mostrar. Grande, monoespaçado e selecionável — quem confere
+ * se uma correção chegou precisa poder copiar o valor e comparar.
+ */
+.marca-versao {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0 0 14px;
+}
+
+.marca-versao .chave {
+  color: var(--texto-fraco);
+  font-size: 12.5px;
+}
+
+.marca-versao .valor {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 20px;
+  color: var(--ouro);
+  letter-spacing: 0.5px;
+  user-select: all;
+  -webkit-user-select: all;
+}
+
+/*
+ * A resposta da verificação.
+ *
+ * Precisa de caixa própria: `.referencia`, que é o parágrafo de contexto usado
+ * no resto do site, não tem borda nenhuma — pintar `border-color` nela não
+ * mudava um pixel, e as três situações saíam com a mesma cara de texto de
+ * apoio. O que se lê aqui é o resultado de uma pergunta que o usuário fez, e
+ * tem de se destacar do que está em volta.
+ *
+ * As três cores significam coisas diferentes: verde é "conferido e em dia",
+ * ouro é "há algo novo, e depende de você", vermelho é "não deu para saber". O
+ * último não é erro do usuário nem defeito do aplicativo — é ausência de
+ * resposta, e tem de parecer diferente das outras duas justamente para não ser
+ * lido como um "não".
+ */
+.resposta {
+  margin: 12px 0 0;
+  padding: 11px 13px;
+  background: var(--fundo-campo);
+  border: 1px solid var(--borda);
+  border-left-width: 3px;
+  border-radius: 10px;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--texto);
+}
+
+.resposta.boa { border-left-color: var(--verde); }
+.resposta.nova { border-left-color: var(--ouro); }
+.resposta.sem-resposta { border-left-color: var(--vermelho); }
+
+/* Linha de dado: rótulo à esquerda, valor à direita, um por linha. */
+.linha-dado {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  margin: 0;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--borda);
+  font-size: 14.5px;
+}
+
+.linha-dado:last-of-type { border-bottom: none; }
+.linha-dado > span { color: var(--texto-fraco); }
+
+.linha-dado b {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  font-weight: 600;
+}
+
+/*
+ * Os atalhos entre aplicativos. Uma fileira que quebra em vez de rolar: são
+ * três e cabem em qualquer tela; rolagem aqui esconderia o terceiro sem
+ * necessidade.
+ */
+.atalhos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.atalho {
+  flex: 1 1 auto;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 14px;
+  border: 1px solid var(--borda);
+  border-radius: 10px;
+  background: var(--fundo-campo);
+  color: var(--texto);
+  text-decoration: none;
+  font-size: 14.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.atalho:active { border-color: var(--acento); color: var(--acento); }

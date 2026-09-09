@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img"
+     aria-label="Plano de Fano: sete pontos e sete retas">
+  <title>Sonho Lúcido</title>
+  <desc>
+    O plano de Fano — sete pontos e sete retas, com cada par de pontos aparecendo
+    em exatamente uma reta. É o menor covering design que existe, C(7,3,2) = 7,
+    e o primeiro caso que este motor resolve e prova ótimo.
+  </desc>
+
+  <rect width="512" height="512" fill="#0b1020"/>
+
+  <g stroke="#7aa2ff" stroke-width="6" fill="none" stroke-linecap="round">
+    <!-- os três lados do triângulo -->
+    <path d="M256 87.04 L402.32 340.48"/>
+    <path d="M402.32 340.48 L109.68 340.48"/>
+    <path d="M109.68 340.48 L256 87.04"/>
+    <!-- as três medianas, cada uma de um vértice ao ponto médio oposto -->
+    <path d="M256 87.04 L256 340.48"/>
+    <path d="M402.32 340.48 L182.84 213.76"/>
+    <path d="M109.68 340.48 L329.16 213.76"/>
+    <!-- a sétima reta: o círculo pelos três pontos médios -->
+    <circle cx="256" cy="256" r="84.48"/>
+  </g>
+
+  <g fill="#ffc75a">
+    <circle cx="256" cy="87.04" r="18"/>
+    <circle cx="402.32" cy="340.48" r="18"/>
+    <circle cx="109.68" cy="340.48" r="18"/>
+    <circle cx="329.16" cy="213.76" r="18"/>
+    <circle cx="256" cy="340.48" r="18"/>
+    <circle cx="182.84" cy="213.76" r="18"/>
+    <circle cx="256" cy="256" r="18"/>
+  </g>
+</svg>

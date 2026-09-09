@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b1020">
+<title>Sonho Lúcido — fechamentos da Lotofácil</title>
+<meta name="description" content="Quanto você quer gastar, quais dezenas quer jogar, e as cartelas prontas com a garantia que o dinheiro compra.">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icone.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icone-180.png">
+<link rel="stylesheet" href="estilo.css">
+<link rel="modulepreload" href="estrategia.js">
+<link rel="modulepreload" href="catalogo.js">
+<link rel="modulepreload" href="conferir.js">
+<link rel="modulepreload" href="volante.js">
+<link rel="modulepreload" href="analise.js">
+<link rel="preload" href="catalogo/indice.json" as="fetch" crossorigin>
+<link rel="preload" href="catalogo/precos.json" as="fetch" crossorigin>
+<link rel="preload" href="catalogo/acaso.json" as="fetch" crossorigin>
+<script type="module" src="app.js"></script>
+</head>
+<body>
+<main id="painel-principal">
+
+<h1>Sonho Lúcido</h1>
+<!-- Quem chega pelo link não sabe o que é isto, e a primeira coisa que a tela
+     pede é dinheiro. Uma linha, sem jargão: diz a loteria e diz a ideia — as
+     cartelas se completam, e é daí que vem a garantia. -->
+<p class="oque-e">Cartelas da Lotofácil que, juntas, garantem acertos.</p>
+
+<section class="cartao" id="secao-dinheiro">
+  <label for="valor">Quanto você quer gastar</label>
+  <input id="valor" type="text" inputmode="decimal" autocomplete="off" value="R$ 50,00">
+  <input id="regua" type="range" min="0" max="1000" value="0" list="degraus"
+    aria-label="Quanto você quer gastar">
+  <datalist id="degraus"></datalist>
+  <p class="degrau" id="degrau"></p>
+</section>
+
+<section class="cartao" id="secao-dezenas">
+  <label id="rotulo-grade">Quais dezenas você quer jogar</label>
+  <div class="grade" id="grade" role="group" aria-labelledby="rotulo-grade"></div>
+  <div class="linha">
+    <button type="button" id="escolher">Escolher por mim</button>
+    <button type="button" id="limpar" class="discreto">Limpar</button>
+    <span class="contagem" id="contagem"></span>
+  </div>
+</section>
+
+<section class="resposta" id="resposta" aria-live="polite"></section>
+
+<section id="secao-bilhetes"></section>
+
+<hr>
+
+<details id="det-manual">
+  <summary>Montar do meu jeito</summary>
+  <div>
+    <p class="ajuda">Aqui o dinheiro não manda. Você diz quantas dezenas quer no
+      pool, quantas em cada cartela, que garantia quer e no máximo quantas cartelas topa
+      jogar — e o que sobrar disso aparece na lista, do mais barato ao mais caro. Deixe
+      "tanto faz" no que não importar. O que você marcar vale ao pé da letra: quando o
+      catálogo não tiver aquilo, a tela diz isso e mostra o que tem perto — não monta
+      outra coisa no lugar. Cartelas de 15 a 20 dezenas, que são as que a lotérica
+      aceita.</p>
+    <label for="m-pool">Quantas dezenas no pool</label>
+    <select id="m-pool"></select>
+    <label for="m-k">Dezenas em cada cartela</label>
+    <select id="m-k"></select>
+    <label for="m-t">Garantia de acertos <span class="ajuda">(exatamente esta)</span></label>
+    <select id="m-t"></select>
+    <label for="m-teto">No máximo quantas cartelas <span class="ajuda">(em branco: todas)</span></label>
+    <input id="m-teto" type="number" min="1" inputmode="numeric" autocomplete="off">
+    <label for="m-fechamento">Qual fechamento montar</label>
+    <select id="m-fechamento"></select>
+    <p id="manual" class="ajuda" aria-live="polite"></p>
+  </div>
+</details>
+
+<details id="det-bolao">
+  <summary>Dividir com outras pessoas</summary>
+  <div>
+    <label for="partes">Em quantas partes</label>
+    <input id="partes" type="number" min="2" max="20" value="2">
+    <div id="bolao"></div>
+  </div>
+</details>
+
+<details id="det-carteira">
+  <summary>O que eu já joguei</summary>
+  <div id="carteira"></div>
+</details>
+
+<details id="det-dinheiro">
+  <summary>Preços e prêmios</summary>
+  <div>
+    <p class="ajuda">Estes valores não são auditados por este aplicativo. Confira na lotérica e corrija aqui se estiverem diferentes.</p>
+    <div id="tabela-precos"></div>
+    <div class="linha"><button type="button" id="restaurar-precos" class="discreto">Voltar aos valores publicados</button></div>
+  </div>
+</details>
+
+<details id="det-intencao">
+  <summary>Pedir com as próprias palavras</summary>
+  <div>
+    <label for="intencao">Por exemplo: trezentos reais, vinte dezenas, quero garantir 14</label>
+    <input id="intencao" type="text" autocomplete="off">
+    <div class="linha"><button type="button" id="enviar-intencao" class="discreto">Entendi, pode montar</button></div>
+    <p id="aviso-intencao" class="ajuda" aria-live="polite"></p>
+  </div>
+</details>
+
+<footer>
+  <span id="carimbo"></span>
+  <span id="rede"></span>
+</footer>
+
+</main>
+
+<!-- A área de análise. Só existe depois que há fechamento, e ocupa a tela
+     inteira quando aberta: gerar e analisar são dois assuntos, e misturá-los
+     era o que enchia a primeira tela de cartelas que ninguém tinha pedido. -->
+<section class="analise" id="analise" hidden role="dialog" aria-modal="true"
+  aria-label="Cartelas e análise">
+  <!-- O título e as abas grudam no topo juntos, num bloco só. Grudando cada um
+       por conta própria, o de baixo precisava saber a altura do de cima — e
+       sabia errado: 3rem contra os 63 px que o outro mede, 15 px de diferença,
+       que as abas cobriam do botão "Voltar" assim que a página rolava. -->
+  <div class="analise-cabeca">
+  <div class="analise-topo">
+    <button type="button" id="voltar" class="discreto">‹ Voltar</button>
+    <strong id="analise-titulo"></strong>
+  </div>
+  <nav class="abas" id="abas" role="tablist" aria-label="O que ver">
+    <button type="button" role="tab" id="tab-cartelas" aria-controls="aba-cartelas" data-aba="cartelas" aria-selected="true">Cartelas</button>
+    <button type="button" role="tab" id="tab-conferir" aria-controls="aba-conferir" data-aba="conferir" aria-selected="false">Conferir</button>
+    <button type="button" role="tab" id="tab-simular" aria-controls="aba-simular" data-aba="simular" aria-selected="false">Simular</button>
+    <button type="button" role="tab" id="tab-valores" aria-controls="aba-valores" data-aba="valores" aria-selected="false">Valores</button>
+    <button type="button" role="tab" id="tab-resumo" aria-controls="aba-resumo" data-aba="resumo" aria-selected="false">Resumo</button>
+  </nav>
+  </div>
+
+  <div class="aba" id="aba-cartelas" role="tabpanel" aria-labelledby="tab-cartelas" tabindex="0">
+    <div id="lista-cartelas"></div>
+  </div>
+
+  <div class="aba" id="aba-conferir" role="tabpanel" aria-labelledby="tab-conferir" tabindex="0" hidden>
+    <p class="ajuda">O resultado de um concurso de verdade, conferido contra todas as suas
+      cartelas.</p>
+    <label for="sorteio">As 15 dezenas sorteadas</label>
+    <input id="sorteio" type="text" inputmode="numeric" autocomplete="off"
+      placeholder="1 2 3 4 5 6 7 8 9 10 11 12 13 14 15">
+    <div class="linha">
+      <button type="button" id="buscar-sorteio" class="discreto">Buscar o último concurso</button>
+    </div>
+    <div id="conferencia"></div>
+  </div>
+
+  <div class="aba" id="aba-simular" role="tabpanel" aria-labelledby="tab-simular" tabindex="0" hidden>
+    <p class="ajuda">Resultados inventados aqui mesmo, para ver como o fechamento se comporta
+      antes de gastar dinheiro com ele.</p>
+    <label for="s-quantos">Quantos sorteios</label>
+    <select id="s-quantos">
+      <option value="1">1 sorteio</option>
+      <option value="10">10 sorteios</option>
+      <option value="100" selected>100 sorteios</option>
+      <option value="1000">1.000 sorteios</option>
+    </select>
+    <label for="s-onde">Que tipo de sorteio</label>
+    <select id="s-onde">
+      <option value="real" selected>Como na vida real, entre as 25 dezenas</option>
+      <option value="pool">Só os que caem dentro do seu pool</option>
+    </select>
+    <div class="linha"><button type="button" id="simular">Simular</button></div>
+    <div id="simulacao" aria-live="polite"></div>
+  </div>
+
+  <div class="aba" id="aba-valores" role="tabpanel" aria-labelledby="tab-valores" tabindex="0" hidden>
+    <div id="valores"></div>
+  </div>
+
+  <div class="aba" id="aba-resumo" role="tabpanel" aria-labelledby="tab-resumo" tabindex="0" hidden>
+    <div id="resumo"></div>
+    <details id="det-conferir">
+      <summary>Conferir a garantia, sorteio por sorteio</summary>
+      <div>
+        <p class="ajuda">Percorre todos os resultados possíveis dentro das suas dezenas e mostra
+          o pior caso. Nada é enviado para lugar nenhum: a conta é feita aqui.</p>
+        <button type="button" id="varrer">Conferir agora</button>
+        <p id="varredura" aria-live="polite"></p>
+      </div>
+    </details>
+    <details id="det-acaso">
+      <summary>E se eu jogasse no chute?</summary>
+      <div id="acaso"></div>
+    </details>
+  </div>
+</section>
+
+<div class="painel" id="painel" hidden>
+  <div class="painel-topo">
+    <strong id="painel-titulo"></strong>
+    <button type="button" id="fechar-painel" aria-label="Fechar">✕</button>
+  </div>
+  <div class="painel-corpo" id="painel-corpo"></div>
+</div>
+
+</body>
+</html>

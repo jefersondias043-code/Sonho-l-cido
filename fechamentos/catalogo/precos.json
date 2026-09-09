@@ -1,0 +1,21 @@
+{
+  "versao": 1,
+  "vigencia": "julho de 2025, conferidos em setembro de 2026",
+  "moeda": "BRL",
+  "observacao": "Valores em centavos. Este é o único arquivo do catálogo que não é gerado: ele é a tabela oficial copiada à mão, e o aplicativo não a audita. Confira na lotérica e corrija na tela se estiver diferente. As faixas de 14 e 15 acertos são rateadas e mudam a cada concurso — os números aqui são apenas uma referência para a conta aparecer.",
+  "aposta": {
+    "15": 350,
+    "16": 5600,
+    "17": 47600,
+    "18": 285600,
+    "19": 1356600,
+    "20": 5426400
+  },
+  "premio": {
+    "11": 700,
+    "12": 1400,
+    "13": 3500,
+    "14": 150000,
+    "15": 170000000
+  }
+}
