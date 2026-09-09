@@ -691,28 +691,31 @@ for (const t of [11, 12, 13, 14]) {
 
 // ── e o que não existe é avisado antes de ser escolhido ────────────────────
 //
-// `20/15/15` é o beco mais curto do catálogo: o pool tem cartela de 15 e tem
-// garantia de 15, cada select oferecia os dois, e juntos não existem. Agora o
-// select diz isso na própria opção — e escolher assim mesmo dá a recusa com o
-// tamanho que o fechamento teria, que é informação e não um beco.
-await opcoesDe(20, '', 15, '');
-const garantiasDe20 = await pagina.locator('#m-t option').allInnerTexts();
-conferir('com cartela de 15, a garantia de 15 vem marcada como sem fechamento',
-  garantiasDe20.some((l) => /^15 acertos — sem fechamento/.test(l.trim()))
-  && garantiasDe20.filter((l) => /sem fechamento/.test(l)).length === 1,
-  garantiasDe20.map((l) => l.trim()).join(' | '));
-await opcoesDe(20, '', '', 15);
-const cartelasDe20 = await pagina.locator('#m-k option').allInnerTexts();
-conferir('e com garantia de 15, é a cartela de 15 que vem marcada',
-  cartelasDe20.some((l) => /^15 por cartela — sem fechamento/.test(l.trim()))
-  && cartelasDe20.filter((l) => /sem fechamento/.test(l)).length === 1,
-  cartelasDe20.map((l) => l.trim()).join(' | '));
-await opcoesDe(20, '', 15, 15);
+// `25/15/14` é um beco: o pool de 25 tem cartela de 15 e tem garantia de 14,
+// cada select oferece os dois, e juntos não existem — um fechamento assim
+// precisaria de pelo menos 22.382 cartelas, e o catálogo publica até 16.000.
+// Agora o select diz isso na própria opção, e escolher assim mesmo dá a recusa
+// com o tamanho que o fechamento teria, que é informação e não um beco.
+//
+// (Este teste já apontou para `20/15/15`, que era beco e deixou de ser: o teto
+// de publicação passou a contar peso em vez de fingir contar dinheiro, e as
+// 15.504 combinações inteiras couberam. Um teste que aponta para um beco tem
+// de mudar quando o beco fecha — e fechar becos é o objetivo.)
+await opcoesDe(25, '', 15, '');
+const garantiasDe25 = await pagina.locator('#m-t option').allInnerTexts();
+conferir('com cartela de 15, a garantia de 14 vem marcada como sem fechamento',
+  garantiasDe25.some((l) => /^14 acertos — sem fechamento/.test(l.trim())),
+  garantiasDe25.map((l) => l.trim()).join(' | '));
+await opcoesDe(25, '', '', 14);
+const cartelasDe25 = await pagina.locator('#m-k option').allInnerTexts();
+conferir('e com garantia de 14, é a cartela de 15 que vem marcada',
+  cartelasDe25.some((l) => /^15 por cartela — sem fechamento/.test(l.trim())),
+  cartelasDe25.map((l) => l.trim()).join(' | '));
+await opcoesDe(25, '', 15, 14);
 const beco = await respostaDiz();
 conferir('escolhendo o beco, a recusa diz de que tamanho seria o fechamento',
   beco.includes('Não há fechamento catalogado')
-  && /todas as combinações de 15 entre as suas 20 dezenas/.test(beco)
-  && beco.includes('15.504 cartelas') && beco.includes('R$ 54.264,00'),
+  && /pelo menos .*22\.382 cartelas/.test(beco),
   beco.slice(0, 220));
 
 // ── escolher uma linha é dizer os dois valores ─────────────────────────────
@@ -739,11 +742,11 @@ conferir('e encolher o pool até o pedido não caber é recusa, não troca',
   encolheu.slice(0, 160));
 
 // ── e um pedido sem resposta é dito, não trocado ───────────────────────────
-await opcoesDe(25, '', 16, 14);
+await opcoesDe(24, '', 15, 14);
 const semResposta = await respostaDiz();
 conferir('um pedido que o catálogo não tem é recusado por escrito',
   semResposta.includes('Não há fechamento catalogado')
-  && semResposta.includes('25 dezenas') && semResposta.includes('cartela de 16')
+  && semResposta.includes('24 dezenas') && semResposta.includes('cartela de 15')
   && semResposta.includes('14 acertos garantidos'), semResposta.slice(0, 140));
 // "Não monta outro" é medido no que a resposta desenha, e não no texto: um
 // fechamento montado tem manchete, unidade e selo, e a recusa não tem nenhum
@@ -754,7 +757,7 @@ const montado = await pagina.locator(
 conferir('e a tela não monta outro fechamento no lugar', montado === 0, `${montado} pedaços`);
 // A recusa também diz de que tamanho o fechamento pedido teria de ser.
 conferir('e diz o piso do que foi pedido',
-  /pelo menos .*3\.014 cartelas/.test(semResposta), semResposta.slice(0, 220));
+  /pelo menos .*9\.614 cartelas/.test(semResposta), semResposta.slice(0, 220));
 // Um "não há" sem saída é um beco. As vizinhanças existem, e um toque nelas
 // resolve — senão a pessoa fica procurando qual dos quatro controles afrouxar.
 const saidas = await pagina.locator('.resposta [data-manual]').count();

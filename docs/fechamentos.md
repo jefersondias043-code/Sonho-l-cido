@@ -621,7 +621,7 @@ encontram. Na tela isso vira dois selos que não se parecem:
 - **menor conhecido** — este é o menor que se achou, e ao lado aparece o piso:
   *"nenhum fechamento faz isso com menos de 46"*.
 
-Hoje o catálogo tem **221 das 330 no mínimo provado** e 312 com bilhetes
+Hoje o catálogo tem **226 das 330 no mínimo provado** e 317 com bilhetes
 publicados. E vale dizer em que cada prova se apoia, porque não são todas iguais:
 
 <!-- a tabela das provas: gerada por ferramentas/numeros-do-catalogo.py -->
@@ -630,12 +630,12 @@ publicados. E vale dizer em que cada prova se apoia, porque não são todas igua
 | aritmética fechada — um bilhete de `k` num pool de `v` cruza `k + 15 − v` com qualquer sorteio, e quando isso já alcança `t` o mínimo é 1 | 145 | `conferir-tudo` refaz o argumento |
 | fórmula — `k = 15` com `t = 15` exige que o bilhete **seja** o sorteio, logo todos os `C(v,15)` | 10 | `conferir-tudo` refaz o argumento |
 | cota de Turán no avesso | 35 | a cota vem de `motor-core`, validada lá contra números publicados |
+| exaustão | 19 | a cota vem de `motor-core`, validada lá contra números publicados |
 | cota de Schönheim | 17 | a cota vem de `motor-core`, validada lá contra números publicados |
-| exaustão | 14 | a cota vem de `motor-core`, validada lá contra números publicados |
 <!-- fim de a tabela das provas -->
 
 Nos 155 primeiros o conferidor independente não acredita em ninguém: recalcula. Nos
-66 restantes a prova se apoia numa cota que o `motor-core` implementa e testa
+71 restantes a prova se apoia numa cota que o `motor-core` implementa e testa
 contra a literatura — e o conferidor só cobra que a cota anunciada não seja menor
 que a cota de contagem que ele mesmo recalcula. É menos do que uma prova
 independente, e é isto que se pode afirmar sem exagero.
@@ -1015,6 +1015,49 @@ números mais visíveis do aplicativo se moveram junto:
 Tudo isso passou pelo `conferir-tudo`, que não compartilha uma linha com o
 gerador nem com a busca: 330 entradas, 249.307.987 sorteios varridos, e cada
 sorteio possível encontrando alguma cartela com a garantia prometida.
+
+### Cinco becos fecharam, e o teto passou a dizer a verdade
+
+O "montar do meu jeito" tinha **18 becos**: combinações que os dois selects
+deixam montar e que o catálogo não atende. Eles não eram descuido — eram
+entradas cujo fechamento o motor nunca tinha alcançado, ou cujo resultado
+passava do teto de publicação.
+
+O teto era o problema maior, e ele mesmo já admitia: *"ele conta cartelas, e não
+dinheiro, e por isso não é a fronteira que o parágrafo acima descreve"*. Com o
+corte em 8.000 cartelas, o catálogo publicava dezoito fechamentos acima de
+R$ 1 milhão — o mais caro em R$ 59.907.456 — e recusava , que o motor
+resolve com 10.167 cartelas de 15 dezenas por **R$ 35.584,50**. Mais barato que
+49 dos que já estavam lá. O teto não protegia o bolso de ninguém: barrava
+justamente os fechamentos baratos, porque são os que precisam de muitas
+cartelas.
+
+Ele passou a ser o que sempre foi de fato — um teto de **peso** do catálogo e do
+tempo de conferência —, em 16.000 cartelas, cerca de 110 KiB por arquivo. O
+bolso continua protegido pelo lugar certo: o preço ao lado de cada fechamento na
+tela.
+
+Cinco entradas entraram:
+
+| entrada | cartelas | piso | custo | |
+|---|---:|---:|---:|---|
+| 20/15/15 | 15.504 | 15.504 | R$ 54.264,00 | mínimo provado |
+| 25/18/15 | 14.850 | 5.121 | R$ 42.411.600,00 | |
+| 25/16/14 | 10.944 | 3.014 | R$ 612.864,00 | |
+| 23/15/14 | 10.167 | 4.378 | R$ 35.584,50 | |
+| 23/17/15 | 10.051 | 3.996 | R$ 4.784.276,00 | |
+
+ era o exemplo que a própria tela usava ao recusar um pedido. Agora
+ela monta.
+
+E três ficaram de fora de propósito —  em 18.928,  em 24.770
+e  em 26.782. Subir o teto de novo para capturá-las seria mover a
+trave: ele foi fixado em 16.000 por uma razão dita em voz alta, os 110 KiB, e os
+números novos não mudam essa razão. Nessas o aplicativo diz o piso e mostra o
+que há perto, que é o comportamento certo para um pedido que não tem resposta.
+
+O modo manual passa de 237 para **242 fechamentos alcançáveis**, e de 18 para
+**13 becos**.
 
 ### E onde a folga era da cota, não do fechamento
 
@@ -1843,7 +1886,7 @@ que não confere. `catalogo.yml` roda a mesma varredura e as **dez** suítes a c
 envio, em qualquer branch — cinco do cliente (a da tela duas vezes, na raiz e na
 subpasta), três do servidor e duas de ferramenta.
 
-## As 18 entradas sem bilhetes
+## As 13 entradas sem bilhetes
 
 Dezoito das 330 guardam só o piso, e por um motivo econômico, não matemático: o
 menor fechamento conhecido passa de oito mil bilhetes, o que descreve compras de
